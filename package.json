@@ -18,7 +18,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "tokens": "npm run generate -w @fin-creador/design-tokens",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:types": "supabase gen types typescript --linked --schema public > packages/api/src/database.types.ts"
   },
   "devDependencies": {
     "@types/node": "^24",
