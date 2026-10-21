@@ -162,6 +162,16 @@
     @apply font-heading;
   }
 
+  /* Browser autofill paints its own (yellow/blue) background and text colour. Keep the
+     design's surface background and ink text (ink on surface ≥ 4.5:1, see token tests).
+     The long background-colour transition stops Chrome repainting its autofill colour. */
+  :is([data-slot="input"], [data-slot="native-select"]):is(:autofill, :-webkit-autofill) {
+    -webkit-text-fill-color: var(--fc-color-ink);
+    caret-color: var(--fc-color-ink);
+    box-shadow: 0 0 0 1000px var(--fc-color-surface) inset;
+    transition: background-color 600000s 0s, color 600000s 0s;
+  }
+
   /* Visible keyboard focus on every interactive element (design-spec §3). */
   :focus-visible {
     outline: 2px solid var(--ring);
