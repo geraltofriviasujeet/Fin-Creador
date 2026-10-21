@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LogIn, Settings } from "lucide-react"
+import { LogOut, Settings } from "lucide-react"
+import { signOutAction } from "@/app/(auth)/actions"
 import { cn } from "cn"
 import { Logo } from "@/components/brand/logo"
 import { toast } from "@/components/ui/toast"
@@ -59,7 +60,7 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
         </ul>
       </nav>
 
-      <div className="grid gap-4 border-t border-white/10 pt-4">
+      <div className="grid grid-cols-1 gap-4 border-t border-white/10 pt-4">
         <Link
           href="/settings"
           aria-current={isActive({ href: "/settings" }, pathname) ? "page" : undefined}
@@ -81,18 +82,29 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
                 aria-hidden="true"
                 className="flex size-10 shrink-0 items-center justify-center rounded-full bg-chip-peach text-sm font-bold text-ink"
               >
-                {initials(user.name)}
+                {user.name ? initials(user.name) : user.email.charAt(0).toUpperCase()}
               </span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{user.name}</p>
-                <p className="truncate text-xs text-nav-muted">{user.email}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{user.name ?? user.email}</p>
+                {user.name && <p className="truncate text-xs text-nav-muted">{user.email}</p>}
               </div>
+              <form action={signOutAction} className="shrink-0">
+                <button
+                  type="submit"
+                  aria-label="Sign out"
+                  title="Sign out"
+                  className="flex size-10 items-center justify-center rounded-lg text-nav-muted hover:bg-white/5 hover:text-nav-text"
+                >
+                  <LogOut aria-hidden="true" className="size-5" />
+                </button>
+              </form>
             </div>
           ) : (
-            <Link href="/sign-in" className={cn(itemClasses, "text-nav-muted hover:bg-white/5 hover:text-nav-text")}>
-              <LogIn aria-hidden="true" />
-              Sign in
-            </Link>
+            // Loading placeholder while the signed-in user is fetched.
+            <div aria-hidden="true" className="flex items-center gap-3 px-1">
+              <span className="size-10 shrink-0 rounded-full bg-white/10" />
+              <span className="h-3 w-32 rounded bg-white/10" />
+            </div>
           )}
         </div>
       </div>
