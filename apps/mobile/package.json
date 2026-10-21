@@ -1,0 +1,27 @@
+{
+  "name": "@fin-creador/mobile",
+  "version": "0.1.0",
+  "main": "index.ts",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fin-creador/design-tokens": "*",
+    "@fin-creador/schemas": "*",
+    "expo": "~58.0.16",
+    "expo-status-bar": "~58.0.3",
+    "react": "19.3.0",
+    "react-native": "0.88.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0",
+    "eslint": "^9",
+    "eslint-config-expo": "~58.0.4",
+    "typescript": "~6.0.3"
+  }
+}

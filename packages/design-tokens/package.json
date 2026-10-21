@@ -1,0 +1,14 @@
+{
+  "name": "@fin-creador/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./tokens.css"
+  },
+  "scripts": {
+    "generate": "node scripts/generate-css.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

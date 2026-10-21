@@ -1,0 +1,110 @@
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { LogIn, Settings } from "lucide-react"
+import { cn } from "cn"
+import { Logo } from "@/components/brand/logo"
+import { toast } from "@/components/ui/toast"
+import { NAV_ITEMS, comingSoonMessage, isActive } from "@/components/shell/nav-items"
+import type { ShellUser } from "@/components/shell/app-shell"
+
+const itemClasses =
+  "flex h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-base transition-colors [&_svg]:size-5 [&_svg]:shrink-0"
+
+/** Fixed dark sidebar, shown at ≥ 761px (design-spec §4). */
+export function Sidebar({ user }: { user: ShellUser | null }) {
+  const pathname = usePathname()
+
+  return (
+    <aside className="on-dark fixed inset-y-0 left-0 z-30 hidden w-(--fc-layout-sidebar-width) flex-col bg-nav px-4 pt-7 pb-5 text-nav-text md:flex">
+      <Logo tone="onDark" className="ml-1.5" />
+
+      <nav aria-label="Main" className="mt-10 flex-1">
+        <ul className="grid gap-1.5">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon
+            const active = item.available && isActive(item, pathname)
+            return (
+              <li key={item.key}>
+                {item.available ? (
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      itemClasses,
+                      active ? "bg-brand font-bold text-ink" : "text-nav-muted hover:bg-white/5 hover:text-nav-text"
+                    )}
+                  >
+                    <Icon aria-hidden="true" />
+                    {item.label}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    aria-disabled="true"
+                    onClick={() => toast.info(comingSoonMessage(item.label))}
+                    className={cn(itemClasses, "text-nav-muted hover:bg-white/5")}
+                  >
+                    <Icon aria-hidden="true" />
+                    {item.label}
+                    <span className="ml-auto rounded-md bg-white/10 px-1.5 py-0.5 text-xs font-medium text-nav-muted">
+                      Soon
+                    </span>
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+
+      <div className="grid gap-4 border-t border-white/10 pt-4">
+        <Link
+          href="/settings"
+          aria-current={isActive({ href: "/settings" }, pathname) ? "page" : undefined}
+          className={cn(
+            itemClasses,
+            isActive({ href: "/settings" }, pathname)
+              ? "bg-brand font-bold text-ink"
+              : "text-nav-muted hover:bg-white/5 hover:text-nav-text"
+          )}
+        >
+          <Settings aria-hidden="true" />
+          Settings
+        </Link>
+
+        <div className="border-t border-white/10 pt-4">
+          {user ? (
+            <div className="flex items-center gap-3 px-1">
+              <span
+                aria-hidden="true"
+                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-chip-peach text-sm font-bold text-ink"
+              >
+                {initials(user.name)}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{user.name}</p>
+                <p className="truncate text-xs text-nav-muted">{user.email}</p>
+              </div>
+            </div>
+          ) : (
+            <Link href="/sign-in" className={cn(itemClasses, "text-nav-muted hover:bg-white/5 hover:text-nav-text")}>
+              <LogIn aria-hidden="true" />
+              Sign in
+            </Link>
+          )}
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("")
+}

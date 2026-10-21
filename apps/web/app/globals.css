@@ -1,0 +1,182 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+/* Brand values (generated from packages/design-tokens). Everything below references them. */
+@import "@fin-creador/design-tokens/tokens.css";
+
+/* Light-only theme (design-spec). Keep `dark:` inert unless a .dark ancestor is ever added,
+   instead of Tailwind's default prefers-color-scheme behaviour. */
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /* Only brand colours exist; Tailwind's default palette is disabled. */
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Spec breakpoints: mobile ≤ 760px, desktop ≥ 1100px (layout.mobileMaxWidth / desktopMinWidth).
+     Media queries cannot read CSS variables; a token test checks these values. */
+  --breakpoint-*: initial;
+  --breakpoint-md: 761px;
+  --breakpoint-lg: 1100px;
+}
+
+@theme inline {
+  /* Brand utilities: bg-ink, text-nav-muted, bg-brand, bg-chip-mint, … */
+  --color-ink: var(--fc-color-ink);
+  --color-muted-subtle: var(--fc-color-muted-subtle);
+  --color-line: var(--fc-color-line);
+  --color-line-strong: var(--fc-color-line-strong);
+  --color-canvas: var(--fc-color-canvas);
+  --color-surface: var(--fc-color-surface);
+  --color-nav: var(--fc-color-nav);
+  --color-nav-text: var(--fc-color-nav-text);
+  --color-nav-muted: var(--fc-color-nav-muted);
+  --color-brand: var(--fc-color-accent);
+  --color-brand-deep: var(--fc-color-accent-deep);
+  --color-chip-mint: var(--fc-color-mint);
+  --color-chip-peach: var(--fc-color-peach);
+  --color-chip-lavender: var(--fc-color-lavender);
+  --color-chip-blue: var(--fc-color-blue);
+  --color-chart: var(--fc-color-chart);
+  --color-success: var(--fc-color-success);
+  --color-success-fill: var(--fc-color-success-fill);
+  --color-danger: var(--fc-color-danger);
+  --color-danger-fill: var(--fc-color-danger-fill);
+
+  /* shadcn semantic colours */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Fonts (next/font variables set in app/layout.tsx) */
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-manrope), var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+
+  /* Type scale (min 12px) */
+  --text-xs: var(--fc-text-xs);
+  --text-sm: var(--fc-text-sm);
+  --text-base: var(--fc-text-base);
+  --text-lg: var(--fc-text-lg);
+  --text-xl: var(--fc-text-xl);
+  --text-2xl: var(--fc-text-2xl);
+  --text-3xl: var(--fc-text-3xl);
+  --text-4xl: var(--fc-text-4xl);
+  --text-5xl: var(--fc-text-5xl);
+
+  /* Radii: rounded-lg = buttons/inputs (10), rounded-xl = inner blocks (14), rounded-2xl = cards (20) */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: var(--fc-radius-control);
+  --radius-xl: var(--fc-radius-md);
+  --radius-2xl: var(--fc-radius-lg);
+  --radius-control: var(--fc-radius-control);
+  --radius-block: var(--fc-radius-md);
+  --radius-card: var(--fc-radius-lg);
+
+  --shadow-raised: var(--fc-shadow-raised);
+}
+
+:root {
+  --radius: var(--fc-radius-control);
+  --background: var(--fc-color-canvas);
+  --foreground: var(--fc-color-ink);
+  --card: var(--fc-color-surface);
+  --card-foreground: var(--fc-color-ink);
+  --popover: var(--fc-color-surface);
+  --popover-foreground: var(--fc-color-ink);
+  --primary: var(--fc-color-ink);
+  --primary-foreground: var(--fc-color-surface);
+  --secondary: var(--fc-color-canvas);
+  --secondary-foreground: var(--fc-color-ink);
+  --muted: var(--fc-color-canvas);
+  --muted-foreground: var(--fc-color-muted);
+  /* shadcn "accent" = subtle hover surface, not the lime brand accent. */
+  --accent: var(--fc-color-canvas);
+  --accent-foreground: var(--fc-color-ink);
+  --destructive: var(--fc-color-danger);
+  --border: var(--fc-color-line);
+  --input: var(--fc-color-line-strong);
+  --ring: var(--fc-color-accent-deep);
+  --chart-1: var(--fc-color-chart);
+  --chart-2: var(--fc-color-accent-deep);
+  --chart-3: var(--fc-color-success-fill);
+  --chart-4: var(--fc-color-danger-fill);
+  --chart-5: var(--fc-color-muted-subtle);
+  --sidebar: var(--fc-color-nav);
+  --sidebar-foreground: var(--fc-color-nav-text);
+  --sidebar-primary: var(--fc-color-accent);
+  --sidebar-primary-foreground: var(--fc-color-ink);
+  --sidebar-accent: var(--fc-color-accent-deep);
+  --sidebar-accent-foreground: var(--fc-color-nav-text);
+  --sidebar-border: var(--fc-color-accent-deep);
+  --sidebar-ring: var(--fc-color-accent);
+}
+
+/* Dark surfaces (sidebar, balance card, toast): lime focus ring stays visible. */
+.on-dark {
+  --ring: var(--fc-color-accent);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  body {
+    @apply min-h-dvh bg-background text-sm text-foreground;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading;
+  }
+
+  /* Visible keyboard focus on every interactive element (design-spec §3). */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Respect reduced motion: no slide/fade/hover-lift animations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
