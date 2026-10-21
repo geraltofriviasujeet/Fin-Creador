@@ -3,18 +3,22 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(35);
+select plan(42);
 
 -- Fixed test users (fictional).
 --   A: Asha  11111111-1111-4111-8111-111111111111
 --   B: Bala  22222222-2222-4222-8222-222222222222
---   C: long name metadata     33333333-3333-4333-8333-333333333333
---   D: no name metadata       44444444-4444-4444-8444-444444444444
+--   C: long name metadata                 33333333-3333-4333-8333-333333333333
+--   D: no name metadata                   44444444-4444-4444-8444-444444444444
+--   E: blank display_name, has full_name  66666666-6666-4666-8666-666666666666
+--   F: empty display_name, has name       77777777-7777-4777-8777-777777777777
 insert into auth.users (id, email, raw_user_meta_data) values
   ('11111111-1111-4111-8111-111111111111', 'asha@example.test', '{"display_name": "  Asha Rao  "}'),
   ('22222222-2222-4222-8222-222222222222', 'bala@example.test', '{"full_name": "Bala"}'),
   ('33333333-3333-4333-8333-333333333333', 'long@example.test', jsonb_build_object('name', repeat('x', 100))),
-  ('44444444-4444-4444-8444-444444444444', 'none@example.test', '{}');
+  ('44444444-4444-4444-8444-444444444444', 'none@example.test', '{}'),
+  ('66666666-6666-4666-8666-666666666666', 'esha@example.test', '{"display_name": "   ", "full_name": "Esha"}'),
+  ('77777777-7777-4777-8777-777777777777', 'neel@example.test', '{"display_name": "", "name": "Neel"}');
 
 -- ---------------------------------------------------------------- schema (1-5)
 select has_table('public', 'profiles', 'profiles table exists');
@@ -27,7 +31,7 @@ select ok(
 select policies_are('public', 'profiles', array['profiles_select_own', 'profiles_update_own'],
   'only the select-own and update-own policies exist');
 
--- ------------------------------------------------------- sign-up trigger (6-11)
+-- ------------------------------------------------------- sign-up trigger (6-15)
 select results_eq(
   $$ select display_name, country, currency, time_zone from public.profiles
      where id = '11111111-1111-4111-8111-111111111111' $$,
@@ -54,13 +58,31 @@ select ok(
   not has_function_privilege('anon', 'public.handle_new_user()', 'execute'),
   'anon cannot call handle_new_user'
 );
+select is(
+  (select display_name from public.profiles where id = '66666666-6666-4666-8666-666666666666'),
+  'Esha', 'blank display_name falls back to full_name'
+);
+select is(
+  (select display_name from public.profiles where id = '77777777-7777-4777-8777-777777777777'),
+  'Neel', 'empty display_name falls back to name'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.backfill_missing_profiles()', 'execute')
+  and not has_function_privilege('anon', 'public.backfill_missing_profiles()', 'execute'),
+  'API roles cannot call backfill_missing_profiles'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.profile_display_name(jsonb)', 'execute')
+  and not has_function_privilege('anon', 'public.profile_display_name(jsonb)', 'execute'),
+  'API roles cannot call profile_display_name'
+);
 
--- ------------------------------------------------------- table grants (12-13)
+-- ------------------------------------------------------- table grants (16-17)
 select table_privs_are('public', 'profiles', 'anon', array[]::text[], 'anon has no table privileges');
 select table_privs_are('public', 'profiles', 'authenticated', array['SELECT'],
   'authenticated has only SELECT at table level (UPDATE is column-level)');
 
--- ------------------------------------------------------- as user A (14-27)
+-- ------------------------------------------------------- as user A (18-31)
 select set_config('request.jwt.claims',
   '{"sub": "11111111-1111-4111-8111-111111111111", "role": "authenticated"}', true);
 set local role authenticated;
@@ -134,7 +156,7 @@ select throws_ok(
   '23514', null, 'blank display name is rejected'
 );
 
--- ------------------------------------------------------- as user B (28-29)
+-- ------------------------------------------------------- as user B (32-33)
 select set_config('request.jwt.claims',
   '{"sub": "22222222-2222-4222-8222-222222222222", "role": "authenticated"}', true);
 
@@ -152,7 +174,7 @@ select results_eq(
   'user B cannot update user A''s profile (0 rows affected)'
 );
 
--- --------------------------------------------- signed in, no user id (30)
+-- --------------------------------------------- signed in, no user id (34)
 select set_config('request.jwt.claims', '{"role": "authenticated"}', true);
 select results_eq(
   $$ select count(*) from public.profiles $$,
@@ -160,7 +182,7 @@ select results_eq(
   'authenticated role without a user id sees nothing'
 );
 
--- ------------------------------------------------------- anonymous (31-32)
+-- ------------------------------------------------------- anonymous (35-36)
 reset role;
 select set_config('request.jwt.claims', '{"role": "anon"}', true);
 set local role anon;
@@ -171,7 +193,7 @@ select throws_ok(
   '42501', null, 'anon cannot update profiles'
 );
 
--- ------------------------------------------------------- as owner (33-35)
+-- ------------------------------------------------------- as owner (37-42)
 reset role;
 
 select results_eq(
@@ -198,6 +220,21 @@ select is(
   (select count(*) from public.profiles where id = '44444444-4444-4444-8444-444444444444'),
   0::bigint, 'deleting the auth user deletes the profile'
 );
+
+-- Backfill: simulate auth users that exist without a profile (e.g. created before
+-- the trigger) by removing two profiles, then run the migration's backfill again.
+delete from public.profiles
+where id in ('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222');
+select is(public.backfill_missing_profiles(), 2, 'backfill creates the two missing profiles');
+select results_eq(
+  $$ select id, display_name, country, currency, time_zone from public.profiles
+     where id in ('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222')
+     order by id $$,
+  $$ values ('11111111-1111-4111-8111-111111111111'::uuid, 'Asha Rao'::text, 'IN'::text, 'INR'::text, 'Asia/Kolkata'::text),
+            ('22222222-2222-4222-8222-222222222222'::uuid, 'Bala'::text, 'IN'::text, 'INR'::text, 'Asia/Kolkata'::text) $$,
+  'backfilled profiles get names from metadata and the default preferences'
+);
+select is(public.backfill_missing_profiles(), 0, 'backfill is idempotent (existing profiles untouched)');
 
 select * from finish();
 rollback;

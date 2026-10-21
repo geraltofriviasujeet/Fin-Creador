@@ -8,8 +8,9 @@
 --   * RLS: a signed-in user can read and update only their own row.
 --   * Column grants: users may update only display_name, phone, country, currency, time_zone.
 --     id, avatar_url, created_at and updated_at are not user-writable.
---   * No insert/delete for clients: rows are created by the sign-up trigger and removed
---     by ON DELETE CASCADE when the auth user is deleted.
+--   * No insert/delete for clients: rows are created by the sign-up trigger (plus a
+--     one-time backfill for users who existed before it) and removed by ON DELETE
+--     CASCADE when the auth user is deleted.
 
 create table public.profiles (
   id           uuid primary key references auth.users (id) on delete cascade,
@@ -82,9 +83,24 @@ create trigger profiles_set_updated_at
 -- Create a profile for every new auth user
 -- ---------------------------------------------------------------------------
 
+-- Display name from sign-up metadata: our form sends display_name; Google sends
+-- full_name / name. Blank values are skipped so the next key is used, and the result
+-- is trimmed and capped at 80 characters so bad metadata can never block sign-up.
+-- Returns null when no usable name exists.
+create function public.profile_display_name(meta jsonb)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select pg_catalog.btrim(pg_catalog.left(coalesce(
+    nullif(pg_catalog.btrim(meta ->> 'display_name'), ''),
+    nullif(pg_catalog.btrim(meta ->> 'full_name'), ''),
+    nullif(pg_catalog.btrim(meta ->> 'name'), '')
+  ), 80));
+$$;
+
 -- SECURITY DEFINER so it can insert while the client has no INSERT privilege.
--- The name comes from sign-up metadata (our form sends display_name; Google sends
--- full_name / name). It is trimmed and capped so bad metadata can never block sign-up.
 create function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -93,18 +109,7 @@ set search_path = ''
 as $$
 begin
   insert into public.profiles (id, display_name)
-  values (
-    new.id,
-    nullif(
-      pg_catalog.btrim(pg_catalog.left(pg_catalog.btrim(coalesce(
-        new.raw_user_meta_data ->> 'display_name',
-        new.raw_user_meta_data ->> 'full_name',
-        new.raw_user_meta_data ->> 'name',
-        ''
-      )), 80)),
-      ''
-    )
-  );
+  values (new.id, public.profile_display_name(new.raw_user_meta_data));
   return new;
 end;
 $$;
@@ -113,7 +118,8 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- Trigger functions are not callable through the API.
+-- Internal functions are not callable through the API.
+revoke execute on function public.profile_display_name(jsonb) from public, anon, authenticated;
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.profiles_validate_time_zone() from public, anon, authenticated;
 revoke execute on function public.profiles_set_updated_at() from public, anon, authenticated;
@@ -142,3 +148,31 @@ create policy profiles_update_own
   to authenticated
   using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);
+
+-- ---------------------------------------------------------------------------
+-- Backfill
+-- ---------------------------------------------------------------------------
+
+-- Creates profiles for auth users that existed before the sign-up trigger (or lack one
+-- for any other reason). Idempotent; returns the number of profiles created.
+-- A function rather than an inline statement so the pgTAP tests can exercise it.
+create function public.backfill_missing_profiles()
+returns integer
+language plpgsql
+set search_path = ''
+as $$
+declare
+  created integer;
+begin
+  insert into public.profiles (id, display_name)
+  select u.id, public.profile_display_name(u.raw_user_meta_data)
+  from auth.users as u
+  on conflict (id) do nothing;
+  get diagnostics created = row_count;
+  return created;
+end;
+$$;
+
+revoke execute on function public.backfill_missing_profiles() from public, anon, authenticated;
+
+select public.backfill_missing_profiles();
