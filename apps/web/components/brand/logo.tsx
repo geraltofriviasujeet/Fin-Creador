@@ -46,7 +46,7 @@ export function LogoMark({ className, size = logo.size }: { className?: string; 
 type Tone = "onDark" | "onLight"
 
 /**
- * "fin" + "creador" in Manrope 700. On dark: white + lime (spec).
+ * "Fin" + "Creador" in Manrope 700. On dark: white + lime (spec).
  * On light: all ink, because lime text on white fails contrast.
  */
 export function Wordmark({ tone, className }: { tone: Tone; className?: string }) {
@@ -56,8 +56,8 @@ export function Wordmark({ tone, className }: { tone: Tone; className?: string }
     >
       <span className="sr-only">Fin Creador</span>
       <span aria-hidden="true" className={tone === "onDark" ? "text-nav-text" : "text-ink"}>
-        fin
-        <span className={tone === "onDark" ? "text-brand" : "text-ink"}>creador</span>
+        Fin
+        <span className={tone === "onDark" ? "text-brand" : "text-ink"}>Creador</span>
       </span>
     </span>
   )

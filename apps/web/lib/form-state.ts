@@ -6,6 +6,8 @@ export type FormState = {
   fieldErrors?: Record<string, string>
   /** Submitted values echoed back so inputs keep their content after an error. Never passwords. */
   values?: Record<string, string>
+  /** Machine-readable follow-up for the UI, e.g. offer to resend a confirmation email. */
+  code?: "email_not_confirmed"
 }
 
 export const initialFormState: FormState = { status: "idle" }
