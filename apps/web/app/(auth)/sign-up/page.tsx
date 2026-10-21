@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { signUpAction } from "@/app/(auth)/actions"
+import { signInWithGoogleAction, signUpAction } from "@/app/(auth)/actions"
 import { AuthCard, AuthLink } from "@/components/auth/auth-card"
 import { GoogleButton, OrDivider, SignUpForm } from "@/components/auth/auth-forms"
 
@@ -16,7 +16,7 @@ export default function SignUpPage() {
         </>
       }
     >
-      <GoogleButton label="Sign up with Google" />
+      <GoogleButton label="Sign up with Google" action={signInWithGoogleAction} />
       <OrDivider />
       <SignUpForm action={signUpAction} />
     </AuthCard>
