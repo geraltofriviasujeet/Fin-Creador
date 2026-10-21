@@ -1,0 +1,27 @@
+// Rules shared by every workspace. Each app's eslint.config.mjs adds its framework
+// preset (Next.js, Expo) and then spreads this in, so these rules win.
+// The @typescript-eslint plugin is registered by those presets / by typescript-eslint.
+export const sharedRules = {
+  files: ["**/*.{ts,tsx,mts,cts}"],
+  rules: {
+    eqeqeq: ["error", "always"],
+    "no-console": ["warn", { allow: ["warn", "error"] }],
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/consistent-type-imports": "error",
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+    ],
+  },
+};
+
+export const sharedIgnores = [
+  "**/node_modules/**",
+  "**/.next/**",
+  "**/.expo/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/coverage/**",
+  "**/next-env.d.ts",
+  "**/expo-env.d.ts",
+];
