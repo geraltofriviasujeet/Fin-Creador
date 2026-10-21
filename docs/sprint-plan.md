@@ -14,6 +14,50 @@ tested, usable feature—not just setup work or static screens.
 | **Platforms** | Responsive web app + Android and iOS apps |
 | **Core principle** | One backend, consistent financial rules, security from Sprint 1 |
 
+# Status and decisions log
+
+Update this section at the end of every sprint or step (see section 9).
+Last updated: 2026-10-22.
+
+## Sprint status
+
+| **Sprint** | **Focus** | **Status** | **Notes** |
+|----|----|----|----|
+| **1** | Foundation, authentication & profile | In progress | See Sprint 1 steps below. |
+| **2** | Accounts & starting balances | Not started | |
+| **3** | Expense & transaction tracking | Not started | |
+| **4** | Income sources & recurring items | Not started | |
+| **5** | Dashboard & analytics | Not started | |
+| **6** | Budgets & savings goals | Not started | |
+| **7** | Investment portfolio | Not started | |
+| **8** | Loans, liabilities & reports | Not started | |
+| **9** | AI financial insights | Not started | |
+| **10** | Notifications & reminders | Not started | |
+| **11** | Mobile polish, offline & PWA | Not started | |
+| **12** | Security & production release | Not started | |
+
+## Sprint 1 steps
+
+| **Step** | **Status** | **Notes** |
+|----|----|----|
+| **0. Environment hygiene** | Done | Fixed `.gitignore` (env files were not ignored); added `.env.example` files; moved CLAUDE.md to the repo root. |
+| **1. Monorepo skeleton** | Done | npm workspaces: `apps/web` (Next.js), `apps/mobile` (Expo shell), `packages/schemas`, `packages/design-tokens`; shared TS/ESLint/Vitest config. In PR #1 (open, not merged). |
+| **Design pass and app shell** | Done | Tokens, fonts, logo, primitives, web shell, styled auth and Settings screens, dev-only `/dev/design`. Visually reviewed and approved at desktop, tablet and phone widths. In PR #1. |
+| **2. Profiles migration, RLS and pgTAP tests** | In progress | Migration approved; PR #2 into `sprint-1-foundation`. First CI run passed (35 pgTAP tests). Added backfill for existing users and blank-name fallback (42 tests); CI rerun pending. Not pushed to the hosted Supabase project (`supabase db push` awaits approval). |
+| **3. Web auth wiring (Supabase)** | Not started | Auth and Settings forms validate input but store nothing yet. |
+| **4. Mobile shell (auth, profile)** | Not started | |
+| **5. Tests (E2E, secret check)** | Not started | Unit tests exist for schemas, tokens and formatting. |
+| **6. CI and setup docs** | In progress | CI workflow (`.github/workflows/ci.yml`) in PR #2; first run passed (app and database jobs). `docs/setup.md` not started. |
+
+## Decisions
+
+| **Date** | **Decision** | **Reason / consequence** |
+|----|----|----|
+| **2026-10-21** | UI follows the Figma Make design, adopted as `docs/design-spec.md`: dark forest green with a lime accent. This replaces the emerald brand color. | One visual source of truth for web and mobile. Text colors that failed WCAG AA were darkened; input borders darkened to 3:1; minimum text 12px. |
+| **2026-10-22** | Database and RLS tests run in GitHub Actions, not on the development Mac. Do not start Docker or local Supabase there; check free disk before any large download. | A local Supabase start filled the Mac's disk. CI uses a throwaway database and never touches the hosted project. |
+| **2026-10-22** | Web hosting is Vercel Hobby. | Hobby is for non-commercial use only: upgrade to Pro (or move hosting) before any paid or commercial launch. |
+| **2026-10-22** | Scheduled jobs and reminders use Supabase scheduling (`pg_cron` and Edge Functions), not Vercel Cron. | Vercel Hobby cron runs at most once a day with up to an hour of drift — not enough for a 10 PM reminder in each user's time zone. |
+
 # 1. Executive summary
 
 Fin Creador is a personal finance platform for recording daily expenses
@@ -50,6 +94,10 @@ management, AI, notifications, and production hardening.
 | **AI** | Server-side provider abstraction; code calculates, AI explains |
 | **Notifications** | Scheduled delivery, Expo push, supported web notifications |
 | **Quality** | Git branches/PRs, migrations, automated tests, lint, typecheck, build |
+| **Hosting** | Vercel Hobby for now. Hobby is non-commercial only; upgrade to Pro (or move hosting) before any paid or commercial launch |
+| **CI** | GitHub Actions on pull requests: lint, typecheck, unit tests, build, migrations and pgTAP database tests |
+| **Design** | `docs/design-spec.md` and the Figma Make file it references; single token source in `packages/design-tokens` |
+| **Scheduling** | Supabase scheduling (`pg_cron`, Edge Functions) for reminders and other scheduled jobs; not Vercel Cron |
 
 Preserve the existing repository and working conventions. Inspect before
 restructuring; do not force a new architecture onto working code.
@@ -95,6 +143,13 @@ and manage their profile.
 - Plan Apple sign-in where required by iOS distribution/authentication
   setup.
 
+- Design foundation from `docs/design-spec.md`: tokens, fonts, logo,
+  shared primitives (Button, Input, Card, Badge, Toast) and a dev-only
+  design review page with clearly labeled demo data.
+
+- App shell: web sidebar, topbar and mobile bottom tab bar; styled auth
+  and profile/Settings screens.
+
 ### Acceptance criteria
 
 - Sign-up, sign-in, sign-out, and recovery flows work with clear errors.
@@ -106,6 +161,14 @@ and manage their profile.
 - No service-role or provider secrets appear in client bundles.
 
 - Local setup and test deployment are documented.
+
+- All text is at least 12px.
+
+- Text and background color pairs meet WCAG AA contrast.
+
+- The CI workflow passes on the pull request.
+
+- No demo data appears in real screens.
 
 ## Sprint 2 — Accounts and starting balances
 
@@ -132,6 +195,10 @@ where their money is held.
 - Money uses exact representations, not binary floating point.
 
 - Archived accounts do not corrupt historical reports.
+
+### Design deliverables
+
+- Accounts screens, following `docs/design-spec.md`.
 
 **Dependencies:** Sprint 1 authentication and database foundation.
 
@@ -166,6 +233,12 @@ transaction ledger.
 
 - Loading, empty, validation, and error states are present.
 
+### Design deliverables
+
+- Add transaction modal (web) and bottom sheet (mobile).
+
+- Transactions list, search and filters.
+
 **Dependencies:** Sprint 2 accounts.
 
 ## Sprint 4 — Income sources and recurring items
@@ -193,6 +266,10 @@ sources and recurring transactions.
 - Period income is distinct from current account/source balance.
 
 - Total Balance definition is documented and tested.
+
+### Design deliverables
+
+- Income page.
 
 **Dependencies:** Sprints 2–3 account and transaction models.
 
@@ -226,6 +303,14 @@ real, date-filtered data.
 
 - Web MVP can be deployed for controlled user testing.
 
+### Design deliverables
+
+- Dashboard: summary cards, spending chart and budget donut, using real data with empty states.
+
+- Controlled web deployment on Vercel (Hobby) for user testing.
+
+- At the start of Sprint 5, write `docs/deployment.md`: Vercel project setup, environment variables, Supabase auth redirect URLs, and the Hobby non-commercial limit.
+
 **Dependencies:** Sprints 2–4 data and calculation rules.
 
 ## Sprint 6 — Budgets and savings goals
@@ -255,6 +340,10 @@ understand the savings required.
 - Budget indicators use correct period and categories.
 
 - Assumptions are shown when a goal lacks a target date.
+
+### Design deliverables
+
+- Budgets and Goals pages.
 
 **Dependencies:** Sprint 5 reporting and validated calculations.
 
@@ -286,6 +375,10 @@ portfolio composition and performance estimates.
 - Valuation timestamp and source are visible.
 
 - No live price is claimed without a trusted provider and timestamp.
+
+### Design deliverables
+
+- Investments page.
 
 **Dependencies:** Sprints 2 and 5 account/reporting foundations.
 
@@ -385,6 +478,12 @@ reminders across supported platforms.
 
 - Do not promise exact delivery when OS/provider cannot guarantee it.
 
+### Design deliverables
+
+- Reminder and notification settings screens.
+
+- Reminders built on Supabase scheduling (`pg_cron` and Edge Functions), not Vercel Cron.
+
 **Dependencies:** Sprints 1 and 4; notification infrastructure.
 
 ## Sprint 11 — Mobile polish, offline support and PWA
@@ -454,6 +553,10 @@ for deployment and store submission.
 - Release notes and store-submission materials are ready; store approval
   is not assumed.
 
+### Design deliverables
+
+- Hosting-plan decision for a commercial launch: upgrade Vercel Hobby to Pro or move hosting before any paid or commercial use.
+
 **Dependencies:** All launch-critical features and environments.
 
 # 5. Financial rules that must remain consistent
@@ -516,6 +619,9 @@ trusted server-side code, and cover them with tests.
 | **Notification limits** | Test each platform; communicate permissions and delivery limitations. |
 | **Offline conflicts** | Limit offline scope; use idempotency and explicit pending/synced states. |
 | **App-store delays** | Test mobile builds throughout; treat review approval as an external dependency. |
+| **Vercel Hobby is non-commercial only** | Treat Hobby as a testing tier; upgrade to Pro or move hosting before any paid or commercial launch (decision due in Sprint 12, or earlier if monetized). |
+| **Design drift between Figma, web and mobile** | Single token source in `packages/design-tokens`; `docs/design-spec.md` as the visual source of truth; dev-only design review page. |
+| **Local disk or tooling limits** | Run database, RLS and build checks in GitHub Actions; check free disk before large downloads; no local Docker/Supabase on the development Mac. |
 
 # 8. Release milestones
 
@@ -547,6 +653,10 @@ trusted server-side code, and cover them with tests.
 
 - Update CLAUDE.md only when a durable decision changes; keep
   sprint-specific tasks in this plan or tickets.
+
+- At the end of every sprint or step, update the status table and
+  decisions log at the top of this plan. Update CLAUDE.md only for
+  durable decisions.
 
 # 10. Recommended first task
 

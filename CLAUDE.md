@@ -39,6 +39,8 @@
     the exact next step.
 12. Keep this file concise as the project evolves. Update it when a
     durable decision changes; do not append temporary sprint notes here.
+13. When finishing a sprint or step, update the status table and
+    decisions log at the top of `docs/sprint-plan.md`.
 
 ## 2. Product definition
 
@@ -158,6 +160,22 @@ explicitly approved decision says otherwise.
     UI filters.
 -   Keep service-role credentials and AI provider secrets server-side
     only.
+
+### Hosting, CI and scheduling
+
+-   Web hosting: Vercel Hobby for now. Hobby is non-commercial only;
+    upgrade to Pro (or move hosting) before any paid or commercial
+    launch.
+-   CI: GitHub Actions on pull requests (`.github/workflows/ci.yml`)
+    runs lint, typecheck, unit tests, build, migrations and pgTAP tests
+    on a throwaway database. Database and RLS tests run there, not on
+    the development Mac: do not start Docker or local Supabase, and
+    check free disk before any large download.
+-   Scheduled jobs and reminders use Supabase scheduling (`pg_cron`,
+    Edge Functions), not Vercel Cron (Hobby cron is once a day with up
+    to an hour of drift).
+-   Visual source of truth: `docs/design-spec.md`; token values live
+    only in `packages/design-tokens`.
 
 ### Suggested monorepo layout
 
@@ -336,6 +354,7 @@ Keep these concepts distinct:
     assume permission is granted.
 -   Schedule notifications through a reliable server-side/supported
     delivery mechanism rather than relying on the app remaining open.
+    Use Supabase scheduling, not Vercel Cron (see section 4).
 -   Handle disabled reminders, time-zone changes, daylight-saving
     changes, invalid push tokens, and delivery failures.
 -   Do not promise exact delivery time where the operating system or
