@@ -43,11 +43,11 @@ Last updated: 2026-10-22.
 | **0. Environment hygiene** | Done | Fixed `.gitignore` (env files were not ignored); added `.env.example` files; moved CLAUDE.md to the repo root. |
 | **1. Monorepo skeleton** | Done | npm workspaces: `apps/web` (Next.js), `apps/mobile` (Expo shell), `packages/schemas`, `packages/design-tokens`; shared TS/ESLint/Vitest config. In PR #1 (open, not merged). |
 | **Design pass and app shell** | Done | Tokens, fonts, logo, primitives, web shell, styled auth and Settings screens, dev-only `/dev/design`. Visually reviewed and approved at desktop, tablet and phone widths. In PR #1. |
-| **2. Profiles migration, RLS and pgTAP tests** | In progress | Migration (approved) and 35 pgTAP tests on branch `sprint-1-step-2-profiles`, in a PR into `sprint-1-foundation`; first CI run pending. Not pushed to the hosted Supabase project (`supabase db push` awaits approval). |
+| **2. Profiles migration, RLS and pgTAP tests** | In progress | Migration approved; PR #2 into `sprint-1-foundation`. First CI run passed (35 pgTAP tests). Added backfill for existing users and blank-name fallback (42 tests); CI rerun pending. Not pushed to the hosted Supabase project (`supabase db push` awaits approval). |
 | **3. Web auth wiring (Supabase)** | Not started | Auth and Settings forms validate input but store nothing yet. |
 | **4. Mobile shell (auth, profile)** | Not started | |
 | **5. Tests (E2E, secret check)** | Not started | Unit tests exist for schemas, tokens and formatting. |
-| **6. CI and setup docs** | In progress | CI workflow (`.github/workflows/ci.yml`) in the same PR; first run pending. `docs/setup.md` not started. |
+| **6. CI and setup docs** | In progress | CI workflow (`.github/workflows/ci.yml`) in PR #2; first run passed (app and database jobs). `docs/setup.md` not started. |
 
 ## Decisions
 
