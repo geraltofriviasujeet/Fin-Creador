@@ -18,7 +18,11 @@ export function Sheet({ eyebrow, title, children }: { eyebrow?: string; title: s
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + spacing[8] }]}
+        contentContainerStyle={[
+          styles.body,
+          // Android shows sheets as full-screen modals (see app/(app)/_layout.tsx): clear the status bar.
+          { paddingTop: (Platform.OS === "android" ? insets.top : 0) + spacing[5], paddingBottom: insets.bottom + spacing[8] },
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
