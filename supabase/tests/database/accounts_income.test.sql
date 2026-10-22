@@ -139,11 +139,17 @@ select is(
   (select user_id from public.accounts where name = 'Overdraft Bank'),
   '11111111-1111-4111-8111-111111111111'::uuid, 'user_id defaults to the signed-in user'
 );
+-- As user B, who has no cash account: user A already has one, and the one-cash rule
+-- (FC012, migration 20261022190000) would reject the insert before this check runs.
+select set_config('request.jwt.claims',
+  '{"sub": "22222222-2222-4222-8222-222222222222", "role": "authenticated"}', true);
 select throws_ok(
   $$ insert into public.accounts (kind, name, currency, opening_balance_minor, opening_balance_date)
      values ('cash', 'Wallet', 'INR', -1, current_date) $$,
   '23514', null, 'cash cannot open below zero'
 );
+select set_config('request.jwt.claims',
+  '{"sub": "11111111-1111-4111-8111-111111111111", "role": "authenticated"}', true);
 select throws_ok(
   $$ insert into public.accounts (kind, name, currency, opening_balance_minor, opening_balance_date)
      values ('other', 'Paytm', 'INR', -1, current_date) $$,
@@ -154,11 +160,17 @@ select throws_ok(
      values ('bank', 'No type', 'INR', current_date) $$,
   '23514', null, 'a bank account needs savings or current'
 );
+-- As user B, who has no cash account: user A already has one, and the one-cash rule
+-- (FC012, migration 20261022190000) would reject the insert before this check runs.
+select set_config('request.jwt.claims',
+  '{"sub": "22222222-2222-4222-8222-222222222222", "role": "authenticated"}', true);
 select throws_ok(
   $$ insert into public.accounts (kind, bank_type, name, currency, opening_balance_date)
      values ('cash', 'savings', 'Cash', 'INR', current_date) $$,
   '23514', null, 'only bank accounts have a bank type'
 );
+select set_config('request.jwt.claims',
+  '{"sub": "11111111-1111-4111-8111-111111111111", "role": "authenticated"}', true);
 select throws_ok(
   $$ insert into public.accounts (kind, bank_type, name, last4, currency, opening_balance_date)
      values ('bank', 'savings', 'Bad digits', '12a4', 'INR', current_date) $$,
