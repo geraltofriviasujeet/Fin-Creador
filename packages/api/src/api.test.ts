@@ -3,6 +3,7 @@ import {
   authErrorMessage,
   INVALID_TIME_ZONE_CODE,
   isExistingAccountError,
+  ledgerErrorMessage,
   isSafePublicKey,
   profileFormValues,
   profileUpdateColumns,
@@ -93,5 +94,27 @@ describe("profile mapping", () => {
 
   it("matches the trigger's invalid time zone code", () => {
     expect(INVALID_TIME_ZONE_CODE).toBe("22023")
+  })
+})
+
+describe("ledgerErrorMessage", () => {
+  it.each([
+    ["FC001", "accountId"],
+    ["FC004", "currency"],
+    ["FC006", "sourceId"],
+    ["FC011", "openingBalanceDate"],
+  ])("maps %s to a friendly message on %s", (code, field) => {
+    const m = ledgerErrorMessage({ code, message: "raw database text" })
+    expect(m.field).toBe(field)
+    expect(m.message).not.toContain("raw database text")
+  })
+
+  it("puts a future-date error on the form's own date field", () => {
+    expect(ledgerErrorMessage({ code: "FC003" }, { dateField: "occurredOn" }).field).toBe("occurredOn")
+  })
+
+  it("maps a duplicate source name and falls back to a generic message", () => {
+    expect(ledgerErrorMessage({ code: "23505" })).toEqual({ message: "You already have a source with this name.", field: "name" })
+    expect(ledgerErrorMessage({ code: "XX000", message: "secret detail" }).message).toBe("We couldn’t save that. Please try again.")
   })
 })

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fin-creador/domain": "*",
     "zod": "^4.6.7"
   }
 }

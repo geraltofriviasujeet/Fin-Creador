@@ -54,10 +54,10 @@ Last updated: 2026-10-22.
 | **Step** | **Status** | **Notes** |
 |----|----|----|
 | **0. Docs** | Done | Scope change recorded here; Income screens added to `docs/design-spec.md`; CLAUDE.md §5 clarified. |
-| **1. Migration and pgTAP** | In review | `accounts`, `categories` (income sources), `transactions` (income only), balance view, `record_income` / `void_income`, default sources; 105 pgTAP tests. Review fixes applied (trigger helper privileges, as-of date checks and lock, user deletion). Awaiting CI. |
-| **2. Domain and schemas** | Not started | Money parsing/formatting, balances, totals, period ranges, income by source, with tests; shared validation; bank list. |
-| **3. Web Income page** | Not started | Income page, Add income, Add bank / cash / other account, Add source, archive and restore, void. |
-| **4. E2E tests** | Not started | Account and income flows, double submit, void, archive, cross-user. |
+| **1. Migration and pgTAP** | Done | `accounts`, `categories` (income sources), `transactions` (income only), balance view, `record_income` / `void_income`, default sources; 105 pgTAP tests green in CI (PR #9). Applied to fin-creador-dev 2026-10-22; types regenerated. |
+| **2. Domain and schemas** | Done (uncommitted) | `packages/domain`: dates and periods in the user's time zone, money parsing, balances, holdings totals, income by source, rental, trend; `packages/schemas`: account, income, source and void forms, bank list; `packages/api`: FC001–FC011 messages. Unit tests at month, year, leap-year and time-zone boundaries. |
+| **3. Web Income page** | Built (uncommitted) | `/income`: six cards, Income sources, Where your money is with Total available; Add income, Add bank / cash / other account, edit, archive and restore, Add source, void. Topbar "Add transaction" opens Add income. Signed-in screens verified only through the E2E tests in CI (no test users on the dev project). |
+| **4. E2E tests** | Written, not yet run | 6 Playwright tests (empty states, accounts and totals, double submit, void / archive / restore, future date and deep link, cross-user); CI also uploads screenshots at desktop, tablet and phone widths. |
 | **5. Mobile** | Not started | Income screen and bottom sheets, after the web steps. |
 | **6. Status and PR** | Not started | |
 
