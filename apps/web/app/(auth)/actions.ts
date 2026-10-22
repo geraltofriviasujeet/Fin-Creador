@@ -7,7 +7,7 @@ import {
   signUpSchema,
   updatePasswordSchema,
 } from "@fin-creador/schemas"
-import { authErrorMessage } from "@fin-creador/api"
+import { SIGN_UP_CHECK_EMAIL, authErrorMessage, isExistingAccountError } from "@fin-creador/api"
 import { safeNextPath } from "@/lib/auth/redirect"
 import { getPublicEnv } from "@/lib/env"
 import { type FormState, pick, readFields, validate } from "@/lib/form-state"
@@ -58,17 +58,15 @@ export async function signUpAction(_prev: FormState, formData: FormData): Promis
     // display_name is read by the profiles sign-up trigger.
     options: { data: { display_name: displayName }, emailRedirectTo: callbackUrl("/") },
   })
-  if (error) return errorState(error, pick(input, echo))
+  // An already-registered email gets exactly the same answer as a new one (no enumeration).
+  const checkEmail: FormState = { status: "success", message: SIGN_UP_CHECK_EMAIL, values: pick(input, echo) }
+  if (error) return isExistingAccountError(error) ? checkEmail : errorState(error, pick(input, echo))
 
   // Email confirmation off: signed in immediately.
   if (data.session) redirect("/")
 
-  // Confirmation on (or the email already exists — Supabase answers identically).
-  return {
-    status: "success",
-    message: "Check your email for a link to confirm your account, then sign in.",
-    values: pick(input, echo),
-  }
+  // Confirmation on (an unconfirmed existing email also lands here).
+  return checkEmail
 }
 
 export async function resendConfirmationAction(_prev: FormState, formData: FormData): Promise<FormState> {

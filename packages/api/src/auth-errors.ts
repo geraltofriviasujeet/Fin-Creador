@@ -14,6 +14,21 @@ export type AuthMessage = {
 
 const GENERIC = "Something went wrong. Please try again."
 
+/** The answer every sign-up gets when email confirmation is on, for new and existing emails alike. */
+export const SIGN_UP_CHECK_EMAIL = "Check your email for a link to confirm your account, then sign in."
+
+const EXISTING_ACCOUNT_CODES = new Set(["user_already_exists", "email_exists"])
+
+/**
+ * True when sign-up failed only because the email already has an account. Callers must
+ * answer exactly as for a new sign-up, so the response never reveals that an email is
+ * registered. (Supabase returns this for confirmed accounts; unconfirmed ones already get
+ * the normal answer.)
+ */
+export function isExistingAccountError(error: AuthErrorLike): boolean {
+  return !!error?.code && EXISTING_ACCOUNT_CODES.has(error.code)
+}
+
 export function authErrorMessage(error: AuthErrorLike): AuthMessage {
   switch (error?.code) {
     case "invalid_credentials":

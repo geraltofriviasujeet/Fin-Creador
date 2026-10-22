@@ -20,6 +20,7 @@ export const sharedIgnores = [
   "**/.next/**",
   "**/.expo/**",
   "**/dist/**",
+  "**/dist-js/**",
   "**/build/**",
   "**/coverage/**",
   "**/next-env.d.ts",

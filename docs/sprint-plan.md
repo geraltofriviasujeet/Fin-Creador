@@ -45,9 +45,9 @@ Last updated: 2026-10-22.
 | **Design pass and app shell** | Done | Tokens, fonts, logo, primitives, web shell, styled auth and Settings screens, dev-only `/dev/design`. Visually reviewed and approved at desktop, tablet and phone widths. Merged to `main` (PR #1). |
 | **2. Profiles migration, RLS and pgTAP tests** | Done | Migration applied to the dev project (fin-creador-dev). 42 pgTAP tests pass in CI. Merged to `sprint-1-foundation` and `main` (PR #2). |
 | **3. Web auth wiring (Supabase)** | Done (not yet on `sprint-1-foundation`) | Email/password, Google OAuth, recovery, sign-out, protected routes and profile editing. Real round trip on the dev project passed 2026-10-22. PR #3 merged into `sprint-1-step-2-profiles` after that branch had already merged, so the auth code is not on `sprint-1-foundation` or `main` yet; it needs a follow-up PR from `sprint-1-step-2-profiles`. |
-| **4. Mobile shell (auth, profile)** | Done on Android (awaiting commit) | Expo Router shell with five tabs, header, native primitives, email/password and Google sign-in, sign-up with confirmation, password-reset email, Settings with profile editing through RLS, encrypted session storage. Tested 2026-10-22 on an Android phone in Expo Go 58.0.5: layout, sign-in and Google sign-in work. iPhone not tested yet: the App Store Expo Go is still SDK 57. Lint, typecheck, unit tests and iOS/Android bundles pass. Branch `sprint-1-step-4-mobile`, uncommitted. |
-| **5. Tests (E2E, secret check)** | Not started | Unit tests exist for schemas, tokens and formatting. |
-| **6. CI and setup docs** | In progress | CI workflow (`.github/workflows/ci.yml`) runs on every PR; green on PRs #2 and #3. Mobile bundle step added in Step 4. `docs/setup.md` not started. |
+| **4. Mobile shell (auth, profile)** | Done (Android) | Expo Router shell with five tabs, native primitives, email/password and Google sign-in, sign-up with confirmation, password-reset email, Settings with profile editing through RLS, encrypted session storage. Tested 2026-10-22 on an Android phone in Expo Go 58.0.5. iPhone test pending SDK 58 support in the App Store Expo Go. Merged to `sprint-1-foundation` (PR #5). |
+| **5. Tests (E2E, secret check)** | Built, awaiting CI | 13 Playwright E2E tests (sign-up with email confirmation, unconfirmed sign-in and resend, sign-in errors, protected routes and safe `next`, profile save, password reset, sign-out) run in CI against a throwaway local Supabase with the Mailpit inbox; never against fin-creador-dev. Secret check (`scripts/check-secrets.mjs`) scans tracked files, the web client bundle and the mobile bundles, with a canary for server-only env. Google sign-in stays a manual check. |
+| **6. CI and setup docs** | Built, awaiting CI | CI runs lint, typecheck, unit tests, web build, mobile bundles, secret check, migrations and pgTAP, and the E2E job on every PR. `docs/setup.md` (placeholders only) and README written. |
 
 ## Decisions
 
@@ -65,6 +65,9 @@ Last updated: 2026-10-22.
 | **2026-10-22** | Auth error messages, the publishable-key guard and profile column mapping live in `packages/api`, shared by web and mobile. | One set of messages and rules; the clients cannot drift apart. |
 | **2026-10-22** | Google sign-in in Expo Go is tested with `npm run dev:mobile:google`, which serves Expo under an sslip.io hostname (e.g. `192-168-1-6.sslip.io`). | Supabase refuses OAuth redirects to bare IP addresses even when allow-listed, and the ngrok tunnel was unreliable. App builds use `fincreador://auth/callback`, which Supabase already accepts. |
 | **2026-10-22** | The mobile app supplies `crypto.getRandomValues` and `crypto.subtle.digest` from `expo-crypto` before Supabase loads. | Hermes has no WebCrypto, so supabase-js was falling back to `Math.random()` and a "plain" PKCE challenge. |
+| **2026-10-22** | Web E2E tests run only in CI, against a throwaway Supabase started on the runner, with emails read from its Mailpit inbox. A global setup refuses to run against anything but a local Supabase. | No test users in fin-creador-dev and no service-role key needed. `supabase/config.toml` mirrors the hosted auth settings (confirmation on, password minimum 8, same token-hash email templates) and has higher local rate limits; it is not pushed to the hosted project. |
+| **2026-10-22** | The secret check scans a plain-JS export of the mobile app, not the Hermes bytecode. | Bytecode stores strings back to back, so harmless prefixes merge with neighbouring strings and look like keys. |
+| **2026-10-22** | Sign-up answers "Check your email…" for an email that already has an account, exactly as for a new one (web and mobile, shared `isExistingAccountError`). | Found by the E2E tests: Supabase returns `user_already_exists` for confirmed accounts and the app showed "Something went wrong", which revealed that the email was registered. |
 
 ## Before production (open items)
 
@@ -331,6 +334,7 @@ real, date-filtered data.
 - Controlled web deployment on Vercel (Hobby) for user testing.
 
 - At the start of Sprint 5, write `docs/deployment.md`: Vercel project setup, environment variables, Supabase auth redirect URLs, and the Hobby non-commercial limit.
+- After the first Vercel deployment, verify the auth redirects (email confirmation, password reset, Google, signed-out redirects) stay on the deployment's own domain. If any land on `localhost`, build those redirects from `NEXT_PUBLIC_SITE_URL` instead of the request URL (`app/auth/callback/route.ts`, `lib/supabase/proxy.ts`). The E2E tests run on `localhost:3000` because `next start` builds request URLs from `localhost`.
 
 **Dependencies:** Sprints 2–4 data and calculation rules.
 
@@ -479,6 +483,12 @@ reminders across supported platforms.
 
 - Add upcoming bill/EMI and recurring-transaction reminders where data
   exists.
+
+- Backlog (from Sprint 1): when someone tries to sign up with an email
+  that already has an account, email the owner ("someone tried to sign
+  up with your address; sign in or reset your password"). Sign-up itself
+  already answers identically for new and existing emails. Needs a
+  server-side email sender (custom SMTP or an Edge Function).
 
 - Implement supported mobile push, supported web notifications, and
   in-app notification center.
