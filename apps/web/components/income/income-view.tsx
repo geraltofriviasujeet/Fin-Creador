@@ -19,6 +19,7 @@ import {
 } from "@fin-creador/domain"
 import { setAccountArchivedAction } from "@/app/(app)/income/actions"
 import { AccountForm } from "@/components/income/account-form"
+import { CashForm } from "@/components/income/cash-form"
 import { money, shortDateTime } from "@/components/income/format"
 import { IncomeForm } from "@/components/income/income-form"
 import { SourceEntries } from "@/components/income/source-entries"
@@ -36,8 +37,9 @@ import { initialFormState } from "@/lib/form-state"
 import type { IncomeAccount, IncomePageData } from "@/lib/income/types"
 
 type Open =
-  | { type: "income" }
+  | { type: "income"; accountId?: string }
   | { type: "account"; kind: AccountKind; account?: IncomeAccount }
+  | { type: "cash" }
   | { type: "source" }
   | { type: "entries"; sourceId: string }
   | { type: "archive"; account: IncomeAccount }
@@ -100,7 +102,9 @@ export function IncomeView({ data }: { data: IncomePageData }) {
   const activeSources = sources.filter((s) => !s.archived)
   const accountLabel = (id: string) => accounts.find((a) => a.id === id)?.label ?? "Account"
   const year = today.slice(0, 4)
-  const hasCash = accounts.some((a) => a.kind === "cash")
+  // One active cash account per person: once it exists, "Add cash" updates it.
+  const activeCash = accounts.find((a) => a.kind === "cash" && !a.archived)
+  const addOrUpdateCash = () => show(activeCash ? { type: "cash" } : { type: "account", kind: "cash" })
 
   return (
     <>
@@ -236,7 +240,7 @@ export function IncomeView({ data }: { data: IncomePageData }) {
               <p className="text-sm text-muted-foreground">Add the banks and cash where you keep money to see your total.</p>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => show({ type: "account", kind: "bank" })}>Add bank account</Button>
-                <Button variant="secondary" onClick={() => show({ type: "account", kind: "cash" })}>
+                <Button variant="secondary" onClick={addOrUpdateCash}>
                   Add cash
                 </Button>
               </div>
@@ -260,9 +264,9 @@ export function IncomeView({ data }: { data: IncomePageData }) {
                         <Menu.Popup className="min-w-36 rounded-xl border border-line bg-surface p-1 text-sm text-ink shadow-(--shadow-raised) outline-none">
                           <Menu.Item
                             className="flex h-10 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
-                            onClick={() => show({ type: "account", kind: account.kind, account })}
+                            onClick={() => show(account.kind === "cash" ? { type: "cash" } : { type: "account", kind: account.kind, account })}
                           >
-                            Edit
+                            {account.kind === "cash" ? "Update amount" : "Edit"}
                           </Menu.Item>
                           <Menu.Item
                             className="flex h-10 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
@@ -285,9 +289,9 @@ export function IncomeView({ data }: { data: IncomePageData }) {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={() => show({ type: "account", kind: "cash" })}>
+            <Button variant="secondary" size="sm" onClick={addOrUpdateCash}>
               <Plus aria-hidden="true" />
-              Add cash
+              {activeCash ? "Update cash" : "Add cash"}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => show({ type: "account", kind: "other" })}>
               <Plus aria-hidden="true" />
@@ -310,22 +314,30 @@ export function IncomeView({ data }: { data: IncomePageData }) {
               accounts={activeAccounts}
               sources={activeSources}
               today={today}
+              presetAccountId={open.accountId}
               onDone={close}
               onAddAccount={() => show({ type: "account", kind: "bank" })}
             />
           </DialogContent>
         )}
         {open?.type === "account" && (
-          <DialogContent eyebrow={open.account ? "Edit account" : "New account"} title={open.account ? open.account.label : ADD_TITLES[open.kind]}>
+          <DialogContent
+            eyebrow={open.kind === "cash" ? undefined : open.account ? "Edit account" : "New account"}
+            title={open.account ? open.account.label : ADD_TITLES[open.kind]}
+          >
             <AccountForm
               key={openId}
               kind={open.kind}
               account={open.account}
               currency={currency}
               today={today}
-              suggestedName={open.kind === "cash" && !hasCash ? "Cash in hand" : undefined}
               onDone={close}
             />
+          </DialogContent>
+        )}
+        {open?.type === "cash" && activeCash && (
+          <DialogContent title="Update cash in hand">
+            <CashForm key={openId} cash={activeCash} onDone={close} onAddIncome={() => show({ type: "income", accountId: activeCash.id })} />
           </DialogContent>
         )}
         {open?.type === "source" && (

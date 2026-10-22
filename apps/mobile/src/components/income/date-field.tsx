@@ -25,7 +25,7 @@ export function DateField({ label, value, max, onChange, hint, error }: Props) {
             mode="date"
             display="compact"
             accessibilityLabel={label}
-            onChange={(_, date) => pick(date)}
+            onValueChange={(_, date) => pick(date)}
           />
         </View>
       ) : (
@@ -38,7 +38,8 @@ export function DateField({ label, value, max, onChange, hint, error }: Props) {
               value: isoToLocalDate(value),
               maximumDate: isoToLocalDate(max),
               mode: "date",
-              onChange: (event, date) => event.type === "set" && pick(date),
+              // Called only when a date is chosen; dismissing changes nothing.
+              onValueChange: (_, date) => pick(date),
             })
           }
           style={({ pressed }) => [

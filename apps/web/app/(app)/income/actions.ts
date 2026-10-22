@@ -9,6 +9,7 @@ import {
   saveAccount,
   saveSource,
   setAccountArchived,
+  updateCashOnHand,
   voidIncome,
 } from "@fin-creador/api"
 import { type FormState, readFields } from "@/lib/form-state"
@@ -69,6 +70,11 @@ const INCOME_FIELDS = ["amount", "sourceId", "accountId", "occurredOn", "note", 
 export async function recordIncomeAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const input = readFields(formData, INCOME_FIELDS)
   return toState(await recordIncome(await client(), input), input)
+}
+
+export async function updateCashOnHandAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const input = readFields(formData, ["accountId", "amount"])
+  return toState(await updateCashOnHand(await client(), input), input)
 }
 
 export async function voidIncomeAction(_prev: FormState, formData: FormData): Promise<FormState> {

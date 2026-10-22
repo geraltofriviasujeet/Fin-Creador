@@ -18,12 +18,14 @@ type Props = {
   accounts: IncomeAccount[]
   sources: IncomeSourceItem[]
   today: string
+  /** Pre-selected "Received into" account (e.g. Cash in hand from "Received cash as income?"). */
+  presetAccountId?: string
   onDone: () => void
   onAddAccount: () => void
 }
 
 /** Add income (design-spec §9): amount, source, date, "Received into" account, note. */
-export function IncomeForm({ accounts, sources, today, onDone, onAddAccount }: Props) {
+export function IncomeForm({ accounts, sources, today, presetAccountId, onDone, onAddAccount }: Props) {
   const [state, action, pending] = useActionState(recordIncomeAction, initialFormState)
   // One key per opened form: retries after an error reuse it, so the income is saved once.
   const [requestKey] = useState(newRequestKey)
@@ -32,8 +34,10 @@ export function IncomeForm({ accounts, sources, today, onDone, onAddAccount }: P
   const errors = state.fieldErrors ?? {}
 
   const [sourceId, setSourceId] = useState(v.sourceId ?? "")
-  const [accountId, setAccountId] = useState(v.accountId ?? (accounts.length === 1 ? accounts[0]!.id : ""))
-  const [accountTouched, setAccountTouched] = useState(false)
+  const [accountId, setAccountId] = useState(
+    v.accountId ?? (presetAccountId && accounts.some((a) => a.id === presetAccountId) ? presetAccountId : accounts.length === 1 ? accounts[0]!.id : "")
+  )
+  const [accountTouched, setAccountTouched] = useState(Boolean(presetAccountId))
   const [occurredOn, setOccurredOn] = useState(v.occurredOn ?? today)
 
   const account = accounts.find((a) => a.id === accountId)

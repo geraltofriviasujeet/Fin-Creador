@@ -1,3 +1,4 @@
+import { AMOUNT_ERROR_MESSAGES, parseAmount } from "@fin-creador/domain"
 import { accountFormSchema, firstFieldErrors, incomeFormSchema, sourceFormSchema, voidFormSchema } from "@fin-creador/schemas"
 import type { z } from "zod"
 import { ledgerErrorMessage } from "../ledger-errors"
@@ -115,6 +116,30 @@ export async function recordIncome(supabase: UserClient, input: FormInput): Prom
   })
   if (error) return dbError(error, "occurredOn")
   return { status: "success", message: "Income saved." }
+}
+
+/**
+ * "I have this much cash now" for the user's Cash in hand (one per user). A correction,
+ * not income: the database moves the as-of date to today and sets the opening amount so
+ * the balance equals `amount`; income entries are not changed.
+ */
+export async function updateCashOnHand(supabase: UserClient, input: { accountId?: string; amount?: string }): Promise<WriteResult> {
+  const { data: account } = input.accountId
+    ? await supabase.from("accounts").select("currency").eq("id", input.accountId).maybeSingle()
+    : { data: null }
+  if (!account) return { status: "error", message: "We couldn't find your cash account." }
+
+  const amount = parseAmount(input.amount ?? "", account.currency, { allowZero: true })
+  if (!amount.ok) {
+    return { status: "error", message: FIX_FIELDS, fieldErrors: { amount: AMOUNT_ERROR_MESSAGES[amount.error] } }
+  }
+
+  const { error } = await supabase.rpc("set_cash_on_hand", { p_account_id: input.accountId!, p_amount_minor: amount.minor })
+  if (error?.code === "23514") {
+    return { status: "error", message: FIX_FIELDS, fieldErrors: { amount: "That's less than the cash income you recorded today." } }
+  }
+  if (error) return dbError(error)
+  return { status: "success", message: "Cash in hand updated." }
 }
 
 /** One-way void: the entry stays in history and stops counting. */

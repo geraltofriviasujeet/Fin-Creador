@@ -72,11 +72,18 @@ function IncomeContent({ data }: { data: IncomePageData }) {
   }, [accounts, currency, entries, sources, today]);
 
   const label = (id: string) => accounts.find((a) => a.id === id)?.label ?? "Account";
+  const hasCash = accounts.some((a) => a.kind === "cash" && !a.archived);
   const h = view.holdings;
 
   function accountActions(account: IncomeAccount) {
     Alert.alert(account.label, undefined, [
-      { text: "Edit", onPress: () => router.push({ pathname: "/sheets/account", params: { kind: account.kind, id: account.id } }) },
+      {
+        text: account.kind === "cash" ? "Update amount" : "Edit",
+        onPress: () =>
+          account.kind === "cash"
+            ? router.push("/sheets/cash")
+            : router.push({ pathname: "/sheets/account", params: { kind: account.kind, id: account.id } }),
+      },
       {
         text: "Archive",
         style: "destructive",
@@ -211,7 +218,12 @@ function IncomeContent({ data }: { data: IncomePageData }) {
           <Text style={styles.totalValue}>{money(h.totalAvailableMinor, currency)}</Text>
         </View>
         <View style={styles.actions}>
-          <Button label="Add cash" variant="secondary" icon={Plus} onPress={() => router.push({ pathname: "/sheets/account", params: { kind: "cash" } })} />
+          <Button
+            label={hasCash ? "Update cash" : "Add cash"}
+            variant="secondary"
+            icon={Plus}
+            onPress={() => (hasCash ? router.push("/sheets/cash") : router.push({ pathname: "/sheets/account", params: { kind: "cash" } }))}
+          />
           <Button label="Add other account" variant="secondary" icon={Plus} onPress={() => router.push({ pathname: "/sheets/account", params: { kind: "other" } })} />
           {h.archived.length > 0 ? <Button label={`Show archived (${h.archived.length})`} variant="ghost" onPress={() => router.push("/sheets/archived")} /> : null}
         </View>

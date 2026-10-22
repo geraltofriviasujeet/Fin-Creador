@@ -18,15 +18,13 @@ type Props = {
   account?: IncomeAccount
   currency: string
   today: string
-  /** Pre-fill "Cash in hand" for the first cash account. */
-  suggestedName?: string
   onDone: () => void
 }
 
 const KNOWN_BANKS = new Set<string>(INDIAN_BANKS)
 
 /** Add or edit a bank, cash or other account (design-spec §9). */
-export function AccountForm({ kind, account, currency, today, suggestedName, onDone }: Props) {
+export function AccountForm({ kind, account, currency, today, onDone }: Props) {
   const [state, action, pending] = useActionState(saveAccountAction, initialFormState)
   useFormSuccess(state, onDone)
   const errors = state.fieldErrors ?? {}
@@ -36,7 +34,7 @@ export function AccountForm({ kind, account, currency, today, suggestedName, onD
     bankName: initialBank,
     otherBankName: initialBank === OTHER_BANK ? account?.name ?? "" : "",
     bankType: account?.bankType ?? "savings",
-    name: account?.name ?? suggestedName ?? "",
+    name: account?.name ?? "",
     institution: account?.institution ?? "",
     last4: account?.last4 ?? "",
     currency: account?.currency ?? currency,
@@ -80,31 +78,31 @@ export function AccountForm({ kind, account, currency, today, suggestedName, onD
             <TextField name="last4" label="Last 4 digits" hint="Optional" placeholder="0000" inputMode="numeric" maxLength={4} defaultValue={v.last4} error={errors.last4} />
           </div>
         </>
-      ) : (
+      ) : kind === "other" ? (
         <>
-          <TextField
-            name="name"
-            label="Name"
-            placeholder={kind === "cash" ? "Cash in hand" : "e.g. Paytm wallet"}
-            maxLength={80}
-            defaultValue={v.name}
-            error={errors.name}
-          />
-          {kind === "other" && (
-            <TextField name="institution" label="Provider" hint="Optional" maxLength={80} defaultValue={v.institution} error={errors.institution} />
-          )}
+          <TextField name="name" label="Name" placeholder="e.g. Paytm wallet" maxLength={80} defaultValue={v.name} error={errors.name} />
+          <TextField name="institution" label="Provider" hint="Optional" maxLength={80} defaultValue={v.institution} error={errors.institution} />
+        </>
+      ) : (
+        // Cash is just the amount held now: always "Cash in hand", as of today, in the
+        // profile currency (one cash account per person).
+        <>
+          <input type="hidden" name="name" value="Cash in hand" />
+          <input type="hidden" name="openingBalanceDate" value={today} />
+          <input type="hidden" name="currency" value={currency} />
         </>
       )}
 
       <AmountField
         name="openingBalance"
-        label="Opening balance"
+        label={kind === "cash" ? "Amount" : "Opening balance"}
         currency={selectedCurrency}
         defaultValue={v.openingBalance}
-        error={errors.openingBalance}
-        hint={kind === "bank" ? "Use a minus sign if the account is overdrawn." : undefined}
+        error={errors.openingBalance ?? (kind === "cash" ? (errors.name ?? errors.openingBalanceDate) : undefined)}
+        hint={kind === "bank" ? "Use a minus sign if the account is overdrawn." : kind === "cash" ? "The cash you have now." : undefined}
       />
 
+      {kind !== "cash" && (
       <div className="grid gap-5 md:grid-cols-2">
         <TextField
           name="openingBalanceDate"
@@ -129,8 +127,9 @@ export function AccountForm({ kind, account, currency, today, suggestedName, onD
           ))}
         </SelectField>
       </div>
+      )}
 
-      <FormActions submit={account ? "Save changes" : "Add account"} busy="Saving…" pending={pending} />
+      <FormActions submit={account ? "Save changes" : kind === "cash" ? "Add cash" : "Add account"} busy="Saving…" pending={pending} />
     </form>
   )
 }

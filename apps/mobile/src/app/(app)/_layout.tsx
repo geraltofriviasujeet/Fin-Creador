@@ -1,17 +1,15 @@
 import { Stack } from "expo-router";
+import { Platform } from "react-native";
 import { IncomeDataProvider } from "@/lib/income-store";
 import { colors, fontFamily } from "@/theme";
 
-// Add / edit sheets (design-spec §5–6): native form sheets at full height. Native headers
-// don't render inside sheets, so each sheet draws its own title row. If Android's keyboard
-// or the searchable lists misbehave in a sheet, switch `presentation` to "fullScreenModal"
-// here (one place, no new library).
+// Add / edit sheets (design-spec §5–6), set in one place. iOS: the standard modal card
+// (slides up, swipe down to dismiss). Android: full-screen modal. Native "formSheet" was
+// tried first but rendered empty on both platforms in device tests (its flex: 1 content
+// got no height). Native headers are hidden, so each sheet draws its own title row.
 const SHEET = {
-  presentation: "formSheet" as const,
+  presentation: (Platform.OS === "android" ? "fullScreenModal" : "modal") as "fullScreenModal" | "modal",
   headerShown: false,
-  sheetAllowedDetents: [1],
-  sheetGrabberVisible: true,
-  sheetCornerRadius: 24,
   contentStyle: { backgroundColor: colors.surface },
 };
 
@@ -38,6 +36,7 @@ export default function AppLayout() {
       <Stack.Screen name="sheets/source" options={SHEET} />
       <Stack.Screen name="sheets/entries" options={SHEET} />
       <Stack.Screen name="sheets/archived" options={SHEET} />
+      <Stack.Screen name="sheets/cash" options={SHEET} />
     </Stack>
     </IncomeDataProvider>
   );
