@@ -29,7 +29,9 @@ test("signing up again with a registered email gives the same answer (no account
   await page.context().clearCookies()
 
   await submitSignUp(page, { name: "Someone Else", email, password: "another-pass-99" })
-  await expect(page.getByText("Check your email for a link to confirm your account")).toBeVisible()
+  // Exactly the answer a brand-new email gets, and no error.
+  await expect(page.getByText("Check your email for a link to confirm your account, then sign in.")).toBeVisible()
+  await expect(page.getByText("Something went wrong")).toHaveCount(0)
 })
 
 test("an unconfirmed account cannot sign in and can resend the confirmation", async ({ page }) => {
@@ -38,13 +40,16 @@ test("an unconfirmed account cannot sign in and can resend the confirmation", as
   await submitSignUp(page, { name: "Not Yet", email })
   await expect(page.getByText("Check your email for a link to confirm your account")).toBeVisible()
   await waitForAuthLink(email, CONFIRM_SUBJECT, { after: startedAt })
+  const firstEmailAt = Date.now()
   const before = await countEmails(email, CONFIRM_SUBJECT)
 
   await page.goto("/sign-in")
   await signIn(page, email, PASSWORD)
   await expect(page.getByText("Please confirm your email first.")).toBeVisible()
 
-  // A real second email: supabase/config.toml sets [auth.email] max_frequency to 1s for CI.
+  // A real second email: supabase/config.toml sets [auth.email] max_frequency to 1s for CI,
+  // so wait at least 2 s after the first email before resending.
+  await page.waitForTimeout(Math.max(0, 2000 - (Date.now() - firstEmailAt)))
   await page.getByRole("button", { name: "Resend confirmation email" }).click()
   await expect(page.getByText("If that email still needs confirming, we’ve sent a new link.")).toBeVisible()
   await expect.poll(() => countEmails(email, CONFIRM_SUBJECT)).toBeGreaterThan(before)

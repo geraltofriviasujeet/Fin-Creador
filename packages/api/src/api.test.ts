@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { authErrorMessage, INVALID_TIME_ZONE_CODE, isSafePublicKey, profileFormValues, profileUpdateColumns } from "./index"
+import {
+  authErrorMessage,
+  INVALID_TIME_ZONE_CODE,
+  isExistingAccountError,
+  isSafePublicKey,
+  profileFormValues,
+  profileUpdateColumns,
+  SIGN_UP_CHECK_EMAIL,
+} from "./index"
 
 describe("authErrorMessage", () => {
   it("does not reveal whether an account exists", () => {
@@ -23,6 +31,23 @@ describe("authErrorMessage", () => {
   it("falls back to a generic message for unknown errors", () => {
     expect(authErrorMessage({ code: "something_new" }).message).toBe("Something went wrong. Please try again.")
     expect(authErrorMessage(undefined).message).toBe("Something went wrong. Please try again.")
+  })
+})
+
+describe("isExistingAccountError (no account enumeration on sign-up)", () => {
+  it.each(["user_already_exists", "email_exists"])("treats %s as an existing account", (code) => {
+    expect(isExistingAccountError({ code, status: 422 })).toBe(true)
+  })
+
+  it.each([{ code: "weak_password" }, { code: "over_email_send_rate_limit", status: 429 }, { status: 500 }, null, undefined])(
+    "leaves other errors alone: %j",
+    (error) => {
+      expect(isExistingAccountError(error)).toBe(false)
+    }
+  )
+
+  it("uses one shared answer for new and existing emails", () => {
+    expect(SIGN_UP_CHECK_EMAIL).toBe("Check your email for a link to confirm your account, then sign in.")
   })
 })
 

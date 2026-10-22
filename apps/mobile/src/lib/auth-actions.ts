@@ -1,4 +1,4 @@
-import { authErrorMessage } from "@fin-creador/api";
+import { SIGN_UP_CHECK_EMAIL, authErrorMessage, isExistingAccountError } from "@fin-creador/api";
 import { forgotPasswordSchema, signInSchema, signUpSchema } from "@fin-creador/schemas";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
@@ -38,11 +38,13 @@ export async function signUp(input: { displayName: string; email: string; passwo
     // display_name is read by the profiles sign-up trigger.
     options: { data: { display_name: displayName }, emailRedirectTo: emailRedirect() },
   });
-  if (error) return errorState(error);
+  // An already-registered email gets exactly the same answer as a new one (no enumeration).
+  const checkEmail: FormState = { status: "info", message: SIGN_UP_CHECK_EMAIL };
+  if (error) return isExistingAccountError(error) ? checkEmail : errorState(error);
   // Email confirmation off: the session arrives and the router moves to the app.
   if (data.session) return { status: "success" };
-  // Confirmation on (or the email already exists — Supabase answers identically).
-  return { status: "info", message: "Check your email for a link to confirm your account, then sign in here." };
+  // Confirmation on (an unconfirmed existing email also lands here).
+  return checkEmail;
 }
 
 export async function resendConfirmation(email: string): Promise<FormState> {

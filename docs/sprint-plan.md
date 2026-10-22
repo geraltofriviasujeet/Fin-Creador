@@ -67,6 +67,7 @@ Last updated: 2026-10-22.
 | **2026-10-22** | The mobile app supplies `crypto.getRandomValues` and `crypto.subtle.digest` from `expo-crypto` before Supabase loads. | Hermes has no WebCrypto, so supabase-js was falling back to `Math.random()` and a "plain" PKCE challenge. |
 | **2026-10-22** | Web E2E tests run only in CI, against a throwaway Supabase started on the runner, with emails read from its Mailpit inbox. A global setup refuses to run against anything but a local Supabase. | No test users in fin-creador-dev and no service-role key needed. `supabase/config.toml` mirrors the hosted auth settings (confirmation on, password minimum 8, same token-hash email templates) and has higher local rate limits; it is not pushed to the hosted project. |
 | **2026-10-22** | The secret check scans a plain-JS export of the mobile app, not the Hermes bytecode. | Bytecode stores strings back to back, so harmless prefixes merge with neighbouring strings and look like keys. |
+| **2026-10-22** | Sign-up answers "Check your email…" for an email that already has an account, exactly as for a new one (web and mobile, shared `isExistingAccountError`). | Found by the E2E tests: Supabase returns `user_already_exists` for confirmed accounts and the app showed "Something went wrong", which revealed that the email was registered. |
 
 ## Before production (open items)
 
@@ -482,6 +483,12 @@ reminders across supported platforms.
 
 - Add upcoming bill/EMI and recurring-transaction reminders where data
   exists.
+
+- Backlog (from Sprint 1): when someone tries to sign up with an email
+  that already has an account, email the owner ("someone tried to sign
+  up with your address; sign in or reset your password"). Sign-up itself
+  already answers identically for new and existing emails. Needs a
+  server-side email sender (custom SMTP or an Edge Function).
 
 - Implement supported mobile push, supported web notifications, and
   in-app notification center.

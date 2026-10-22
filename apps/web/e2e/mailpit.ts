@@ -1,6 +1,13 @@
 // Reads emails captured by the local Supabase test inbox (Mailpit).
 export const MAILPIT_URL = process.env.MAILPIT_URL ?? "http://127.0.0.1:54324"
 
+/**
+ * Our templates (supabase/templates) link straight to the app's callback with a token hash.
+ * Supabase's default templates go through its /verify page instead, so matching only this
+ * prefix proves the custom templates were used.
+ */
+const APP_CALLBACK_PREFIX = "http://localhost:3000/auth/callback?token_hash="
+
 type Summary = { ID: string; Subject: string; Created: string }
 
 async function search(email: string, subject: string): Promise<Summary[]> {
@@ -12,8 +19,8 @@ async function search(email: string, subject: string): Promise<Summary[]> {
 }
 
 /**
- * Waits for the newest email to `email` whose subject contains `subject` and returns the
- * first link to /auth/callback in it. `after` skips emails that were already there.
+ * Waits for the newest email to `email` whose subject contains `subject` and returns its
+ * token-hash link to the app's /auth/callback. `after` skips emails that were already there.
  */
 export async function waitForAuthLink(
   email: string,
@@ -27,9 +34,11 @@ export async function waitForAuthLink(
     if (newest) {
       const res = await fetch(`${MAILPIT_URL}/api/v1/message/${newest.ID}`)
       const message = (await res.json()) as { HTML?: string }
-      const href = message.HTML?.match(/href="([^"]*\/auth\/callback\?[^"]*)"/)?.[1]
-      if (!href) throw new Error(`No /auth/callback link in "${newest.Subject}"`)
-      return href.replaceAll("&amp;", "&")
+      const href = [...(message.HTML ?? "").matchAll(/href="([^"]*)"/g)]
+        .map((m) => (m[1] ?? "").replaceAll("&amp;", "&"))
+        .find((link) => link.startsWith(APP_CALLBACK_PREFIX))
+      if (!href) throw new Error(`"${newest.Subject}" has no ${APP_CALLBACK_PREFIX}… link (custom email template not used?)`)
+      return href
     }
     await new Promise((r) => setTimeout(r, 500))
   }

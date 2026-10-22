@@ -25,6 +25,7 @@ test("profile changes are validated, saved and still there after signing in agai
 
   await signOut(page)
   await signIn(page, email)
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible() // sign-in finished
   await page.goto("/settings")
   await expect(page.getByLabel("Name")).toHaveValue("Renamed Person")
   await expect(page.getByLabel("Phone (optional)")).toHaveValue("+919876543210")
