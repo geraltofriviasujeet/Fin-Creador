@@ -49,7 +49,8 @@ export function formatMoney(amount: MinorUnits, options: MoneyFormatOptions): st
     currency,
     minimumFractionDigits: shownDigits,
     maximumFractionDigits: shownDigits,
-    signDisplay: signed ? "exceptZero" : "auto",
+    // Only when needed: older Hermes (mobile) builds may not support signDisplay.
+    ...(signed ? { signDisplay: "exceptZero" as const } : {}),
   });
   // Intl accepts decimal strings (exact); the cast covers lib typings that lag behind.
   return formatter.format(decimal as unknown as number);

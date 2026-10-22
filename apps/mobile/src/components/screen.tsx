@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import type { ReactElement, ReactNode } from "react";
+import { KeyboardAvoidingView, Platform, type RefreshControlProps, ScrollView, StyleSheet, View } from "react-native";
 import { type Edge, SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing } from "@/theme";
 
@@ -9,10 +9,12 @@ type Props = {
   edges?: Edge[];
   /** Centre the content vertically (auth screens). */
   centered?: boolean;
+  /** Pull to refresh. */
+  refreshControl?: ReactElement<RefreshControlProps>;
 };
 
 /** Scrollable page on the canvas background, keyboard-aware so focused inputs stay visible. */
-export function Screen({ children, edges = [], centered }: Props) {
+export function Screen({ children, edges = [], centered, refreshControl }: Props) {
   return (
     <SafeAreaView edges={edges} style={styles.safe}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -20,6 +22,7 @@ export function Screen({ children, edges = [], centered }: Props) {
           contentContainerStyle={[styles.content, centered && styles.centered]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
+          refreshControl={refreshControl}
         >
           <View style={styles.inner}>{children}</View>
         </ScrollView>
