@@ -43,6 +43,13 @@ jobs:
       - name: Build web
         run: npm run build
 
+      # Bundles the Expo app for iOS and Android (Hermes bytecode) without a device or
+      # native build, so import, syntax and route errors fail here.
+      - name: Bundle mobile
+        run: npm run bundle:mobile
+        env:
+          CI: "1"
+
   database:
     name: Migrations and pgTAP tests
     runs-on: ubuntu-24.04

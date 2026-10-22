@@ -41,13 +41,13 @@ Last updated: 2026-10-22.
 | **Step** | **Status** | **Notes** |
 |----|----|----|
 | **0. Environment hygiene** | Done | Fixed `.gitignore` (env files were not ignored); added `.env.example` files; moved CLAUDE.md to the repo root. |
-| **1. Monorepo skeleton** | Done | npm workspaces: `apps/web` (Next.js), `apps/mobile` (Expo shell), `packages/schemas`, `packages/design-tokens`; shared TS/ESLint/Vitest config. In PR #1 (open, not merged). |
-| **Design pass and app shell** | Done | Tokens, fonts, logo, primitives, web shell, styled auth and Settings screens, dev-only `/dev/design`. Visually reviewed and approved at desktop, tablet and phone widths. In PR #1. |
-| **2. Profiles migration, RLS and pgTAP tests** | In progress | Migration approved; PR #2 into `sprint-1-foundation`. First CI run passed (35 pgTAP tests). Added backfill for existing users and blank-name fallback (42 tests); CI rerun pending. Not pushed to the hosted Supabase project (`supabase db push` awaits approval). |
-| **3. Web auth wiring (Supabase)** | In progress | Email/password, Google OAuth, recovery, sign-out, protected routes and real profile editing wired; PR from `sprint-1-step-3-auth` (stacked on PR #2). Automated checks pass; awaiting dashboard settings (redirect URLs, email templates, 8-char minimum) and a real sign-up/sign-in test. |
-| **4. Mobile shell (auth, profile)** | Not started | |
+| **1. Monorepo skeleton** | Done | npm workspaces: `apps/web` (Next.js), `apps/mobile` (Expo shell), `packages/schemas`, `packages/design-tokens`; shared TS/ESLint/Vitest config. Merged to `main` (PR #1). |
+| **Design pass and app shell** | Done | Tokens, fonts, logo, primitives, web shell, styled auth and Settings screens, dev-only `/dev/design`. Visually reviewed and approved at desktop, tablet and phone widths. Merged to `main` (PR #1). |
+| **2. Profiles migration, RLS and pgTAP tests** | Done | Migration applied to the dev project (fin-creador-dev). 42 pgTAP tests pass in CI. Merged to `sprint-1-foundation` and `main` (PR #2). |
+| **3. Web auth wiring (Supabase)** | Done (not yet on `sprint-1-foundation`) | Email/password, Google OAuth, recovery, sign-out, protected routes and profile editing. Real round trip on the dev project passed 2026-10-22. PR #3 merged into `sprint-1-step-2-profiles` after that branch had already merged, so the auth code is not on `sprint-1-foundation` or `main` yet; it needs a follow-up PR from `sprint-1-step-2-profiles`. |
+| **4. Mobile shell (auth, profile)** | Done on Android (awaiting commit) | Expo Router shell with five tabs, header, native primitives, email/password and Google sign-in, sign-up with confirmation, password-reset email, Settings with profile editing through RLS, encrypted session storage. Tested 2026-10-22 on an Android phone in Expo Go 58.0.5: layout, sign-in and Google sign-in work. iPhone not tested yet: the App Store Expo Go is still SDK 57. Lint, typecheck, unit tests and iOS/Android bundles pass. Branch `sprint-1-step-4-mobile`, uncommitted. |
 | **5. Tests (E2E, secret check)** | Not started | Unit tests exist for schemas, tokens and formatting. |
-| **6. CI and setup docs** | In progress | CI workflow (`.github/workflows/ci.yml`) in PR #2; first run passed (app and database jobs). `docs/setup.md` not started. |
+| **6. CI and setup docs** | In progress | CI workflow (`.github/workflows/ci.yml`) runs on every PR; green on PRs #2 and #3. Mobile bundle step added in Step 4. `docs/setup.md` not started. |
 
 ## Decisions
 
@@ -58,6 +58,26 @@ Last updated: 2026-10-22.
 | **2026-10-22** | Web hosting is Vercel Hobby. | Hobby is for non-commercial use only: upgrade to Pro (or move hosting) before any paid or commercial launch. |
 | **2026-10-22** | Wordmark is written "FinCreador" with a capital F and C (Figma used lowercase "fincreador"). | Brand name reads correctly; applied everywhere through the single Wordmark component. |
 | **2026-10-22** | Scheduled jobs and reminders use Supabase scheduling (`pg_cron` and Edge Functions), not Vercel Cron. | Vercel Hobby cron runs at most once a day with up to an hour of drift — not enough for a 10 PM reminder in each user's time zone. |
+| **2026-10-22** | Mobile uses Expo Router (`apps/mobile/src/app`), with protected `(auth)` and `(app)` groups and five bottom tabs matching the web tab bar. | Expo's recommended navigation; route guards keep signed-out users out of the app screens. |
+| **2026-10-22** | The mobile session is stored in AsyncStorage, encrypted with AES-256-GCM (`expo-crypto`); the key lives in the Keychain / Android Keystore (`expo-secure-store`, after first unlock, this device only). | The secure store cannot hold a whole session; this keeps tokens encrypted at rest. A session that can't be decrypted is dropped and the user signs in again. |
+| **2026-10-22** | Email links from the mobile app (sign-up confirmation, password reset) open the web app. Google sign-in on mobile uses the system auth browser with PKCE and returns to the app. | Deep-linking email links into the app needs real app builds (Sprint 11). Expo Go needs `exp://**` in the Supabase redirect allow list; builds use `fincreador://auth/callback`. |
+| **2026-10-22** | Country, currency and time-zone lists (with English names) are generated into `packages/schemas/src/region-data.ts` and used by web and mobile. | Hermes (mobile) lacks `Intl.supportedValuesOf` and `Intl.DisplayNames`; one static list means both clients offer the same choices. |
+| **2026-10-22** | Auth error messages, the publishable-key guard and profile column mapping live in `packages/api`, shared by web and mobile. | One set of messages and rules; the clients cannot drift apart. |
+| **2026-10-22** | Google sign-in in Expo Go is tested with `npm run dev:mobile:google`, which serves Expo under an sslip.io hostname (e.g. `192-168-1-6.sslip.io`). | Supabase refuses OAuth redirects to bare IP addresses even when allow-listed, and the ngrok tunnel was unreliable. App builds use `fincreador://auth/callback`, which Supabase already accepts. |
+| **2026-10-22** | The mobile app supplies `crypto.getRandomValues` and `crypto.subtle.digest` from `expo-crypto` before Supabase loads. | Hermes has no WebCrypto, so supabase-js was falling back to `Math.random()` and a "plain" PKCE challenge. |
+
+## Before production (open items)
+
+Development-only settings that must be removed or replaced before any production release (Sprint 12 at the latest):
+
+- **Supabase redirect allow list:** remove `exp://**` (Expo Go) and the `http://localhost:3000/...` entries; keep only the production web URL and the app's own scheme.
+- **Dev scripts:** drop `npm run dev:mobile:google` (`apps/mobile/scripts/start-lan-hostname.sh`); it exists only so Google sign-in can return to Expo Go during development.
+- **App scheme:** use a fixed `fincreador://` scheme in the release builds (and keep `fincreador://auth/callback` as the only mobile OAuth return address). Remove the Expo Go `exp://` branch in `oauthRedirectUrl` once development builds replace Expo Go.
+- **Site URL:** set it to the production web URL.
+
+Pending tests:
+
+- **iPhone:** Step 4 not yet tested on iOS. It is waiting for the App Store Expo Go to support SDK 58 (or an `eas go` / development build).
 
 # 1. Executive summary
 
@@ -540,6 +560,10 @@ for deployment and store submission.
   store metadata.
 
 - Prepare web deployment and Android/iOS release builds.
+
+- Clear the development-only items in "Before production (open items)"
+  at the top of this document (redirect allow list, dev scripts, fixed
+  `fincreador://` scheme, Site URL).
 
 ### Acceptance criteria
 
