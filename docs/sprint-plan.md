@@ -333,6 +333,7 @@ real, date-filtered data.
 - Controlled web deployment on Vercel (Hobby) for user testing.
 
 - At the start of Sprint 5, write `docs/deployment.md`: Vercel project setup, environment variables, Supabase auth redirect URLs, and the Hobby non-commercial limit.
+- After the first Vercel deployment, verify the auth redirects (email confirmation, password reset, Google, signed-out redirects) stay on the deployment's own domain. If any land on `localhost`, build those redirects from `NEXT_PUBLIC_SITE_URL` instead of the request URL (`app/auth/callback/route.ts`, `lib/supabase/proxy.ts`). The E2E tests run on `localhost:3000` because `next start` builds request URLs from `localhost`.
 
 **Dependencies:** Sprints 2–4 data and calculation rules.
 

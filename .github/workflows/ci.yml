@@ -126,17 +126,20 @@ jobs:
           {
             echo "NEXT_PUBLIC_SUPABASE_URL=${API_URL}"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${PUBLISHABLE_KEY:-$ANON_KEY}"
-            echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000"
+            echo "NEXT_PUBLIC_SITE_URL=http://localhost:3000"
           } >> "$GITHUB_ENV"
 
       - name: Build web
         run: npm run build
 
-      - name: Install Chromium for Playwright
-        run: npx playwright install --with-deps chromium
-
+      # Uses the Google Chrome preinstalled on the runner (Playwright channel "chrome").
       - name: Run E2E tests
         run: npm run test:e2e
+
+      # Diagnostics only: the local Auth server's log (throwaway test users, no real data).
+      - name: Show local Auth log
+        if: failure()
+        run: docker logs "$(docker ps --format '{{.Names}}' | grep -m1 supabase_auth)" 2>&1 | tail -n 200
 
       - name: Upload Playwright report
         if: failure()

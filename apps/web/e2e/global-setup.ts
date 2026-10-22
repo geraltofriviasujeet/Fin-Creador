@@ -12,7 +12,7 @@ export default async function globalSetup() {
   }
   if (host !== "127.0.0.1" && host !== "localhost") {
     throw new Error(
-      "E2E tests only run against a local Supabase (NEXT_PUBLIC_SUPABASE_URL must point at 127.0.0.1). " +
+      "E2E tests only run against a local Supabase (NEXT_PUBLIC_SUPABASE_URL must point at 127.0.0.1 or localhost). " +
         "They run in CI; see docs/setup.md."
     )
   }

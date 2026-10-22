@@ -44,6 +44,7 @@ test("an unconfirmed account cannot sign in and can resend the confirmation", as
   await signIn(page, email, PASSWORD)
   await expect(page.getByText("Please confirm your email first.")).toBeVisible()
 
+  // A real second email: supabase/config.toml sets [auth.email] max_frequency to 1s for CI.
   await page.getByRole("button", { name: "Resend confirmation email" }).click()
   await expect(page.getByText("If that email still needs confirming, we’ve sent a new link.")).toBeVisible()
   await expect.poll(() => countEmails(email, CONFIRM_SUBJECT)).toBeGreaterThan(before)
@@ -52,5 +53,6 @@ test("an unconfirmed account cannot sign in and can resend the confirmation", as
 test("a tampered confirmation link is rejected", async ({ page }) => {
   await page.goto("/auth/callback?token_hash=not-a-real-token&type=email&next=/")
   await expect(page).toHaveURL(/\/sign-in/)
-  await expect(page.getByText("That link is invalid or has expired.")).toBeVisible()
+  // Scoped to the toast region: the same text is also announced for screen readers.
+  await expect(page.getByRole("region", { name: "Notifications" }).getByText("That link is invalid or has expired.")).toBeVisible()
 })
