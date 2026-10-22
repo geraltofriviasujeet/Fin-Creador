@@ -65,7 +65,7 @@ export const contrastPairs: ReadonlyArray<{
   { fg: "ink", bg: "accent", min: 4.5, use: "active nav / brand button" },
   { fg: "navText", bg: "nav", min: 4.5, use: "sidebar text" },
   { fg: "navMuted", bg: "nav", min: 4.5, use: "sidebar secondary text" },
-  { fg: "accent", bg: "nav", min: 4.5, use: "wordmark 'creador' on nav" },
+  { fg: "accent", bg: "nav", min: 4.5, use: "wordmark 'Creador' on nav" },
   { fg: "navText", bg: "accentDeep", min: 4.5, use: "balance card text" },
   { fg: "navMuted", bg: "accentDeep", min: 4.5, use: "balance card secondary" },
   { fg: "accent", bg: "accentDeep", min: 4.5, use: "badge on balance card" },

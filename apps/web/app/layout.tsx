@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, Manrope } from "next/font/google";
 import { colors } from "@fin-creador/design-tokens";
+import { Suspense } from "react";
+import { NoticeToast } from "@/components/notice-toast";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
@@ -32,7 +34,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en-IN" className={`${manrope.variable} ${dmSans.variable}`}>
       <body>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          {children}
+          <Suspense fallback={null}>
+            <NoticeToast />
+          </Suspense>
+        </ToastProvider>
       </body>
     </html>
   );

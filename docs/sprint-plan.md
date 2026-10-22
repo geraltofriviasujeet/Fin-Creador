@@ -44,7 +44,7 @@ Last updated: 2026-10-22.
 | **1. Monorepo skeleton** | Done | npm workspaces: `apps/web` (Next.js), `apps/mobile` (Expo shell), `packages/schemas`, `packages/design-tokens`; shared TS/ESLint/Vitest config. In PR #1 (open, not merged). |
 | **Design pass and app shell** | Done | Tokens, fonts, logo, primitives, web shell, styled auth and Settings screens, dev-only `/dev/design`. Visually reviewed and approved at desktop, tablet and phone widths. In PR #1. |
 | **2. Profiles migration, RLS and pgTAP tests** | In progress | Migration approved; PR #2 into `sprint-1-foundation`. First CI run passed (35 pgTAP tests). Added backfill for existing users and blank-name fallback (42 tests); CI rerun pending. Not pushed to the hosted Supabase project (`supabase db push` awaits approval). |
-| **3. Web auth wiring (Supabase)** | Not started | Auth and Settings forms validate input but store nothing yet. |
+| **3. Web auth wiring (Supabase)** | In progress | Email/password, Google OAuth, recovery, sign-out, protected routes and real profile editing wired; PR from `sprint-1-step-3-auth` (stacked on PR #2). Automated checks pass; awaiting dashboard settings (redirect URLs, email templates, 8-char minimum) and a real sign-up/sign-in test. |
 | **4. Mobile shell (auth, profile)** | Not started | |
 | **5. Tests (E2E, secret check)** | Not started | Unit tests exist for schemas, tokens and formatting. |
 | **6. CI and setup docs** | In progress | CI workflow (`.github/workflows/ci.yml`) in PR #2; first run passed (app and database jobs). `docs/setup.md` not started. |
@@ -56,6 +56,7 @@ Last updated: 2026-10-22.
 | **2026-10-21** | UI follows the Figma Make design, adopted as `docs/design-spec.md`: dark forest green with a lime accent. This replaces the emerald brand color. | One visual source of truth for web and mobile. Text colors that failed WCAG AA were darkened; input borders darkened to 3:1; minimum text 12px. |
 | **2026-10-22** | Database and RLS tests run in GitHub Actions, not on the development Mac. Do not start Docker or local Supabase there; check free disk before any large download. | A local Supabase start filled the Mac's disk. CI uses a throwaway database and never touches the hosted project. |
 | **2026-10-22** | Web hosting is Vercel Hobby. | Hobby is for non-commercial use only: upgrade to Pro (or move hosting) before any paid or commercial launch. |
+| **2026-10-22** | Wordmark is written "FinCreador" with a capital F and C (Figma used lowercase "fincreador"). | Brand name reads correctly; applied everywhere through the single Wordmark component. |
 | **2026-10-22** | Scheduled jobs and reminders use Supabase scheduling (`pg_cron` and Edge Functions), not Vercel Cron. | Vercel Hobby cron runs at most once a day with up to an hour of drift — not enough for a 10 PM reminder in each user's time zone. |
 
 # 1. Executive summary
