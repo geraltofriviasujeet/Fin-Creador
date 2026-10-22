@@ -54,7 +54,7 @@ Last updated: 2026-10-22.
 | **Step** | **Status** | **Notes** |
 |----|----|----|
 | **0. Docs** | Done | Scope change recorded here; Income screens added to `docs/design-spec.md`; CLAUDE.md §5 clarified. |
-| **1. Migration and pgTAP** | In review | `accounts`, `categories` (income sources), `transactions` (income only), balance view, `record_income` / `void_income`, default sources; 104 pgTAP tests. Review fixes applied (trigger helper privileges, as-of date checks and lock, user deletion). Awaiting CI. |
+| **1. Migration and pgTAP** | In review | `accounts`, `categories` (income sources), `transactions` (income only), balance view, `record_income` / `void_income`, default sources; 105 pgTAP tests. Review fixes applied (trigger helper privileges, as-of date checks and lock, user deletion). Awaiting CI. |
 | **2. Domain and schemas** | Not started | Money parsing/formatting, balances, totals, period ranges, income by source, with tests; shared validation; bank list. |
 | **3. Web Income page** | Not started | Income page, Add income, Add bank / cash / other account, Add source, archive and restore, void. |
 | **4. E2E tests** | Not started | Account and income flows, double submit, void, archive, cross-user. |

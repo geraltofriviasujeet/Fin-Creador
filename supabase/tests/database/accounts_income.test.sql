@@ -4,7 +4,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(104);
+select plan(105);
 
 -- Fixed test users (fictional). The sign-up triggers create their profiles and default
 -- income sources.
@@ -109,7 +109,7 @@ select is(
   6::bigint, 'every new user gets the defaults'
 );
 
--- ------------------------------------------------------------ as user A (22-74)
+-- ------------------------------------------------------------ as user A (22-75)
 select set_config('request.jwt.claims',
   '{"sub": "11111111-1111-4111-8111-111111111111", "role": "authenticated"}', true);
 set local role authenticated;
@@ -378,12 +378,16 @@ select throws_ok(
   '23514', null, 'expense categories are not enabled yet'
 );
 select throws_ok(
+  $$ insert into public.categories (kind, name) values ('income', 'No type') $$,
+  '23514', null, 'an income source needs a type'
+);
+select throws_ok(
   $$ insert into public.categories (kind, name, source_type, default_account_id)
      values ('income', 'Sneaky', 'other', 'b0000000-0000-4000-8000-000000000001') $$,
   '23503', null, 'a source cannot default to user B''s account'
 );
 
--- ------------------------------------------------------------ as user B (75-83)
+-- ------------------------------------------------------------ as user B (76-84)
 select set_config('request.jwt.claims',
   '{"sub": "22222222-2222-4222-8222-222222222222", "role": "authenticated"}', true);
 
@@ -432,11 +436,11 @@ select throws_ok(
   'FC003', null, '"future" is judged in the user''s own time zone'
 );
 
--- ---------------------------------------------- signed in without a user id (84)
+-- ---------------------------------------------- signed in without a user id (85)
 select set_config('request.jwt.claims', '{"role": "authenticated"}', true);
 select is((select count(*) from public.account_balances), 0::bigint, 'no user id: the balance view shows nothing');
 
--- ------------------------------------------------------------ anonymous (85-87)
+-- ------------------------------------------------------------ anonymous (86-88)
 reset role;
 select set_config('request.jwt.claims', '{"role": "anon"}', true);
 set local role anon;
@@ -449,7 +453,7 @@ select throws_ok(
   '42501', null, 'anon cannot record income'
 );
 
--- ------------------------------------------------------------ as owner (88-104)
+-- ------------------------------------------------------------ as owner (89-105)
 reset role;
 
 select throws_ok(

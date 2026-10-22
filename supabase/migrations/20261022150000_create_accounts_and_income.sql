@@ -80,9 +80,11 @@ create table public.accounts (
 
   constraint accounts_id_user_unique unique (id, user_id),
   constraint accounts_kind check (kind in ('bank', 'cash', 'other')),
-  -- Banks are savings or current; other kinds have no bank type.
+  -- Banks are savings or current; other kinds have no bank type. The explicit
+  -- "is not null" matters: a CHECK only rejects FALSE, and NULL IN (...) is NULL.
   constraint accounts_bank_type check (
-    (kind = 'bank' and bank_type in ('savings', 'current')) or (kind <> 'bank' and bank_type is null)
+    (kind = 'bank' and bank_type is not null and bank_type in ('savings', 'current'))
+    or (kind <> 'bank' and bank_type is null)
   ),
   constraint accounts_name_length check (char_length(btrim(name)) between 1 and 80),
   constraint accounts_institution_length
@@ -178,8 +180,10 @@ create table public.categories (
   -- Expense categories arrive in Sprint 3 (drop this constraint then).
   constraint categories_kind_enabled check (kind = 'income'),
   constraint categories_name_length check (char_length(btrim(name)) between 1 and 60),
+  -- Income sources need a type (explicit "is not null": NULL IN (...) would pass a CHECK).
   constraint categories_source_type check (
-    (kind = 'income' and source_type in ('salary', 'rent', 'freelance', 'business', 'interest', 'other'))
+    (kind = 'income' and source_type is not null
+       and source_type in ('salary', 'rent', 'freelance', 'business', 'interest', 'other'))
     or (kind <> 'income' and source_type is null)
   ),
   constraint categories_default_account_income_only check (kind = 'income' or default_account_id is null),
