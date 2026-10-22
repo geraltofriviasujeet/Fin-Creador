@@ -1,5 +1,6 @@
-// Maps Supabase Auth error codes to user-facing messages. Messages never reveal whether
-// an email is registered, and raw provider messages are never shown.
+// Maps Supabase Auth error codes to user-facing messages, for web and mobile alike.
+// Messages never reveal whether an email is registered, and raw provider messages are
+// never shown.
 
 export type AuthErrorLike = { code?: string | undefined; status?: number | undefined } | null | undefined
 

@@ -1,27 +1,9 @@
 import { z } from "zod"
+import { isSafePublicKey } from "@fin-creador/api"
 
 // Public configuration only. These values are inlined into the browser bundle, so a
 // secret must never be placed here: the publishable-key check below refuses Supabase
 // secret keys and service-role JWTs outright.
-
-/** Decodes a JWT payload without verifying it (only used to inspect the role claim). */
-function jwtRole(token: string): string | undefined {
-  const part = token.split(".")[1]
-  if (!part) return undefined
-  try {
-    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"))
-    const role: unknown = JSON.parse(json).role
-    return typeof role === "string" ? role : undefined
-  } catch {
-    return undefined
-  }
-}
-
-export function isSafePublicKey(key: string): boolean {
-  if (key.startsWith("sb_secret_")) return false
-  if (key.split(".").length === 3) return jwtRole(key) === "anon" // legacy anon JWT only
-  return key.startsWith("sb_publishable_")
-}
 
 const publicEnvSchema = z.object({
   supabaseUrl: z.url({ message: "NEXT_PUBLIC_SUPABASE_URL must be a URL" }),

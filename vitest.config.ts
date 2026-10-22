@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 // UI/integration test setups get their own config when they are introduced.
 export default defineConfig({
   test: {
-    include: ["packages/*/src/**/*.test.ts", "apps/web/**/*.test.ts"],
+    include: ["packages/*/src/**/*.test.ts", "apps/web/**/*.test.ts", "apps/mobile/src/**/*.test.ts"],
     exclude: ["**/node_modules/**", "**/.next/**"],
     environment: "node",
   },
