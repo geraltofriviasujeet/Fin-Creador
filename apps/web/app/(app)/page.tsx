@@ -1,7 +1,7 @@
 import Link from "next/link"
-import { Inbox, UserRound } from "lucide-react"
+import { ArrowDownToLine, Inbox, UserRound } from "lucide-react"
 import { PageHeader } from "@/components/shell/app-shell"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
 // First-run empty state. The real dashboard (summary cards, charts) is Sprint 5.
@@ -17,14 +17,20 @@ export default function OverviewPage() {
         <div className="grid max-w-md gap-1.5">
           <h2 className="text-xl font-semibold">Nothing to show yet</h2>
           <p className="text-sm text-muted-foreground">
-            Your balance, income and spending will appear here after you add accounts and
-            transactions. Start by setting your country, currency and time zone.
+            Your balance, income and spending will appear here as you record them. Add your
+            accounts and income on the Income page.
           </p>
         </div>
-        <Button nativeButton={false} render={<Link href="/settings" />}>
-          <UserRound aria-hidden="true" />
-          Set up your profile
-        </Button>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Link href="/income" className={buttonVariants()}>
+            <ArrowDownToLine aria-hidden="true" />
+            Go to Income
+          </Link>
+          <Link href="/settings" className={buttonVariants({ variant: "secondary" })}>
+            <UserRound aria-hidden="true" />
+            Set up your profile
+          </Link>
+        </div>
       </Card>
     </>
   )

@@ -23,10 +23,10 @@ Last updated: 2026-10-22.
 
 | **Sprint** | **Focus** | **Status** | **Notes** |
 |----|----|----|----|
-| **1** | Foundation, authentication & profile | Done | Completed 2026-10-22; released to `main` via PR #7. iPhone test of the mobile app pending SDK 58 in the App Store Expo Go. See Sprint 1 steps below. |
-| **2** | Accounts & starting balances | Not started | |
-| **3** | Expense & transaction tracking | Not started | |
-| **4** | Income sources & recurring items | Not started | |
+| **1** | Foundation, authentication & profile | Done | Completed 2026-10-22; released to `main` via PR #7. Mobile app runs on Android and iPhone in Expo Go 58 (iPhone from 2026-10-22). See Sprint 1 steps below. |
+| **2** | Accounts & Income page | Done | Completed 2026-10-22 (PRs #9–#16). Accounts, income sources, income entries with void, one cash account with "Update cash in hand", the Income page on web and mobile. Tested on web (E2E in CI) and on Android and iPhone (Expo Go 58). Scope widened from the original plan (see decisions). See Sprint 2 steps below. |
+| **3** | Expense & transaction tracking | Not started | Income entry, the transactions table and safe void moved into Sprint 2. |
+| **4** | Recurring items | Not started | Income sources and the Income page moved into Sprint 2; recurring rules and mark received/paid stay here. |
 | **5** | Dashboard & analytics | Not started | |
 | **6** | Budgets & savings goals | Not started | |
 | **7** | Investment portfolio | Not started | |
@@ -49,6 +49,18 @@ Last updated: 2026-10-22.
 | **5. Tests (E2E, secret check)** | Done | 13 Playwright E2E tests (sign-up with email confirmation, unconfirmed sign-in and resend, sign-in errors, protected routes and safe `next`, profile save, password reset, sign-out) run in CI against a throwaway local Supabase with the Mailpit inbox; never against fin-creador-dev. Secret check (`scripts/check-secrets.mjs`) scans tracked files, the web client bundle and the mobile bundles, with a canary for server-only env. Google sign-in stays a manual check. All 13 E2E tests green in CI (PR #6); they found and fixed one app bug (sign-up revealed registered emails). |
 | **6. CI and setup docs** | Done | CI runs lint, typecheck, unit tests, web build, mobile bundles, secret check, migrations and pgTAP, and the E2E job on every PR. `docs/setup.md` (placeholders only) and README written. All CI jobs green on PR #6. |
 
+## Sprint 2 steps
+
+| **Step** | **Status** | **Notes** |
+|----|----|----|
+| **0. Docs** | Done | Scope change recorded here; Income screens added to `docs/design-spec.md`; CLAUDE.md §5 clarified. |
+| **1. Migration and pgTAP** | Done | `accounts`, `categories` (income sources), `transactions` (income only), balance view, `record_income` / `void_income`, default sources; 105 pgTAP tests green in CI (PR #9). Applied to fin-creador-dev 2026-10-22; types regenerated. |
+| **2. Domain and schemas** | Done | `packages/domain`: dates and periods in the user's time zone, money parsing, balances, holdings totals, income by source (incl. voided-only), rental, trend; `packages/schemas`: account, income, source and void forms, bank list; `packages/api`: FC001–FC013 messages. Unit tests at month, year, leap-year and time-zone boundaries (PR #10). |
+| **3. Web Income page** | Done | `/income`: six cards, Income sources, Where your money is with Total available; Add income, Add bank / other account, Add / Update cash, edit, archive and restore, Add source, void. Topbar "Add transaction" opens Add income. CI fixes: breakpoints, real links, form values kept after errors, restore confirmation (PRs #10–#12). |
+| **4. E2E tests** | Done | 6 Playwright tests for the Income page (empty states, accounts and totals, cash update, double submit, void / archive / restore, future date and deep link, cross-user); 19 in total, green in CI with screenshots at three widths. |
+| **5. Mobile** | Done | Shared loader and writers in `packages/api` (#13); mobile Income screen and add / edit screens (#14), iOS modal cards and Android full-screen modals (#15), one cash account with Update cash in hand (#16, migration 20261022190000 applied to fin-creador-dev). Tested on Android and iPhone in Expo Go 58. |
+| **6. Status and PR** | Done | Status and decisions updated; PR from `sprint-1-foundation` into `main` opened for review. |
+
 ## Decisions
 
 | **Date** | **Decision** | **Reason / consequence** |
@@ -56,7 +68,7 @@ Last updated: 2026-10-22.
 | **2026-10-21** | UI follows the Figma Make design, adopted as `docs/design-spec.md`: dark forest green with a lime accent. This replaces the emerald brand color. | One visual source of truth for web and mobile. Text colors that failed WCAG AA were darkened; input borders darkened to 3:1; minimum text 12px. |
 | **2026-10-22** | Database and RLS tests run in GitHub Actions, not on the development Mac. Do not start Docker or local Supabase there; check free disk before any large download. | A local Supabase start filled the Mac's disk. CI uses a throwaway database and never touches the hosted project. |
 | **2026-10-22** | Web hosting is Vercel Hobby. | Hobby is for non-commercial use only: upgrade to Pro (or move hosting) before any paid or commercial launch. |
-| **2026-10-22** | Wordmark is written "FinCreador" with a capital F and C (Figma used lowercase "fincreador"). | Brand name reads correctly; applied everywhere through the single Wordmark component. |
+| **2026-10-22** | ~~Wordmark is written "FinCreador" with a capital F and C (Figma used lowercase "fincreador").~~ Superseded below. | Brand name reads correctly; applied everywhere through the single Wordmark component. |
 | **2026-10-22** | Scheduled jobs and reminders use Supabase scheduling (`pg_cron` and Edge Functions), not Vercel Cron. | Vercel Hobby cron runs at most once a day with up to an hour of drift — not enough for a 10 PM reminder in each user's time zone. |
 | **2026-10-22** | Mobile uses Expo Router (`apps/mobile/src/app`), with protected `(auth)` and `(app)` groups and five bottom tabs matching the web tab bar. | Expo's recommended navigation; route guards keep signed-out users out of the app screens. |
 | **2026-10-22** | The mobile session is stored in AsyncStorage, encrypted with AES-256-GCM (`expo-crypto`); the key lives in the Keychain / Android Keystore (`expo-secure-store`, after first unlock, this device only). | The secure store cannot hold a whole session; this keeps tokens encrypted at rest. A session that can't be decrypted is dropped and the user signs in again. |
@@ -68,6 +80,20 @@ Last updated: 2026-10-22.
 | **2026-10-22** | Web E2E tests run only in CI, against a throwaway Supabase started on the runner, with emails read from its Mailpit inbox. A global setup refuses to run against anything but a local Supabase. | No test users in fin-creador-dev and no service-role key needed. `supabase/config.toml` mirrors the hosted auth settings (confirmation on, password minimum 8, same token-hash email templates) and has higher local rate limits; it is not pushed to the hosted project. |
 | **2026-10-22** | The secret check scans a plain-JS export of the mobile app, not the Hermes bytecode. | Bytecode stores strings back to back, so harmless prefixes merge with neighbouring strings and look like keys. |
 | **2026-10-22** | Sign-up answers "Check your email…" for an email that already has an account, exactly as for a new one (web and mobile, shared `isExistingAccountError`). | Found by the E2E tests: Supabase returns `user_already_exists` for confirmed accounts and the app showed "Something went wrong", which revealed that the email was registered. |
+| **2026-10-22** | Sprint 2 covers accounts and the full Income page from `docs/design/Income*.png`. Moved in from Sprint 3: income entry, the transactions table (designed for income, expense and transfer; only income enabled) and safe void. Moved in from Sprint 4: income sources and the Income page. Sprint 3 keeps expenses, transfers, editing and history, search and filters; Sprint 4 keeps recurring rules and mark received/paid. | Owner's scope decision; the Income page is the first screen that needs accounts, so both ship together. There is no separate Accounts page. |
+| **2026-10-22** | An income source is an income category (`categories` with `kind = income`): a type (salary, rent, freelance, business, interest, other) and an optional default account. Sources hold no balance; money lives only in accounts, and cash and other holdings are accounts. | Avoids two overlapping concepts and double counting (CLAUDE.md §5). |
+| **2026-10-22** | Total available = sum of active accounts' balances in the profile currency. Accounts in other currencies are listed but not totalled (no conversion). Account balance = opening balance + posted inflows − posted outflows, counting entries on or after the opening balance's "as of" date (the balance at the start of that day). Voided entries never count. | Exact, explainable totals; income dated before the as-of date still counts as period income but is already inside the opening figure. |
+| **2026-10-22** | Opening balance may be negative for bank accounts only; cash and other accounts must be zero or more until Sprint 8 (liabilities). ~~Multiple cash accounts are allowed; the Cash in hand card sums them and the first "Add cash" pre-fills "Cash in hand".~~ Superseded by "one cash account" below. | Overdrawn current accounts exist; negative cash does not. |
+| **2026-10-22** | Add income has a single "Received into" account (banks, cash, other); no separate payment-method field. | The account already records where the money landed. |
+| **2026-10-22** | A mistaken income entry is voided, never deleted or edited (editing is Sprint 3). Voiding is one-way and enforced in the database. Creating income is idempotent (client key, unique per user). | Auditable history and no double posting. |
+| **2026-10-22** | An account's currency and opening-balance date are locked once it has entries (error codes FC004, FC011); the opening amount can still be corrected. The as-of date is only re-checked against "today" when it is set or changed, so editing and archiving keep working after a time-zone change. | The as-of date decides which entries count toward the balance; moving it later would silently re-classify existing income. |
+| **2026-10-22** | Income entries cascade from their account and source (`ON DELETE CASCADE`), and a source's default account is cleared (`SET NULL`), only so that deleting a whole user works. Accounts and sources must never be deleted directly, only archived; account deletion (Sprint 12) goes through deleting the user. | Keeps the ledger intact: no client can delete an account or source, and deleting a user removes all of their data in any cascade order. |
+| **2026-10-22** | Default income sources (Salary, Freelance, Rental income, Business, Interest & dividends, Other income) are created for every user by a separate function that can never block sign-up, with a backfill and a lazy fallback on first use. The Income sources panel lists only sources with income this year or added by the user. | Ready-to-use categories without showing rows of ₹0. |
+| **2026-10-22** | "This month" and "this year" use the calendar in the user's time zone. The Rental income card sums all rent-type sources. "Linked account" on a source is the account that actually received its income this year ("Multiple accounts" if several), else its default account. | Matches the Figma; financial year is a backlog setting. |
+| **2026-10-22** | Wordmark is lowercase "fincreador" as in the Figma ("fin" white, "creador" lime on dark; both ink on light). Screen readers hear "Fin Creador"; titles, emails and body text keep "Fin Creador". | Owner's decision; reverses the earlier "FinCreador". Lime stays off light backgrounds (contrast). |
+| **2026-10-22** | Income loading and writes live in `packages/api` (`loadIncomeData`, `saveAccount`, `setAccountArchived`, `saveSource`, `recordIncome`, `voidIncome`) and take the signed-in user's Supabase client (RLS applies, never a service-role key). The web's server actions are thin wrappers; the mobile app calls the same functions. "Today" comes from the database (`user_local_today`) on both clients and drives the month and year; if it can't be read, nothing is saved (no device-clock fallback). | One code path for validation, writes and error messages on web and mobile. |
+| **2026-10-22** | Mobile add and edit screens open as the standard iOS modal card (slides up, swipe down to dismiss) and as full-screen modals on Android, set in one place in `apps/mobile/src/app/(app)/_layout.tsx`. Dates use the native picker (`onValueChange`), capped at today from the database. | Native form sheets were tried first but rendered empty on both platforms in device tests (their `flex: 1` content got no height). Tested on Android and iPhone in Expo Go 58 on 2026-10-22. |
+| **2026-10-22** | One active cash account per person ("Cash in hand"), enforced in the database (trigger, FC012; a trigger rather than a unique index so existing duplicates don't block the migration). "Add cash" asks only for the amount held now; afterwards "Update cash in hand" (`set_cash_on_hand`) sets the cash held now by moving the as-of date to today and setting the opening amount, without changing any income entry. Cash received as income is recorded as income into Cash in hand; ATM withdrawals become transfers (Sprint 3). Same on web and mobile. | Owner's choice (option A) after a second "Cash in hand 2" appeared. Telling the app how much cash you have is a correction, not income (CLAUDE.md §5). |
 
 ## Before production (open items)
 
@@ -78,9 +104,17 @@ Development-only settings that must be removed or replaced before any production
 - **App scheme:** use a fixed `fincreador://` scheme in the release builds (and keep `fincreador://auth/callback` as the only mobile OAuth return address). Remove the Expo Go `exp://` branch in `oauthRedirectUrl` once development builds replace Expo Go.
 - **Site URL:** set it to the production web URL.
 
+- **Email sender:** add custom SMTP (Supabase's built-in sender allows only a few emails per hour).
+
 Pending tests:
 
-- **iPhone:** Step 4 not yet tested on iOS. It is waiting for the App Store Expo Go to support SDK 58 (or an `eas go` / development build).
+- **Google sign-in on iPhone:** the app runs on iPhone in Expo Go 58 (tested 2026-10-22), but Google sign-in has only been tested on Android so far (`npm run dev:mobile:google`).
+
+## Backlog
+
+- **Financial year setting:** optional April–March financial year for "this year" figures (Sprint 2 uses the calendar year).
+- **Repeated sign-up email:** see Sprint 10.
+- **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
 
 # 1. Executive summary
 
@@ -131,9 +165,9 @@ restructuring; do not force a new architecture onto working code.
 | **Sprint** | **Timeline** | **Focus** | **Usable outcome** |
 |----|----|----|----|
 | **1** | Weeks 1–2 | Foundation, authentication & profile | Register/sign in; manage profile. |
-| **2** | Weeks 3–4 | Accounts & starting balances | Create bank, cash, savings, and other accounts. |
+| **2** | Weeks 3–4 | Accounts & Income page | Create accounts, record income, see income and balances on the Income page. |
 | **3** | Weeks 5–6 | Expense & transaction tracking | Add, edit, search, filter, and review transactions. |
-| **4** | Weeks 7–8 | Income sources & recurring items | Track multiple income sources and recurring entries. |
+| **4** | Weeks 7–8 | Recurring items | Recurring rules and mark received/paid. |
 | **5** | Weeks 9–10 | Dashboard & analytics | View meaningful time-based financial insights. |
 | **6** | Weeks 11–12 | Budgets & savings goals | Plan targets and track progress. |
 | **7** | Weeks 13–14 | Investment portfolio | Track holdings and manual valuations. |
@@ -194,35 +228,65 @@ and manage their profile.
 
 - No demo data appears in real screens.
 
-## Sprint 2 — Accounts and starting balances
+## Sprint 2 — Accounts and the Income page
 
-**Weeks 3–4 \| Usable outcome:** A user can create accounts and see
-where their money is held.
+**Weeks 3–4 \| Usable outcome:** A user can record where their money is
+held, record income into it, and see income and balances on the Income
+page.
+
+Scope widened on 2026-10-22 (see the decisions log): income entry, the
+transactions table and income sources moved in from Sprints 3 and 4.
 
 ### Scope and deliverables
 
-- Support bank, cash, savings, and other account types.
+- Accounts: bank (savings or current), cash and other; opening balance
+  with an "as of" date; optional institution and last 4 digits;
+  currency; create, edit, archive and restore. Archived accounts leave
+  the list and totals but stay in history.
 
-- Add opening balances, account names, optional institution/labels, and
-  currency.
+- Income sources (income categories) with a type and optional default
+  account; default sources for every user; Add source.
 
-- Implement create, edit, archive, and balance views.
+- Income entries: amount, date, source, "Received into" account, note;
+  idempotent creation; one-way void. The transactions table is designed
+  for income, expense and transfer, with only income enabled.
 
-- Add constraints, indexes, ownership checks, and RLS tests.
+- Income page exactly as in `docs/design/Income*.png`: Income this month,
+  Income this year, Bank accounts, Money in banks, Cash in hand, Rental
+  income, Income sources (monthly and yearly, linked account), Where your
+  money is with Total available. No separate Accounts page.
+
+- Calculations in `packages/domain`, shared by web and mobile. Web first,
+  then mobile screens.
 
 ### Acceptance criteria
 
-- Account CRUD works for an authenticated user.
+- Account and income flows work for an authenticated user; another user
+  can read or change nothing (RLS, tested in pgTAP including the balance
+  view).
 
-- Users cannot read or modify another user’s accounts.
+- Money is stored as integer minor units (`bigint`) with a currency;
+  never binary floating point.
 
-- Money uses exact representations, not binary floating point.
+- Account balance = opening balance + posted inflows − outflows; Total
+  available = sum of active accounts' balances in the profile currency;
+  period income is reported separately from balances.
 
-- Archived accounts do not corrupt historical reports.
+- Month, year and leap-year boundaries are correct in the user's time
+  zone (unit tests).
+
+- A double-submitted income is recorded once; voided income drops out of
+  balances and totals but stays in history.
+
+- Archived accounts do not corrupt historical income figures.
+
+- Loading, empty, validation and error states are present; no demo data
+  in real screens.
 
 ### Design deliverables
 
-- Accounts screens, following `docs/design-spec.md`.
+- Income page, Add income modal, Add bank / cash / other account, Add
+  source, account actions and empty states (`docs/design-spec.md` §9).
 
 **Dependencies:** Sprint 1 authentication and database foundation.
 
@@ -230,6 +294,10 @@ where their money is held.
 
 **Weeks 5–6 \| Usable outcome:** A user can maintain a reliable daily
 transaction ledger.
+
+Already delivered in Sprint 2: income entry, the transactions table
+(income only) and void. Sprint 3 enables expenses and transfers on the
+same table and adds editing with history, search and filters.
 
 ### Scope and deliverables
 
@@ -265,7 +333,11 @@ transaction ledger.
 
 **Dependencies:** Sprint 2 accounts.
 
-## Sprint 4 — Income sources and recurring items
+## Sprint 4 — Recurring items
+
+Income sources and the Income page moved into Sprint 2 (2026-10-22).
+Sprint 4 keeps recurring rules and mark received/paid; the original list
+below is kept for reference.
 
 **Weeks 7–8 \| Usable outcome:** A user can track multiple income
 sources and recurring transactions.

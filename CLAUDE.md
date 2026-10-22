@@ -254,6 +254,10 @@ Keep these concepts distinct:
 -   **Total Balance = Bank Balance + all other income-source balances,
     including Cash and any other income/source balances.**
 -   Do not calculate Total Balance as Bank Balance plus Cash only.
+-   Implementation (decided 2026-10-22): income sources classify income
+    and hold no balance; cash and other holdings are accounts. Total
+    available (Total Balance) = sum of active accounts' balances in the
+    profile currency.
 -   Define which source types contribute to this metric in code and
     tests.
 -   Prevent double-counting when money moves between accounts or when an

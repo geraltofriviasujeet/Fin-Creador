@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { Bell, Settings } from "lucide-react-native";
+import { Bell, Plus, Settings } from "lucide-react-native";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/button";
@@ -8,7 +8,7 @@ import { useToast } from "@/components/toast";
 import { comingSoonMessage } from "@/navigation";
 import { colors, spacing } from "@/theme";
 
-/** Top bar for the tab screens (design-spec §5): logo, notifications (coming soon), settings. */
+/** Top bar for the tab screens (design-spec §5): logo, notifications (coming soon), settings, add income. */
 export function AppHeader() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -25,6 +25,7 @@ export function AppHeader() {
           onPress={() => toast.show(comingSoonMessage("Notifications"))}
         />
         <Button label="Settings" variant="secondary" icon={Settings} iconOnly onPress={() => router.push("/settings")} />
+        <Button label="Add income" icon={Plus} iconOnly onPress={() => router.push("/sheets/income")} />
       </View>
     </View>
   );

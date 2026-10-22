@@ -14,6 +14,108 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          archived_at: string | null
+          bank_type: string | null
+          created_at: string
+          currency: string
+          id: string
+          institution: string | null
+          kind: string
+          last4: string | null
+          name: string
+          opening_balance_date: string
+          opening_balance_minor: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          bank_type?: string | null
+          created_at?: string
+          currency: string
+          id?: string
+          institution?: string | null
+          kind: string
+          last4?: string | null
+          name: string
+          opening_balance_date: string
+          opening_balance_minor?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          bank_type?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          institution?: string | null
+          kind?: string
+          last4?: string | null
+          name?: string
+          opening_balance_date?: string
+          opening_balance_minor?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          default_account_id: string | null
+          id: string
+          is_default: boolean
+          kind: string
+          name: string
+          source_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          default_account_id?: string | null
+          id?: string
+          is_default?: boolean
+          kind: string
+          name: string
+          source_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          default_account_id?: string | null
+          id?: string
+          is_default?: boolean
+          kind?: string
+          name?: string
+          source_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_default_account_owned"
+            columns: ["default_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "categories_default_account_owned"
+            columns: ["default_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -50,13 +152,197 @@ export type Database = {
         }
         Relationships: []
       }
+      transactions: {
+        Row: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          type: string
+          user_id: string
+          void_reason: string | null
+          voided_at: string | null
+        }
+        Insert: {
+          account_id: string
+          amount_minor: number
+          category_id?: string | null
+          counter_account_id?: string | null
+          created_at?: string
+          currency: string
+          id?: string
+          idempotency_key: string
+          note?: string | null
+          occurred_on: string
+          type: string
+          user_id?: string
+          void_reason?: string | null
+          voided_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          amount_minor?: number
+          category_id?: string | null
+          counter_account_id?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          idempotency_key?: string
+          note?: string | null
+          occurred_on?: string
+          type?: string
+          user_id?: string
+          void_reason?: string | null
+          voided_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "transactions_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "transactions_category_owned"
+            columns: ["category_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "transactions_counter_account_owned"
+            columns: ["counter_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "transactions_counter_account_owned"
+            columns: ["counter_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      account_balances: {
+        Row: {
+          account_id: string | null
+          inflow_minor: number | null
+          last_activity_at: string | null
+          outflow_minor: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      backfill_default_income_sources: { Args: never; Returns: number }
       backfill_missing_profiles: { Args: never; Returns: number }
+      ensure_default_income_sources: {
+        Args: { p_user_id: string }
+        Returns: number
+      }
+      ensure_my_income_sources: { Args: never; Returns: number }
       profile_display_name: { Args: { meta: Json }; Returns: string }
+      record_income: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_category_id: string
+          p_idempotency_key: string
+          p_note?: string
+          p_occurred_on: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          type: string
+          user_id: string
+          void_reason: string | null
+          voided_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_cash_on_hand: {
+        Args: { p_account_id: string; p_amount_minor: number }
+        Returns: {
+          archived_at: string | null
+          bank_type: string | null
+          created_at: string
+          currency: string
+          id: string
+          institution: string | null
+          kind: string
+          last4: string | null
+          name: string
+          opening_balance_date: string
+          opening_balance_minor: number
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      user_local_today: { Args: { p_user_id: string }; Returns: string }
+      void_income: {
+        Args: { p_reason?: string; p_transaction_id: string }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          type: string
+          user_id: string
+          void_reason: string | null
+          voided_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       [_ in never]: never

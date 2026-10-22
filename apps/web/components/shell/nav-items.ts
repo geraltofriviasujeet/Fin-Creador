@@ -24,7 +24,7 @@ export type NavItem = {
 // Order follows design-spec §4. Flip `available` when a page ships.
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "overview", label: "Overview", href: "/", icon: LayoutGrid, available: true, inTabBar: true },
-  { key: "income", label: "Income", href: "/income", icon: ArrowDownToLine, available: false, inTabBar: false },
+  { key: "income", label: "Income", href: "/income", icon: ArrowDownToLine, available: true, inTabBar: false },
   {
     key: "transactions",
     label: "Transactions",
