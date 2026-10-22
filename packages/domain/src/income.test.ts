@@ -87,6 +87,18 @@ describe("incomeBySource", () => {
     expect(byId.rent).toMatchObject({ monthMinor: 3_200_000, yearMinor: 3_200_000 });
   });
 
+  it("keeps a source whose only entries are voided, at zero, marked onlyVoided", () => {
+    const voidedOnly = [entry({ sourceId: "business", amountMinor: 900_000, occurredOn: "2026-10-05", voided: true })];
+    const [row] = incomeBySource(voidedOnly, sources, periods, "INR").filter((r) => r.source.id === "business");
+    expect(row).toMatchObject({ monthMinor: 0, yearMinor: 0, onlyVoided: true });
+    expect(byId.salary?.onlyVoided).toBe(false);
+  });
+
+  it("does not list a default source whose only voided entry was in an earlier year", () => {
+    const old = [entry({ sourceId: "business", occurredOn: "2025-10-05", voided: true })];
+    expect(incomeBySource(old, sources, periods, "INR").map((r) => r.source.id)).not.toContain("business");
+  });
+
   it("links the account that received the income, 'multiple' if several, else the default", () => {
     expect(byId.salary?.linked).toEqual({ kind: "account", accountId: "hdfc" });
     expect(byId.interest?.linked).toEqual({ kind: "multiple" });

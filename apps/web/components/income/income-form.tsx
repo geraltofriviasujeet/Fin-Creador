@@ -68,7 +68,7 @@ export function IncomeForm({ accounts, sources, today, onDone, onAddAccount }: P
 
       <AmountField name="amount" label="Amount" currency={account?.currency ?? accounts[0]!.currency} defaultValue={v.amount} error={errors.amount} autoFocus />
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <SelectField
           name="sourceId"
           label="Category"

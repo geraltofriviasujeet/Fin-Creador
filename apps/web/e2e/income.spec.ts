@@ -69,7 +69,8 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   const bankDialog = dialog(page, "Add bank account")
   await bankDialog.getByLabel("Last 4 digits").fill("12a4")
   await bankDialog.getByRole("button", { name: "Add account" }).click()
-  await expect(bankDialog.getByText("Select your bank")).toBeVisible()
+  // The error, not the select's "Select your bank" placeholder option.
+  await expect(bankDialog.locator("#bankName-error")).toHaveText("Select your bank")
   await shots(page, "02-add-bank-validation")
   await page.keyboard.press("Escape")
 
@@ -157,8 +158,11 @@ test("void, archive and restore keep history but change the totals", async ({ pa
   await expectCard(card(page, "Income this month"), "₹0")
   await expect(holding(page, "Axis Bank")).toContainText("₹1,000")
 
-  // The voided entry is still in history.
-  await card(page, "Income sources").getByRole("button", { name: /Salary/ }).click()
+  // The source stays listed (at ₹0, marked) so the voided entry is still reachable.
+  const salaryRow = card(page, "Income sources").getByRole("button", { name: /Salary/ })
+  await expect(salaryRow).toContainText("Voided entries only")
+  await expect(salaryRow).toContainText("₹0")
+  await salaryRow.click()
   await expect(dialog(page, "Salary").getByText("Voided: Entered twice")).toBeVisible()
   await page.keyboard.press("Escape")
 
@@ -182,6 +186,7 @@ test("income cannot be dated in the future, and Add transaction opens Add income
   await page.goto("/income")
   await addBank(page, { bank: "Kotak Mahindra Bank", last4: "1111", opening: "0" })
 
+  // A real link (announced as a link), styled as a button.
   await page.getByRole("link", { name: "Add transaction" }).first().click()
   const d = dialog(page, "Add income")
   await expect(d).toBeVisible()

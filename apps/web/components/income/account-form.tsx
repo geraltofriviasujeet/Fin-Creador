@@ -68,7 +68,7 @@ export function AccountForm({ kind, account, currency, today, suggestedName, onD
           {bankName === OTHER_BANK && (
             <TextField name="otherBankName" label="Bank's name" defaultValue={v.otherBankName} maxLength={80} error={errors.otherBankName} />
           )}
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             <SelectField name="bankType" label="Account type" defaultValue={v.bankType} error={errors.bankType}>
               {BANK_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -104,7 +104,7 @@ export function AccountForm({ kind, account, currency, today, suggestedName, onD
         hint={kind === "bank" ? "Use a minus sign if the account is overdrawn." : undefined}
       />
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <TextField
           name="openingBalanceDate"
           type="date"

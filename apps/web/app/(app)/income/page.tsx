@@ -37,7 +37,7 @@ function IncomeSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading income">
       <PageHeader eyebrow="Money in" title="Income" description="See where your money comes from and where it is held." />
-      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }, (_, i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-4 w-28 rounded bg-canvas" />
@@ -46,7 +46,7 @@ function IncomeSkeleton() {
           </Card>
         ))}
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1.45fr_0.8fr]">
+      <div className="grid gap-6 lg:grid-cols-[1.45fr_0.8fr]">
         {[0, 1].map((i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-5 w-40 rounded bg-canvas" />
