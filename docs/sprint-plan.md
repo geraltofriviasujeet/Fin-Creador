@@ -23,7 +23,7 @@ Last updated: 2026-10-22.
 
 | **Sprint** | **Focus** | **Status** | **Notes** |
 |----|----|----|----|
-| **1** | Foundation, authentication & profile | In progress | See Sprint 1 steps below. |
+| **1** | Foundation, authentication & profile | Done | Completed 2026-10-22; released to `main` via PR #7. iPhone test of the mobile app pending SDK 58 in the App Store Expo Go. See Sprint 1 steps below. |
 | **2** | Accounts & starting balances | Not started | |
 | **3** | Expense & transaction tracking | Not started | |
 | **4** | Income sources & recurring items | Not started | |
@@ -46,8 +46,8 @@ Last updated: 2026-10-22.
 | **2. Profiles migration, RLS and pgTAP tests** | Done | Migration applied to the dev project (fin-creador-dev). 42 pgTAP tests pass in CI. Merged to `sprint-1-foundation` and `main` (PR #2). |
 | **3. Web auth wiring (Supabase)** | Done (not yet on `sprint-1-foundation`) | Email/password, Google OAuth, recovery, sign-out, protected routes and profile editing. Real round trip on the dev project passed 2026-10-22. PR #3 merged into `sprint-1-step-2-profiles` after that branch had already merged, so the auth code is not on `sprint-1-foundation` or `main` yet; it needs a follow-up PR from `sprint-1-step-2-profiles`. |
 | **4. Mobile shell (auth, profile)** | Done (Android) | Expo Router shell with five tabs, native primitives, email/password and Google sign-in, sign-up with confirmation, password-reset email, Settings with profile editing through RLS, encrypted session storage. Tested 2026-10-22 on an Android phone in Expo Go 58.0.5. iPhone test pending SDK 58 support in the App Store Expo Go. Merged to `sprint-1-foundation` (PR #5). |
-| **5. Tests (E2E, secret check)** | Built, awaiting CI | 13 Playwright E2E tests (sign-up with email confirmation, unconfirmed sign-in and resend, sign-in errors, protected routes and safe `next`, profile save, password reset, sign-out) run in CI against a throwaway local Supabase with the Mailpit inbox; never against fin-creador-dev. Secret check (`scripts/check-secrets.mjs`) scans tracked files, the web client bundle and the mobile bundles, with a canary for server-only env. Google sign-in stays a manual check. |
-| **6. CI and setup docs** | Built, awaiting CI | CI runs lint, typecheck, unit tests, web build, mobile bundles, secret check, migrations and pgTAP, and the E2E job on every PR. `docs/setup.md` (placeholders only) and README written. |
+| **5. Tests (E2E, secret check)** | Done | 13 Playwright E2E tests (sign-up with email confirmation, unconfirmed sign-in and resend, sign-in errors, protected routes and safe `next`, profile save, password reset, sign-out) run in CI against a throwaway local Supabase with the Mailpit inbox; never against fin-creador-dev. Secret check (`scripts/check-secrets.mjs`) scans tracked files, the web client bundle and the mobile bundles, with a canary for server-only env. Google sign-in stays a manual check. All 13 E2E tests green in CI (PR #6); they found and fixed one app bug (sign-up revealed registered emails). |
+| **6. CI and setup docs** | Done | CI runs lint, typecheck, unit tests, web build, mobile bundles, secret check, migrations and pgTAP, and the E2E job on every PR. `docs/setup.md` (placeholders only) and README written. All CI jobs green on PR #6. |
 
 ## Decisions
 
