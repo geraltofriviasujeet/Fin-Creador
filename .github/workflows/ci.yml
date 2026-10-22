@@ -141,6 +141,16 @@ jobs:
         if: failure()
         run: docker logs "$(docker ps --format '{{.Names}}' | grep -m1 supabase_auth)" 2>&1 | tail -n 200
 
+      # Screenshots of the Income page at desktop, tablet and phone widths, for review.
+      - name: Upload E2E screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-screenshots
+          path: apps/web/e2e-screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
