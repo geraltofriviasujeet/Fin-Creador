@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { TODAY_UNAVAILABLE, type UserClient } from "./client"
 import { loadIncomeData } from "./load"
-import { recordIncome, saveAccount, saveSource, setAccountArchived, voidIncome } from "./writers"
+import { recordIncome, saveAccount, saveSource, setAccountArchived, updateCashOnHand, voidIncome } from "./writers"
 
 // A minimal stand-in for the signed-in user's Supabase client: records every write and
 // RPC, and answers from the scenario given. No network, no service role.
@@ -78,7 +78,7 @@ const bank = {
 }
 const writes = (calls: Call[]) => calls.filter((c) => c.target !== "user_local_today")
 
-describe("database errors through the shared mapper (FC001–FC011)", () => {
+describe("database errors through the shared mapper (FC001–FC013)", () => {
   // Field each code lands on in Add income; undefined = form-level message.
   const incomeFields: Record<string, string | undefined> = {
     FC001: "accountId",
@@ -92,6 +92,8 @@ describe("database errors through the shared mapper (FC001–FC011)", () => {
     FC009: undefined,
     FC010: "accountId",
     FC011: "openingBalanceDate",
+    FC012: undefined,
+    FC013: undefined,
   }
 
   it.each(Object.entries(incomeFields))("%s → friendly message on %s, never the raw text", async (code, field) => {
@@ -227,5 +229,50 @@ describe("today comes from the database, never the device clock", () => {
   it("the loader fails instead of guessing today", async () => {
     expect(await loadIncomeData(fakeClient({ today: null }).client)).toEqual({ ok: false, reason: "unavailable" })
     expect(await loadIncomeData(fakeClient({ signedIn: false }).client)).toEqual({ ok: false, reason: "unauthenticated" })
+  })
+})
+
+describe("updateCashOnHand (one cash account, a correction not income)", () => {
+  const cash = { accountId: "a0000000-0000-4000-8000-000000000001", amount: "10,000" }
+
+  it("sets the amount held now in minor units", async () => {
+    const { client, calls } = fakeClient()
+    expect(await updateCashOnHand(client, cash)).toEqual({ status: "success", message: "Cash in hand updated." })
+    expect(writes(calls)).toEqual([
+      { kind: "rpc", target: "set_cash_on_hand", payload: { p_account_id: cash.accountId, p_amount_minor: 1_000_000 } },
+    ])
+  })
+
+  it("allows zero but not a negative amount", async () => {
+    expect((await updateCashOnHand(fakeClient().client, { ...cash, amount: "0" })).status).toBe("success")
+    const { client, calls } = fakeClient()
+    expect(await updateCashOnHand(client, { ...cash, amount: "-5" })).toMatchObject({ fieldErrors: { amount: "Amount can't be negative" } })
+    expect(writes(calls)).toEqual([])
+  })
+
+  it("explains an amount below today's cash income", async () => {
+    const { client } = fakeClient({ rpcError: { code: "23514", message: "violates check constraint" } })
+    expect(await updateCashOnHand(client, cash)).toMatchObject({
+      fieldErrors: { amount: "That's less than the cash income you recorded today." },
+    })
+  })
+
+  it("maps 'not a cash account' and 'already have cash'", async () => {
+    expect((await updateCashOnHand(fakeClient({ rpcError: { code: "FC013", message: "raw" } }).client, cash))).toEqual({
+      status: "error",
+      message: "Only Cash in hand can be updated this way.",
+    })
+    const add = fakeClient({ writeError: { code: "FC012", message: "raw" } })
+    expect(await saveAccount(add.client, { kind: "cash", name: "Cash in hand", currency: "INR", openingBalance: "500", openingBalanceDate: "2026-10-22" })).toEqual({
+      status: "error",
+      message: "You already have Cash in hand. Update its amount instead.",
+    })
+  })
+
+  it("reports a missing account", async () => {
+    expect(await updateCashOnHand(fakeClient({ accountCurrency: null }).client, cash)).toEqual({
+      status: "error",
+      message: "We couldn't find your cash account.",
+    })
   })
 })

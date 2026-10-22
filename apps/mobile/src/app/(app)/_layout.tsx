@@ -36,6 +36,7 @@ export default function AppLayout() {
       <Stack.Screen name="sheets/source" options={SHEET} />
       <Stack.Screen name="sheets/entries" options={SHEET} />
       <Stack.Screen name="sheets/archived" options={SHEET} />
+      <Stack.Screen name="sheets/cash" options={SHEET} />
     </Stack>
     </IncomeDataProvider>
   );

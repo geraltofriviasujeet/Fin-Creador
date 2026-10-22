@@ -293,6 +293,30 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      set_cash_on_hand: {
+        Args: { p_account_id: string; p_amount_minor: number }
+        Returns: {
+          archived_at: string | null
+          bank_type: string | null
+          created_at: string
+          currency: string
+          id: string
+          institution: string | null
+          kind: string
+          last4: string | null
+          name: string
+          opening_balance_date: string
+          opening_balance_minor: number
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       user_local_today: { Args: { p_user_id: string }; Returns: string }
       void_income: {
         Args: { p_reason?: string; p_transaction_id: string }

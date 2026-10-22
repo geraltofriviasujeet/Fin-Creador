@@ -104,7 +104,7 @@ Reference: `docs/design/Incometop.png`, `Incomebottom.png`, `Incomemodal1.png`, 
 | Income this year | non-voided income this calendar year | "January – December {year}" |
 | Bank accounts | count of active bank accounts | "{n} savings · {n} current" |
 | Money in banks | sum of active bank account balances | "Across {n} bank accounts" (Figma said "linked"; we don't link banks) |
-| Cash in hand | sum of active cash account balances | "As of {date of latest change}" (Figma said "Updated today") |
+| Cash in hand | the active cash account's balance | "As of {date of latest change}" (Figma said "Updated today") |
 | Rental income | rent-type sources this month | "{amount} this year"; with no rent source: ₹0 and "Add a rental source" |
 
 **Income sources panel** ("Monthly and yearly earnings by source", link "Add source ›"). Row: icon tile (house for rent, briefcase otherwise) on mint, source name, linked account ("HDFC Bank ··4821", "Multiple accounts", or the default account), this month's amount (success colour) and "{amount} yearly" (this calendar year). Lists sources with income this year plus sources the user added. Empty: "No income recorded yet" with "Add income".
@@ -115,7 +115,9 @@ Reference: `docs/design/Incometop.png`, `Incomebottom.png`, `Incomemodal1.png`, 
 
 **Add bank account modal** (`Incomemodal2.png`). Eyebrow "NEW ACCOUNT", title "Add bank account". Fields: Bank name (list of banks plus "Other bank" with a text field), Account type (Savings account / Current account), Last 4 digits (optional), **Opening balance** (replaces "Current balance"; may be negative for bank accounts) and **As of** date (defaults to today), Currency (defaults to the profile currency). Actions: Cancel, "Add account".
 
-**Add cash / Add other account.** Same modal shape. Cash: Name (first one pre-filled "Cash in hand"), Opening balance (≥ 0), As of, Currency. Other: Name (e.g. "Paytm wallet"), optional institution, Opening balance (≥ 0), As of, Currency.
+**Add cash.** One cash account per person, always named "Cash in hand". The first "Add cash" asks only for **Amount** (the cash held now, ≥ 0; as of today; profile currency), button "Add cash", no eyebrow. Once it exists, the button reads **"Update cash"** and opens **"Update cash in hand"**: "Now: ₹x", a "Cash you have now" amount ("This corrects the amount; it isn't counted as income"), button "Update cash in hand", and a link "Received cash as income? Add income" that opens Add income with Cash in hand pre-selected. The cash row's menu shows "Update amount".
+
+**Add other account.** Name (e.g. "Paytm wallet"), optional provider, Opening balance (≥ 0), As of, Currency.
 
 **Edit account** reuses the add form. Currency is locked once the account has income. **Archive** asks for confirmation: "{name} will leave your totals. Its income history stays."
 

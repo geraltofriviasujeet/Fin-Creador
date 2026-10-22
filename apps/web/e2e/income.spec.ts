@@ -87,15 +87,15 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   await expectCard(stat(page, "Bank accounts"), "2", "1 savings · 1 current")
   await expectCard(stat(page, "Money in banks"), "₹4,24,850", "Across 2 bank accounts")
 
-  // First cash account is pre-filled "Cash in hand"; cash can't start below zero.
+  // Add cash is just an amount (named "Cash in hand"); cash can't start below zero.
   await page.getByRole("button", { name: "Add cash" }).first().click()
   const cashDialog = dialog(page, "Add cash")
-  await expect(cashDialog.getByLabel("Name")).toHaveValue("Cash in hand")
-  await cashDialog.getByLabel("Opening balance").fill("-5")
-  await cashDialog.getByRole("button", { name: "Add account" }).click()
+  await expect(cashDialog.getByLabel("Name")).toHaveCount(0)
+  await cashDialog.getByLabel("Amount").fill("-5")
+  await cashDialog.getByRole("button", { name: "Add cash" }).click()
   await expect(cashDialog.getByText("Only bank accounts can start below zero")).toBeVisible()
-  await cashDialog.getByLabel("Opening balance").fill("20,800")
-  await cashDialog.getByRole("button", { name: "Add account" }).click()
+  await cashDialog.getByLabel("Amount").fill("20,800")
+  await cashDialog.getByRole("button", { name: "Add cash" }).click()
   await expect(cashDialog).toBeHidden()
   await expectCard(stat(page, "Cash in hand"), "₹20,800")
   await expectCard(card(page, "Where your money is"), "₹4,45,650")
@@ -116,6 +116,24 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   // Defaults without income stay out of the list.
   await expect(sources.getByText("Business")).toHaveCount(0)
   await shots(page, "03-income-filled")
+
+  // One cash account: "Update cash" sets the amount held now (a correction, not income).
+  await page.getByRole("button", { name: "Update cash" }).click()
+  const update = dialog(page, "Update cash in hand")
+  await expect(update.getByLabel("Cash you have now")).toHaveValue("20800")
+  await update.getByLabel("Cash you have now").fill("25,000")
+  await update.getByRole("button", { name: "Update cash in hand" }).click()
+  await expect(toast(page, "Cash in hand updated.")).toBeVisible()
+  await expectCard(stat(page, "Cash in hand"), "₹25,000")
+  await expectCard(stat(page, "Income this month"), "₹1,60,000") // unchanged: not income
+  await expect(holding(page, "Cash in hand")).toHaveCount(1)
+  await expectCard(card(page, "Where your money is"), "₹6,09,850")
+
+  // "Received cash as income?" opens Add income with Cash in hand pre-selected.
+  await page.getByRole("button", { name: "Update cash" }).click()
+  await dialog(page, "Update cash in hand").getByRole("button", { name: "Add income" }).click()
+  await expect(dialog(page, "Add income").getByLabel("Received into").locator("option:checked")).toHaveText("Cash in hand")
+  await page.keyboard.press("Escape")
 
   // Add income dialog, for visual review.
   await page.getByRole("button", { name: "Add income" }).first().click()

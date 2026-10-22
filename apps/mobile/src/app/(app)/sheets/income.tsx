@@ -1,6 +1,6 @@
 import { type IncomePageData, newRequestKey, recordIncome } from "@fin-creador/api";
 import { countsTowardBalance } from "@fin-creador/domain";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Badge } from "@/components/badge";
@@ -11,7 +11,7 @@ import { IncomeGate } from "@/components/income/income-gate";
 import { Sheet } from "@/components/income/sheet";
 import { SelectField } from "@/components/select-field";
 import { TextField } from "@/components/text-field";
-import { shortDate } from "@/lib/income-format";
+import { param, shortDate } from "@/lib/income-format";
 import { getSupabase } from "@/lib/supabase";
 import { useSave } from "@/lib/use-save";
 import { colors, fontFamily, fontSize, radius, spacing } from "@/theme";
@@ -34,8 +34,12 @@ function IncomeForm({ data }: { data: IncomePageData }) {
   const [requestKey] = useState(newRequestKey);
   const [amount, setAmount] = useState("");
   const [sourceId, setSourceId] = useState("");
-  const [accountId, setAccountId] = useState(accounts.length === 1 ? accounts[0]!.id : "");
-  const [accountTouched, setAccountTouched] = useState(false);
+  // "Received cash as income?" opens this sheet with Cash in hand pre-selected.
+  const preset = param(useLocalSearchParams<{ accountId?: string }>().accountId);
+  const [accountId, setAccountId] = useState(
+    accounts.some((a) => a.id === preset) ? preset : accounts.length === 1 ? accounts[0]!.id : ""
+  );
+  const [accountTouched, setAccountTouched] = useState(Boolean(preset));
   const [occurredOn, setOccurredOn] = useState(data.today);
   const [note, setNote] = useState("");
   const { save, busy, fieldErrors, formError } = useSave();

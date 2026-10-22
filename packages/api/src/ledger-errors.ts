@@ -22,6 +22,8 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC008: { message: "We couldn't find that entry." },
   FC010: { message: "We couldn't find that account.", field: "accountId" },
   FC011: { message: "The as-of date can't change once the account has income.", field: "openingBalanceDate" },
+  FC012: { message: "You already have Cash in hand. Update its amount instead." },
+  FC013: { message: "Only Cash in hand can be updated this way." },
 }
 
 /** `dateField` names the date input on the current form (occurredOn or openingBalanceDate). */
