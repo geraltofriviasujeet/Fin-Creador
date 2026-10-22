@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { Bell, Plus, Search, Settings } from "lucide-react"
 import { Logo } from "@/components/brand/logo"
-import { Button } from "@/components/ui/button"
+import { cn } from "cn"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { comingSoonMessage } from "@/components/shell/nav-items"
 
@@ -53,29 +54,17 @@ export function Topbar() {
         >
           <Bell aria-hidden="true" className="size-5" />
         </Button>
-        <Button
-          variant="secondary"
-          size="icon"
-          aria-label="Settings"
-          className="md:hidden"
-          nativeButton={false}
-          render={<Link href="/settings" />}
-        >
+        {/* Navigation is a real link styled as a button, so it is announced as a link. */}
+        <Link href="/settings" aria-label="Settings" className={cn(buttonVariants({ variant: "secondary", size: "icon" }), "md:hidden")}>
           <Settings aria-hidden="true" className="size-5" />
-        </Button>
-        <Button
-          size="icon"
-          aria-label="Add transaction"
-          className="md:hidden"
-          nativeButton={false}
-          render={<Link href={ADD_INCOME_HREF} />}
-        >
+        </Link>
+        <Link href={ADD_INCOME_HREF} aria-label="Add transaction" className={cn(buttonVariants({ size: "icon" }), "md:hidden")}>
           <Plus aria-hidden="true" className="size-5" />
-        </Button>
-        <Button size="lg" className="hidden md:inline-flex" nativeButton={false} render={<Link href={ADD_INCOME_HREF} />}>
+        </Link>
+        <Link href={ADD_INCOME_HREF} className={cn(buttonVariants({ size: "lg" }), "hidden md:inline-flex")}>
           <Plus aria-hidden="true" />
           Add transaction
-        </Button>
+        </Link>
       </div>
     </header>
   )

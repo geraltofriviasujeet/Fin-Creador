@@ -57,11 +57,14 @@ export interface SourceRow<S extends IncomeSource = IncomeSource> {
   yearMinor: number;
   /** The account that received this source's income this year, else its default account. */
   linked: LinkedAccount;
+  /** Every entry this year is voided: listed (so the history stays reachable), counts as 0. */
+  onlyVoided: boolean;
 }
 
 /**
- * Rows for the Income sources panel: sources with income this year, plus sources the
- * user added (not archived). Sorted by this year's income, largest first, then name.
+ * Rows for the Income sources panel: sources with any entry this year (voided ones too,
+ * so their history stays reachable), plus sources the user added (not archived). Amounts
+ * never include voided entries. Sorted by this year's income, largest first, then name.
  */
 export function incomeBySource<S extends IncomeSource>(
   entries: readonly IncomeEntry[],
@@ -71,9 +74,9 @@ export function incomeBySource<S extends IncomeSource>(
 ): SourceRow<S>[] {
   const rows: SourceRow<S>[] = [];
   for (const source of sources) {
-    const thisYear = entries.filter((e) => !e.voided && e.sourceId === source.id && isInRange(e.occurredOn, periods.year));
-    const hasIncome = thisYear.length > 0;
-    if (!hasIncome && (source.isDefault || source.archived)) continue;
+    const allThisYear = entries.filter((e) => e.sourceId === source.id && isInRange(e.occurredOn, periods.year));
+    const thisYear = allThisYear.filter((e) => !e.voided);
+    if (allThisYear.length === 0 && (source.isDefault || source.archived)) continue;
 
     const accounts = [...new Set(thisYear.map((e) => e.accountId))];
     const linked: LinkedAccount =
@@ -90,6 +93,7 @@ export function incomeBySource<S extends IncomeSource>(
       monthMinor: sumIncome(thisYear, periods.month, currency),
       yearMinor: sumIncome(thisYear, periods.year, currency),
       linked,
+      onlyVoided: allThisYear.length > 0 && thisYear.length === 0,
     });
   }
   return rows.sort((a, b) => b.yearMinor - a.yearMinor || a.source.name.localeCompare(b.source.name));

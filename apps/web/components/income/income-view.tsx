@@ -121,7 +121,7 @@ export function IncomeView({ data }: { data: IncomePageData }) {
         }
       />
 
-      <section aria-label="Summary" className="-mx-4 mb-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 xl:grid-cols-3">
+      <section aria-label="Summary" className="-mx-4 mb-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 lg:grid-cols-3">
         <StatCard
           label="Income this month"
           value={money(view.thisMonth, currency)}
@@ -173,7 +173,7 @@ export function IncomeView({ data }: { data: IncomePageData }) {
         />
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1.45fr_0.8fr]">
+      <div className="grid gap-6 lg:grid-cols-[1.45fr_0.8fr]">
         <Card>
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -197,7 +197,7 @@ export function IncomeView({ data }: { data: IncomePageData }) {
             </div>
           ) : (
             <ul className="mt-4 divide-y divide-line">
-              {view.sourceRows.map(({ source, monthMinor, yearMinor, linked }) => (
+              {view.sourceRows.map(({ source, monthMinor, yearMinor, linked, onlyVoided }) => (
                 <li key={source.id}>
                   <button
                     type="button"
@@ -212,6 +212,7 @@ export function IncomeView({ data }: { data: IncomePageData }) {
                       <span className="truncate text-xs text-muted-foreground">
                         {linked.kind === "multiple" ? "Multiple accounts" : linked.kind === "account" ? accountLabel(linked.accountId) : "No account yet"}
                       </span>
+                      {onlyVoided && <span className="text-xs text-muted-foreground">Voided entries only</span>}
                     </span>
                     <span className="grid justify-items-end gap-0.5 tabular-nums">
                       <span className="font-semibold text-success">{money(monthMinor, currency)}</span>

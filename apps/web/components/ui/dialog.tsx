@@ -29,11 +29,11 @@ function DialogContent({
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop className="fixed inset-0 z-40 bg-ink/40 transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
-      <DialogPrimitive.Viewport className="fixed inset-0 z-50 grid place-items-end overflow-y-auto p-0 sm:place-items-center sm:p-4">
+      <DialogPrimitive.Viewport className="fixed inset-0 z-50 grid items-end justify-items-center overflow-y-auto p-0 md:items-center md:p-4">
         <DialogPrimitive.Popup
           className={cn(
-            "relative w-full max-w-xl rounded-t-3xl bg-surface p-6 text-ink shadow-(--shadow-raised) outline-none transition-[opacity,transform] duration-150 data-[ending-style]:translate-y-2 data-[ending-style]:opacity-0 data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0 sm:rounded-3xl sm:p-8",
-            "pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+            "relative w-full max-w-xl rounded-t-3xl bg-surface p-6 text-ink shadow-(--shadow-raised) outline-none transition-[opacity,transform] duration-150 data-[ending-style]:translate-y-2 data-[ending-style]:opacity-0 data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0 md:rounded-3xl md:p-8",
+            "pb-[max(1.5rem,env(safe-area-inset-bottom))] md:pb-8",
             className
           )}
         >

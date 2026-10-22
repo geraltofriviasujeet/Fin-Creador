@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { ArrowDownToLine, Inbox, UserRound } from "lucide-react"
 import { PageHeader } from "@/components/shell/app-shell"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
 // First-run empty state. The real dashboard (summary cards, charts) is Sprint 5.
@@ -22,14 +22,14 @@ export default function OverviewPage() {
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-3">
-          <Button nativeButton={false} render={<Link href="/income" />}>
+          <Link href="/income" className={buttonVariants()}>
             <ArrowDownToLine aria-hidden="true" />
             Go to Income
-          </Button>
-          <Button variant="secondary" nativeButton={false} render={<Link href="/settings" />}>
+          </Link>
+          <Link href="/settings" className={buttonVariants({ variant: "secondary" })}>
             <UserRound aria-hidden="true" />
             Set up your profile
-          </Button>
+          </Link>
         </div>
       </Card>
     </>
