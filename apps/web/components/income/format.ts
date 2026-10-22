@@ -27,15 +27,5 @@ export function shortDateTime(instant: string, timeZone: string) {
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone }).format(new Date(instant))
 }
 
-/**
- * A random v4 UUID used as the idempotency key. randomUUID() exists only in secure
- * contexts (HTTPS, localhost); getRandomValues() works everywhere.
- */
-export function newRequestKey(): string {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID()
-  const b = crypto.getRandomValues(new Uint8Array(16))
-  b[6] = (b[6]! & 0x0f) | 0x40
-  b[8] = (b[8]! & 0x3f) | 0x80
-  const hex = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("")
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
-}
+// One idempotency key per opened form; shared with the mobile app.
+export { newRequestKey } from "@fin-creador/api"

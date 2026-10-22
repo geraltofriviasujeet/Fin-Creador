@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fin-creador/schemas": "*"
+    "@fin-creador/domain": "*",
+    "@fin-creador/schemas": "*",
+    "@supabase/supabase-js": "^2.118.0",
+    "zod": "^4.6.7"
   }
 }
