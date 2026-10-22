@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { canonicalTimeZone, isCountryCode } from "./regions";
+import { canonicalTimeZone, isCountryCode, isKnownTimeZone } from "./regions";
 
 // India-first defaults (CLAUDE.md §5). Must match the column defaults in the profiles migration.
 export const PROFILE_DEFAULTS = {
@@ -8,7 +8,10 @@ export const PROFILE_DEFAULTS = {
   timeZone: "Asia/Kolkata",
 } as const;
 
+// The bundled list first: Hermes (mobile) may not resolve every zone through Intl.
+// The database trigger is the final check against pg_timezone_names.
 function isValidTimeZone(value: string): boolean {
+  if (isKnownTimeZone(value)) return true;
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: value });
     return true;

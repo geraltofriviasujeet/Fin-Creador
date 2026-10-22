@@ -2,37 +2,18 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { LogOut } from "lucide-react"
-import { COUNTRY_CODES, canonicalTimeZone, listCurrencies, listTimeZones } from "@fin-creador/schemas"
+import { PROFILE_FORM_COLUMNS, profileFormValues } from "@fin-creador/api"
+import { countryOptions, currencyOptions, timeZoneOptions } from "@fin-creador/schemas"
 import { signOutAction } from "@/app/(auth)/actions"
 import { updateProfileAction } from "@/app/(app)/settings/actions"
 import { PageHeader } from "@/components/shell/app-shell"
-import { ProfileForm, type Option } from "@/components/settings/profile-form"
+import { ProfileForm } from "@/components/settings/profile-form"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = { title: "Settings" }
-
-const LOCALE = "en-IN"
-
-function countryOptions(): Option[] {
-  const names = new Intl.DisplayNames([LOCALE], { type: "region" })
-  return COUNTRY_CODES.map((code) => ({ value: code, label: names.of(code) ?? code })).sort((a, b) =>
-    a.label.localeCompare(b.label, LOCALE)
-  )
-}
-
-function currencyOptions(current: string): Option[] {
-  const names = new Intl.DisplayNames([LOCALE], { type: "currency" })
-  const codes = new Set([...listCurrencies(), current])
-  return [...codes].sort().map((code) => ({ value: code, label: `${code} — ${names.of(code) ?? code}` }))
-}
-
-function timeZoneOptions(current: string): Option[] {
-  const zones = new Set([...listTimeZones(), current])
-  return [...zones].sort().map((zone) => ({ value: zone, label: zone.replaceAll("_", " ") }))
-}
 
 export default function SettingsPage() {
   return (
@@ -52,7 +33,7 @@ async function SettingsContent() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("display_name, phone, country, currency, time_zone")
+    .select(PROFILE_FORM_COLUMNS)
     .eq("id", auth.user.id)
     .maybeSingle()
 
@@ -71,16 +52,10 @@ async function SettingsContent() {
         ) : (
           <ProfileForm
             action={updateProfileAction}
-            defaults={{
-              displayName: profile.display_name ?? "",
-              phone: profile.phone ?? "",
-              country: profile.country,
-              currency: profile.currency,
-              timeZone: canonicalTimeZone(profile.time_zone),
-            }}
+            defaults={profileFormValues(profile)}
             countries={countryOptions()}
             currencies={currencyOptions(profile.currency)}
-            timeZones={timeZoneOptions(canonicalTimeZone(profile.time_zone))}
+            timeZones={timeZoneOptions(profile.time_zone)}
           />
         )}
       </Card>

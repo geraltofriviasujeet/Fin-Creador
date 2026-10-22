@@ -7,7 +7,7 @@ import {
   signUpSchema,
   updatePasswordSchema,
 } from "@fin-creador/schemas"
-import { authErrorMessage } from "@/lib/auth/errors"
+import { authErrorMessage } from "@fin-creador/api"
 import { safeNextPath } from "@/lib/auth/redirect"
 import { getPublicEnv } from "@/lib/env"
 import { type FormState, pick, readFields, validate } from "@/lib/form-state"

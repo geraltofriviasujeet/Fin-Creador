@@ -1,4 +1,5 @@
 import type { z } from "zod"
+import { firstFieldErrors } from "@fin-creador/schemas"
 
 export type FormState = {
   status: "idle" | "error" | "info" | "success"
@@ -34,17 +35,12 @@ export function validate<S extends z.ZodType>(
   const result = schema.safeParse(input)
   if (result.success) return { ok: true, data: result.data }
 
-  const fieldErrors: Record<string, string> = {}
-  for (const issue of result.error.issues) {
-    const key = String(issue.path[0] ?? "form")
-    fieldErrors[key] ??= issue.message
-  }
   return {
     ok: false,
     state: {
       status: "error",
       message: "Please fix the highlighted fields.",
-      fieldErrors,
+      fieldErrors: firstFieldErrors(result.error),
       values: pick(input, echo),
     },
   }

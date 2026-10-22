@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { INVALID_TIME_ZONE_CODE, profileUpdateColumns } from "@fin-creador/api"
 import { profileUpdateSchema } from "@fin-creador/schemas"
 import { type FormState, readFields, validate } from "@/lib/form-state"
 import { createClient } from "@/lib/supabase/server"
@@ -17,22 +18,15 @@ export async function updateProfileAction(_prev: FormState, formData: FormData):
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) redirect("/sign-in?next=%2Fsettings")
 
-  const p = result.data
   // Only the columns the migration grants UPDATE on; RLS restricts the row to the caller.
   const { data, error } = await supabase
     .from("profiles")
-    .update({
-      display_name: p.displayName,
-      phone: p.phone,
-      country: p.country,
-      currency: p.currency,
-      time_zone: p.timeZone,
-    })
+    .update(profileUpdateColumns(result.data))
     .eq("id", auth.user.id)
     .select("id")
     .maybeSingle()
 
-  if (error?.code === "22023") {
+  if (error?.code === INVALID_TIME_ZONE_CODE) {
     return { status: "error", message: "Please fix the highlighted fields.", fieldErrors: { timeZone: "Unknown time zone" }, values: input }
   }
   if (error || !data) {
