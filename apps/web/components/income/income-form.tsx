@@ -6,6 +6,7 @@ import { recordIncomeAction } from "@/app/(app)/income/actions"
 import { AmountField } from "@/components/income/amount-field"
 import { FormActions } from "@/components/income/form-actions"
 import { newRequestKey, shortDate } from "@/components/income/format"
+import { submitWithoutReset } from "@/components/income/submit-without-reset"
 import { useFormSuccess } from "@/components/income/use-form-success"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -50,7 +51,7 @@ export function IncomeForm({ accounts, sources, today, onDone, onAddAccount }: P
   }
 
   return (
-    <form action={action} noValidate className="grid gap-5">
+    <form onSubmit={submitWithoutReset(action)} noValidate className="grid gap-5">
       <div role="group" aria-label="Transaction type" className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1">
         <span
           aria-disabled="true"
@@ -81,7 +82,7 @@ export function IncomeForm({ accounts, sources, today, onDone, onAddAccount }: P
             if (!accountTouched && fallback && accounts.some((a) => a.id === fallback)) setAccountId(fallback)
           }}
         >
-          <option value="" disabled>
+          <option value="">
             Choose a source
           </option>
           {sources.map((s) => (
@@ -111,7 +112,7 @@ export function IncomeForm({ accounts, sources, today, onDone, onAddAccount }: P
           setAccountTouched(true)
         }}
       >
-        <option value="" disabled>
+        <option value="">
           Choose an account
         </option>
         {accounts.map((a) => (
