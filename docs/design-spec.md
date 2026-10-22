@@ -6,7 +6,7 @@ This file is the visual source of truth for web and mobile. Financial rules stay
 
 ## 1. Brand
 
-- Wordmark: `Fin` in white + `Creador` in lime (capital F and C, decided 2026-10-22; Figma used lowercase), Manrope 700, letter-spacing -0.6px, 20px. On light backgrounds both parts are ink.
+- Wordmark: lowercase `fin` in white + `creador` in lime, as in the Figma (changed back from "FinCreador" on 2026-10-22), Manrope 700, letter-spacing -0.6px, 20px. Lime only on dark backgrounds; on light backgrounds both parts are ink. Screen readers hear "Fin Creador" (visually hidden text); the styled wordmark is hidden from them. Page titles, email subjects and body text keep "Fin Creador".
 - Logo mark: 28px lime rounded square (radius 9px), rotated -6deg, containing a dark open ring ("C" shape, 3px stroke, left side open).
 - Palette direction: dark forest green + lime accent. This REPLACES the "emerald" accent in CLAUDE.md section 3 (update CLAUDE.md).
 

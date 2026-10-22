@@ -26,13 +26,21 @@ export function LogoMark({ size = logo.size }: { size?: number }) {
 
 type Tone = "onDark" | "onLight";
 
-/** "Fin" + "Creador": white + lime on dark; all ink on light (lime text fails contrast there). */
+/**
+ * "fin" + "creador" in lowercase, as in the Figma: white + lime on dark; all ink on light
+ * (lime text fails contrast there). The styled text is hidden from screen readers, which
+ * hear "Fin Creador" from the Logo's label instead.
+ */
 export function Wordmark({ tone }: { tone: Tone }) {
   const base = tone === "onDark" ? colors.navText : colors.ink;
   return (
-    <Text accessibilityLabel="Fin Creador" style={[styles.wordmark, { color: base }]}>
-      Fin
-      <Text style={{ color: tone === "onDark" ? colors.accent : colors.ink }}>Creador</Text>
+    <Text
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.wordmark, { color: base }]}
+    >
+      fin
+      <Text style={{ color: tone === "onDark" ? colors.accent : colors.ink }}>creador</Text>
     </Text>
   );
 }
