@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   COUNTRY_CODES,
+  countryOptions,
+  currencyOptions,
+  firstFieldErrors,
+  isKnownTimeZone,
   listCurrencies,
   listTimeZones,
   profileUpdateSchema,
   signInSchema,
   signUpSchema,
+  timeZoneOptions,
   timeZoneSchema,
   updatePasswordSchema,
 } from "./index";
@@ -31,6 +36,38 @@ describe("regions", () => {
 
   it("lists INR among currencies", () => {
     expect(listCurrencies()).toContain("INR");
+  });
+
+  it("builds picker options from the bundled lists, not the runtime", () => {
+    const countries = countryOptions();
+    expect(countries).toHaveLength(249);
+    expect(countries.find((o) => o.value === "IN")?.label).toBe("India");
+    // Name order, so Åland Islands sits next to Albania rather than at the end.
+    expect(countries.slice(0, 3).map((o) => o.value)).toEqual(["AF", "AX", "AL"]);
+    expect(currencyOptions().find((o) => o.value === "INR")?.label).toBe("INR — Indian Rupee");
+    expect(currencyOptions("XYZ").map((o) => o.value)).toContain("XYZ");
+    expect(timeZoneOptions("Asia/Calcutta").filter((o) => o.value.startsWith("Asia/K")).map((o) => o.value)).not.toContain(
+      "Asia/Calcutta"
+    );
+    expect(timeZoneOptions().find((o) => o.value === "America/New_York")?.label).toBe("America/New York");
+  });
+
+  it("accepts every bundled time zone without needing Intl", () => {
+    expect(listTimeZones().every(isKnownTimeZone)).toBe(true);
+    expect(isKnownTimeZone("Asia/Calcutta")).toBe(true);
+    expect(isKnownTimeZone("Mars/Olympus")).toBe(false);
+  });
+
+  it("keeps the first message per field", () => {
+    const result = signUpSchema.safeParse({ displayName: "", email: "nope", password: "x" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(firstFieldErrors(result.error)).toEqual({
+        displayName: "Enter your name",
+        email: "Enter a valid email address",
+        password: "Use at least 8 characters",
+      });
+    }
   });
 });
 

@@ -1,19 +1,38 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
+import { INVALID_TIME_ZONE_CODE, profileUpdateColumns } from "@fin-creador/api"
 import { profileUpdateSchema } from "@fin-creador/schemas"
-import { type FormState, pick, readFields, validate } from "@/lib/form-state"
+import { type FormState, readFields, validate } from "@/lib/form-state"
+import { createClient } from "@/lib/supabase/server"
 
 const FIELDS = ["displayName", "phone", "country", "currency", "timeZone"] as const
 
-// Validated with the shared schema now; persisted to `profiles` (RLS-protected)
-// once the migration and sign-in land in Sprint 1 Steps 2–3.
 export async function updateProfileAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const input = readFields(formData, FIELDS)
   const result = validate(profileUpdateSchema, input, FIELDS)
   if (!result.ok) return result.state
-  return {
-    status: "info",
-    message: "Looks good. Saving isn’t connected yet — profiles are stored once sign-in is set up.",
-    values: pick(input, FIELDS),
+
+  const supabase = await createClient()
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) redirect("/sign-in?next=%2Fsettings")
+
+  // Only the columns the migration grants UPDATE on; RLS restricts the row to the caller.
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(profileUpdateColumns(result.data))
+    .eq("id", auth.user.id)
+    .select("id")
+    .maybeSingle()
+
+  if (error?.code === INVALID_TIME_ZONE_CODE) {
+    return { status: "error", message: "Please fix the highlighted fields.", fieldErrors: { timeZone: "Unknown time zone" }, values: input }
   }
+  if (error || !data) {
+    return { status: "error", message: "We couldn’t save your profile. Please try again.", values: input }
+  }
+
+  revalidatePath("/", "layout") // the sidebar shows the display name
+  return { status: "success", message: "Profile saved.", values: input }
 }

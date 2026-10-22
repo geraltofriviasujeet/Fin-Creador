@@ -1,11 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { useActionState } from "react"
+import { Suspense, useActionState } from "react"
+import { useSearchParams } from "next/navigation"
 import { PASSWORD_MIN_LENGTH } from "@fin-creador/schemas"
 import { Button } from "@/components/ui/button"
 import { FormMessage, TextField } from "@/components/ui/field"
-import { toast } from "@/components/ui/toast"
 import { type FormState, initialFormState } from "@/lib/form-state"
 
 type Action = (state: FormState, formData: FormData) => Promise<FormState>
@@ -23,35 +23,65 @@ function SubmitButton({ pending, idle, busy }: { pending: boolean; idle: string;
   )
 }
 
-export function SignInForm({ action }: { action: Action }) {
-  const [state, formAction, pending] = useActionState(action, initialFormState)
+/** Hidden `next` field from the URL (validated again on the server). */
+function NextField() {
   return (
-    <form action={formAction} noValidate className="grid gap-4">
-      <StateMessage state={state} />
-      <TextField
-        name="email"
-        type="email"
-        label="Email"
-        autoComplete="email"
-        required
-        defaultValue={state.values?.email}
-        error={state.fieldErrors?.email}
-      />
-      <TextField
-        name="password"
-        type="password"
-        label="Password"
-        autoComplete="current-password"
-        required
-        error={state.fieldErrors?.password}
-        labelAside={
-          <Link href="/forgot-password" className="rounded text-xs font-semibold text-ink underline underline-offset-4 hover:no-underline">
-            Forgot password?
-          </Link>
-        }
-      />
-      <SubmitButton pending={pending} idle="Sign in" busy="Signing in…" />
-    </form>
+    <Suspense fallback={null}>
+      <NextFieldInner />
+    </Suspense>
+  )
+}
+
+function NextFieldInner() {
+  const next = useSearchParams().get("next")
+  return next ? <input type="hidden" name="next" value={next} /> : null
+}
+
+export function SignInForm({ action, resendAction }: { action: Action; resendAction: Action }) {
+  const [state, formAction, pending] = useActionState(action, initialFormState)
+  const [resendState, resendFormAction, resending] = useActionState(resendAction, initialFormState)
+  const email = state.values?.email ?? ""
+
+  return (
+    <div className="grid gap-4">
+      <form action={formAction} noValidate className="grid gap-4">
+        <StateMessage state={state} />
+        <NextField />
+        <TextField
+          name="email"
+          type="email"
+          label="Email"
+          autoComplete="email"
+          required
+          defaultValue={email}
+          error={state.fieldErrors?.email}
+        />
+        <TextField
+          name="password"
+          type="password"
+          label="Password"
+          autoComplete="current-password"
+          required
+          error={state.fieldErrors?.password}
+          labelAside={
+            <Link href="/forgot-password" className="rounded text-xs font-semibold text-ink underline underline-offset-4 hover:no-underline">
+              Forgot password?
+            </Link>
+          }
+        />
+        <SubmitButton pending={pending} idle="Sign in" busy="Signing in…" />
+      </form>
+
+      {state.code === "email_not_confirmed" && (
+        <form action={resendFormAction} className="grid gap-3">
+          <input type="hidden" name="email" value={email} />
+          <StateMessage state={resendState} />
+          <Button type="submit" variant="secondary" disabled={resending} aria-busy={resending}>
+            {resending ? "Sending…" : "Resend confirmation email"}
+          </Button>
+        </form>
+      )}
+    </div>
   )
 }
 
@@ -137,19 +167,18 @@ export function UpdatePasswordForm({ action }: { action: Action }) {
   )
 }
 
-/** Google OAuth entry point. Wired to Supabase in Step 3. */
-export function GoogleButton({ label }: { label: string }) {
+/** Google OAuth: the server action returns Google's URL and redirects to it. */
+export function GoogleButton({ label, action }: { label: string; action: Action }) {
+  const [state, formAction, pending] = useActionState(action, initialFormState)
   return (
-    <Button
-      type="button"
-      variant="secondary"
-      size="lg"
-      className="w-full"
-      onClick={() => toast.info("Google sign-in isn’t connected yet.")}
-    >
-      <GoogleIcon />
-      {label}
-    </Button>
+    <form action={formAction} className="grid gap-3">
+      <StateMessage state={state} />
+      <NextField />
+      <Button type="submit" variant="secondary" size="lg" className="w-full" disabled={pending} aria-busy={pending}>
+        <GoogleIcon />
+        {pending ? "Redirecting to Google…" : label}
+      </Button>
+    </form>
   )
 }
 

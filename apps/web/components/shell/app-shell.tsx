@@ -3,11 +3,11 @@ import { Sidebar } from "@/components/shell/sidebar"
 import { TabBar } from "@/components/shell/tab-bar"
 import { Topbar } from "@/components/shell/topbar"
 
-export type ShellUser = { name: string; email: string }
+export type ShellUser = { name: string | null; email: string }
 
 /**
  * App chrome: sidebar (≥ 761px), sticky topbar, bottom tab bar (≤ 760px).
- * `user` is null until sign-in is wired (Sprint 1 Step 3); the sidebar then shows "Sign in".
+ * `user` is null only while the signed-in user is loading (Suspense fallback).
  */
 export function AppShell({ user, children }: { user: ShellUser | null; children: React.ReactNode }) {
   return (

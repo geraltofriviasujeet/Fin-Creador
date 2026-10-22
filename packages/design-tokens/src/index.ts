@@ -65,7 +65,7 @@ export const contrastPairs: ReadonlyArray<{
   { fg: "ink", bg: "accent", min: 4.5, use: "active nav / brand button" },
   { fg: "navText", bg: "nav", min: 4.5, use: "sidebar text" },
   { fg: "navMuted", bg: "nav", min: 4.5, use: "sidebar secondary text" },
-  { fg: "accent", bg: "nav", min: 4.5, use: "wordmark 'creador' on nav" },
+  { fg: "accent", bg: "nav", min: 4.5, use: "wordmark 'Creador' on nav" },
   { fg: "navText", bg: "accentDeep", min: 4.5, use: "balance card text" },
   { fg: "navMuted", bg: "accentDeep", min: 4.5, use: "balance card secondary" },
   { fg: "accent", bg: "accentDeep", min: 4.5, use: "badge on balance card" },
@@ -167,3 +167,19 @@ export const logo = {
   ringGapDeg: 80,
   wordmark: { fontSize: 20, fontWeight: 700, letterSpacing: letterSpacing.wordmark },
 } as const;
+
+/**
+ * SVG path for the logo's open "C" ring, in the mark's 0..size viewBox: an arc around the
+ * centre with its gap centred on the left (180°). Shared by the web SVG and react-native-svg.
+ */
+export function logoRingPath(): string {
+  const c = logo.size / 2;
+  const r = logo.ringRadius;
+  const half = logo.ringGapDeg / 2;
+  const point = (deg: number) => {
+    const rad = (deg * Math.PI) / 180;
+    return `${(c + r * Math.cos(rad)).toFixed(3)} ${(c + r * Math.sin(rad)).toFixed(3)}`;
+  };
+  // From the upper end of the gap, clockwise the long way round to the lower end.
+  return `M ${point(180 + half)} A ${r} ${r} 0 1 1 ${point(180 - half)}`;
+}
