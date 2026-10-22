@@ -6,7 +6,11 @@ import { signUpConfirmed, uniqueEmail } from "./helpers"
 
 const SHOTS = "e2e-screenshots"
 
+// Panels ("Income sources", "Where your money is") by their title.
 const card = (page: Page, label: string) => page.locator("[data-slot=card]").filter({ has: page.getByText(label, { exact: true }) })
+// Summary cards only: an account can itself be named "Cash in hand".
+const stat = (page: Page, label: string) =>
+  page.getByRole("region", { name: "Summary" }).locator("[data-slot=card]").filter({ has: page.getByText(label, { exact: true }) })
 const dialog = (page: Page, title: string) => page.getByRole("dialog", { name: title })
 const toast = (page: Page, text: string) => page.getByRole("region", { name: "Notifications" }).getByText(text)
 const holding = (page: Page, label: string) => card(page, "Where your money is").getByRole("listitem").filter({ hasText: label })
@@ -51,8 +55,8 @@ test("first run shows empty states, never sample data", async ({ page }) => {
   await page.getByRole("link", { name: "Income", exact: true }).first().click()
   await expect(page.getByRole("heading", { name: "Income", level: 1 })).toBeVisible()
 
-  await expectCard(card(page, "Income this month"), "₹0")
-  await expectCard(card(page, "Bank accounts"), "0", "None added yet")
+  await expectCard(stat(page, "Income this month"), "₹0")
+  await expectCard(stat(page, "Bank accounts"), "0", "None added yet")
   await expect(page.getByText("No income recorded yet")).toBeVisible()
   await expect(page.getByText("Add your first account")).toBeVisible()
   await expectCard(card(page, "Where your money is"), "Total available", "₹0")
@@ -71,13 +75,17 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   await bankDialog.getByRole("button", { name: "Add account" }).click()
   // The error, not the select's "Select your bank" placeholder option.
   await expect(bankDialog.locator("#bankName-error")).toHaveText("Select your bank")
+  // Fields keep what the person had after the error (no React form reset).
+  await expect(bankDialog.getByLabel("Bank name")).toHaveValue("")
+  await expect(bankDialog.getByLabel("Currency")).toHaveValue("INR")
+  await expect(bankDialog.getByLabel("Last 4 digits")).toHaveValue("12a4")
   await shots(page, "02-add-bank-validation")
   await page.keyboard.press("Escape")
 
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "2,48,600" })
   await addBank(page, { bank: "ICICI Bank", last4: "0934", opening: "1,76,250", type: "Current account" })
-  await expectCard(card(page, "Bank accounts"), "2", "1 savings · 1 current")
-  await expectCard(card(page, "Money in banks"), "₹4,24,850", "Across 2 bank accounts")
+  await expectCard(stat(page, "Bank accounts"), "2", "1 savings · 1 current")
+  await expectCard(stat(page, "Money in banks"), "₹4,24,850", "Across 2 bank accounts")
 
   // First cash account is pre-filled "Cash in hand"; cash can't start below zero.
   await page.getByRole("button", { name: "Add cash" }).first().click()
@@ -89,16 +97,16 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   await cashDialog.getByLabel("Opening balance").fill("20,800")
   await cashDialog.getByRole("button", { name: "Add account" }).click()
   await expect(cashDialog).toBeHidden()
-  await expectCard(card(page, "Cash in hand"), "₹20,800")
+  await expectCard(stat(page, "Cash in hand"), "₹20,800")
   await expectCard(card(page, "Where your money is"), "₹4,45,650")
 
   // Income: period income and balances move together; period income stays separate.
   await addIncome(page, { amount: "1,28,000", source: "Salary", into: "HDFC Bank ··4821", note: "October salary" })
   await expect(toast(page, "Income saved.")).toBeVisible()
   await addIncome(page, { amount: "32,000", source: "Rental income", into: "ICICI Bank ··0934" })
-  await expectCard(card(page, "Income this month"), "₹1,60,000")
-  await expectCard(card(page, "Income this year"), "₹1,60,000", "January – December")
-  await expectCard(card(page, "Rental income"), "₹32,000", "₹32,000 this year")
+  await expectCard(stat(page, "Income this month"), "₹1,60,000")
+  await expectCard(stat(page, "Income this year"), "₹1,60,000", "January – December")
+  await expectCard(stat(page, "Rental income"), "₹32,000", "₹32,000 this year")
   await expect(holding(page, "HDFC Bank ··4821")).toContainText("₹3,76,600")
   await expectCard(card(page, "Where your money is"), "₹6,05,650")
 
@@ -131,7 +139,7 @@ test("a double-submitted income is recorded once", async ({ page }) => {
   })
   await expect(d).toBeHidden()
   await page.reload()
-  await expectCard(card(page, "Income this month"), "₹5,000")
+  await expectCard(stat(page, "Income this month"), "₹5,000")
   await expect(holding(page, "State Bank of India ··6618")).toContainText("₹5,000")
 })
 
@@ -145,7 +153,7 @@ test("void, archive and restore keep history but change the totals", async ({ pa
   await expect(d).toBeHidden()
 
   await addIncome(page, { amount: "2,500", source: "Salary", into: "Axis Bank" })
-  await expectCard(card(page, "Income this month"), "₹2,500")
+  await expectCard(stat(page, "Income this month"), "₹2,500")
 
   // Void from the source's entries.
   await card(page, "Income sources").getByRole("button", { name: /Salary/ }).click()
@@ -155,7 +163,7 @@ test("void, archive and restore keep history but change the totals", async ({ pa
   await shots(page, "05-void-confirm")
   await entries.getByRole("button", { name: "Void income" }).click()
   await expect(toast(page, "Income voided.")).toBeVisible()
-  await expectCard(card(page, "Income this month"), "₹0")
+  await expectCard(stat(page, "Income this month"), "₹0")
   await expect(holding(page, "Axis Bank")).toContainText("₹1,000")
 
   // The source stays listed (at ₹0, marked) so the voided entry is still reachable.

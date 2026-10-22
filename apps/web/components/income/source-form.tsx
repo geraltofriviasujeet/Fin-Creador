@@ -4,6 +4,7 @@ import { useActionState } from "react"
 import { SOURCE_TYPES } from "@fin-creador/schemas"
 import { saveSourceAction } from "@/app/(app)/income/actions"
 import { FormActions } from "@/components/income/form-actions"
+import { submitWithoutReset } from "@/components/income/submit-without-reset"
 import { useFormSuccess } from "@/components/income/use-form-success"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { initialFormState } from "@/lib/form-state"
@@ -17,7 +18,7 @@ export function SourceForm({ accounts, onDone }: { accounts: IncomeAccount[]; on
   const errors = state.fieldErrors ?? {}
 
   return (
-    <form action={action} noValidate className="grid gap-5">
+    <form onSubmit={submitWithoutReset(action)} noValidate className="grid gap-5">
       {state.status === "error" && state.message && <FormMessage tone="error">{state.message}</FormMessage>}
       <TextField name="name" label="Name" placeholder="e.g. Shop rent" maxLength={60} defaultValue={v.name} error={errors.name} autoFocus />
       <SelectField name="sourceType" label="Type" defaultValue={v.sourceType ?? "other"} error={errors.sourceType}>

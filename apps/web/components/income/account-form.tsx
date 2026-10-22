@@ -6,6 +6,7 @@ import { BANK_TYPES, currencyOptions, INDIAN_BANKS, OTHER_BANK } from "@fin-crea
 import { saveAccountAction } from "@/app/(app)/income/actions"
 import { AmountField } from "@/components/income/amount-field"
 import { FormActions } from "@/components/income/form-actions"
+import { submitWithoutReset } from "@/components/income/submit-without-reset"
 import { useFormSuccess } from "@/components/income/use-form-success"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { initialFormState } from "@/lib/form-state"
@@ -47,7 +48,7 @@ export function AccountForm({ kind, account, currency, today, suggestedName, onD
   const [selectedCurrency, setSelectedCurrency] = useState(v.currency ?? currency)
 
   return (
-    <form action={action} noValidate className="grid gap-5">
+    <form onSubmit={submitWithoutReset(action)} noValidate className="grid gap-5">
       {state.status === "error" && state.message && <FormMessage tone="error">{state.message}</FormMessage>}
       {account && <input type="hidden" name="id" value={account.id} />}
       <input type="hidden" name="kind" value={kind} />
@@ -55,7 +56,7 @@ export function AccountForm({ kind, account, currency, today, suggestedName, onD
       {kind === "bank" ? (
         <>
           <SelectField name="bankName" label="Bank name" value={bankName} onChange={(e) => setBankName(e.target.value)} error={errors.bankName}>
-            <option value="" disabled>
+            <option value="">
               Select your bank
             </option>
             {INDIAN_BANKS.map((b) => (

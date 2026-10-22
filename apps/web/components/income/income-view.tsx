@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useCallback, useEffect, useMemo, useState } from "react"
+import { useActionState, useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
 import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, ChevronRight, House, MoreHorizontal, Plus } from "lucide-react"
@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
+import { toast } from "@/components/ui/toast"
 import { initialFormState } from "@/lib/form-state"
 import type { IncomeAccount, IncomePageData } from "@/lib/income/types"
 
@@ -385,19 +386,28 @@ function ArchiveForm({ account, onDone }: { account: IncomeAccount; onDone: () =
   )
 }
 
-const noop = () => {}
-
+// Restoring removes this row from the archived list in the same update, so the result
+// is announced from the submit handler (the toast lives outside this component), not
+// from an effect in a row that has already disappeared.
 function RestoreForm({ account }: { account: IncomeAccount }) {
-  const [state, action, pending] = useActionState(setAccountArchivedAction, initialFormState)
-  useFormSuccess(state, noop)
+  const [pending, startRestore] = useTransition()
   return (
-    <form action={action}>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        const formData = new FormData(event.currentTarget)
+        startRestore(async () => {
+          const result = await setAccountArchivedAction(initialFormState, formData)
+          if (result.status === "success") toast.success(result.message ?? "Account restored.")
+          else toast.error(result.message ?? "We couldn't restore that account. Please try again.")
+        })
+      }}
+    >
       <input type="hidden" name="id" value={account.id} />
       <input type="hidden" name="archived" value="false" />
       <Button type="submit" variant="secondary" size="sm" disabled={pending} aria-busy={pending}>
         {pending ? "Restoring…" : "Restore"}
       </Button>
-      {state.status === "error" && <span className="sr-only">{state.message}</span>}
     </form>
   )
 }
