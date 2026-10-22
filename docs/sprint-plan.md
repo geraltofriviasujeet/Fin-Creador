@@ -23,8 +23,8 @@ Last updated: 2026-10-22.
 
 | **Sprint** | **Focus** | **Status** | **Notes** |
 |----|----|----|----|
-| **1** | Foundation, authentication & profile | Done | Completed 2026-10-22; released to `main` via PR #7. iPhone test of the mobile app pending SDK 58 in the App Store Expo Go. See Sprint 1 steps below. |
-| **2** | Accounts & Income page | In progress | Scope widened 2026-10-22 (see decisions): accounts plus income entry, income sources and the full Income page. See Sprint 2 steps below. |
+| **1** | Foundation, authentication & profile | Done | Completed 2026-10-22; released to `main` via PR #7. Mobile app runs on Android and iPhone in Expo Go 58 (iPhone from 2026-10-22). See Sprint 1 steps below. |
+| **2** | Accounts & Income page | Done | Completed 2026-10-22 (PRs #9–#16). Accounts, income sources, income entries with void, one cash account with "Update cash in hand", the Income page on web and mobile. Tested on web (E2E in CI) and on Android and iPhone (Expo Go 58). Scope widened from the original plan (see decisions). See Sprint 2 steps below. |
 | **3** | Expense & transaction tracking | Not started | Income entry, the transactions table and safe void moved into Sprint 2. |
 | **4** | Recurring items | Not started | Income sources and the Income page moved into Sprint 2; recurring rules and mark received/paid stay here. |
 | **5** | Dashboard & analytics | Not started | |
@@ -55,11 +55,11 @@ Last updated: 2026-10-22.
 |----|----|----|
 | **0. Docs** | Done | Scope change recorded here; Income screens added to `docs/design-spec.md`; CLAUDE.md §5 clarified. |
 | **1. Migration and pgTAP** | Done | `accounts`, `categories` (income sources), `transactions` (income only), balance view, `record_income` / `void_income`, default sources; 105 pgTAP tests green in CI (PR #9). Applied to fin-creador-dev 2026-10-22; types regenerated. |
-| **2. Domain and schemas** | Done (uncommitted) | `packages/domain`: dates and periods in the user's time zone, money parsing, balances, holdings totals, income by source, rental, trend; `packages/schemas`: account, income, source and void forms, bank list; `packages/api`: FC001–FC011 messages. Unit tests at month, year, leap-year and time-zone boundaries. |
-| **3. Web Income page** | Built (uncommitted) | `/income`: six cards, Income sources, Where your money is with Total available; Add income, Add bank / cash / other account, edit, archive and restore, Add source, void. Topbar "Add transaction" opens Add income. Signed-in screens verified only through the E2E tests in CI (no test users on the dev project). |
-| **4. E2E tests** | Written, not yet run | 6 Playwright tests (empty states, accounts and totals, double submit, void / archive / restore, future date and deep link, cross-user); CI also uploads screenshots at desktop, tablet and phone widths. |
-| **5. Mobile** | Built, awaiting device test | PR A merged (#13): shared loader and writers, lowercase wordmark. PR B: mobile Income screen (cards, sources, Where your money is), native form sheets for add / edit account, add income, add source, entries with void, archived with restore; archive via a confirmation; Overview card (Total available, Income this month) and header + open Income / Add income; "today" from `user_local_today`; offline error with retry everywhere. Android test on a phone pending; iPhone pending SDK 58 in the App Store Expo Go. |
-| **6. Status and PR** | Not started | |
+| **2. Domain and schemas** | Done | `packages/domain`: dates and periods in the user's time zone, money parsing, balances, holdings totals, income by source (incl. voided-only), rental, trend; `packages/schemas`: account, income, source and void forms, bank list; `packages/api`: FC001–FC013 messages. Unit tests at month, year, leap-year and time-zone boundaries (PR #10). |
+| **3. Web Income page** | Done | `/income`: six cards, Income sources, Where your money is with Total available; Add income, Add bank / other account, Add / Update cash, edit, archive and restore, Add source, void. Topbar "Add transaction" opens Add income. CI fixes: breakpoints, real links, form values kept after errors, restore confirmation (PRs #10–#12). |
+| **4. E2E tests** | Done | 6 Playwright tests for the Income page (empty states, accounts and totals, cash update, double submit, void / archive / restore, future date and deep link, cross-user); 19 in total, green in CI with screenshots at three widths. |
+| **5. Mobile** | Done | Shared loader and writers in `packages/api` (#13); mobile Income screen and add / edit screens (#14), iOS modal cards and Android full-screen modals (#15), one cash account with Update cash in hand (#16, migration 20261022190000 applied to fin-creador-dev). Tested on Android and iPhone in Expo Go 58. |
+| **6. Status and PR** | Done | Status and decisions updated; PR from `sprint-1-foundation` into `main` opened for review. |
 
 ## Decisions
 
@@ -104,14 +104,17 @@ Development-only settings that must be removed or replaced before any production
 - **App scheme:** use a fixed `fincreador://` scheme in the release builds (and keep `fincreador://auth/callback` as the only mobile OAuth return address). Remove the Expo Go `exp://` branch in `oauthRedirectUrl` once development builds replace Expo Go.
 - **Site URL:** set it to the production web URL.
 
+- **Email sender:** add custom SMTP (Supabase's built-in sender allows only a few emails per hour).
+
 Pending tests:
 
-- **iPhone:** Step 4 not yet tested on iOS. It is waiting for the App Store Expo Go to support SDK 58 (or an `eas go` / development build).
+- **Google sign-in on iPhone:** the app runs on iPhone in Expo Go 58 (tested 2026-10-22), but Google sign-in has only been tested on Android so far (`npm run dev:mobile:google`).
 
 ## Backlog
 
 - **Financial year setting:** optional April–March financial year for "this year" figures (Sprint 2 uses the calendar year).
 - **Repeated sign-up email:** see Sprint 10.
+- **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
 
 # 1. Executive summary
 
