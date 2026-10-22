@@ -20,7 +20,8 @@ export function Sheet({ eyebrow, title, children }: { eyebrow?: string; title: s
         style={styles.flex}
         contentContainerStyle={[
           styles.body,
-          // Android shows sheets as full-screen modals (see app/(app)/_layout.tsx): clear the status bar.
+          // Android shows sheets as full-screen modals (see app/(app)/_layout.tsx): clear the
+          // status bar. The iOS modal card already sits below it.
           { paddingTop: (Platform.OS === "android" ? insets.top : 0) + spacing[5], paddingBottom: insets.bottom + spacing[8] },
         ]}
         keyboardShouldPersistTaps="handled"

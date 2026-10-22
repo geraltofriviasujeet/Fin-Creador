@@ -3,16 +3,13 @@ import { Platform } from "react-native";
 import { IncomeDataProvider } from "@/lib/income-store";
 import { colors, fontFamily } from "@/theme";
 
-// Add / edit sheets (design-spec §5–6). iOS: native form sheets at full height. Android:
-// full-screen modals, because Android form sheets don't support flex: 1 content (Expo
-// docs) and opened with no visible height on the first device test. Native headers don't
-// render here, so each sheet draws its own title row.
+// Add / edit sheets (design-spec §5–6), set in one place. iOS: the standard modal card
+// (slides up, swipe down to dismiss). Android: full-screen modal. Native "formSheet" was
+// tried first but rendered empty on both platforms in device tests (its flex: 1 content
+// got no height). Native headers are hidden, so each sheet draws its own title row.
 const SHEET = {
-  presentation: (Platform.OS === "android" ? "fullScreenModal" : "formSheet") as "fullScreenModal" | "formSheet",
+  presentation: (Platform.OS === "android" ? "fullScreenModal" : "modal") as "fullScreenModal" | "modal",
   headerShown: false,
-  sheetAllowedDetents: [1],
-  sheetGrabberVisible: true,
-  sheetCornerRadius: 24,
   contentStyle: { backgroundColor: colors.surface },
 };
 
