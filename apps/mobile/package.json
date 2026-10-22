@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "bundle": "expo export --platform ios --platform android --output-dir dist",
-    "start:hostname": "sh scripts/start-lan-hostname.sh"
+    "start:hostname": "sh scripts/start-lan-hostname.sh",
+    "bundle:js": "expo export --platform ios --platform android --no-bytecode --output-dir dist-js"
   },
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
