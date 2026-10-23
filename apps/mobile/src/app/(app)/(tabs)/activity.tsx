@@ -26,7 +26,7 @@ import {
 } from "@fin-creador/api";
 import { formatPercentFromBasisPoints, incomeTrendBasisPoints, savingsRateBasisPoints } from "@fin-creador/domain";
 import { useRouter } from "expo-router";
-import { Plus, RotateCw, Search, Wallet } from "lucide-react-native";
+import { Plus, Repeat, RotateCw, Search, Wallet } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Badge } from "@/components/badge";
@@ -146,6 +146,7 @@ function Activity({ data }: { data: TransactionsContext }) {
   return (
     <View style={styles.gap}>
       <Button label="Add transaction" icon={Plus} onPress={() => addTransaction()} />
+      <Button label="Recurring" variant="secondary" icon={Repeat} onPress={() => router.push("/recurring")} accessibilityHint="Opens recurring items: what is due and what it costs" />
       <Segmented label="Transaction type" options={TYPE_TABS} value={f.type} onChange={(type) => go({ type })} />
 
       <Card style={styles.filters}>

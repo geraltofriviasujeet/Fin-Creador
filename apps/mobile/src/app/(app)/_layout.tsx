@@ -33,8 +33,11 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
       <Stack.Screen name="income" options={{ title: "Income" }} />
+      <Stack.Screen name="recurring" options={{ title: "Recurring" }} />
       <Stack.Screen name="sheets/transaction" options={SHEET} />
       <Stack.Screen name="sheets/entry" options={SHEET} />
+      <Stack.Screen name="sheets/recurring-rule" options={SHEET} />
+      <Stack.Screen name="sheets/recurring-skip" options={SHEET} />
       <Stack.Screen name="sheets/account" options={SHEET} />
       <Stack.Screen name="sheets/source" options={SHEET} />
       <Stack.Screen name="sheets/entries" options={SHEET} />

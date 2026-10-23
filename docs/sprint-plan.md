@@ -74,7 +74,7 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **Phase 2.4 Remove the prototype** | Done | `/dev/transactions`, its demo data and the dev-only sign-in exception removed; unit test (no exception) and E2E against the production build (redirect signed out, 404 signed in). |
 | **Phase 2.5 E2E tests** | Done | 7 Playwright journeys in `e2e/transactions.spec.ts` (validation, totals and balances, edit and history, void, double submit, stale edit, search and filters, income edit, production check, cross-user), green in CI on PR #19; screenshots of the final pages only. |
 | **Phase 2.5b Expense categories (web)** | Done | Settings → Categories: add, rename (and icon), archive, restore; defaults archivable, never deleted; no duplicate active names; archived categories keep their history. Shared writers in `packages/api`; E2E `e2e/categories.spec.ts` with one screenshot. |
-| **Phase 2.6 Mobile** | Not started | Separate PR: its own Recurring screen, reached from the Overview card and Activity. |
+| **Phase 2.6 Mobile** | In progress | Branch `sprint-4-mobile` (draft PR into the sprint branch): Recurring screen (cost tiles, Due / Needs attention / Coming in 30 days / Ended, groups, archived with Restore, Undo skip) from the shared view builder; rule sheet (add, edit, fix, archive), skip sheet, Confirm in the Add / Edit sheet (type and category fixed); Overview Recurring card and an Activity link. Device test in Expo Go pending. |
 | **Phase 2.7 Status and PR** | Done | Status and decisions updated; PR #19 merged into `main` 2026-10-23. |
 
 ## Sprint 4 steps
