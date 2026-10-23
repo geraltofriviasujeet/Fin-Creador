@@ -103,10 +103,16 @@ describe("ledgerErrorMessage", () => {
     ["FC004", "currency"],
     ["FC006", "sourceId"],
     ["FC011", "openingBalanceDate"],
+    ["FC015", "counterAccountId"],
+    ["FC016", "paymentMode"],
   ])("maps %s to a friendly message on %s", (code, field) => {
     const m = ledgerErrorMessage({ code, message: "raw database text" })
     expect(m.field).toBe(field)
     expect(m.message).not.toContain("raw database text")
+  })
+
+  it.each(["FC014", "FC017"])("maps %s to a friendly message", (code) => {
+    expect(ledgerErrorMessage({ code, message: "raw database text" }).message).not.toMatch(/raw database text|couldn’t save/)
   })
 
   it("puts a future-date error on the form's own date field", () => {

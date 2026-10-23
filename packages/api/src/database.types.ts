@@ -67,6 +67,7 @@ export type Database = {
           archived_at: string | null
           created_at: string
           default_account_id: string | null
+          icon: string | null
           id: string
           is_default: boolean
           kind: string
@@ -79,6 +80,7 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           default_account_id?: string | null
+          icon?: string | null
           id?: string
           is_default?: boolean
           kind: string
@@ -91,6 +93,7 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           default_account_id?: string | null
+          icon?: string | null
           id?: string
           is_default?: boolean
           kind?: string
@@ -164,8 +167,11 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          payment_mode: string | null
+          replaces_id: string | null
           type: string
           user_id: string
+          void_idempotency_key: string | null
           void_reason: string | null
           voided_at: string | null
         }
@@ -180,8 +186,11 @@ export type Database = {
           idempotency_key: string
           note?: string | null
           occurred_on: string
+          payment_mode?: string | null
+          replaces_id?: string | null
           type: string
           user_id?: string
+          void_idempotency_key?: string | null
           void_reason?: string | null
           voided_at?: string | null
         }
@@ -196,8 +205,11 @@ export type Database = {
           idempotency_key?: string
           note?: string | null
           occurred_on?: string
+          payment_mode?: string | null
+          replaces_id?: string | null
           type?: string
           user_id?: string
+          void_idempotency_key?: string | null
           void_reason?: string | null
           voided_at?: string | null
         }
@@ -237,6 +249,13 @@ export type Database = {
             referencedRelation: "accounts"
             referencedColumns: ["id", "user_id"]
           },
+          {
+            foreignKeyName: "transactions_replaces_owned"
+            columns: ["replaces_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id", "user_id"]
+          },
         ]
       }
     }
@@ -253,13 +272,98 @@ export type Database = {
       }
     }
     Functions: {
+      backfill_default_expense_categories: { Args: never; Returns: number }
       backfill_default_income_sources: { Args: never; Returns: number }
       backfill_missing_profiles: { Args: never; Returns: number }
+      edit_transaction: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_category_id?: string
+          p_counter_account_id?: string
+          p_idempotency_key: string
+          p_note?: string
+          p_occurred_on: string
+          p_payment_mode?: string
+          p_transaction_id: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          payment_mode: string | null
+          replaces_id: string | null
+          type: string
+          user_id: string
+          void_idempotency_key: string | null
+          void_reason: string | null
+          voided_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      ensure_default_expense_categories: {
+        Args: { p_user_id: string }
+        Returns: number
+      }
       ensure_default_income_sources: {
         Args: { p_user_id: string }
         Returns: number
       }
+      ensure_my_expense_categories: { Args: never; Returns: number }
       ensure_my_income_sources: { Args: never; Returns: number }
+      list_transactions: {
+        Args: {
+          p_account_id?: string
+          p_after_created_at?: string
+          p_after_id?: string
+          p_after_occurred_on?: string
+          p_amount_minor?: number
+          p_category_id?: string
+          p_from: string
+          p_include_voided?: boolean
+          p_limit?: number
+          p_query?: string
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          payment_mode: string | null
+          replaces_id: string | null
+          type: string
+          user_id: string
+          void_idempotency_key: string | null
+          void_reason: string | null
+          voided_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       profile_display_name: { Args: { meta: Json }; Returns: string }
       record_income: {
         Args: {
@@ -281,8 +385,49 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          payment_mode: string | null
+          replaces_id: string | null
           type: string
           user_id: string
+          void_idempotency_key: string | null
+          void_reason: string | null
+          voided_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_transaction: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_category_id?: string
+          p_counter_account_id?: string
+          p_idempotency_key: string
+          p_note?: string
+          p_occurred_on: string
+          p_payment_mode?: string
+          p_type: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          payment_mode: string | null
+          replaces_id: string | null
+          type: string
+          user_id: string
+          void_idempotency_key: string | null
           void_reason: string | null
           voided_at: string | null
         }
@@ -317,6 +462,59 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      transaction_summary: {
+        Args: {
+          p_account_id?: string
+          p_amount_minor?: number
+          p_category_id?: string
+          p_from: string
+          p_query?: string
+          p_to: string
+        }
+        Returns: {
+          currency: string
+          expense_count: number
+          expense_minor: number
+          income_count: number
+          income_minor: number
+          transfer_count: number
+        }[]
+      }
+      transactions_matching: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_category_id: string
+          p_from: string
+          p_query: string
+          p_to: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          payment_mode: string | null
+          replaces_id: string | null
+          type: string
+          user_id: string
+          void_idempotency_key: string | null
+          void_reason: string | null
+          voided_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       user_local_today: { Args: { p_user_id: string }; Returns: string }
       void_income: {
         Args: { p_reason?: string; p_transaction_id: string }
@@ -331,8 +529,43 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          payment_mode: string | null
+          replaces_id: string | null
           type: string
           user_id: string
+          void_idempotency_key: string | null
+          void_reason: string | null
+          voided_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      void_transaction: {
+        Args: {
+          p_idempotency_key: string
+          p_reason?: string
+          p_transaction_id: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          payment_mode: string | null
+          replaces_id: string | null
+          type: string
+          user_id: string
+          void_idempotency_key: string | null
           void_reason: string | null
           voided_at: string | null
         }

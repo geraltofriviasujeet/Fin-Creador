@@ -1,5 +1,5 @@
-// Maps database errors from accounts, sources and income (supabase/migrations
-// 20261022150000) to messages for web and mobile. Raw database messages are never shown.
+// Maps database errors from accounts, categories and entries (supabase/migrations
+// 20261022150000, 20261023120000) to messages for web and mobile. Raw database messages are never shown.
 
 export type LedgerErrorLike = { code?: string | undefined; message?: string | undefined } | null | undefined
 
@@ -24,6 +24,10 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC011: { message: "The as-of date can't change once the account has income.", field: "openingBalanceDate" },
   FC012: { message: "You already have Cash in hand. Update its amount instead." },
   FC013: { message: "Only Cash in hand can be updated this way." },
+  FC014: { message: "This entry was changed elsewhere. Reload to see the latest version." },
+  FC015: { message: "Both accounts of a transfer need the same currency.", field: "counterAccountId" },
+  FC016: { message: "A payment mode can only be used with a bank account.", field: "paymentMode" },
+  FC017: { message: "Nothing has changed." },
 }
 
 /** `dateField` names the date input on the current form (occurredOn or openingBalanceDate). */
