@@ -16,7 +16,7 @@ const DEMO_TIME_ZONE = "Asia/Kolkata"
 export default function RecurringPrototypePage() {
   if (process.env.NODE_ENV === "production") notFound()
   return (
-    <AppShell user={{ name: "Demo user", email: "demo@example.test" }}>
+    <AppShell user={{ name: "Demo user", email: "demo@example.test" }} navPreview={{ recurring: "/dev/recurring" }}>
       <Suspense fallback={null}>
         <PrototypeContent />
       </Suspense>

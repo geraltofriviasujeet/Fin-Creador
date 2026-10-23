@@ -25,22 +25,29 @@ export type DemoRule = {
 export type DemoPost = { ruleId: string; date: IsoDate; amountMinor: number; voided: boolean }
 export type DemoSkip = { ruleId: string; date: IsoDate; reason: string | null }
 
+/**
+ * Phase 2 adds a stable internal key to two defaults (not editable), so grouping survives
+ * a rename: Subscriptions and Memberships group by it.
+ */
+export type CategoryKey = "subscription" | "membership"
+export type DemoCategory = LedgerCategory & { key: CategoryKey | null }
+
 export type DemoData = {
   today: IsoDate
   currency: string
   accounts: LedgerAccount[]
-  categories: LedgerCategory[]
+  categories: DemoCategory[]
   rules: DemoRule[]
   posts: DemoPost[]
   skips: DemoSkip[]
 }
 
-const account = (id: string, kind: LedgerAccount["kind"], label: string, opening: number, archived = false): LedgerAccount => ({
+const account = (id: string, kind: LedgerAccount["kind"], label: string, opening: number, archived = false, currency = "INR"): LedgerAccount => ({
   id,
   kind,
   bankType: kind === "bank" ? "savings" : null,
   label,
-  currency: "INR",
+  currency,
   openingBalanceMinor: opening,
   openingBalanceDate: "2026-01-01",
   inflowMinor: 0,
@@ -48,13 +55,14 @@ const account = (id: string, kind: LedgerAccount["kind"], label: string, opening
   archived,
 })
 
-const category = (id: string, kind: LedgerCategory["kind"], name: string, icon: string, archived = false): LedgerCategory => ({
+const category = (id: string, kind: LedgerCategory["kind"], name: string, icon: string, archived = false, key: CategoryKey | null = null): DemoCategory => ({
   id,
   kind,
   name,
   icon,
   archived,
   defaultAccountId: null,
+  key,
 })
 
 const rule = (r: Partial<DemoRule> & Pick<DemoRule, "id" | "type" | "amountMinor" | "accountId" | "frequency" | "startDate">): DemoRule => ({
@@ -73,13 +81,26 @@ export function createDemoData(today: IsoDate, { empty = false } = {}): DemoData
     account("a-savings", "bank", "Demo Savings Bank ··1234", 18_000_000),
     account("a-cash", "cash", "Cash in hand", 500_000),
     account("a-old", "bank", "Old Demo Bank ··9876", 0, true),
+    account("a-usd", "other", "Demo travel wallet (USD)", 10_000, false, "USD"),
   ]
+  // The 14 default expense categories (12 from Sprint 3, plus Membership and Subscription),
+  // one the person renamed (the key keeps it grouped), and one they archived.
   const categories = [
+    category("c-food", "expense", "Food & dining", "food"),
+    category("c-groceries", "expense", "Groceries", "groceries"),
+    category("c-transport", "expense", "Transport", "transport"),
     category("c-rent", "expense", "Rent & housing", "home"),
     category("c-bills", "expense", "Utilities & bills", "bills"),
+    category("c-shopping", "expense", "Shopping", "shopping"),
+    category("c-health", "expense", "Health", "health"),
     category("c-fun", "expense", "Entertainment", "fun"),
-    category("c-gym", "expense", "Gym membership", "health", true),
+    category("c-education", "expense", "Education", "education"),
+    category("c-travel", "expense", "Travel", "travel"),
+    category("c-care", "expense", "Personal care", "care"),
+    category("c-membership", "expense", "Clubs & gym", "membership", false, "membership"),
+    category("c-subscription", "expense", "Subscription", "subscription", false, "subscription"),
     category("c-other", "expense", "Other expenses", "other"),
+    category("c-gym", "expense", "Old gym", "health", true),
     category("s-salary", "income", "Salary", "salary"),
     category("s-rent", "income", "Rental income", "rent"),
     category("s-freelance", "income", "Freelance", "freelance"),
@@ -94,7 +115,10 @@ export function createDemoData(today: IsoDate, { empty = false } = {}): DemoData
     // Due today: weekly cash for the week.
     rule({ id: "r-cash", type: "transfer", amountMinor: 300_000, accountId: "a-savings", counterAccountId: "a-cash", note: "Weekly cash", frequency: "weekly", startDate: addDays(today, -21) }),
     // Starts soon.
-    rule({ id: "r-stream", type: "expense", amountMinor: 64_900, accountId: "a-savings", categoryId: "c-fun", paymentMode: "upi", note: "Streaming subscription", frequency: "monthly", startDate: addDays(today, 4) }),
+    rule({ id: "r-stream", type: "expense", amountMinor: 64_900, accountId: "a-savings", categoryId: "c-subscription", paymentMode: "upi", note: "Streaming service", frequency: "monthly", startDate: addDays(today, 4) }),
+    rule({ id: "r-music", type: "expense", amountMinor: 1_19_900, accountId: "a-savings", categoryId: "c-subscription", paymentMode: "debit_card", note: "Music, yearly plan", frequency: "yearly", startDate: addDays(today, -200) }),
+    rule({ id: "r-cloud", type: "expense", amountMinor: 299, currency: "USD", accountId: "a-usd", categoryId: "c-subscription", note: "Cloud storage", frequency: "monthly", startDate: addDays(today, -20) }),
+    rule({ id: "r-club", type: "expense", amountMinor: 2_00_000, accountId: "a-savings", categoryId: "c-membership", paymentMode: "upi", note: "Sports club", frequency: "monthly", startDate: addDays(today, -58) }),
     // Skipped this time (paid by hand), so the next one is coming up.
     rule({ id: "r-power", type: "expense", amountMinor: 420_000, accountId: "a-savings", categoryId: "c-bills", note: "Electricity bill", frequency: "quarterly", startDate: addDays(today, -100) }),
     // Needs attention: its category is archived.
@@ -125,6 +149,9 @@ export function createDemoData(today: IsoDate, { empty = false } = {}): DemoData
       post("r-rent", latest("r-rent")),
       post("r-cash", previous("r-cash")),
       post("r-course", latest("r-course")),
+      post("r-music", latest("r-music")),
+      post("r-cloud", latest("r-cloud")),
+      post("r-club", previous("r-club")),
     ],
     skips: [{ ruleId: "r-power", date: latest("r-power"), reason: "Paid at the counter, added by hand" }],
   }

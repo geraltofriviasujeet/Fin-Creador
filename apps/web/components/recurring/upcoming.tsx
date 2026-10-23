@@ -1,22 +1,26 @@
 "use client"
 
-import { CalendarClock, CircleAlert } from "lucide-react"
+import Link from "next/link"
+import { ArrowRight, CircleAlert } from "lucide-react"
 import type { EntryType, LedgerItem, Lookup } from "@fin-creador/api"
 import { type IsoDate, addDays } from "@fin-creador/domain"
 import { cn } from "cn"
-import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, signedAmount } from "@/components/transactions/display"
+import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, signedAmount } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 
+/** Coming-up items are listed this many days ahead (owner, 2026-10-23). */
+export const UPCOMING_DAYS = 30
+
 /**
- * One recurring rule's place in the Upcoming list. `entry` describes what confirming it
- * would post (the same text helpers as the ledger). Computed in packages/domain.
+ * One recurring rule's place in the lists. `entry` describes what confirming it would post
+ * (the same text helpers as the ledger). Computed in packages/domain.
  */
 export type UpcomingItem = {
   ruleId: string
-  kind: "due" | "needs_attention" | "upcoming"
-  /** The occurrence date (due / upcoming), or the next one for a rule that needs attention. */
+  kind: "due" | "needs_attention" | "upcoming" | "ended"
+  /** The occurrence date: due, upcoming, or for "needs attention" the one waiting. Null once ended. */
   date: IsoDate | null
   schedule: string
   entry: LedgerItem
@@ -24,141 +28,135 @@ export type UpcomingItem = {
   attention?: string
 }
 
-/** Coming-up items are listed this many days ahead. */
-export const UPCOMING_DAYS = 30
+/** Within the next UPCOMING_DAYS days. */
+export const isComingSoon = (item: UpcomingItem, today: IsoDate) =>
+  item.kind === "upcoming" && item.date !== null && item.date <= addDays(today, UPCOMING_DAYS)
+
+/** A rule's row: icon, title, schedule, account, amount and date, then the actions given. */
+export function RecurringRow({ item, lookup, today, children }: { item: UpcomingItem; lookup: Lookup; today: IsoDate; children?: React.ReactNode }) {
+  return (
+    <li className="grid gap-2 border-b border-line px-5 py-3 last:border-b-0 md:flex md:items-center md:gap-4 md:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <EntryIcon entry={item.entry} lookup={lookup} />
+        <div className="min-w-0 flex-1">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold">
+            <span className="truncate">{entryTitle(item.entry, lookup)}</span>
+            {item.kind === "needs_attention" && <Badge tone="negative">Needs attention</Badge>}
+            {item.kind === "due" && item.date && item.date < today && <Badge tone="info">Missed</Badge>}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            {item.schedule} · {entryKindLabel(item.entry, lookup)} · {accountChipText(item.entry, lookup)}
+          </p>
+          {item.attention && (
+            <p className="mt-1 flex items-start gap-1.5 text-xs text-danger">
+              <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+              {item.attention}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-3 pl-14 md:pl-0">
+        <div className="text-right">
+          <p className="text-sm font-semibold tabular-nums">{signedAmount(item.entry)}</p>
+          <p className="text-xs text-muted-foreground">
+            {item.kind === "ended" ? `Ended ${item.date ? fullDate(item.date) : ""}`.trim() : item.date ? dayHeading(item.date, today) : "No date"}
+          </p>
+        </div>
+        {children && <div className="flex shrink-0 items-center gap-1">{children}</div>}
+      </div>
+    </li>
+  )
+}
+
+/** A titled panel with a count, its own list and its own empty state (the /recurring page). */
+export function RecurringPanel({
+  title,
+  description,
+  count,
+  empty,
+  children,
+  className,
+}: {
+  title: string
+  description?: string
+  count: number
+  empty: string
+  children: React.ReactNode
+  className?: string
+}) {
+  const id = `panel-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
+  return (
+    <Card aria-labelledby={id} className={cn("px-0 md:px-0", className)}>
+      <div className="px-5 md:px-6">
+        <CardTitle id={id}>
+          {title} <span className="text-muted-foreground">({count})</span>
+        </CardTitle>
+        {description && <CardDescription className="mt-1">{description}</CardDescription>}
+      </div>
+      {count === 0 ? <p className="px-5 pt-4 pb-1 text-sm text-muted-foreground md:px-6">{empty}</p> : <ul className="mt-4 border-t border-line">{children}</ul>}
+    </Card>
+  )
+}
 
 /**
- * Upcoming recurring items, shared by the Income page (income only) and the Transactions
- * page (all types, or the type tab). Nothing posts by itself: due items wait for Confirm
- * or Skip; a rule that needs attention must be fixed first.
+ * The compact Upcoming card on the Income page (income only) and the Transactions page (the
+ * type tab). Due and needs-attention first, then the next few; everything else is on
+ * /recurring. Nothing posts by itself.
  */
-export function Upcoming({
+export function UpcomingCard({
   items,
   lookup,
   today,
   type = null,
+  href,
   onConfirm,
-  onSkip,
-  onFix,
-  onManage,
+  limit = 3,
 }: {
   items: UpcomingItem[]
   lookup: Lookup
   today: IsoDate
   type?: EntryType | null
+  href: string
   onConfirm: (ruleId: string) => void
-  onSkip: (ruleId: string) => void
-  onFix: (ruleId: string) => void
-  onManage?: () => void
+  limit?: number
 }) {
-  const horizon = addDays(today, UPCOMING_DAYS)
-  const shown = items.filter((i) => (!type || i.entry.type === type) && (i.kind !== "upcoming" || (i.date !== null && i.date <= horizon)))
-  const attention = shown.filter((i) => i.kind === "needs_attention")
-  const due = shown.filter((i) => i.kind === "due").sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
-  const soon = shown.filter((i) => i.kind === "upcoming").sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
+  const mine = items.filter((i) => !type || i.entry.type === type)
+  const due = mine.filter((i) => i.kind === "due")
+  const attention = mine.filter((i) => i.kind === "needs_attention")
+  const soon = mine.filter((i) => isComingSoon(i, today))
+  const byDate = (a: UpcomingItem, b: UpcomingItem) => (a.date ?? "").localeCompare(b.date ?? "")
+  const shown = [...attention, ...due.sort(byDate), ...soon.sort(byDate)].slice(0, limit)
+  const what = type === "income" ? "recurring income" : type ? `recurring ${type}s` : "recurring items"
 
   return (
     <Card className="px-0 md:px-0">
-      <div className="flex flex-wrap items-end justify-between gap-2 px-5 md:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 md:px-6">
         <div>
           <CardTitle>Upcoming</CardTitle>
           <CardDescription className="mt-1">
-            Recurring {type ? `${type === "income" ? "income" : `${type}s`}` : "items"} due now and in the next {UPCOMING_DAYS} days. Nothing is saved until you confirm it.
+            {due.length} due · {attention.length} need attention · {soon.length} in the next {UPCOMING_DAYS} days
           </CardDescription>
         </div>
-        {onManage && (
-          <Button variant="secondary" size="sm" onClick={onManage}>
-            Manage recurring
-          </Button>
-        )}
+        <Link href={href} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
+          Open Recurring
+          <ArrowRight aria-hidden="true" />
+        </Link>
       </div>
-
       {shown.length === 0 ? (
-        <div className="grid justify-items-center gap-2 px-5 py-10 text-center md:px-6">
-          <CalendarClock aria-hidden="true" className="size-6 text-muted-foreground" />
-          <p className="font-semibold">Nothing due</p>
-          <p className="max-w-md text-sm text-muted-foreground">Add a recurring item (salary, rent, a subscription) and it shows here when it&apos;s due.</p>
-        </div>
+        <p className="px-5 pt-4 pb-1 text-sm text-muted-foreground md:px-6">No {what} due or coming up. Nothing is saved until you confirm it.</p>
       ) : (
-        <div className="mt-4">
-          <Section title="Needs attention" items={attention} lookup={lookup} today={today}>
-            {(i) => (
-              <Button variant="secondary" size="sm" onClick={() => onFix(i.ruleId)} aria-label={`Fix ${entryTitle(i.entry, lookup)}`}>
-                Fix
-              </Button>
-            )}
-          </Section>
-          <Section title="Due" items={due} lookup={lookup} today={today}>
-            {(i) => (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => onSkip(i.ruleId)} aria-label={`Skip ${entryTitle(i.entry, lookup)}`}>
-                  Skip
-                </Button>
+        <ul className="mt-4 border-t border-line">
+          {shown.map((i) => (
+            <RecurringRow key={i.ruleId} item={i} lookup={lookup} today={today}>
+              {i.kind === "due" && (
                 <Button size="sm" onClick={() => onConfirm(i.ruleId)} aria-label={`Confirm ${entryTitle(i.entry, lookup)}`}>
                   Confirm
                 </Button>
-              </>
-            )}
-          </Section>
-          <Section title={`Coming up · next ${UPCOMING_DAYS} days`} items={soon} lookup={lookup} today={today} />
-        </div>
+              )}
+            </RecurringRow>
+          ))}
+        </ul>
       )}
     </Card>
-  )
-}
-
-function Section({
-  title,
-  items,
-  lookup,
-  today,
-  children,
-}: {
-  title: string
-  items: UpcomingItem[]
-  lookup: Lookup
-  today: IsoDate
-  children?: (item: UpcomingItem) => React.ReactNode
-}) {
-  if (items.length === 0) return null
-  const id = `upcoming-${title.split(" ")[0]!.toLowerCase()}`
-  return (
-    <section aria-labelledby={id}>
-      <h3 id={id} className="border-y border-line bg-canvas px-5 py-2 text-xs font-semibold tracking-(--fc-tracking-eyebrow) text-muted-foreground uppercase md:px-6">
-        {title} ({items.length})
-      </h3>
-      <ul>
-        {items.map((i) => (
-          <li key={i.ruleId} className={cn("grid gap-2 border-b border-line px-5 py-3 last:border-b-0 md:flex md:items-center md:gap-4 md:px-6")}>
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <EntryIcon entry={i.entry} lookup={lookup} />
-              <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold">
-                  <span className="truncate">{entryTitle(i.entry, lookup)}</span>
-                  {i.kind === "needs_attention" && <Badge tone="negative">Needs attention</Badge>}
-                  {i.kind === "due" && i.date && i.date < today && <Badge tone="info">Missed</Badge>}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {i.schedule} · {entryKindLabel(i.entry, lookup)} · {accountChipText(i.entry, lookup)}
-                </p>
-                {i.attention && (
-                  <p className="mt-1 flex items-start gap-1.5 text-xs text-danger">
-                    <CircleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
-                    {i.attention}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 pl-14 md:pl-0">
-              <div className="text-right">
-                <p className="text-sm font-semibold tabular-nums">{signedAmount(i.entry)}</p>
-                <p className="text-xs text-muted-foreground">{i.date ? dayHeading(i.date, today) : "No date"}</p>
-              </div>
-              {children && <div className="flex shrink-0 items-center gap-1">{children(i)}</div>}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }

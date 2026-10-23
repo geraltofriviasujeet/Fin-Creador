@@ -2,6 +2,7 @@ import type * as React from "react"
 import { Sidebar } from "@/components/shell/sidebar"
 import { TabBar } from "@/components/shell/tab-bar"
 import { Topbar } from "@/components/shell/topbar"
+import type { NavPreview } from "@/components/shell/nav-items"
 
 export type ShellUser = { name: string | null; email: string }
 
@@ -12,9 +13,12 @@ export type ShellUser = { name: string | null; email: string }
 export function AppShell({
   user,
   children,
+  navPreview,
 }: {
   user: ShellUser | null
   children: React.ReactNode
+  /** Dev prototypes only (see navItems). */
+  navPreview?: NavPreview
 }) {
   return (
     <div className="min-h-dvh md:pl-(--fc-layout-sidebar-width)">
@@ -24,7 +28,7 @@ export function AppShell({
       >
         Skip to content
       </a>
-      <Sidebar user={user} />
+      <Sidebar user={user} navPreview={navPreview} />
       <Topbar />
       <main
         id="main"

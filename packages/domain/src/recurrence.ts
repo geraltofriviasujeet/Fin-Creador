@@ -148,3 +148,64 @@ export function scheduleText(schedule: Pick<Schedule, "frequency" | "startDate">
 /** Whether some months are shorter than the anchor day (the occurrence moves to the month's last day). */
 export const anchorDayMayMove = (schedule: Pick<Schedule, "frequency" | "startDate">) =>
   schedule.frequency !== "weekly" && mustParse(schedule.startDate).day > 28;
+
+// ---------------------------------------------------------------------------
+// Recurring cost (estimated from the rules' default amounts)
+// ---------------------------------------------------------------------------
+//   Active expense rules only: not income, not transfers, not ended or archived.
+//   Yearly = amount × occurrences per year (weekly 52, monthly 12, quarterly 4, yearly 1).
+//   Monthly = yearly / 12, rounded half up, from each tile's yearly total. Integer minor
+//   units throughout; each currency is totalled separately, never converted.
+
+export const OCCURRENCES_PER_YEAR: Readonly<Record<Frequency, number>> = { weekly: 52, monthly: 12, quarterly: 4, yearly: 1 };
+
+export const yearlyCostMinor = (amountMinor: number, frequency: Frequency): number => amountMinor * OCCURRENCES_PER_YEAR[frequency];
+
+/** yearly / 12, rounded half up (for the non-negative amounts here). */
+export const monthlyFromYearlyMinor = (yearlyMinor: number): number => Math.floor((yearlyMinor + 6) / 12);
+
+export type CostGroup = "subscription" | "membership" | "other";
+
+export interface CostRule {
+  type: "income" | "expense" | "transfer";
+  amountMinor: number;
+  currency: string;
+  frequency: Frequency;
+  group: CostGroup;
+  /** False once the rule has ended or is archived. */
+  active: boolean;
+}
+
+export interface CostTotal {
+  yearlyMinor: number;
+  monthlyMinor: number;
+  count: number;
+}
+
+export interface RecurringCosts {
+  currency: string;
+  subscriptions: CostTotal;
+  memberships: CostTotal;
+  total: CostTotal;
+}
+
+/** Cost tiles per currency, sorted by currency code. */
+export function recurringCosts(rules: readonly CostRule[]): RecurringCosts[] {
+  const byCurrency = new Map<string, { subscription: number[]; membership: number[]; all: number[] }>();
+  for (const r of rules) {
+    if (r.type !== "expense" || !r.active) continue;
+    const bucket = byCurrency.get(r.currency) ?? { subscription: [], membership: [], all: [] };
+    const yearly = yearlyCostMinor(r.amountMinor, r.frequency);
+    if (r.group !== "other") bucket[r.group].push(yearly);
+    bucket.all.push(yearly);
+    byCurrency.set(r.currency, bucket);
+  }
+  const total = (values: number[]): CostTotal => {
+    const yearlyMinor = values.reduce((sum, v) => sum + v, 0);
+    if (!Number.isSafeInteger(yearlyMinor)) throw new Error("Recurring cost is too large to total exactly");
+    return { yearlyMinor, monthlyMinor: monthlyFromYearlyMinor(yearlyMinor), count: values.length };
+  };
+  return [...byCurrency.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, b]) => ({ currency, subscriptions: total(b.subscription), memberships: total(b.membership), total: total(b.all) }));
+}

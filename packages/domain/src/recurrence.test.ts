@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  type CostRule,
   type Schedule,
+  monthlyFromYearlyMinor,
+  recurringCosts,
+  yearlyCostMinor,
   isOccurrence,
   latestOccurrenceOnOrBefore,
   nextOccurrenceAfter,
@@ -97,5 +101,42 @@ describe("scheduleText", () => {
     expect(scheduleText({ frequency: "yearly", startDate: "2028-02-29" })).toBe("Yearly on 29 Feb");
     expect(anchorDayMayMove({ frequency: "monthly", startDate: "2026-01-29" })).toBe(true);
     expect(anchorDayMayMove({ frequency: "weekly", startDate: "2026-01-31" })).toBe(false);
+  });
+});
+
+describe("recurringCosts", () => {
+  const r = (over: Partial<CostRule>): CostRule => ({ type: "expense", amountMinor: 64_900, currency: "INR", frequency: "monthly", group: "subscription", active: true, ...over });
+
+  it("annualises by frequency and rounds the monthly figure half up", () => {
+    expect([yearlyCostMinor(100, "weekly"), yearlyCostMinor(100, "monthly"), yearlyCostMinor(100, "quarterly"), yearlyCostMinor(100, "yearly")]).toEqual([5200, 1200, 400, 100]);
+    expect(monthlyFromYearlyMinor(18)).toBe(2); // 1.5 → 2
+    expect(monthlyFromYearlyMinor(17)).toBe(1); // 1.42 → 1
+    expect(monthlyFromYearlyMinor(0)).toBe(0);
+  });
+
+  it("totals a mixed-frequency set, keeping only active expense rules", () => {
+    const costs = recurringCosts([
+      r({ amountMinor: 64_900 }), // subscription, monthly: 7,78,800 a year
+      r({ amountMinor: 1_49_900, frequency: "yearly" }), // subscription, yearly: 1,49,900
+      r({ amountMinor: 1_50_000, group: "membership" }), // membership, monthly: 18,00,000
+      r({ amountMinor: 30_000, frequency: "weekly", group: "other" }), // other, weekly: 15,60,000
+      r({ amountMinor: 4_20_000, frequency: "quarterly", group: "other" }), // other, quarterly: 16,80,000
+      r({ type: "income", amountMinor: 95_00_000 }), // income: never a cost
+      r({ type: "transfer", amountMinor: 3_00_000 }), // transfer: never a cost
+      r({ active: false, amountMinor: 99_999 }), // ended or archived
+    ]);
+    expect(costs).toEqual([
+      {
+        currency: "INR",
+        subscriptions: { yearlyMinor: 9_28_700, monthlyMinor: 77_392, count: 2 }, // 77,391.67 → 77,392
+        memberships: { yearlyMinor: 18_00_000, monthlyMinor: 1_50_000, count: 1 },
+        total: { yearlyMinor: 59_68_700, monthlyMinor: 4_97_392, count: 5 }, // 4,97,391.67 → 4,97,392
+      },
+    ]);
+  });
+
+  it("keeps currencies apart, never summed", () => {
+    const costs = recurringCosts([r({ currency: "USD", amountMinor: 299 }), r({ amountMinor: 64_900 })]);
+    expect(costs.map((c) => [c.currency, c.total.yearlyMinor])).toEqual([["INR", 7_78_800], ["USD", 3_588]]);
   });
 });
