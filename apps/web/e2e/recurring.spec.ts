@@ -12,7 +12,12 @@ const daysAgo = (n: number) => {
 }
 
 const panel = (page: Page, title: RegExp | string) => page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: title }) })
-const tile = (page: Page, label: string) => page.locator("[data-slot=card]").filter({ hasText: new RegExp(`^${label}`) })
+// Cost tiles only (a group panel is also called "Subscriptions").
+const tile = (page: Page, label: string) =>
+  page.getByRole("region", { name: "Recurring cost in INR" }).locator("[data-slot=card]").filter({ hasText: new RegExp(`^${label}`) })
+// Ledger rows only (the Upcoming card lists recurring items too).
+const ledgerRow = (page: Page, text: string) =>
+  page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: "All transactions" }) }).locator("li").filter({ hasText: text })
 
 type Rule = { type?: "Expense" | "Income" | "Transfer"; amount: string; category?: string; from: string; to?: string; frequency?: string; start: string; note: string }
 
@@ -69,7 +74,7 @@ test("a recurring expense is due, confirmed through the Add dialog, and costed",
 
   // The entry is a normal expense; the Upcoming card on Transactions links to Recurring.
   await page.goto("/transactions")
-  await expect(page.locator("main li").filter({ hasText: "Streaming" }).first()).toContainText("699")
+  await expect(ledgerRow(page, "Streaming")).toContainText("699")
   await expect(page.getByRole("heading", { name: "Upcoming" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Open Recurring" })).toHaveAttribute("href", "/recurring")
 })
@@ -127,7 +132,7 @@ test("a double-submitted confirm saves one entry", async ({ page }) => {
   })
   await expect(add).toBeHidden()
   await page.goto("/transactions")
-  await expect(page.locator("main li").filter({ hasText: "Sports club" })).toHaveCount(1)
+  await expect(ledgerRow(page, "Sports club")).toHaveCount(1)
 })
 
 test("the Income page shows recurring income only", async ({ page }) => {
