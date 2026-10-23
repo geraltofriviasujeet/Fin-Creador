@@ -26,7 +26,11 @@ export type LedgerCategory = {
   archived: boolean
   /** Income sources only: pre-selected "Received into" account. */
   defaultAccountId: string | null
+  /** Stable internal key of a keyed default (Membership, Subscription); groups recurring costs whatever the name. */
+  key: CategoryKey | null
 }
+
+export type CategoryKey = "membership" | "subscription"
 
 /** One version of an entry, as listed. */
 export type LedgerItem = LedgerEntry & {
