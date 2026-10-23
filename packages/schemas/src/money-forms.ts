@@ -182,5 +182,6 @@ export type SourceFormOutput = z.output<typeof sourceFormSchema>;
 
 export const voidFormSchema = z.object({
   transactionId: z.uuid({ message: "Entry not found" }),
+  idempotencyKey: z.uuid({ message: "Please reopen the form and try again" }),
   reason: optionalText.refine((r) => r.length <= 200, "Keep the reason under 200 characters").transform((r) => r || null),
 });

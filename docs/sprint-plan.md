@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-22.
+Last updated: 2026-10-23.
 
 ## Sprint status
 
@@ -25,7 +25,7 @@ Last updated: 2026-10-22.
 |----|----|----|----|
 | **1** | Foundation, authentication & profile | Done | Completed 2026-10-22; released to `main` via PR #7. Mobile app runs on Android and iPhone in Expo Go 58 (iPhone from 2026-10-22). See Sprint 1 steps below. |
 | **2** | Accounts & Income page | Done | Completed 2026-10-22 (PRs #9–#16). Accounts, income sources, income entries with void, one cash account with "Update cash in hand", the Income page on web and mobile. Tested on web (E2E in CI) and on Android and iPhone (Expo Go 58). Scope widened from the original plan (see decisions). See Sprint 2 steps below. |
-| **3** | Expense & transaction tracking | Not started | Income entry, the transactions table and safe void moved into Sprint 2. |
+| **3** | Expense & transaction tracking | In progress | Income entry, the transactions table and safe void moved into Sprint 2. Two phases (see Sprint 3 steps): Phase 1 prototype done and approved 2026-10-23; Phase 2 (database, wiring, E2E, mobile) in progress. |
 | **4** | Recurring items | Not started | Income sources and the Income page moved into Sprint 2; recurring rules and mark received/paid stay here. |
 | **5** | Dashboard & analytics | Not started | |
 | **6** | Budgets & savings goals | Not started | |
@@ -61,6 +61,22 @@ Last updated: 2026-10-22.
 | **5. Mobile** | Done | Shared loader and writers in `packages/api` (#13); mobile Income screen and add / edit screens (#14), iOS modal cards and Android full-screen modals (#15), one cash account with Update cash in hand (#16, migration 20261022190000 applied to fin-creador-dev). Tested on Android and iPhone in Expo Go 58. |
 | **6. Status and PR** | Done | Status and decisions updated; PR from `sprint-1-foundation` into `main` opened for review. |
 
+## Sprint 3 steps
+
+Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on demo data with no database changes; Phase 2 builds the real feature. No PR into `main` until Phase 2 has removed the prototype route.
+
+| **Step** | **Status** | **Notes** |
+|----|----|----|
+| **Phase 1. Web prototype** | Done (owner's click-through pending) | `/dev/transactions` on in-memory demo data (development only), `packages/domain/src/ledger.ts` with unit tests, screenshots in `docs/design/transactions-prototype/`. UI and rules approved 2026-10-23, subject to the owner's click-through. |
+| **Phase 2.1 Migration and pgTAP** | Done (one push pending) | Migration 20261023120000 applied to fin-creador-dev 2026-10-23 (97 pgTAP tests, green in CI on draft PR #19). Follow-up 20261023180000 (drops `void_income`) is not yet on fin-creador-dev (`migration list --linked`, 2026-10-23). |
+| **Phase 2.2 Shared schemas, loaders and writers** | Done | `packages/schemas` transaction form; `packages/api/src/transactions`: context, page (opaque keyset cursor), totals, history, `saveTransaction`, `voidTransaction`; every write takes a request key. Income page and mobile void moved to `void_transaction`. |
+| **Phase 2.3 Web wiring** | Done | `/transactions` on real data (filters in the URL, run in the database), add / edit / void / history dialogs; topbar Add transaction and search go there. Income page: Edit and History open the same dialogs on `/transactions`. |
+| **Phase 2.4 Remove the prototype** | Done | `/dev/transactions`, its demo data and the dev-only sign-in exception removed; unit test (no exception) and E2E against the production build (redirect signed out, 404 signed in). |
+| **Phase 2.5 E2E tests** | Done | 7 Playwright journeys in `e2e/transactions.spec.ts` (validation, totals and balances, edit and history, void, double submit, stale edit, search and filters, income edit, production check, cross-user), green in CI on PR #19; screenshots of the final pages only. |
+| **Phase 2.5b Expense categories (web)** | Done | Settings → Categories: add, rename (and icon), archive, restore; defaults archivable, never deleted; no duplicate active names; archived categories keep their history. Shared writers in `packages/api`; E2E `e2e/categories.spec.ts` with one screenshot. |
+| **Phase 2.6 Mobile** | In progress | Branch `sprint-3-mobile` (draft PR into the sprint branch). Activity tab (type tabs, search, filters, totals, grouped list, Show more on the shared cursor) and one Add / Edit sheet for expenses, income and transfers, plus an entry sheet with Void and History. Device test in Expo Go pending. |
+| **Phase 2.7 Status and PR** | Not started | |
+
 ## Decisions
 
 | **Date** | **Decision** | **Reason / consequence** |
@@ -94,6 +110,16 @@ Last updated: 2026-10-22.
 | **2026-10-22** | Income loading and writes live in `packages/api` (`loadIncomeData`, `saveAccount`, `setAccountArchived`, `saveSource`, `recordIncome`, `voidIncome`) and take the signed-in user's Supabase client (RLS applies, never a service-role key). The web's server actions are thin wrappers; the mobile app calls the same functions. "Today" comes from the database (`user_local_today`) on both clients and drives the month and year; if it can't be read, nothing is saved (no device-clock fallback). | One code path for validation, writes and error messages on web and mobile. |
 | **2026-10-22** | Mobile add and edit screens open as the standard iOS modal card (slides up, swipe down to dismiss) and as full-screen modals on Android, set in one place in `apps/mobile/src/app/(app)/_layout.tsx`. Dates use the native picker (`onValueChange`), capped at today from the database. | Native form sheets were tried first but rendered empty on both platforms in device tests (their `flex: 1` content got no height). Tested on Android and iPhone in Expo Go 58 on 2026-10-22. |
 | **2026-10-22** | One active cash account per person ("Cash in hand"), enforced in the database (trigger, FC012; a trigger rather than a unique index so existing duplicates don't block the migration). "Add cash" asks only for the amount held now; afterwards "Update cash in hand" (`set_cash_on_hand`) sets the cash held now by moving the as-of date to today and setting the opening amount, without changing any income entry. Cash received as income is recorded as income into Cash in hand; ATM withdrawals become transfers (Sprint 3). Same on web and mobile. | Owner's choice (option A) after a second "Cash in hand 2" appeared. Telling the app how much cash you have is a correction, not income (CLAUDE.md §5). |
+| **2026-10-23** | Sprint 3 rules (owner): expense categories are user-editable (12 defaults; add, rename, archive), separate from income sources (both are rows in `categories`, by kind). Payment mode is an optional label (UPI, Debit card, Net banking, Cheque) on expenses from a bank account; the account moves the money. Credit cards wait for Sprint 8. An expense may take cash or other accounts below zero (the app warns) and bank accounts may go negative. Entries carry a date only, no time of day. | Approved after the Phase 1 prototype. |
+| **2026-10-23** | A transfer is one ledger row (`account_id` = from, `counter_account_id` = to), never income or expense; voiding it restores both accounts. Both accounts must be active and in the same currency. | One row keeps a transfer atomic and impossible to half-void. |
+| **2026-10-23** | Editing voids the old version and inserts the new one, linked by `replaces_id`, in one database transaction. Type cannot change; a stale edit (the version was already voided or replaced) is refused. Every write (income, expense, transfer, edit, void) takes an idempotency key, so a retry saves once. | Ledger rows stay immutable; history is exact. |
+| **2026-10-23** | Transaction search and lists run through parameterised database functions (never client-built filter strings), with keyset paging, not offset. Search matches note, category and account names (literal text, any case) or an exact amount. | No injection through PostgREST filter syntax; stable paging while entries are added. |
+| **2026-10-23** | Type shapes are enforced by CHECKs (`transactions_shape`, `transactions_payment_mode`, `account_id NOT NULL`); triggers add the FC codes. Editing a plainly voided entry is FC005; FC014 only when another edit replaced it. | Owner review of the Phase 2 SQL; one pgTAP test per violation. |
+| **2026-10-23** | The list cursor is opaque and keeps `created_at` as the raw database string (microseconds), never a JS Date. | A Date cuts to milliseconds, so keyset paging would repeat or skip rows. |
+| **2026-10-23** | `void_income` is dropped (migration 20261023180000) in the same PR that moves web and mobile to `void_transaction`; `record_income` stays for the Income page. | Owner decision B; one void path with a request key. |
+| **2026-10-23** | Income entries are edited from the Income page by opening `/transactions?edit=<id>` (and `?history=<id>`), the same dialog as every other entry; the Income page hides versions an edit replaced. | One edit form and one set of rules on web. |
+| **2026-10-23** | Expense categories are managed on web only, in a "Categories" section on Settings, following the Income sources pattern: add, rename, archive, restore. Defaults can be archived, never deleted; no duplicate active names; archived categories keep their history. Mobile category management is in the backlog. | Owner decision after Phase 2.5. |
+| **2026-10-23** | On mobile one Add / Edit transaction sheet (Expense, Income, Transfer) replaces the Add income sheet; the header + opens it on Expense, the Income screen on Income. Entry text, filters and the balance preview live in `packages/api` and are used by web and mobile. | One form and one set of rules per platform; no duplicated money logic (CLAUDE.md §4–5). |
 
 ## Before production (open items)
 
@@ -114,6 +140,8 @@ Pending tests:
 
 - **Financial year setting:** optional April–March financial year for "this year" figures (Sprint 2 uses the calendar year).
 - **Repeated sign-up email:** see Sprint 10.
+- **Mobile category management:** add, rename, archive and restore expense categories in the mobile app (web has it on Settings since Sprint 3; owner, 2026-10-23).
+- **Payee / merchant on entries:** a "paid to" field (the Figma shows merchant names). Not in Sprint 3 (owner, 2026-10-23).
 - **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
 
 # 1. Executive summary

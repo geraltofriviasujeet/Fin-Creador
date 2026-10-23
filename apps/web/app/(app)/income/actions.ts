@@ -10,7 +10,7 @@ import {
   saveSource,
   setAccountArchived,
   updateCashOnHand,
-  voidIncome,
+  voidTransaction,
 } from "@fin-creador/api"
 import { type FormState, readFields } from "@/lib/form-state"
 import { createClient } from "@/lib/supabase/server"
@@ -78,6 +78,8 @@ export async function updateCashOnHandAction(_prev: FormState, formData: FormDat
 }
 
 export async function voidIncomeAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const input = readFields(formData, ["transactionId", "reason"])
-  return toState(await voidIncome(await client(), input), { reason: input.reason ?? "" })
+  const input = readFields(formData, ["transactionId", "reason", "idempotencyKey"])
+  const state = toState(await voidTransaction(await client(), input), { reason: input.reason ?? "" })
+  if (state.status === "success") revalidatePath("/transactions")
+  return state
 }

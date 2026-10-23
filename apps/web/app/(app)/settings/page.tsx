@@ -2,11 +2,12 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { LogOut } from "lucide-react"
-import { PROFILE_FORM_COLUMNS, profileFormValues } from "@fin-creador/api"
+import { PROFILE_FORM_COLUMNS, loadExpenseCategories, profileFormValues } from "@fin-creador/api"
 import { countryOptions, currencyOptions, timeZoneOptions } from "@fin-creador/schemas"
 import { signOutAction } from "@/app/(auth)/actions"
 import { updateProfileAction } from "@/app/(app)/settings/actions"
 import { PageHeader } from "@/components/shell/app-shell"
+import { ExpenseCategories } from "@/components/settings/expense-categories"
 import { ProfileForm } from "@/components/settings/profile-form"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
@@ -18,7 +19,7 @@ export const metadata: Metadata = { title: "Settings" }
 export default function SettingsPage() {
   return (
     <>
-      <PageHeader title="Settings" description="Manage your profile and regional preferences." />
+      <PageHeader title="Settings" description="Manage your profile, regional preferences and expense categories." />
       <Suspense fallback={<SettingsSkeleton />}>
         <SettingsContent />
       </Suspense>
@@ -31,11 +32,10 @@ async function SettingsContent() {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) redirect("/sign-in?next=%2Fsettings")
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select(PROFILE_FORM_COLUMNS)
-    .eq("id", auth.user.id)
-    .maybeSingle()
+  const [{ data: profile, error }, categories] = await Promise.all([
+    supabase.from("profiles").select(PROFILE_FORM_COLUMNS).eq("id", auth.user.id).maybeSingle(),
+    loadExpenseCategories(supabase),
+  ])
 
   return (
     <div className="grid max-w-2xl gap-6">
@@ -61,6 +61,21 @@ async function SettingsContent() {
       </Card>
 
       <Card>
+        <CardTitle>Categories</CardTitle>
+        <CardDescription className="mt-1">
+          Expense categories for what you spend. Archived ones stay on past entries and can be
+          restored. Income sources are on the Income page.
+        </CardDescription>
+        {categories.ok ? (
+          <ExpenseCategories categories={categories.categories} />
+        ) : (
+          <FormMessage tone="error" className="mt-6">
+            We couldn’t load your categories. Refresh the page to try again.
+          </FormMessage>
+        )}
+      </Card>
+
+      <Card>
         <CardTitle>Account</CardTitle>
         <CardDescription className="mt-1">Signed in as {auth.user.email}</CardDescription>
         <form action={signOutAction} className="mt-5">
@@ -77,7 +92,7 @@ async function SettingsContent() {
 function SettingsSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading settings" className="grid max-w-2xl gap-6">
-      {[0, 1].map((i) => (
+      {[0, 1, 2].map((i) => (
         <Card key={i} className="grid gap-4">
           <span className="h-5 w-32 rounded bg-canvas" />
           <span className="h-4 w-3/4 rounded bg-canvas" />

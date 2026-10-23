@@ -112,7 +112,7 @@ describe("sourceFormSchema and voidFormSchema", () => {
   });
 
   it("normalizes a void request", () => {
-    expect(voidFormSchema.parse({ transactionId: "e0000000-0000-4000-8000-000000000001", reason: " " }).reason).toBeNull();
+    expect(voidFormSchema.parse({ transactionId: "e0000000-0000-4000-8000-000000000001", idempotencyKey: "e0000000-0000-4000-8000-000000000002", reason: " " }).reason).toBeNull();
   });
 
   it("has a bank list without duplicates", () => {

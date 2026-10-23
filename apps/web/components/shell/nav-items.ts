@@ -31,13 +31,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     tabLabel: "Activity",
     href: "/transactions",
     icon: Wallet,
-    available: false,
+    available: true,
     inTabBar: true,
   },
   { key: "budgets", label: "Budgets", href: "/budgets", icon: ChartNoAxesColumn, available: false, inTabBar: true },
   { key: "investments", label: "Investments", href: "/investments", icon: ArrowUpToLine, available: false, inTabBar: true },
   { key: "goals", label: "Goals", href: "/goals", icon: Goal, available: false, inTabBar: true },
 ]
+
 
 export function isActive(item: Pick<NavItem, "href">, pathname: string) {
   return item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`)

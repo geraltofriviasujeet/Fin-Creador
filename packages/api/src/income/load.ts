@@ -34,7 +34,7 @@ export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> 
       .eq("kind", "income")
       .order("name")
 
-  const [accountsRes, balancesRes, firstSources, entriesRes] = await Promise.all([
+  const [accountsRes, balancesRes, firstSources, entriesRes, replacedRes] = await Promise.all([
     supabase
       .from("accounts")
       .select("id, kind, bank_type, name, institution, last4, currency, opening_balance_minor, opening_balance_date, archived_at, updated_at")
@@ -43,13 +43,18 @@ export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> 
     loadSources(),
     supabase
       .from("transactions")
-      .select("id, amount_minor, currency, occurred_on, category_id, account_id, note, voided_at, void_reason")
+      .select("id, amount_minor, currency, occurred_on, category_id, account_id, note, voided_at, void_reason, replaces_id")
       .eq("type", "income")
       .gte("occurred_on", since)
       .order("occurred_on", { ascending: false })
       .order("created_at", { ascending: false }),
+    // Versions an edit replaced: shown only in History, never in the lists.
+    supabase.from("transactions").select("replaces_id").eq("type", "income").not("replaces_id", "is", null),
   ])
-  if (accountsRes.error || balancesRes.error || firstSources.error || entriesRes.error) return { ok: false, reason: "unavailable" }
+  if (accountsRes.error || balancesRes.error || firstSources.error || entriesRes.error || replacedRes.error) {
+    return { ok: false, reason: "unavailable" }
+  }
+  const replaced = new Set(replacedRes.data.map((r) => r.replaces_id))
 
   let sourceRows = firstSources.data
   if (sourceRows.length === 0) {
@@ -90,7 +95,7 @@ export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> 
     archived: c.archived_at !== null,
   }))
 
-  const entries: IncomeEntryItem[] = entriesRes.data.map((t) => ({
+  const entries: IncomeEntryItem[] = entriesRes.data.filter((t) => !replaced.has(t.id)).map((t) => ({
     id: t.id,
     amountMinor: t.amount_minor,
     currency: t.currency,
@@ -100,6 +105,7 @@ export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> 
     voided: t.voided_at !== null,
     note: t.note,
     voidReason: t.void_reason,
+    edited: t.replaces_id !== null,
   }))
 
   return { ok: true, data: { currency: profile.currency, timeZone: profile.time_zone, today, accounts, sources, entries } }

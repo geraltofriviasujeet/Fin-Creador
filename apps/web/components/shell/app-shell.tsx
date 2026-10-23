@@ -9,7 +9,13 @@ export type ShellUser = { name: string | null; email: string }
  * App chrome: sidebar (≥ 761px), sticky topbar, bottom tab bar (≤ 760px).
  * `user` is null only while the signed-in user is loading (Suspense fallback).
  */
-export function AppShell({ user, children }: { user: ShellUser | null; children: React.ReactNode }) {
+export function AppShell({
+  user,
+  children,
+}: {
+  user: ShellUser | null
+  children: React.ReactNode
+}) {
   return (
     <div className="min-h-dvh md:pl-(--fc-layout-sidebar-width)">
       <a

@@ -76,6 +76,12 @@ describe("route rules", () => {
   it("lets signed-in users into the app", () => {
     expect(decideRoute("/settings", "", true)).toBeNull()
   })
+
+  it("has no sign-in exception for the removed prototype, in any build", () => {
+    expect(routeKind("/dev/transactions")).toBe("protected")
+    expect(decideRoute("/dev/transactions", "", false)).toEqual({ redirectTo: "/sign-in?next=%2Fdev%2Ftransactions" })
+    expect(decideRoute("/transactions", "?q=rent", false)).toEqual({ redirectTo: "/sign-in?next=%2Ftransactions%3Fq%3Drent" })
+  })
 })
 
 describe("public env guard", () => {

@@ -80,3 +80,10 @@ export function isInRange(date: IsoDate, range: DateRange): boolean {
 
 /** The earlier of two dates. */
 export const minDate = (a: IsoDate, b: IsoDate): IsoDate => (a <= b ? a : b);
+
+/** The calendar date `days` after (or before, if negative) `date`. */
+export function addDays(date: IsoDate, days: number): IsoDate {
+  const { year, month, day } = mustParse(date);
+  const d = new Date(Date.UTC(year, month - 1, day + days));
+  return `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}

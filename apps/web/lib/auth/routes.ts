@@ -24,7 +24,11 @@ export type RouteDecision = { redirectTo: string } | null
  * Where to redirect, given the path and whether a session exists. `search` is kept so
  * the user returns to the same page after signing in.
  */
-export function decideRoute(pathname: string, search: string, signedIn: boolean): RouteDecision {
+export function decideRoute(
+  pathname: string,
+  search: string,
+  signedIn: boolean
+): RouteDecision {
   const kind = routeKind(pathname)
   if (kind === "protected" && !signedIn) {
     const next = `${pathname}${search}`
