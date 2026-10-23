@@ -6,7 +6,7 @@ export type TabItem = { name: string; label: string; icon: LucideIcon; available
 
 export const TABS: readonly TabItem[] = [
   { name: "index", label: "Overview", icon: LayoutGrid, available: true },
-  { name: "activity", label: "Activity", icon: Wallet, available: false },
+  { name: "activity", label: "Activity", icon: Wallet, available: true },
   { name: "budgets", label: "Budgets", icon: ChartNoAxesColumn, available: false },
   { name: "investments", label: "Investments", icon: ArrowUpToLine, available: false },
   { name: "goals", label: "Goals", icon: Goal, available: false },

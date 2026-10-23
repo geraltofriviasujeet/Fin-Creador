@@ -24,6 +24,8 @@ export type LedgerCategory = {
   name: string
   icon: string
   archived: boolean
+  /** Income sources only: pre-selected "Received into" account. */
+  defaultAccountId: string | null
 }
 
 /** One version of an entry, as listed. */

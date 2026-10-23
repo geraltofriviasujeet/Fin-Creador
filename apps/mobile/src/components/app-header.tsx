@@ -8,7 +8,7 @@ import { useToast } from "@/components/toast";
 import { comingSoonMessage } from "@/navigation";
 import { colors, spacing } from "@/theme";
 
-/** Top bar for the tab screens (design-spec §5): logo, notifications (coming soon), settings, add income. */
+/** Top bar for the tab screens (design-spec §5): logo, notifications (coming soon), settings, add transaction. */
 export function AppHeader() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -25,7 +25,7 @@ export function AppHeader() {
           onPress={() => toast.show(comingSoonMessage("Notifications"))}
         />
         <Button label="Settings" variant="secondary" icon={Settings} iconOnly onPress={() => router.push("/settings")} />
-        <Button label="Add income" icon={Plus} iconOnly onPress={() => router.push("/sheets/income")} />
+        <Button label="Add transaction" icon={Plus} iconOnly onPress={() => router.push({ pathname: "/sheets/transaction", params: { type: "expense" } })} />
       </View>
     </View>
   );

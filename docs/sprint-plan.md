@@ -74,7 +74,7 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **Phase 2.4 Remove the prototype** | Done | `/dev/transactions`, its demo data and the dev-only sign-in exception removed; unit test (no exception) and E2E against the production build (redirect signed out, 404 signed in). |
 | **Phase 2.5 E2E tests** | Done | 7 Playwright journeys in `e2e/transactions.spec.ts` (validation, totals and balances, edit and history, void, double submit, stale edit, search and filters, income edit, production check, cross-user), green in CI on PR #19; screenshots of the final pages only. |
 | **Phase 2.5b Expense categories (web)** | Done | Settings → Categories: add, rename (and icon), archive, restore; defaults archivable, never deleted; no duplicate active names; archived categories keep their history. Shared writers in `packages/api`; E2E `e2e/categories.spec.ts` with one screenshot. |
-| **Phase 2.6 Mobile** | Not started | Activity tab and the Add sheet from the approved screens; a separate PR after web. |
+| **Phase 2.6 Mobile** | In progress | Branch `sprint-3-mobile` (draft PR into the sprint branch). Activity tab (type tabs, search, filters, totals, grouped list, Show more on the shared cursor) and one Add / Edit sheet for expenses, income and transfers, plus an entry sheet with Void and History. Device test in Expo Go pending. |
 | **Phase 2.7 Status and PR** | Not started | |
 
 ## Decisions
@@ -119,6 +119,7 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **2026-10-23** | `void_income` is dropped (migration 20261023180000) in the same PR that moves web and mobile to `void_transaction`; `record_income` stays for the Income page. | Owner decision B; one void path with a request key. |
 | **2026-10-23** | Income entries are edited from the Income page by opening `/transactions?edit=<id>` (and `?history=<id>`), the same dialog as every other entry; the Income page hides versions an edit replaced. | One edit form and one set of rules on web. |
 | **2026-10-23** | Expense categories are managed on web only, in a "Categories" section on Settings, following the Income sources pattern: add, rename, archive, restore. Defaults can be archived, never deleted; no duplicate active names; archived categories keep their history. Mobile category management is in the backlog. | Owner decision after Phase 2.5. |
+| **2026-10-23** | On mobile one Add / Edit transaction sheet (Expense, Income, Transfer) replaces the Add income sheet; the header + opens it on Expense, the Income screen on Income. Entry text, filters and the balance preview live in `packages/api` and are used by web and mobile. | One form and one set of rules per platform; no duplicated money logic (CLAUDE.md §4–5). |
 
 ## Before production (open items)
 

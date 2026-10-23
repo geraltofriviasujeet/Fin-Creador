@@ -112,7 +112,7 @@ function IncomeContent({ data }: { data: IncomePageData }) {
   return (
     <>
       <View style={styles.actions}>
-        <Button label="Add income" icon={Plus} onPress={() => router.push("/sheets/income")} />
+        <Button label="Add income" icon={Plus} onPress={() => router.push({ pathname: "/sheets/transaction", params: { type: "income" } })} />
         <Button label="Add bank account" variant="secondary" icon={Plus} onPress={() => router.push({ pathname: "/sheets/account", params: { kind: "bank" } })} />
       </View>
 
@@ -153,7 +153,7 @@ function IncomeContent({ data }: { data: IncomePageData }) {
           <View style={styles.empty}>
             <Text style={text.label}>No income recorded yet</Text>
             <Text style={text.bodySmall}>Your sources appear here with this month’s and this year’s income.</Text>
-            <Button label="Add income" icon={Plus} onPress={() => router.push("/sheets/income")} />
+            <Button label="Add income" icon={Plus} onPress={() => router.push({ pathname: "/sheets/transaction", params: { type: "income" } })} />
           </View>
         ) : (
           view.sourceRows.map(({ source, monthMinor, yearMinor, linked, onlyVoided }) => (

@@ -54,7 +54,7 @@ function CashForm({ data }: { data: IncomePageData }) {
       <Button label="Update cash in hand" fullWidth loading={busy} onPress={() => void save(() => updateCashOnHand(getSupabase(), { accountId: cash.id, amount }))} />
       <View style={styles.link}>
         <Text style={text.bodySmall}>Received cash as income?</Text>
-        <TextLink label="Add income" onPress={() => router.replace({ pathname: "/sheets/income", params: { accountId: cash.id } })} />
+        <TextLink label="Add income" onPress={() => router.replace({ pathname: "/sheets/transaction", params: { type: "income", accountId: cash.id } })} />
       </View>
     </View>
   );

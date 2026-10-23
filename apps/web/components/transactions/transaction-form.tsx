@@ -1,16 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import type { LedgerAccount, LedgerCategory, LedgerItem } from "@fin-creador/api"
-import {
-  AMOUNT_ERROR_MESSAGES,
-  type IsoDate,
-  accountBalance,
-  addMinor,
-  countsTowardBalance,
-  minorToInputString,
-  parseAmount,
-} from "@fin-creador/domain"
+import { type LedgerAccount, type LedgerCategory, type LedgerItem, balancesWithout, previewDraft } from "@fin-creador/api"
+import { AMOUNT_ERROR_MESSAGES, type IsoDate, minorToInputString, parseAmount } from "@fin-creador/domain"
 import { PAYMENT_MODES, type PaymentModeValue } from "@fin-creador/schemas"
 import { cn } from "cn"
 import { AmountField } from "@/components/income/amount-field"
@@ -53,19 +45,6 @@ type Props = {
   onSave: (draft: Draft, requestKey: string) => Promise<SaveResult>
 }
 
-/** Current balance per account, leaving out the entry being edited (so the preview shows its replacement). */
-function balancesWithout(accounts: LedgerAccount[], editing: LedgerItem | null) {
-  const balances = new Map(accounts.map((a) => [a.id, accountBalance(a)]))
-  if (!editing || editing.voided) return balances
-  const undo = (accountId: string | null, delta: number) => {
-    const a = accounts.find((x) => x.id === accountId)
-    if (a && countsTowardBalance(editing.occurredOn, a.openingBalanceDate)) balances.set(a.id, addMinor(balances.get(a.id) ?? 0, delta))
-  }
-  undo(editing.accountId, editing.type === "income" ? -editing.amountMinor : editing.amountMinor)
-  if (editing.type === "transfer") undo(editing.counterAccountId, -editing.amountMinor)
-  return balances
-}
-
 export function TransactionForm({ mode, accounts, categories, lastExpenseAccountId, today, onTypeChange, onSave }: Props) {
   const editing = mode.kind === "edit" ? mode.entry : null
   const [type, setType] = useState<EntryType>(editing?.type ?? (mode.kind === "add" ? mode.type : "expense"))
@@ -96,20 +75,14 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
   const currency = account?.currency ?? "INR"
 
   const parsed = parseAmount(amount, currency)
-  const balances = balancesWithout(accounts, editing)
-  const after = (a: LedgerAccount | undefined, delta: number) => {
-    if (!a || !parsed.ok || !occurredOn || !countsTowardBalance(occurredOn, a.openingBalanceDate)) return null
-    const before = balances.get(a.id) ?? 0
-    return { account: a, before, after: before + delta }
-  }
-  const moves = [
-    type === "income" ? after(account, parsed.ok ? parsed.minor : 0) : after(account, parsed.ok ? -parsed.minor : 0),
-    type === "transfer" ? after(counter, parsed.ok ? parsed.minor : 0) : null,
-  ].filter((m): m is NonNullable<typeof m> => m !== null)
-  const goesNegative = moves.find((m) => m.after < 0 && m.account.kind !== "bank")
-  const beforeOpening = [account, type === "transfer" ? counter : undefined].filter(
-    (a): a is LedgerAccount => Boolean(a && occurredOn && !countsTowardBalance(occurredOn, a.openingBalanceDate))
-  )
+  const { moves, goesNegative, beforeOpening } = previewDraft({
+    type,
+    amountMinor: parsed.ok ? parsed.minor : null,
+    occurredOn,
+    account,
+    counter,
+    balances: balancesWithout(accounts, editing),
+  })
 
   const noun = type === "income" ? "income" : type
   const accountLabel = type === "income" ? "Received into" : type === "transfer" ? "From" : "Paid from"

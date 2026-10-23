@@ -1,6 +1,8 @@
-// Transactions filters, read from and written to the URL so links, the back button and the
-// topbar search work. The filtering itself runs in the database (list_transactions).
-import type { LedgerAccount, LedgerCategory, TransactionFilters } from "@fin-creador/api"
+// Transactions filters, shared by web (read from and written to the URL, so links, the back
+// button and the topbar search work) and mobile. The filtering runs in the database
+// (list_transactions, transaction_summary).
+import type { TransactionFilters } from "./list"
+import type { LedgerAccount, LedgerCategory } from "./types"
 import { type DateRange, type IsoDate, isIsoDate, monthRange, previousMonthRange, yearRange } from "@fin-creador/domain"
 
 export const TYPE_TABS = [
