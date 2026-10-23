@@ -88,7 +88,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **Phase 2.2 Shared loaders and writers** | Done | `packages/schemas` rule, confirm and skip forms; `packages/api/src/recurring`: loader, `buildRecurringView` (panels, groups by key, cost tiles), writers with request keys; FC018–FC023 messages; types regenerated. |
 | **Phase 2.3 Web wiring** | Done | `/recurring` page (cost tiles, Due / Needs attention / Coming in 30 days / Ended, Subscriptions / Memberships / Other recurring, archived with Restore, Undo skip); sidebar item live; compact Upcoming card on Income (income only) and Transactions (the type tab), Confirm through the Add dialog. |
 | **Phase 2.4 Remove the prototype** | Done | `/dev/recurring`, its demo data, the nav preview and the dev sign-in exception removed; unit test and E2E (redirect signed out, 404 signed in). |
-| **Phase 2.5 E2E tests** | In progress | `e2e/recurring.spec.ts`: due and confirm with a changed amount, cost tiles, skip and undo, archive and restore, needs attention and fix, double confirm, income-only card, cross-user, production check. |
+| **Phase 2.5 E2E tests** | Done | Green in CI on draft PR #21. `e2e/recurring.spec.ts`: due and confirm with a changed amount, cost tiles, skip and undo, archive and restore, needs attention and fix, double confirm, income-only card, cross-user, production check. |
 | **Phase 2.6 Mobile** | Not started | Separate PR. |
 | **Phase 2.7 Status and PR** | Not started | |
 
