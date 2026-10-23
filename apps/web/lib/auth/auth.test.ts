@@ -76,6 +76,17 @@ describe("route rules", () => {
   it("lets signed-in users into the app", () => {
     expect(decideRoute("/settings", "", true)).toBeNull()
   })
+
+  it("opens the demo-data prototype without a session in development only", () => {
+    expect(decideRoute("/dev/transactions", "", false, false)).toBeNull()
+    expect(decideRoute("/dev/transactions", "", false, true)).toEqual({
+      redirectTo: "/sign-in?next=%2Fdev%2Ftransactions",
+    })
+    // Exact path only: other dev pages and look-alikes stay protected.
+    expect(routeKind("/dev/design", false)).toBe("protected")
+    expect(routeKind("/dev/transactions/x", false)).toBe("protected")
+    expect(routeKind("/dev/transactionsx", false)).toBe("protected")
+  })
 })
 
 describe("public env guard", () => {

@@ -12,6 +12,7 @@ export function AmountField({
   error,
   hint,
   autoFocus,
+  onChange,
 }: {
   name: string
   label: string
@@ -20,6 +21,7 @@ export function AmountField({
   error?: string
   hint?: string
   autoFocus?: boolean
+  onChange?: (value: string) => void
 }) {
   return (
     <Field id={name} label={label} error={error} hint={hint}>
@@ -35,6 +37,7 @@ export function AmountField({
             placeholder="0.00"
             defaultValue={defaultValue}
             autoFocus={autoFocus}
+            onChange={onChange ? (e) => onChange(e.target.value) : undefined}
             className={cn(controlClasses, "h-14 pl-10 font-heading text-2xl font-semibold tabular-nums")}
             {...aria}
           />

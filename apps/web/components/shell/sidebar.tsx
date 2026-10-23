@@ -7,14 +7,14 @@ import { signOutAction } from "@/app/(auth)/actions"
 import { cn } from "cn"
 import { Logo } from "@/components/brand/logo"
 import { toast } from "@/components/ui/toast"
-import { NAV_ITEMS, comingSoonMessage, isActive } from "@/components/shell/nav-items"
+import { type NavPreview, comingSoonMessage, isActive, navItems } from "@/components/shell/nav-items"
 import type { ShellUser } from "@/components/shell/app-shell"
 
 const itemClasses =
   "flex h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-base transition-colors [&_svg]:size-5 [&_svg]:shrink-0"
 
 /** Fixed dark sidebar, shown at ≥ 761px (design-spec §4). */
-export function Sidebar({ user }: { user: ShellUser | null }) {
+export function Sidebar({ user, navPreview }: { user: ShellUser | null; navPreview?: NavPreview }) {
   const pathname = usePathname()
 
   return (
@@ -23,7 +23,7 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
 
       <nav aria-label="Main" className="mt-10 flex-1">
         <ul className="grid gap-1.5">
-          {NAV_ITEMS.map((item) => {
+          {navItems(navPreview).map((item) => {
             const Icon = item.icon
             const active = item.available && isActive(item, pathname)
             return (

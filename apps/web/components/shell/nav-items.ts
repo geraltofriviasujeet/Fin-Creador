@@ -39,6 +39,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: "goals", label: "Goals", href: "/goals", icon: Goal, available: false, inTabBar: true },
 ]
 
+/** Dev prototypes only: treat these items as available, linking to the given path. */
+export type NavPreview = Readonly<Record<string, string>>
+
+export function navItems(preview?: NavPreview): readonly NavItem[] {
+  if (!preview) return NAV_ITEMS
+  return NAV_ITEMS.map((item) => (preview[item.key] ? { ...item, href: preview[item.key]!, available: true } : item))
+}
+
 export function isActive(item: Pick<NavItem, "href">, pathname: string) {
   return item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`)
 }

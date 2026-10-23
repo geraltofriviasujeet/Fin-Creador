@@ -1,7 +1,8 @@
 import type * as React from "react"
 import { Sidebar } from "@/components/shell/sidebar"
 import { TabBar } from "@/components/shell/tab-bar"
-import { Topbar } from "@/components/shell/topbar"
+import { Topbar, type TopbarRoutes } from "@/components/shell/topbar"
+import type { NavPreview } from "@/components/shell/nav-items"
 
 export type ShellUser = { name: string | null; email: string }
 
@@ -9,7 +10,18 @@ export type ShellUser = { name: string | null; email: string }
  * App chrome: sidebar (≥ 761px), sticky topbar, bottom tab bar (≤ 760px).
  * `user` is null only while the signed-in user is loading (Suspense fallback).
  */
-export function AppShell({ user, children }: { user: ShellUser | null; children: React.ReactNode }) {
+export function AppShell({
+  user,
+  children,
+  navPreview,
+  topbarRoutes,
+}: {
+  user: ShellUser | null
+  children: React.ReactNode
+  /** Dev prototypes only (see navItems). */
+  navPreview?: NavPreview
+  topbarRoutes?: TopbarRoutes
+}) {
   return (
     <div className="min-h-dvh md:pl-(--fc-layout-sidebar-width)">
       <a
@@ -18,8 +30,8 @@ export function AppShell({ user, children }: { user: ShellUser | null; children:
       >
         Skip to content
       </a>
-      <Sidebar user={user} />
-      <Topbar />
+      <Sidebar user={user} navPreview={navPreview} />
+      <Topbar routes={topbarRoutes} />
       <main
         id="main"
         tabIndex={-1}
@@ -27,7 +39,7 @@ export function AppShell({ user, children }: { user: ShellUser | null; children:
       >
         {children}
       </main>
-      <TabBar />
+      <TabBar navPreview={navPreview} />
     </div>
   )
 }
