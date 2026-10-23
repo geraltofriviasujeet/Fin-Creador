@@ -2,16 +2,17 @@
 
 import { useState } from "react"
 import { cn } from "cn"
+import { newRequestKey } from "@/components/income/format"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
-import type { DemoEntry } from "./demo-data"
+import type { LedgerItem } from "@fin-creador/api"
 import { TYPE_NOUN, accountChipText, entryKindLabel, entryTitle, fullDate, paymentModeLabel, signedAmount } from "./display"
 import type { Lookup } from "./filters"
 import type { SaveResult } from "./transaction-form"
 
-function EntrySummary({ entry, lookup }: { entry: DemoEntry; lookup: Lookup }) {
+function EntrySummary({ entry, lookup }: { entry: LedgerItem; lookup: Lookup }) {
   return (
     <div className="grid gap-1 rounded-xl bg-canvas px-4 py-3 text-sm">
       <div className="flex items-baseline justify-between gap-3">
@@ -31,10 +32,12 @@ export function VoidForm({
   lookup,
   onVoid,
 }: {
-  entry: DemoEntry
+  entry: LedgerItem
   lookup: Lookup
-  onVoid: (reason: string | null) => Promise<SaveResult>
+  onVoid: (reason: string | null, requestKey: string) => Promise<SaveResult>
 }) {
+  // One key per opened form; a retry after a failure reuses it, so the entry is voided once.
+  const [requestKey] = useState(newRequestKey)
   const [reason, setReason] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +53,7 @@ export function VoidForm({
         if (reason.trim().length > 200) return setError("Keep the reason under 200 characters.")
         setPending(true)
         setError(null)
-        const result = await onVoid(reason.trim() || null)
+        const result = await onVoid(reason.trim() || null, requestKey)
         setPending(false)
         if (!result.ok) setError(result.message)
       }}
@@ -85,10 +88,10 @@ export function VoidForm({
   )
 }
 
-type Field = { label: string; value: (e: DemoEntry) => string }
+type Field = { label: string; value: (e: LedgerItem) => string }
 
 /** Every version of an edited entry, oldest first, with what changed. */
-export function HistoryList({ versions, lookup }: { versions: DemoEntry[]; lookup: Lookup }) {
+export function HistoryList({ versions, lookup }: { versions: LedgerItem[]; lookup: Lookup }) {
   const fields: Field[] = [
     { label: "Amount", value: signedAmount },
     { label: "Date", value: (e) => fullDate(e.occurredOn) },

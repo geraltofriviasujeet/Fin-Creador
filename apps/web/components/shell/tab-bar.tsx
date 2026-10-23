@@ -4,13 +4,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "cn"
 import { toast } from "@/components/ui/toast"
-import { type NavPreview, comingSoonMessage, isActive, navItems } from "@/components/shell/nav-items"
+import { NAV_ITEMS, comingSoonMessage, isActive } from "@/components/shell/nav-items"
 
 const tabClasses =
   "flex h-full flex-1 flex-col items-center justify-center gap-1 rounded-lg text-xs [&_svg]:size-5"
 
 /** Bottom tab bar at ≤ 760px (design-spec §5). */
-export function TabBar({ navPreview }: { navPreview?: NavPreview }) {
+export function TabBar() {
   const pathname = usePathname()
 
   return (
@@ -19,7 +19,7 @@ export function TabBar({ navPreview }: { navPreview?: NavPreview }) {
       className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <ul className="flex h-(--fc-layout-tab-bar-height) items-stretch px-1">
-        {navItems(navPreview).filter((item) => item.inTabBar).map((item) => {
+        {NAV_ITEMS.filter((item) => item.inTabBar).map((item) => {
           const Icon = item.icon
           const label = item.tabLabel ?? item.label
           const active = item.available && isActive(item, pathname)

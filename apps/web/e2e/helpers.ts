@@ -45,3 +45,28 @@ export async function signOut(page: Page) {
   await page.getByRole("button", { name: "Sign out" }).first().click()
   await expect(page).toHaveURL(/\/sign-in/)
 }
+
+export const dialog = (page: Page, title: string) => page.getByRole("dialog", { name: title })
+export const toast = (page: Page, text: string) => page.getByRole("region", { name: "Notifications" }).getByText(text)
+
+/** Adds a bank account on the Income page (the page must be open). */
+export async function addBank(page: Page, { bank, last4, opening, type = "Savings account" }: { bank: string; last4: string; opening: string; type?: string }) {
+  await page.getByRole("button", { name: "Add bank account" }).first().click()
+  const d = dialog(page, "Add bank account")
+  await d.getByLabel("Bank name").selectOption(bank)
+  await d.getByLabel("Account type").selectOption({ label: type })
+  await d.getByLabel("Last 4 digits").fill(last4)
+  await d.getByLabel("Opening balance").fill(opening)
+  await d.getByRole("button", { name: "Add account" }).click()
+  await expect(toast(page, "Account added.")).toBeVisible()
+  await expect(d).toBeHidden()
+}
+
+/** Adds Cash in hand on the Income page (the page must be open). */
+export async function addCash(page: Page, amount: string) {
+  await page.getByRole("button", { name: "Add cash" }).first().click()
+  const d = dialog(page, "Add cash")
+  await d.getByLabel("Amount").fill(amount)
+  await d.getByRole("button", { name: "Add cash" }).click()
+  await expect(d).toBeHidden()
+}

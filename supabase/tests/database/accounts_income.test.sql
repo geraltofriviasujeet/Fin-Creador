@@ -1,5 +1,5 @@
 -- pgTAP tests for accounts, categories (income sources), transactions (income), the
--- account_balances view, record_income / void_income and the default income sources.
+-- account_balances view, record_income, voiding (void_transaction) and the default income sources.
 -- Run with `supabase test db` (CI). Everything is rolled back.
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -82,9 +82,9 @@ select ok(
 );
 select ok(
   not has_function_privilege('anon', 'public.record_income(uuid, uuid, bigint, date, uuid, text)', 'execute')
-  and not has_function_privilege('anon', 'public.void_income(uuid, text)', 'execute')
+  and not has_function_privilege('anon', 'public.void_transaction(uuid, uuid, text)', 'execute')
   and not has_function_privilege('anon', 'public.ensure_my_income_sources()', 'execute'),
-  'anon cannot call record_income, void_income or ensure_my_income_sources'
+  'anon cannot call record_income, void_transaction or ensure_my_income_sources'
 );
 select ok(
   not has_function_privilege('authenticated', 'public.ensure_default_income_sources(uuid)', 'execute')
@@ -291,10 +291,10 @@ select results_eq(
 
 -- Void: one-way
 select is(
-  (select void_reason from public.void_income(
+  (select void_reason from public.void_transaction(
      (select id from public.transactions where idempotency_key = 'e0000000-0000-4000-8000-000000000003'),
-     '  Entered twice  ')),
-  'Entered twice', 'void_income voids with a trimmed reason'
+     'f0000000-0000-4000-8000-0000000000a1', '  Entered twice  ')),
+  'Entered twice', 'void_transaction voids income with a trimmed reason'
 );
 select is(
   (select inflow_minor from public.account_balances where account_id = 'a0000000-0000-4000-8000-000000000001'),
@@ -305,10 +305,10 @@ select is(
   1::bigint, 'a voided entry stays in history'
 );
 select is(
-  (select void_reason from public.void_income(
+  (select void_reason from public.void_transaction(
      (select id from public.transactions where idempotency_key = 'e0000000-0000-4000-8000-000000000003'),
-     'something else')),
-  'Entered twice', 'voiding again returns the entry unchanged'
+     'f0000000-0000-4000-8000-0000000000a1', 'something else')),
+  'Entered twice', 'a retried void returns the entry unchanged'
 );
 select throws_ok(
   $$ update public.transactions set voided_at = null
@@ -433,8 +433,8 @@ select results_eq(
   'user B cannot void user A''s entries directly (0 rows)'
 );
 select throws_ok(
-  $$ select public.void_income('00000000-0000-4000-8000-000000000000') $$,
-  'FC008', null, 'void_income reports an unknown or foreign entry as not found'
+  $$ select public.void_transaction('00000000-0000-4000-8000-000000000000', gen_random_uuid()) $$,
+  'FC008', null, 'void_transaction reports an unknown or foreign entry as not found'
 );
 select throws_ok(
   $$ select public.record_income('a0000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-000000000003',

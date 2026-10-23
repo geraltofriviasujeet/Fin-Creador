@@ -9,32 +9,22 @@ import { toast } from "@/components/ui/toast"
 import { comingSoonMessage } from "@/components/shell/nav-items"
 
 /**
- * Sticky topbar (design-spec §4–5). "Add transaction" opens Add income (expenses arrive in
- * Sprint 3). Search and notifications belong to
- * Sprints 3 and 10; until then they explain that instead of pretending to work.
- * The bell shows an unread dot only when real unread notifications exist (none yet).
+ * Sticky topbar (design-spec §4–5). "Add transaction" opens Add expense on the
+ * Transactions page and search is a plain GET to it (?q=). Notifications belong to
+ * Sprint 10; until then the bell explains that instead of pretending to work. It shows an
+ * unread dot only when real unread notifications exist (none yet).
  */
-// Opens the Add income dialog on the Income page.
-const ADD_INCOME_HREF = "/income?add=income"
+const ADD_HREF = "/transactions?add=expense"
 
-/** Where "Add transaction" and search go; defaults to Add income and "coming soon". */
-export type TopbarRoutes = { addHref: string; searchPath: string }
-
-export function Topbar({ routes }: { routes?: TopbarRoutes }) {
-  const addHref = routes?.addHref ?? ADD_INCOME_HREF
+export function Topbar() {
   return (
     <header className="sticky top-0 z-20 flex h-(--fc-layout-topbar-height) items-center gap-3 border-b border-line bg-surface/82 px-4 backdrop-blur-md md:px-8.5">
       <Logo tone="onLight" className="md:hidden" />
 
       <form
         role="search"
-        action={routes?.searchPath}
+        action="/transactions"
         className="relative hidden w-(--fc-layout-search-width) max-w-full md:block"
-        onSubmit={(event) => {
-          if (routes) return // a plain GET to the search page (?q=)
-          event.preventDefault()
-          toast.info(comingSoonMessage("Transaction search"))
-        }}
       >
         <label htmlFor="global-search" className="sr-only">
           Search transactions
@@ -65,10 +55,10 @@ export function Topbar({ routes }: { routes?: TopbarRoutes }) {
         <Link href="/settings" aria-label="Settings" className={cn(buttonVariants({ variant: "secondary", size: "icon" }), "md:hidden")}>
           <Settings aria-hidden="true" className="size-5" />
         </Link>
-        <Link href={addHref} aria-label="Add transaction" className={cn(buttonVariants({ size: "icon" }), "md:hidden")}>
+        <Link href={ADD_HREF} aria-label="Add transaction" className={cn(buttonVariants({ size: "icon" }), "md:hidden")}>
           <Plus aria-hidden="true" className="size-5" />
         </Link>
-        <Link href={addHref} className={cn(buttonVariants({ size: "lg" }), "hidden md:inline-flex")}>
+        <Link href={ADD_HREF} className={cn(buttonVariants({ size: "lg" }), "hidden md:inline-flex")}>
           <Plus aria-hidden="true" />
           Add transaction
         </Link>

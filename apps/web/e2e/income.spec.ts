@@ -1,5 +1,5 @@
 import { type Locator, type Page, expect, test } from "@playwright/test"
-import { signUpConfirmed, uniqueEmail } from "./helpers"
+import { addBank, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Income page end to end, against the throwaway local Supabase. One user per test.
 // Screenshots go to e2e-screenshots/ (uploaded by CI for visual review).
@@ -11,8 +11,6 @@ const card = (page: Page, label: string) => page.locator("[data-slot=card]").fil
 // Summary cards only: an account can itself be named "Cash in hand".
 const stat = (page: Page, label: string) =>
   page.getByRole("region", { name: "Summary" }).locator("[data-slot=card]").filter({ has: page.getByText(label, { exact: true }) })
-const dialog = (page: Page, title: string) => page.getByRole("dialog", { name: title })
-const toast = (page: Page, text: string) => page.getByRole("region", { name: "Notifications" }).getByText(text)
 const holding = (page: Page, label: string) => card(page, "Where your money is").getByRole("listitem").filter({ hasText: label })
 
 async function shots(page: Page, name: string) {
@@ -21,18 +19,6 @@ async function shots(page: Page, name: string) {
     await page.screenshot({ path: `${SHOTS}/${name}-${label}.png`, fullPage: true })
   }
   await page.setViewportSize({ width: 1440, height: 900 })
-}
-
-async function addBank(page: Page, { bank, last4, opening, type = "Savings account" }: { bank: string; last4: string; opening: string; type?: string }) {
-  await page.getByRole("button", { name: "Add bank account" }).first().click()
-  const d = dialog(page, "Add bank account")
-  await d.getByLabel("Bank name").selectOption(bank)
-  await d.getByLabel("Account type").selectOption({ label: type })
-  await d.getByLabel("Last 4 digits").fill(last4)
-  await d.getByLabel("Opening balance").fill(opening)
-  await d.getByRole("button", { name: "Add account" }).click()
-  await expect(toast(page, "Account added.")).toBeVisible()
-  await expect(d).toBeHidden()
 }
 
 async function addIncome(page: Page, { amount, source, into, note }: { amount: string; source: string; into: string; note?: string }) {
@@ -207,13 +193,12 @@ test("void, archive and restore keep history but change the totals", async ({ pa
   await expect(holding(page, "Axis Bank")).toContainText("₹1,000")
 })
 
-test("income cannot be dated in the future, and Add transaction opens Add income", async ({ page }) => {
+test("income cannot be dated in the future", async ({ page }) => {
   await signUpConfirmed(page, "Time Keeper", uniqueEmail("income-future"))
   await page.goto("/income")
   await addBank(page, { bank: "Kotak Mahindra Bank", last4: "1111", opening: "0" })
 
-  // A real link (announced as a link), styled as a button.
-  await page.getByRole("link", { name: "Add transaction" }).first().click()
+  await page.getByRole("button", { name: "Add income" }).first().click()
   const d = dialog(page, "Add income")
   await expect(d).toBeVisible()
   await d.getByLabel("Amount").fill("100")

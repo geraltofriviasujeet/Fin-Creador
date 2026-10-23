@@ -18,6 +18,8 @@ export type IncomeSourceItem = IncomeSource
 export type IncomeEntryItem = IncomeEntry & {
   note: string | null
   voidReason: string | null
+  /** This version replaced an earlier one (it has a History). */
+  edited: boolean
 }
 
 export type IncomePageData = {

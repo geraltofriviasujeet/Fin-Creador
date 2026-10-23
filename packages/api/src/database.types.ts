@@ -516,34 +516,6 @@ export type Database = {
         }
       }
       user_local_today: { Args: { p_user_id: string }; Returns: string }
-      void_income: {
-        Args: { p_reason?: string; p_transaction_id: string }
-        Returns: {
-          account_id: string
-          amount_minor: number
-          category_id: string | null
-          counter_account_id: string | null
-          created_at: string
-          currency: string
-          id: string
-          idempotency_key: string
-          note: string | null
-          occurred_on: string
-          payment_mode: string | null
-          replaces_id: string | null
-          type: string
-          user_id: string
-          void_idempotency_key: string | null
-          void_reason: string | null
-          voided_at: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "transactions"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       void_transaction: {
         Args: {
           p_idempotency_key: string

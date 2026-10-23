@@ -1,26 +1,26 @@
 "use client"
 
 import { useState } from "react"
+import type { LedgerAccount, LedgerCategory, LedgerItem } from "@fin-creador/api"
 import {
   AMOUNT_ERROR_MESSAGES,
   type IsoDate,
   accountBalance,
+  addMinor,
   countsTowardBalance,
   minorToInputString,
   parseAmount,
-  postedActivity,
 } from "@fin-creador/domain"
+import { PAYMENT_MODES, type PaymentModeValue } from "@fin-creador/schemas"
 import { cn } from "cn"
 import { AmountField } from "@/components/income/amount-field"
 import { newRequestKey } from "@/components/income/format"
 import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
-import type { DemoAccount, DemoCategory, DemoEntry, PaymentMode } from "./demo-data"
-import { PAYMENT_MODES } from "./demo-data"
 import { fullDate, money } from "./display"
 
-export type EntryType = DemoEntry["type"]
+export type EntryType = LedgerItem["type"]
 
 export type Draft = {
   type: EntryType
@@ -29,11 +29,11 @@ export type Draft = {
   accountId: string
   counterAccountId: string | null
   categoryId: string | null
-  paymentMode: PaymentMode | null
+  paymentMode: PaymentModeValue | null
   note: string | null
 }
 
-export type SaveResult = { ok: true } | { ok: false; message: string }
+export type SaveResult = { ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string> }
 
 const TYPES: { value: EntryType; label: string }[] = [
   { value: "expense", label: "Expense" },
@@ -43,22 +43,30 @@ const TYPES: { value: EntryType; label: string }[] = [
 
 type Props = {
   /** Add a new entry of this type, or edit an existing one (its type is fixed). */
-  mode: { kind: "add"; type: EntryType } | { kind: "edit"; entry: DemoEntry }
-  accounts: DemoAccount[]
-  categories: DemoCategory[]
-  entries: DemoEntry[]
+  mode: { kind: "add"; type: EntryType } | { kind: "edit"; entry: LedgerItem }
+  accounts: LedgerAccount[]
+  categories: LedgerCategory[]
+  /** Fast entry: a new expense starts from the account of the latest expense. */
+  lastExpenseAccountId?: string | null
   today: IsoDate
   onTypeChange?: (type: EntryType) => void
   onSave: (draft: Draft, requestKey: string) => Promise<SaveResult>
 }
 
-/** Current balance per account from the in-memory ledger, leaving out one entry (the one being edited). */
-function balancesWithout(accounts: DemoAccount[], entries: DemoEntry[], skipId?: string) {
-  const activity = postedActivity(accounts, entries.filter((e) => e.id !== skipId))
-  return new Map(accounts.map((a) => [a.id, accountBalance({ ...a, ...activity.get(a.id)! })]))
+/** Current balance per account, leaving out the entry being edited (so the preview shows its replacement). */
+function balancesWithout(accounts: LedgerAccount[], editing: LedgerItem | null) {
+  const balances = new Map(accounts.map((a) => [a.id, accountBalance(a)]))
+  if (!editing || editing.voided) return balances
+  const undo = (accountId: string | null, delta: number) => {
+    const a = accounts.find((x) => x.id === accountId)
+    if (a && countsTowardBalance(editing.occurredOn, a.openingBalanceDate)) balances.set(a.id, addMinor(balances.get(a.id) ?? 0, delta))
+  }
+  undo(editing.accountId, editing.type === "income" ? -editing.amountMinor : editing.amountMinor)
+  if (editing.type === "transfer") undo(editing.counterAccountId, -editing.amountMinor)
+  return balances
 }
 
-export function TransactionForm({ mode, accounts, categories, entries, today, onTypeChange, onSave }: Props) {
+export function TransactionForm({ mode, accounts, categories, lastExpenseAccountId, today, onTypeChange, onSave }: Props) {
   const editing = mode.kind === "edit" ? mode.entry : null
   const [type, setType] = useState<EntryType>(editing?.type ?? (mode.kind === "add" ? mode.type : "expense"))
   // One key per opened form; a retry after a failure reuses it, so the entry is saved once.
@@ -70,8 +78,8 @@ export function TransactionForm({ mode, accounts, categories, entries, today, on
   const [amount, setAmount] = useState(editing ? minorToInputString(editing.amountMinor, editing.currency) : "")
   const [categoryId, setCategoryId] = useState(editing?.categoryId ?? "")
   const [occurredOn, setOccurredOn] = useState(editing?.occurredOn ?? today)
-  // Fast entry: a new expense starts from the account used for the last expense.
-  const lastExpenseAccount = [...entries].reverse().find((e) => e.type === "expense" && !e.voided)?.accountId
+  // Fast entry: a new expense starts from the account used for the last expense, if still active.
+  const lastExpenseAccount = accounts.find((a) => a.id === lastExpenseAccountId && !a.archived)?.id
   const [accountId, setAccountId] = useState(
     editing?.accountId ?? (type === "expense" && lastExpenseAccount ? lastExpenseAccount : "")
   )
@@ -88,8 +96,8 @@ export function TransactionForm({ mode, accounts, categories, entries, today, on
   const currency = account?.currency ?? "INR"
 
   const parsed = parseAmount(amount, currency)
-  const balances = balancesWithout(accounts, entries, editing?.id)
-  const after = (a: DemoAccount | undefined, delta: number) => {
+  const balances = balancesWithout(accounts, editing)
+  const after = (a: LedgerAccount | undefined, delta: number) => {
     if (!a || !parsed.ok || !occurredOn || !countsTowardBalance(occurredOn, a.openingBalanceDate)) return null
     const before = balances.get(a.id) ?? 0
     return { account: a, before, after: before + delta }
@@ -100,7 +108,7 @@ export function TransactionForm({ mode, accounts, categories, entries, today, on
   ].filter((m): m is NonNullable<typeof m> => m !== null)
   const goesNegative = moves.find((m) => m.after < 0 && m.account.kind !== "bank")
   const beforeOpening = [account, type === "transfer" ? counter : undefined].filter(
-    (a): a is DemoAccount => Boolean(a && occurredOn && !countsTowardBalance(occurredOn, a.openingBalanceDate))
+    (a): a is LedgerAccount => Boolean(a && occurredOn && !countsTowardBalance(occurredOn, a.openingBalanceDate))
   )
 
   const noun = type === "income" ? "income" : type
@@ -132,7 +140,7 @@ export function TransactionForm({ mode, accounts, categories, entries, today, on
       accountId,
       counterAccountId: type === "transfer" ? counterAccountId : null,
       categoryId: type === "transfer" ? null : categoryId,
-      paymentMode: type === "expense" && account?.kind === "bank" && paymentMode ? (paymentMode as PaymentMode) : null,
+      paymentMode: type === "expense" && account?.kind === "bank" && paymentMode ? (paymentMode as PaymentModeValue) : null,
       note: note.trim() || null,
     }
     if (
@@ -160,7 +168,10 @@ export function TransactionForm({ mode, accounts, categories, entries, today, on
     setPending(true)
     const result = await onSave(draft, requestKey)
     setPending(false)
-    if (!result.ok) setFormError(result.message)
+    if (!result.ok) {
+      setFormError(result.message)
+      setErrors(result.fieldErrors ?? {})
+    }
   }
 
   return (
@@ -343,7 +354,7 @@ function AccountSelect({
 }: {
   name: string
   label: string
-  accounts: DemoAccount[]
+  accounts: LedgerAccount[]
   value: string
   onChange: (id: string) => void
   error?: string

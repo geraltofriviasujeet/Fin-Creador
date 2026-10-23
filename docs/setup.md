@@ -107,6 +107,12 @@ npm run db:types                            # regenerate packages/api/src/databa
 Rules: never edit an applied migration (add a new one), never reset the hosted database,
 and run `supabase db push` only after the pull request's CI is green.
 
+If `db push` prints "Applying migration …" and then a Docker socket error
+(`failed to connect to the docker API`), do not run it again. Check
+`supabase migration list --linked`: if the migration is listed as remote, it was applied.
+A migration and its history row are written in one transaction. The error comes from a
+step that runs after the migration and needs Docker, which this setup does not run locally.
+
 ## 6. Run the web app
 
 ```sh

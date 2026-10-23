@@ -1,4 +1,4 @@
-import { type IncomeEntryItem, type IncomePageData, voidIncome } from "@fin-creador/api";
+import { type IncomeEntryItem, type IncomePageData, newRequestKey, voidTransaction } from "@fin-creador/api";
 import { isInRange, yearRange } from "@fin-creador/domain";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -63,6 +63,8 @@ function Entries({ data, sourceId }: { data: IncomePageData; sourceId: string })
 
 function VoidForm({ entry, onCancel }: { entry: IncomeEntryItem; onCancel: () => void }) {
   const [reason, setReason] = useState("");
+  // One key per opened form; a retry after a failure reuses it, so the entry is voided once.
+  const [requestKey] = useState(newRequestKey);
   const { save, busy, fieldErrors, formError } = useSave();
   return (
     <View style={styles.voidForm}>
@@ -74,7 +76,7 @@ function VoidForm({ entry, onCancel }: { entry: IncomeEntryItem; onCancel: () =>
         <Button
           label="Void income"
           loading={busy}
-          onPress={() => void save(() => voidIncome(getSupabase(), { transactionId: entry.id, reason }), { close: false }).then((r) => r.status === "success" && onCancel())}
+          onPress={() => void save(() => voidTransaction(getSupabase(), { transactionId: entry.id, reason, idempotencyKey: requestKey }), { close: false }).then((r) => r.status === "success" && onCancel())}
         />
       </View>
     </View>

@@ -1,5 +1,5 @@
 import { AMOUNT_ERROR_MESSAGES, parseAmount } from "@fin-creador/domain"
-import { accountFormSchema, firstFieldErrors, incomeFormSchema, sourceFormSchema, voidFormSchema } from "@fin-creador/schemas"
+import { accountFormSchema, firstFieldErrors, incomeFormSchema, sourceFormSchema } from "@fin-creador/schemas"
 import type { z } from "zod"
 import { ledgerErrorMessage } from "../ledger-errors"
 import { TODAY_UNAVAILABLE, type UserClient, userToday } from "./client"
@@ -140,16 +140,4 @@ export async function updateCashOnHand(supabase: UserClient, input: { accountId?
   }
   if (error) return dbError(error)
   return { status: "success", message: "Cash in hand updated." }
-}
-
-/** One-way void: the entry stays in history and stops counting. */
-export async function voidIncome(supabase: UserClient, input: FormInput): Promise<WriteResult> {
-  const v = check(voidFormSchema, input)
-  if (!v.ok) return v.result
-  const { error } = await supabase.rpc("void_income", {
-    p_transaction_id: v.data.transactionId,
-    p_reason: v.data.reason ?? undefined,
-  })
-  if (error) return dbError(error)
-  return { status: "success", message: "Income voided." }
 }

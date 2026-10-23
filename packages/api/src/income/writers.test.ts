@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { TODAY_UNAVAILABLE, type UserClient } from "./client"
 import { loadIncomeData } from "./load"
-import { recordIncome, saveAccount, saveSource, setAccountArchived, updateCashOnHand, voidIncome } from "./writers"
+import { recordIncome, saveAccount, saveSource, setAccountArchived, updateCashOnHand } from "./writers"
 
 // A minimal stand-in for the signed-in user's Supabase client: records every write and
 // RPC, and answers from the scenario given. No network, no service role.
@@ -149,12 +149,6 @@ describe("validation before any write", () => {
     expect(await saveAccount(client, { ...bank, last4: "12a4" })).toMatchObject({ fieldErrors: { last4: "Enter exactly 4 digits" } })
     expect(writes(calls)).toEqual([])
   })
-
-  it("rejects a void without an entry id", async () => {
-    const { client, calls } = fakeClient()
-    expect(await voidIncome(client, { transactionId: "", reason: "" })).toMatchObject({ status: "error" })
-    expect(writes(calls)).toEqual([])
-  })
 })
 
 describe("writes", () => {
@@ -203,12 +197,6 @@ describe("writes", () => {
     expect(await setAccountArchived(client, { id: "a1", archived: true })).toEqual({ status: "success", message: "Account archived." })
     expect(await setAccountArchived(client, { id: "a1", archived: false })).toEqual({ status: "success", message: "Account restored." })
     expect((writes(calls)[1]?.payload as { archived_at: unknown }).archived_at).toBeNull()
-  })
-
-  it("voids with a trimmed reason", async () => {
-    const { client, calls } = fakeClient()
-    expect(await voidIncome(client, { transactionId: KEY, reason: " Entered twice " })).toEqual({ status: "success", message: "Income voided." })
-    expect(writes(calls)[0]?.payload).toEqual({ p_transaction_id: KEY, p_reason: "Entered twice" })
   })
 })
 

@@ -77,15 +77,10 @@ describe("route rules", () => {
     expect(decideRoute("/settings", "", true)).toBeNull()
   })
 
-  it("opens the demo-data prototype without a session in development only", () => {
-    expect(decideRoute("/dev/transactions", "", false, false)).toBeNull()
-    expect(decideRoute("/dev/transactions", "", false, true)).toEqual({
-      redirectTo: "/sign-in?next=%2Fdev%2Ftransactions",
-    })
-    // Exact path only: other dev pages and look-alikes stay protected.
-    expect(routeKind("/dev/design", false)).toBe("protected")
-    expect(routeKind("/dev/transactions/x", false)).toBe("protected")
-    expect(routeKind("/dev/transactionsx", false)).toBe("protected")
+  it("has no sign-in exception for the removed prototype, in any build", () => {
+    expect(routeKind("/dev/transactions")).toBe("protected")
+    expect(decideRoute("/dev/transactions", "", false)).toEqual({ redirectTo: "/sign-in?next=%2Fdev%2Ftransactions" })
+    expect(decideRoute("/transactions", "?q=rent", false)).toEqual({ redirectTo: "/sign-in?next=%2Ftransactions%3Fq%3Drent" })
   })
 })
 

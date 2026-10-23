@@ -1,5 +1,5 @@
 -- pgTAP tests for expenses, transfers, edits, voids, lists and expense categories
--- (migration 20261023120000). Run with `supabase test db` (CI). Everything is rolled back.
+-- (migrations 20261023120000 and 20261023180000). Run with `supabase test db` (CI). Everything is rolled back.
 begin;
 create extension if not exists pgtap with schema extensions;
 
@@ -253,17 +253,16 @@ select lives_ok(
 );
 
 -- ------------------------------------------------------------ void (38-44)
+select hasnt_function('public', 'void_income', 'void_income is removed (migration 20261023180000)');
 select lives_ok(
-  $$ select public.void_income((select id from public.transactions where idempotency_key = 'e0000000-0000-4000-8000-000000000009')) $$,
-  'void_income still voids income'
+  $$ select public.void_transaction((select id from public.transactions where idempotency_key = 'e0000000-0000-4000-8000-000000000009'),
+       'f0000000-0000-4000-8000-000000000009') $$,
+  'void_transaction voids income'
 );
 select ok(
-  (select void_idempotency_key is not null from public.transactions where idempotency_key = 'e0000000-0000-4000-8000-000000000009'),
-  'void_income records a void key'
-);
-select lives_ok(
-  $$ select public.void_income((select id from public.transactions where idempotency_key = 'e0000000-0000-4000-8000-000000000009')) $$,
-  'void_income on a voided entry returns it'
+  (select void_idempotency_key = 'f0000000-0000-4000-8000-000000000009' from public.transactions
+   where idempotency_key = 'e0000000-0000-4000-8000-000000000009'),
+  'the void key is stored'
 );
 select is(
   (select void_reason from public.void_transaction(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { UserClient } from "../income/client"
-import { type LedgerRow, type PageCursor, loadTransactionPage, queryAmountMinor } from "./list"
+import { type LedgerRow, type PageCursor, loadTransactionPage, loadTransactionTotals, queryAmountMinor } from "./list"
 
 function row(id: string, createdAt: string, occurredOn = "2026-10-20"): LedgerRow {
   return {
@@ -78,5 +78,23 @@ describe("queryAmountMinor", () => {
     expect(queryAmountMinor("100", "INR")).toBe(10000)
     expect(queryAmountMinor("groceries", "INR")).toBeNull()
     expect(queryAmountMinor("", "INR")).toBeNull()
+  })
+})
+
+describe("loadTransactionTotals", () => {
+  it("totals the profile currency and only counts other currencies", async () => {
+    const client = {
+      rpc: async () => ({
+        data: [
+          { currency: "INR", income_minor: 500000, expense_minor: 24500, income_count: 1, expense_count: 3, transfer_count: 1 },
+          { currency: "USD", income_minor: 0, expense_minor: 300, income_count: 0, expense_count: 1, transfer_count: 0 },
+        ],
+        error: null,
+      }),
+    } as unknown as UserClient
+    expect(await loadTransactionTotals(client, filters, "INR")).toEqual({
+      ok: true,
+      totals: { incomeMinor: 500000, expenseMinor: 24500, netMinor: 475500, incomeCount: 1, expenseCount: 3, transferCount: 1, otherCurrencyCount: 1 },
+    })
   })
 })

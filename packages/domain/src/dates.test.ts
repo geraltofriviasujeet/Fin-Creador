@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addDays,
   daysInMonth,
   isInRange,
   isIsoDate,
@@ -75,5 +76,14 @@ describe("calendar ranges", () => {
     expect(isIsoDate("2026-13-01")).toBe(false);
     expect(isIsoDate("22/10/2026")).toBe(false);
     expect(() => monthRange("nope")).toThrow(RangeError);
+  });
+});
+
+describe("addDays", () => {
+  it("crosses month, year and leap-day boundaries", () => {
+    expect(addDays("2026-10-01", -1)).toBe("2026-09-30");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2028-02-28", 1)).toBe("2028-02-29");
+    expect(addDays("2027-02-28", 1)).toBe("2027-03-01");
   });
 });
