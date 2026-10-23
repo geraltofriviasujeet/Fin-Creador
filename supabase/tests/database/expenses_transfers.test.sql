@@ -123,7 +123,7 @@ set local role authenticated;
 -- ------------------------------------------------------------ expense categories (14-20)
 select is(
   (select count(*)::int from public.categories where kind = 'expense' and is_default and icon is not null),
-  12, 'sign-up creates 12 default expense categories with icons'
+  14, 'sign-up creates 14 default expense categories with icons'
 );
 select is(public.ensure_my_expense_categories(), 0, 'the lazy fallback does nothing when defaults exist');
 select lives_ok(
@@ -592,7 +592,7 @@ select throws_ok(
 update public.categories set archived_at = now() where kind = 'expense';
 select is(public.ensure_my_expense_categories(), 0, 'archived defaults are not re-created');
 select set_config('request.jwt.claims', '{"sub": "33333333-3333-4333-8333-333333333333", "role": "authenticated"}', true);
-select is(public.ensure_my_expense_categories(), 12, 'the lazy fallback creates the 12 defaults');
+select is(public.ensure_my_expense_categories(), 14, 'the lazy fallback creates the 14 defaults');
 
 select * from finish();
 rollback;
