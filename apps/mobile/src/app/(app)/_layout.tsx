@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { Platform } from "react-native";
 import { IncomeDataProvider } from "@/lib/income-store";
+import { TransactionsProvider } from "@/lib/transactions-store";
 import { colors, fontFamily } from "@/theme";
 
 // Add / edit sheets (design-spec §5–6), set in one place. iOS: the standard modal card
@@ -18,6 +19,7 @@ export const unstable_settings = { anchor: "(tabs)" };
 export default function AppLayout() {
   return (
     <IncomeDataProvider>
+    <TransactionsProvider>
     <Stack
       screenOptions={{
         contentStyle: { backgroundColor: colors.canvas },
@@ -31,13 +33,15 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
       <Stack.Screen name="income" options={{ title: "Income" }} />
-      <Stack.Screen name="sheets/income" options={SHEET} />
+      <Stack.Screen name="sheets/transaction" options={SHEET} />
+      <Stack.Screen name="sheets/entry" options={SHEET} />
       <Stack.Screen name="sheets/account" options={SHEET} />
       <Stack.Screen name="sheets/source" options={SHEET} />
       <Stack.Screen name="sheets/entries" options={SHEET} />
       <Stack.Screen name="sheets/archived" options={SHEET} />
       <Stack.Screen name="sheets/cash" options={SHEET} />
     </Stack>
+    </TransactionsProvider>
     </IncomeDataProvider>
   );
 }

@@ -3,9 +3,10 @@ import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { useToast } from "@/components/toast";
 import { NETWORK_ERROR, useIncome } from "./income-store";
+import { useTransactions } from "./transactions-store";
 
 /**
- * Runs a shared writer from a sheet. On success: toast, refresh the Income data, close the
+ * Runs a shared writer from a sheet. On success: toast, refresh the Income and Activity data, close the
  * sheet. On failure the sheet stays open with the messages, and its inputs (including the
  * income request key) are kept for the retry. Offline is a retryable error, never a crash.
  */
@@ -13,6 +14,7 @@ export function useSave() {
   const router = useRouter();
   const toast = useToast();
   const { refresh } = useIncome();
+  const { refresh: refreshTransactions } = useTransactions();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<WriteResult | null>(null);
 
@@ -25,6 +27,7 @@ export function useSave() {
         if (r.status === "success") {
           toast.show(r.message);
           void refresh();
+          void refreshTransactions();
           if (close) router.back();
         }
         return r;
@@ -36,7 +39,7 @@ export function useSave() {
         setBusy(false);
       }
     },
-    [refresh, router, toast]
+    [refresh, refreshTransactions, router, toast]
   );
 
   const fieldErrors = result?.status === "error" ? (result.fieldErrors ?? {}) : {};

@@ -17,7 +17,7 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
   if (!day.ok) return day
 
   const loadCategories = () =>
-    supabase.from("categories").select("id, kind, name, icon, source_type, archived_at").order("name")
+    supabase.from("categories").select("id, kind, name, icon, source_type, default_account_id, archived_at").order("name")
 
   const [profileRes, accountsRes, balancesRes, firstCategories, lastExpenseRes, anyEntryRes] = await Promise.all([
     supabase.from("profiles").select("currency, time_zone").eq("id", day.userId).maybeSingle(),
@@ -77,6 +77,7 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
     name: c.name,
     icon: (c.kind === "expense" ? c.icon : c.source_type) ?? "other",
     archived: c.archived_at !== null,
+    defaultAccountId: c.default_account_id,
   }))
 
   return {

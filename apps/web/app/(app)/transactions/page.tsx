@@ -1,10 +1,9 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
-import { loadEntry, loadTransactionPage, loadTransactionTotals, loadTransactionsContext } from "@fin-creador/api"
+import { loadEntry, loadTransactionPage, loadTransactionTotals, loadTransactionsContext, periodRange, previousPeriod, readFilters, toApiFilters } from "@fin-creador/api"
 import { PageHeader } from "@/components/shell/app-shell"
 import { FormMessage } from "@/components/ui/field"
-import { periodRange, previousPeriod, readFilters, toApiFilters } from "@/components/transactions/filters"
 import { TRANSACTIONS_HEADER, TransactionsSkeleton, TransactionsView } from "@/components/transactions/transactions-view"
 import { createClient } from "@/lib/supabase/server"
 

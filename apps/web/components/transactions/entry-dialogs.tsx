@@ -7,9 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
-import type { LedgerItem } from "@fin-creador/api"
+import { type LedgerItem, type Lookup } from "@fin-creador/api"
 import { TYPE_NOUN, accountChipText, entryKindLabel, entryTitle, fullDate, paymentModeLabel, signedAmount } from "./display"
-import type { Lookup } from "./filters"
 import type { SaveResult } from "./transaction-form"
 
 function EntrySummary({ entry, lookup }: { entry: LedgerItem; lookup: Lookup }) {

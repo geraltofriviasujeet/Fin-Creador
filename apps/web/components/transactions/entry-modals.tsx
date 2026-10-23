@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { LedgerAccount, LedgerCategory, LedgerItem, WriteResult } from "@fin-creador/api"
+import { type LedgerAccount, type LedgerCategory, type LedgerItem, type WriteResult, type Lookup } from "@fin-creador/api"
 import { type IsoDate, minorToInputString } from "@fin-creador/domain"
 import {
   loadHistoryAction,
@@ -13,7 +13,6 @@ import { FormMessage } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { TYPE_NOUN, entryTitle } from "./display"
 import { HistoryList, VoidForm } from "./entry-dialogs"
-import type { Lookup } from "./filters"
 import { type Draft, type EntryType, type SaveResult, TransactionForm } from "./transaction-form"
 
 // Add, edit, void and history dialogs on real data, shared by the Transactions and Income
