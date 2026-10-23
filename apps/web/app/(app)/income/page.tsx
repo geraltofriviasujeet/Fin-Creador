@@ -1,10 +1,13 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
+import { buildRecurringView, loadRecurringData, loadTransactionsContext } from "@fin-creador/api"
 import { IncomeView } from "@/components/income/income-view"
+import { UpcomingSection } from "@/components/recurring/upcoming"
 import { PageHeader } from "@/components/shell/app-shell"
 import { Card } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
 import { loadIncomePage } from "@/lib/income/load"
+import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = { title: "Income" }
 
@@ -19,7 +22,8 @@ export default function IncomePage() {
 }
 
 async function IncomeContent() {
-  const result = await loadIncomePage()
+  const supabase = await createClient()
+  const [result, context, recurring] = await Promise.all([loadIncomePage(), loadTransactionsContext(supabase), loadRecurringData(supabase)])
   if (!result.ok) {
     return (
       <>
@@ -30,7 +34,19 @@ async function IncomeContent() {
       </>
     )
   }
-  return <IncomeView data={result.data} />
+  // The Upcoming card is optional here: if it can't load, the Income page still shows.
+  const upcoming =
+    context.ok && recurring.ok ? (
+      <UpcomingSection
+        view={buildRecurringView({ ...recurring.data, ...context.data })}
+        accounts={context.data.accounts}
+        categories={context.data.categories}
+        today={context.data.today}
+        currency={context.data.currency}
+        type="income"
+      />
+    ) : null
+  return <IncomeView data={result.data} upcoming={upcoming} />
 }
 
 function IncomeSkeleton() {

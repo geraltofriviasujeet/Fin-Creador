@@ -1,39 +1,19 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, CircleAlert } from "lucide-react"
-import type { EntryType, LedgerItem, Lookup } from "@fin-creador/api"
-import { type IsoDate, addDays } from "@fin-creador/domain"
+import { type EntryType, type LedgerAccount, type LedgerCategory, type Lookup, type RecurringItem, type RecurringView, UPCOMING_DAYS } from "@fin-creador/api"
+import type { IsoDate } from "@fin-creador/domain"
 import { cn } from "cn"
 import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, signedAmount } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
-
-/** Coming-up items are listed this many days ahead (owner, 2026-10-23). */
-export const UPCOMING_DAYS = 30
-
-/**
- * One recurring rule's place in the lists. `entry` describes what confirming it would post
- * (the same text helpers as the ledger). Computed in packages/domain.
- */
-export type UpcomingItem = {
-  ruleId: string
-  kind: "due" | "needs_attention" | "upcoming" | "ended"
-  /** The occurrence date: due, upcoming, or for "needs attention" the one waiting. Null once ended. */
-  date: IsoDate | null
-  schedule: string
-  entry: LedgerItem
-  /** Why it can't post, for "needs attention". */
-  attention?: string
-}
-
-/** Within the next UPCOMING_DAYS days. */
-export const isComingSoon = (item: UpcomingItem, today: IsoDate) =>
-  item.kind === "upcoming" && item.date !== null && item.date <= addDays(today, UPCOMING_DAYS)
+import { type RecurringDialog, RecurringDialogs } from "./dialogs"
 
 /** A rule's row: icon, title, schedule, account, amount and date, then the actions given. */
-export function RecurringRow({ item, lookup, today, children }: { item: UpcomingItem; lookup: Lookup; today: IsoDate; children?: React.ReactNode }) {
+export function RecurringRow({ item, lookup, today, children }: { item: RecurringItem; lookup: Lookup; today: IsoDate; children?: React.ReactNode }) {
   return (
     <li className="grid gap-2 border-b border-line px-5 py-3 last:border-b-0 md:flex md:items-center md:gap-4 md:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -59,16 +39,16 @@ export function RecurringRow({ item, lookup, today, children }: { item: Upcoming
         <div className="text-right">
           <p className="text-sm font-semibold tabular-nums">{signedAmount(item.entry)}</p>
           <p className="text-xs text-muted-foreground">
-            {item.kind === "ended" ? `Ended ${item.date ? fullDate(item.date) : ""}`.trim() : item.date ? dayHeading(item.date, today) : "No date"}
+            {item.kind === "ended" ? (item.date ? `Ended ${fullDate(item.date)}` : "Ended") : item.kind === "archived" ? "Archived" : item.date ? dayHeading(item.date, today) : ""}
           </p>
         </div>
-        {children && <div className="flex shrink-0 items-center gap-1">{children}</div>}
+        {children && <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">{children}</div>}
       </div>
     </li>
   )
 }
 
-/** A titled panel with a count, its own list and its own empty state (the /recurring page). */
+/** A titled panel with a count, its own list and its own empty state (the Recurring page). */
 export function RecurringPanel({
   title,
   description,
@@ -99,45 +79,42 @@ export function RecurringPanel({
 }
 
 /**
- * The compact Upcoming card on the Income page (income only) and the Transactions page (the
- * type tab). Due and needs-attention first, then the next few; everything else is on
- * /recurring. Nothing posts by itself.
+ * The compact Upcoming card on the Income page (income only) and the Transactions page (all
+ * types): counts, then the first few items (needs attention, due, coming up). Everything
+ * else is on /recurring. Nothing is saved until the person confirms.
  */
 export function UpcomingCard({
-  items,
+  view,
   lookup,
   today,
   type = null,
-  href,
   onConfirm,
   limit = 3,
 }: {
-  items: UpcomingItem[]
+  view: RecurringView
   lookup: Lookup
   today: IsoDate
   type?: EntryType | null
-  href: string
-  onConfirm: (ruleId: string) => void
+  onConfirm: (item: RecurringItem) => void
   limit?: number
 }) {
-  const mine = items.filter((i) => !type || i.entry.type === type)
-  const due = mine.filter((i) => i.kind === "due")
-  const attention = mine.filter((i) => i.kind === "needs_attention")
-  const soon = mine.filter((i) => isComingSoon(i, today))
-  const byDate = (a: UpcomingItem, b: UpcomingItem) => (a.date ?? "").localeCompare(b.date ?? "")
-  const shown = [...attention, ...due.sort(byDate), ...soon.sort(byDate)].slice(0, limit)
-  const what = type === "income" ? "recurring income" : type ? `recurring ${type}s` : "recurring items"
+  const mine = (items: RecurringItem[]) => items.filter((i) => !type || i.rule.type === type)
+  const due = mine(view.due)
+  const attention = mine(view.attention)
+  const soon = mine(view.soon)
+  const shown = [...attention, ...due, ...soon].slice(0, limit)
+  const what = type === "income" ? "recurring income" : "recurring items"
 
   return (
-    <Card className="px-0 md:px-0">
+    <Card aria-labelledby="upcoming-title" className="px-0 md:px-0">
       <div className="flex flex-wrap items-start justify-between gap-3 px-5 md:px-6">
         <div>
-          <CardTitle>Upcoming</CardTitle>
+          <CardTitle id="upcoming-title">Upcoming</CardTitle>
           <CardDescription className="mt-1">
-            {due.length} due · {attention.length} need attention · {soon.length} in the next {UPCOMING_DAYS} days
+            {due.length} due · {attention.length} {attention.length === 1 ? "needs" : "need"} attention · {soon.length} in the next {UPCOMING_DAYS} days
           </CardDescription>
         </div>
-        <Link href={href} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
+        <Link href="/recurring" className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
           Open Recurring
           <ArrowRight aria-hidden="true" />
         </Link>
@@ -147,9 +124,9 @@ export function UpcomingCard({
       ) : (
         <ul className="mt-4 border-t border-line">
           {shown.map((i) => (
-            <RecurringRow key={i.ruleId} item={i} lookup={lookup} today={today}>
+            <RecurringRow key={i.rule.id} item={i} lookup={lookup} today={today}>
               {i.kind === "due" && (
-                <Button size="sm" onClick={() => onConfirm(i.ruleId)} aria-label={`Confirm ${entryTitle(i.entry, lookup)}`}>
+                <Button size="sm" onClick={() => onConfirm(i)} aria-label={`Confirm ${entryTitle(i.entry, lookup)}`}>
                   Confirm
                 </Button>
               )}
@@ -158,5 +135,42 @@ export function UpcomingCard({
         </ul>
       )}
     </Card>
+  )
+}
+
+/** The Upcoming card with its Confirm dialog, for the Income and Transactions pages. */
+export function UpcomingSection({
+  view,
+  accounts,
+  categories,
+  today,
+  currency,
+  type = null,
+}: {
+  view: RecurringView
+  accounts: LedgerAccount[]
+  categories: LedgerCategory[]
+  today: IsoDate
+  currency: string
+  type?: EntryType | null
+}) {
+  const [open, setOpen] = useState<RecurringDialog>(null)
+  const lookup: Lookup = useMemo(
+    () => ({ accounts: new Map(accounts.map((a) => [a.id, a])), categories: new Map(categories.map((c) => [c.id, c])) }),
+    [accounts, categories]
+  )
+  return (
+    <>
+      <UpcomingCard view={view} lookup={lookup} today={today} type={type} onConfirm={(item) => setOpen({ kind: "confirm", item })} />
+      <RecurringDialogs
+        open={open}
+        onClose={() => setOpen(null)}
+        titleOf={(item) => entryTitle(item.entry, lookup)}
+        accounts={accounts}
+        categories={categories}
+        today={today}
+        currency={currency}
+      />
+    </>
   )
 }

@@ -5,7 +5,8 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
 import { Ellipsis, Plus, Search, X } from "lucide-react"
-import { type LedgerItem, type PageCursor, type TransactionTotals, type TransactionsContext, type Filters, type Lookup, PERIODS, TYPE_TABS, filtersToQuery, groupByDay, hasActiveFilters, periodLabel, readFilters, toApiFilters } from "@fin-creador/api"
+import { type LedgerItem, type PageCursor,
+  type RecurringView, type TransactionTotals, type TransactionsContext, type Filters, type Lookup, PERIODS, TYPE_TABS, filtersToQuery, groupByDay, hasActiveFilters, periodLabel, readFilters, toApiFilters } from "@fin-creador/api"
 import {
   type DateRange,
   formatPercentFromBasisPoints,
@@ -14,6 +15,7 @@ import {
 } from "@fin-creador/domain"
 import { cn } from "cn"
 import { loadMoreTransactionsAction } from "@/app/(app)/transactions/actions"
+import { UpcomingSection } from "@/components/recurring/upcoming"
 import { StatCard } from "@/components/income/stat-card"
 import { PageHeader } from "@/components/shell/app-shell"
 import { Badge } from "@/components/ui/badge"
@@ -39,9 +41,11 @@ export type TransactionsViewProps = {
   prevTotals: TransactionTotals | null
   /** Opened from a link (Edit or History on the Income page). */
   open: { kind: "edit" | "history"; entry: LedgerItem } | null
+  /** Recurring items for the compact Upcoming card (null when they couldn't load). */
+  upcoming: RecurringView | null
 }
 
-export function TransactionsView({ context, filters: loaded, range, first, totals, prevTotals, open }: TransactionsViewProps) {
+export function TransactionsView({ context, filters: loaded, range, first, totals, prevTotals, open, upcoming }: TransactionsViewProps) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -123,6 +127,19 @@ export function TransactionsView({ context, filters: loaded, range, first, total
   return (
     <>
       <PageHeader {...TRANSACTIONS_HEADER} actions={addLink("expense", "Add transaction")} />
+
+      {upcoming && (
+        <div className="mb-6">
+          <UpcomingSection
+            view={upcoming}
+            accounts={context.accounts}
+            categories={context.categories}
+            today={today}
+            currency={currency}
+            type={loaded.type === "all" ? null : loaded.type}
+          />
+        </div>
+      )}
 
       <nav aria-label="Transaction type" className="mb-4">
         <ul className="grid grid-cols-4 gap-1 rounded-xl border border-line bg-surface p-1 md:inline-flex">

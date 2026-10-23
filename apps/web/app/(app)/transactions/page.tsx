@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
-import { loadEntry, loadTransactionPage, loadTransactionTotals, loadTransactionsContext, periodRange, previousPeriod, readFilters, toApiFilters } from "@fin-creador/api"
+import { buildRecurringView, loadEntry, loadRecurringData, loadTransactionPage, loadTransactionTotals, loadTransactionsContext, periodRange, previousPeriod, readFilters, toApiFilters } from "@fin-creador/api"
 import { PageHeader } from "@/components/shell/app-shell"
 import { FormMessage } from "@/components/ui/field"
 import { TRANSACTIONS_HEADER, TransactionsSkeleton, TransactionsView } from "@/components/transactions/transactions-view"
@@ -38,11 +38,12 @@ async function TransactionsContent({ searchParams }: { searchParams: SearchParam
   const prevRange = previousPeriod(filters, today)
   const deepLinkId = params.get("edit") ?? params.get("history")
 
-  const [first, totals, prevTotals, deepLinked] = await Promise.all([
+  const [first, totals, prevTotals, deepLinked, recurring] = await Promise.all([
     loadTransactionPage(supabase, toApiFilters(filters, range), { currency }),
     loadTransactionTotals(supabase, toApiFilters(filters, range), currency),
     prevRange ? loadTransactionTotals(supabase, toApiFilters(filters, prevRange), currency) : null,
     deepLinkId && /^[0-9a-f-]{36}$/i.test(deepLinkId) ? loadEntry(supabase, deepLinkId) : null,
+    loadRecurringData(supabase),
   ])
   if (!first.ok || !totals.ok || (prevTotals && !prevTotals.ok)) return <LoadError />
 
@@ -65,6 +66,8 @@ async function TransactionsContent({ searchParams }: { searchParams: SearchParam
       totals={totals.totals}
       prevTotals={prevTotals?.ok ? prevTotals.totals : null}
       open={open}
+      // Optional: if recurring items can't load, the list still shows.
+      upcoming={recurring.ok ? buildRecurringView({ ...recurring.data, ...context.data }) : null}
     />
   )
 }
