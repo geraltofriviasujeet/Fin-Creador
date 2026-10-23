@@ -68,11 +68,12 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **Step** | **Status** | **Notes** |
 |----|----|----|
 | **Phase 1. Web prototype** | Done (owner's click-through pending) | `/dev/transactions` on in-memory demo data (development only), `packages/domain/src/ledger.ts` with unit tests, screenshots in `docs/design/transactions-prototype/`. UI and rules approved 2026-10-23, subject to the owner's click-through. |
-| **Phase 2.1 Migration and pgTAP** | Done | Migration 20261023120000 applied to fin-creador-dev 2026-10-23 (97 pgTAP tests, green in CI on draft PR #19). Follow-up 20261023180000 drops `void_income`; awaiting the owner's `db push`. |
+| **Phase 2.1 Migration and pgTAP** | Done (one push pending) | Migration 20261023120000 applied to fin-creador-dev 2026-10-23 (97 pgTAP tests, green in CI on draft PR #19). Follow-up 20261023180000 (drops `void_income`) is not yet on fin-creador-dev (`migration list --linked`, 2026-10-23). |
 | **Phase 2.2 Shared schemas, loaders and writers** | Done | `packages/schemas` transaction form; `packages/api/src/transactions`: context, page (opaque keyset cursor), totals, history, `saveTransaction`, `voidTransaction`; every write takes a request key. Income page and mobile void moved to `void_transaction`. |
 | **Phase 2.3 Web wiring** | Done | `/transactions` on real data (filters in the URL, run in the database), add / edit / void / history dialogs; topbar Add transaction and search go there. Income page: Edit and History open the same dialogs on `/transactions`. |
 | **Phase 2.4 Remove the prototype** | Done | `/dev/transactions`, its demo data and the dev-only sign-in exception removed; unit test (no exception) and E2E against the production build (redirect signed out, 404 signed in). |
-| **Phase 2.5 E2E tests** | In progress | 7 Playwright journeys in `e2e/transactions.spec.ts` (validation, totals and balances, edit and history, void, double submit, stale edit, search and filters, income edit, production check, cross-user); screenshots of the final pages only. |
+| **Phase 2.5 E2E tests** | Done | 7 Playwright journeys in `e2e/transactions.spec.ts` (validation, totals and balances, edit and history, void, double submit, stale edit, search and filters, income edit, production check, cross-user), green in CI on PR #19; screenshots of the final pages only. |
+| **Phase 2.5b Expense categories (web)** | Done | Settings → Categories: add, rename (and icon), archive, restore; defaults archivable, never deleted; no duplicate active names; archived categories keep their history. Shared writers in `packages/api`; E2E `e2e/categories.spec.ts` with one screenshot. |
 | **Phase 2.6 Mobile** | Not started | Activity tab and the Add sheet from the approved screens; a separate PR after web. |
 | **Phase 2.7 Status and PR** | Not started | |
 
@@ -117,7 +118,7 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **2026-10-23** | The list cursor is opaque and keeps `created_at` as the raw database string (microseconds), never a JS Date. | A Date cuts to milliseconds, so keyset paging would repeat or skip rows. |
 | **2026-10-23** | `void_income` is dropped (migration 20261023180000) in the same PR that moves web and mobile to `void_transaction`; `record_income` stays for the Income page. | Owner decision B; one void path with a request key. |
 | **2026-10-23** | Income entries are edited from the Income page by opening `/transactions?edit=<id>` (and `?history=<id>`), the same dialog as every other entry; the Income page hides versions an edit replaced. | One edit form and one set of rules on web. |
-| **2026-10-23** | Managing expense categories (add, rename, archive) is supported by the database but has no screen yet; the approved Phase 1 screens have none. | Needs a design before it is built (open item). |
+| **2026-10-23** | Expense categories are managed on web only, in a "Categories" section on Settings, following the Income sources pattern: add, rename, archive, restore. Defaults can be archived, never deleted; no duplicate active names; archived categories keep their history. Mobile category management is in the backlog. | Owner decision after Phase 2.5. |
 
 ## Before production (open items)
 
@@ -138,6 +139,7 @@ Pending tests:
 
 - **Financial year setting:** optional April–March financial year for "this year" figures (Sprint 2 uses the calendar year).
 - **Repeated sign-up email:** see Sprint 10.
+- **Mobile category management:** add, rename, archive and restore expense categories in the mobile app (web has it on Settings since Sprint 3; owner, 2026-10-23).
 - **Payee / merchant on entries:** a "paid to" field (the Figma shows merchant names). Not in Sprint 3 (owner, 2026-10-23).
 - **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
 

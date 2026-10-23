@@ -54,6 +54,16 @@ const CHIP: Record<EntryType, string> = {
   transfer: "bg-chip-blue",
 }
 
+/** An expense category's icon in its chip (Settings → Categories). */
+export function CategoryIcon({ icon }: { icon: string }) {
+  const Icon = ICONS[icon] ?? Ellipsis
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-chip-peach text-ink">
+      <Icon aria-hidden="true" className="size-5" />
+    </span>
+  )
+}
+
 export function EntryIcon({ entry, lookup }: { entry: LedgerItem; lookup: Lookup }) {
   const category = entry.categoryId ? lookup.categories.get(entry.categoryId) : undefined
   const Icon = entry.type === "transfer" ? ArrowLeftRight : (ICONS[category?.icon ?? "other"] ?? Ellipsis)

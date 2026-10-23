@@ -1,3 +1,4 @@
+export * from "./categories"
 export * from "./list"
 export * from "./load"
 export * from "./types"

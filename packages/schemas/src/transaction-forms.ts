@@ -17,17 +17,36 @@ export const PAYMENT_MODES = [
 ] as const;
 export type PaymentModeValue = (typeof PAYMENT_MODES)[number]["value"];
 
-/** Icons an expense category may use (categories_icon in the database). */
-export const EXPENSE_ICONS = [
-  "food", "groceries", "transport", "home", "bills", "shopping", "health", "fun",
-  "education", "travel", "care", "other",
-] as const;
-export type ExpenseIcon = (typeof EXPENSE_ICONS)[number];
-
 const text = z
   .string()
   .optional()
   .transform((v) => (v ?? "").trim());
+
+/** Icons an expense category may use (categories_icon in the database), with their names. */
+export const EXPENSE_ICON_OPTIONS = [
+  { value: "food", label: "Food" },
+  { value: "groceries", label: "Groceries" },
+  { value: "transport", label: "Transport" },
+  { value: "home", label: "Home" },
+  { value: "bills", label: "Bills" },
+  { value: "shopping", label: "Shopping" },
+  { value: "health", label: "Health" },
+  { value: "fun", label: "Entertainment" },
+  { value: "education", label: "Education" },
+  { value: "travel", label: "Travel" },
+  { value: "care", label: "Personal care" },
+  { value: "other", label: "Other" },
+] as const;
+export type ExpenseIcon = (typeof EXPENSE_ICON_OPTIONS)[number]["value"];
+const EXPENSE_ICONS = EXPENSE_ICON_OPTIONS.map((o) => o.value) as [ExpenseIcon, ...ExpenseIcon[]];
+
+/** Add (no id) or rename / change the icon of (with id) an expense category. */
+export const expenseCategoryFormSchema = z.object({
+  id: text.pipe(z.union([z.literal(""), z.uuid({ message: "Category not found" })])).transform((v) => v || null),
+  name: z.string().trim().min(1, "Enter a name").max(60, "Keep the name under 60 characters"),
+  icon: z.enum(EXPENSE_ICONS, { message: "Choose an icon" }),
+});
+export type ExpenseCategoryFormOutput = z.output<typeof expenseCategoryFormSchema>;
 
 /**
  * `accountKind` is the kind of the chosen "from" (or "received into") account, read by
