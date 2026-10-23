@@ -7,7 +7,7 @@ test("profile changes are validated, saved and still there after signing in agai
   await page.goto("/settings")
 
   // India-first defaults from the sign-up trigger.
-  await expect(page.getByLabel("Name")).toHaveValue("Profile Person")
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Profile Person")
   await expect(page.getByLabel("Country")).toHaveValue("IN")
   await expect(page.getByLabel("Currency")).toHaveValue("INR")
   await expect(page.getByLabel("Time zone")).toHaveValue("Asia/Kolkata")
@@ -16,7 +16,7 @@ test("profile changes are validated, saved and still there after signing in agai
   await page.getByRole("button", { name: "Save changes" }).click()
   await expect(page.getByText("Use international format, e.g. +91 98765 43210")).toBeVisible()
 
-  await page.getByLabel("Name").fill("Renamed Person")
+  await page.getByLabel("Name", { exact: true }).fill("Renamed Person")
   await page.getByLabel("Phone (optional)").fill("+91 98765 43210")
   await page.getByLabel("Currency").selectOption("USD")
   await page.getByLabel("Time zone").selectOption("America/New_York")
@@ -27,7 +27,7 @@ test("profile changes are validated, saved and still there after signing in agai
   await signIn(page, email)
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible() // sign-in finished
   await page.goto("/settings")
-  await expect(page.getByLabel("Name")).toHaveValue("Renamed Person")
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Renamed Person")
   await expect(page.getByLabel("Phone (optional)")).toHaveValue("+919876543210")
   await expect(page.getByLabel("Currency")).toHaveValue("USD")
   await expect(page.getByLabel("Time zone")).toHaveValue("America/New_York")
