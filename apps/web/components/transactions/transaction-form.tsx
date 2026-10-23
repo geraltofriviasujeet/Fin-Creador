@@ -25,6 +25,8 @@ export type Draft = {
   note: string | null
 }
 
+export type Prefill = Pick<LedgerItem, "amountMinor" | "currency" | "occurredOn" | "accountId" | "counterAccountId" | "categoryId" | "paymentMode" | "note">
+
 export type SaveResult = { ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string> }
 
 const TYPES: { value: EntryType; label: string }[] = [
@@ -35,7 +37,16 @@ const TYPES: { value: EntryType; label: string }[] = [
 
 type Props = {
   /** Add a new entry of this type, or edit an existing one (its type is fixed). */
-  mode: { kind: "add"; type: EntryType } | { kind: "edit"; entry: LedgerItem }
+  mode:
+    | {
+        kind: "add"
+        type: EntryType
+        /** Starting values, e.g. a recurring rule's occurrence being confirmed. */
+        prefill?: Prefill
+        /** Type and category are fixed (they come from a recurring rule). */
+        locked?: boolean
+      }
+    | { kind: "edit"; entry: LedgerItem }
   accounts: LedgerAccount[]
   categories: LedgerCategory[]
   /** Fast entry: a new expense starts from the account of the latest expense. */
@@ -47,6 +58,8 @@ type Props = {
 
 export function TransactionForm({ mode, accounts, categories, lastExpenseAccountId, today, onTypeChange, onSave }: Props) {
   const editing = mode.kind === "edit" ? mode.entry : null
+  const locked = mode.kind === "add" && Boolean(mode.locked)
+  const start: Prefill | null = editing ?? (mode.kind === "add" ? (mode.prefill ?? null) : null)
   const [type, setType] = useState<EntryType>(editing?.type ?? (mode.kind === "add" ? mode.type : "expense"))
   // One key per opened form; a retry after a failure reuses it, so the entry is saved once.
   const [requestKey] = useState(newRequestKey)
@@ -54,17 +67,17 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
   const [formError, setFormError] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const [amount, setAmount] = useState(editing ? minorToInputString(editing.amountMinor, editing.currency) : "")
-  const [categoryId, setCategoryId] = useState(editing?.categoryId ?? "")
-  const [occurredOn, setOccurredOn] = useState(editing?.occurredOn ?? today)
+  const [amount, setAmount] = useState(start ? minorToInputString(start.amountMinor, start.currency) : "")
+  const [categoryId, setCategoryId] = useState(start?.categoryId ?? "")
+  const [occurredOn, setOccurredOn] = useState(start && start.occurredOn <= today ? start.occurredOn : today)
   // Fast entry: a new expense starts from the account used for the last expense, if still active.
   const lastExpenseAccount = accounts.find((a) => a.id === lastExpenseAccountId && !a.archived)?.id
   const [accountId, setAccountId] = useState(
-    editing?.accountId ?? (type === "expense" && lastExpenseAccount ? lastExpenseAccount : "")
+    start?.accountId ?? (type === "expense" && lastExpenseAccount ? lastExpenseAccount : "")
   )
-  const [counterAccountId, setCounterAccountId] = useState(editing?.counterAccountId ?? "")
-  const [paymentMode, setPaymentMode] = useState<string>(editing?.paymentMode ?? "")
-  const [note, setNote] = useState(editing?.note ?? "")
+  const [counterAccountId, setCounterAccountId] = useState(start?.counterAccountId ?? "")
+  const [paymentMode, setPaymentMode] = useState<string>(start?.paymentMode ?? "")
+  const [note, setNote] = useState(start?.note ?? "")
 
   // Archived accounts and categories can't be chosen for new entries; an edit may keep the
   // one it already has.
@@ -158,7 +171,7 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
               type="button"
               role="radio"
               aria-checked={checked}
-              disabled={Boolean(editing) && !checked}
+              disabled={(Boolean(editing) || locked) && !checked}
               onClick={() => {
                 setType(t.value)
                 setErrors({})
@@ -210,6 +223,8 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
             label={type === "income" ? "Source" : "Category"}
             value={categoryId}
             error={errors.categoryId}
+            disabled={locked}
+            hint={locked ? "Set by the recurring rule." : undefined}
             onChange={(e) => setCategoryId(e.target.value)}
           >
             <option value="">{type === "income" ? "Choose a source" : "Choose a category"}</option>

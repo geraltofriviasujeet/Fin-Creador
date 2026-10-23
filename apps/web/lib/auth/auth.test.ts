@@ -82,6 +82,11 @@ describe("route rules", () => {
     expect(decideRoute("/dev/transactions", "", false)).toEqual({ redirectTo: "/sign-in?next=%2Fdev%2Ftransactions" })
     expect(decideRoute("/transactions", "?q=rent", false)).toEqual({ redirectTo: "/sign-in?next=%2Ftransactions%3Fq%3Drent" })
   })
+
+  it("has no sign-in exception for the removed recurring prototype", () => {
+    expect(routeKind("/dev/recurring")).toBe("protected")
+    expect(decideRoute("/recurring", "", false)).toEqual({ redirectTo: "/sign-in?next=%2Frecurring" })
+  })
 })
 
 describe("public env guard", () => {

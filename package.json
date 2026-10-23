@@ -24,6 +24,7 @@
     "test": "vitest run",
     "tokens": "npm run generate -w @fin-creador/design-tokens",
     "test:watch": "vitest",
+    "fixtures:recurrence": "RECURRENCE_FIXTURE=write vitest run scripts/recurrence-parity.test.ts",
     "db:types": "supabase gen types typescript --linked --schema public > packages/api/src/database.types.ts"
   },
   "devDependencies": {

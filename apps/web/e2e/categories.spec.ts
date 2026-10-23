@@ -32,7 +32,7 @@ test("expense categories: add, rename, archive and restore, without duplicates o
   await expect(toast(page, "Expense saved.")).toBeVisible()
 
   await page.goto("/settings")
-  await expect(active(page).getByRole("listitem")).toHaveCount(12)
+  await expect(active(page).getByRole("listitem")).toHaveCount(14)
   await expect(active(page).getByRole("listitem").filter({ hasText: "Groceries" })).toContainText("Default")
 
   // Add, then a duplicate name (any case, spaces) is refused and the typed name is kept.

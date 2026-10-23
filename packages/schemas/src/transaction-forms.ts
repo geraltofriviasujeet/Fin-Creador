@@ -35,6 +35,9 @@ export const EXPENSE_ICON_OPTIONS = [
   { value: "education", label: "Education" },
   { value: "travel", label: "Travel" },
   { value: "care", label: "Personal care" },
+  // Sprint 4: the Membership and Subscription defaults (icon CHECK extended in Phase 2).
+  { value: "membership", label: "Membership" },
+  { value: "subscription", label: "Subscription" },
   { value: "other", label: "Other" },
 ] as const;
 export type ExpenseIcon = (typeof EXPENSE_ICON_OPTIONS)[number]["value"];

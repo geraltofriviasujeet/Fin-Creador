@@ -8,7 +8,7 @@ const lookup: Lookup = {
     ["bank", { id: "bank", kind: "bank", bankType: "savings", label: "HDFC Bank ··4821", currency: "INR", openingBalanceMinor: 0, openingBalanceDate: "2026-01-01", inflowMinor: 0, outflowMinor: 0, archived: false }],
     ["cash", { id: "cash", kind: "cash", bankType: null, label: "Cash in hand", currency: "INR", openingBalanceMinor: 0, openingBalanceDate: "2026-01-01", inflowMinor: 0, outflowMinor: 0, archived: true }],
   ]),
-  categories: new Map([["food", { id: "food", kind: "expense", name: "Food & dining", icon: "food", archived: true, defaultAccountId: null }]]),
+  categories: new Map([["food", { id: "food", kind: "expense", name: "Food & dining", icon: "food", archived: true, defaultAccountId: null, key: null }]]),
 }
 const entry = (over: Partial<LedgerItem>): LedgerItem => ({
   id: "e", type: "expense", amountMinor: 248000, currency: "INR", occurredOn: "2026-10-16", accountId: "bank",

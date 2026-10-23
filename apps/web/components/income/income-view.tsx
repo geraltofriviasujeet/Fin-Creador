@@ -49,7 +49,8 @@ type Open =
 const ADD_TITLES: Record<AccountKind, string> = { bank: "Add bank account", cash: "Add cash", other: "Add other account" }
 
 /** The Income page (design-spec §9). All figures come from packages/domain. */
-export function IncomeView({ data }: { data: IncomePageData }) {
+/** `upcoming`: the compact Upcoming card (recurring income), rendered below the summary. */
+export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?: React.ReactNode }) {
   const { currency, today, timeZone, accounts, sources, entries } = data
   const [open, setOpen] = useState<Open>(null)
   // A fresh id per opened dialog remounts its form, so each Add income gets a new
@@ -177,6 +178,7 @@ export function IncomeView({ data }: { data: IncomePageData }) {
           }
         />
       </section>
+      {upcoming && <div className="mb-6">{upcoming}</div>}
 
       <div className="grid gap-6 lg:grid-cols-[1.45fr_0.8fr]">
         <Card>

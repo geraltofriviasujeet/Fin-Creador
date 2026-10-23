@@ -70,6 +70,7 @@ export type Database = {
           icon: string | null
           id: string
           is_default: boolean
+          key: string | null
           kind: string
           name: string
           source_type: string | null
@@ -83,6 +84,7 @@ export type Database = {
           icon?: string | null
           id?: string
           is_default?: boolean
+          key?: string | null
           kind: string
           name: string
           source_type?: string | null
@@ -96,6 +98,7 @@ export type Database = {
           icon?: string | null
           id?: string
           is_default?: boolean
+          key?: string | null
           kind?: string
           name?: string
           source_type?: string | null
@@ -155,6 +158,150 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_rules: {
+        Row: {
+          account_id: string
+          amount_minor: number
+          archived_at: string | null
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          end_date: string | null
+          frequency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          payment_mode: string | null
+          start_date: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          amount_minor: number
+          archived_at?: string | null
+          category_id?: string | null
+          counter_account_id?: string | null
+          created_at?: string
+          currency: string
+          end_date?: string | null
+          frequency: string
+          id?: string
+          idempotency_key: string
+          note?: string | null
+          payment_mode?: string | null
+          start_date: string
+          type: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          account_id?: string
+          amount_minor?: number
+          archived_at?: string | null
+          category_id?: string | null
+          counter_account_id?: string | null
+          created_at?: string
+          currency?: string
+          end_date?: string | null
+          frequency?: string
+          id?: string
+          idempotency_key?: string
+          note?: string | null
+          payment_mode?: string | null
+          start_date?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_rules_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "recurring_rules_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "recurring_rules_category_owned"
+            columns: ["category_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "recurring_rules_counter_account_owned"
+            columns: ["counter_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "recurring_rules_counter_account_owned"
+            columns: ["counter_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      recurring_skips: {
+        Row: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          occurrence_date: string
+          reason: string | null
+          rule_id: string
+          undone_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          occurrence_date: string
+          reason?: string | null
+          rule_id: string
+          undone_at?: string | null
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          occurrence_date?: string
+          reason?: string | null
+          rule_id?: string
+          undone_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_skips_rule_owned"
+            columns: ["rule_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_rule_progress"
+            referencedColumns: ["rule_id", "user_id"]
+          },
+          {
+            foreignKeyName: "recurring_skips_rule_owned"
+            columns: ["rule_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_rules"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           account_id: string
@@ -167,7 +314,9 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          occurrence_date: string | null
           payment_mode: string | null
+          recurring_rule_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -186,7 +335,9 @@ export type Database = {
           idempotency_key: string
           note?: string | null
           occurred_on: string
+          occurrence_date?: string | null
           payment_mode?: string | null
+          recurring_rule_id?: string | null
           replaces_id?: string | null
           type: string
           user_id?: string
@@ -205,7 +356,9 @@ export type Database = {
           idempotency_key?: string
           note?: string | null
           occurred_on?: string
+          occurrence_date?: string | null
           payment_mode?: string | null
+          recurring_rule_id?: string | null
           replaces_id?: string | null
           type?: string
           user_id?: string
@@ -250,6 +403,20 @@ export type Database = {
             referencedColumns: ["id", "user_id"]
           },
           {
+            foreignKeyName: "transactions_recurring_rule_owned"
+            columns: ["recurring_rule_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_rule_progress"
+            referencedColumns: ["rule_id", "user_id"]
+          },
+          {
+            foreignKeyName: "transactions_recurring_rule_owned"
+            columns: ["recurring_rule_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_rules"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
             foreignKeyName: "transactions_replaces_owned"
             columns: ["replaces_id", "user_id"]
             isOneToOne: false
@@ -270,11 +437,112 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_rule_progress: {
+        Row: {
+          last_posted_on: string | null
+          last_skipped_on: string | null
+          rule_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          last_posted_on?: never
+          last_skipped_on?: never
+          rule_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          last_posted_on?: never
+          last_skipped_on?: never
+          rule_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       backfill_default_expense_categories: { Args: never; Returns: number }
       backfill_default_income_sources: { Args: never; Returns: number }
       backfill_missing_profiles: { Args: never; Returns: number }
+      confirm_recurring_occurrence: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_counter_account_id?: string
+          p_idempotency_key: string
+          p_note?: string
+          p_occurred_on: string
+          p_occurrence_date: string
+          p_payment_mode?: string
+          p_rule_id: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          occurred_on: string
+          occurrence_date: string | null
+          payment_mode: string | null
+          recurring_rule_id: string | null
+          replaces_id: string | null
+          type: string
+          user_id: string
+          void_idempotency_key: string | null
+          void_reason: string | null
+          voided_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_recurring_rule: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_category_id?: string
+          p_counter_account_id?: string
+          p_end_date?: string
+          p_frequency: string
+          p_idempotency_key: string
+          p_note?: string
+          p_payment_mode?: string
+          p_start_date: string
+          p_type: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          archived_at: string | null
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          end_date: string | null
+          frequency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          payment_mode: string | null
+          start_date: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recurring_rules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       edit_transaction: {
         Args: {
           p_account_id: string
@@ -298,7 +566,9 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          occurrence_date: string | null
           payment_mode: string | null
+          recurring_rule_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -349,7 +619,9 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          occurrence_date: string | null
           payment_mode: string | null
+          recurring_rule_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -385,7 +657,9 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          occurrence_date: string | null
           payment_mode: string | null
+          recurring_rule_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -423,7 +697,9 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          occurrence_date: string | null
           payment_mode: string | null
+          recurring_rule_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -437,6 +713,19 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      recurring_is_occurrence: {
+        Args: {
+          p_date: string
+          p_end: string
+          p_frequency: string
+          p_start: string
+        }
+        Returns: boolean
+      }
+      recurring_month_match: {
+        Args: { p_date: string; p_start: string; p_step: number }
+        Returns: boolean
       }
       set_cash_on_hand: {
         Args: { p_account_id: string; p_amount_minor: number }
@@ -458,6 +747,58 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_recurring_rule_archived: {
+        Args: { p_archived: boolean; p_rule_id: string }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          archived_at: string | null
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          end_date: string | null
+          frequency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          payment_mode: string | null
+          start_date: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recurring_rules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      skip_recurring_occurrence: {
+        Args: {
+          p_idempotency_key: string
+          p_occurrence_date: string
+          p_reason?: string
+          p_rule_id: string
+        }
+        Returns: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          occurrence_date: string
+          reason: string | null
+          rule_id: string
+          undone_at: string | null
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recurring_skips"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -500,7 +841,9 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          occurrence_date: string | null
           payment_mode: string | null
+          recurring_rule_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -513,6 +856,62 @@ export type Database = {
           to: "transactions"
           isOneToOne: false
           isSetofReturn: true
+        }
+      }
+      undo_recurring_skip: {
+        Args: { p_occurrence_date: string; p_rule_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          occurrence_date: string
+          reason: string | null
+          rule_id: string
+          undone_at: string | null
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recurring_skips"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_recurring_rule: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_category_id?: string
+          p_counter_account_id?: string
+          p_end_date?: string
+          p_note?: string
+          p_payment_mode?: string
+          p_rule_id: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          archived_at: string | null
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          end_date: string | null
+          frequency: string
+          id: string
+          idempotency_key: string
+          note: string | null
+          payment_mode: string | null
+          start_date: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recurring_rules"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       user_local_today: { Args: { p_user_id: string }; Returns: string }
@@ -533,7 +932,9 @@ export type Database = {
           idempotency_key: string
           note: string | null
           occurred_on: string
+          occurrence_date: string | null
           payment_mode: string | null
+          recurring_rule_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
