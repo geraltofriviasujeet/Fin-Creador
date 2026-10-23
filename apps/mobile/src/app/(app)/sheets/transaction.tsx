@@ -1,6 +1,8 @@
 import {
   type EntryType,
   type LedgerItem,
+  type RecurringItem,
+  confirmRecurringOccurrence,
   type TransactionsContext,
   balancesWithout,
   fullDate,
@@ -25,6 +27,7 @@ import { TextField } from "@/components/text-field";
 import { TransactionsGate } from "@/components/transactions/transactions-gate";
 import { NETWORK_ERROR } from "@/lib/income-store";
 import { param } from "@/lib/income-format";
+import { useRecurringItem } from "@/lib/recurring";
 import { getSupabase } from "@/lib/supabase";
 import { useSave } from "@/lib/use-save";
 import { colors, fontFamily, fontSize, radius, spacing, text } from "@/theme";
@@ -42,8 +45,11 @@ const isType = (v: string): v is EntryType => v === "expense" || v === "income" 
  * Edit (with `id`): same fields and rules as the web form, saved through the shared writer.
  */
 export default function TransactionSheet() {
-  const params = useLocalSearchParams<{ type?: string; id?: string; accountId?: string }>();
+  const params = useLocalSearchParams<{ type?: string; id?: string; accountId?: string; ruleId?: string }>();
   const id = param(params.id);
+  // Confirming a recurring item's due date (from the Recurring screen).
+  const ruleId = param(params.ruleId);
+  const recurring = useRecurringItem(ruleId);
   const initialType = param(params.type);
   const [type, setType] = useState<EntryType>(isType(initialType) ? initialType : "expense");
   const [editing, setEditing] = useState<{ status: "loading" } | { status: "error" } | { status: "ready"; entry: LedgerItem } | null>(
@@ -61,21 +67,27 @@ export default function TransactionSheet() {
     };
   }, [id]);
 
-  const noun = editing?.status === "ready" ? editing.entry.type : type;
+  const noun = editing?.status === "ready" ? editing.entry.type : (recurring?.rule.type ?? type);
   return (
-    <Sheet eyebrow={id ? "Edit transaction" : "New transaction"} title={`${id ? "Edit" : "Add"} ${noun}`}>
+    <Sheet
+      eyebrow={id ? "Edit transaction" : recurring?.date ? `Recurring · ${fullDate(recurring.date)}` : "New transaction"}
+      title={`${id ? "Edit" : "Add"} ${noun}`}
+    >
       <TransactionsGate>
         {(data) =>
-          editing?.status === "loading" ? (
+          ruleId && (!recurring || recurring.kind !== "due") ? (
+            <FormMessage tone="error" message="This recurring item is no longer due. Pull to refresh the list." />
+          ) : editing?.status === "loading" ? (
             <ActivityIndicator color={colors.ink} />
           ) : editing?.status === "error" ? (
             <FormMessage tone="error" message="We couldn't open this entry. It may have been changed or voided. Pull to refresh the list and try again." />
           ) : (
             <TransactionForm
-              key={editing?.status === "ready" ? editing.entry.id : "new"}
+              key={editing?.status === "ready" ? editing.entry.id : (recurring?.rule.id ?? "new")}
               data={data}
-              type={editing?.status === "ready" ? editing.entry.type : type}
+              type={editing?.status === "ready" ? editing.entry.type : (recurring?.rule.type ?? type)}
               editing={editing?.status === "ready" ? editing.entry : null}
+              recurring={ruleId ? recurring : null}
               presetAccountId={param(params.accountId)}
               onTypeChange={setType}
             />
@@ -90,12 +102,15 @@ function TransactionForm({
   data,
   type,
   editing,
+  recurring,
   presetAccountId,
   onTypeChange,
 }: {
   data: TransactionsContext;
   type: EntryType;
   editing: LedgerItem | null;
+  /** A due recurring item: pre-fills the form; its type and category are fixed. */
+  recurring: RecurringItem | null;
   presetAccountId: string;
   onTypeChange: (type: EntryType) => void;
 }) {
@@ -108,20 +123,21 @@ function TransactionForm({
 
   // One key per opened form; kept on retry after a failure, so the entry is saved once.
   const [requestKey] = useState(newRequestKey);
-  const [amount, setAmount] = useState(editing ? minorToInputString(editing.amountMinor, editing.currency) : "");
-  const [categoryId, setCategoryId] = useState(editing?.categoryId ?? "");
-  const [occurredOn, setOccurredOn] = useState(editing?.occurredOn ?? today);
+  const start = editing ?? recurring?.entry ?? null;
+  const [amount, setAmount] = useState(start ? minorToInputString(start.amountMinor, start.currency) : "");
+  const [categoryId, setCategoryId] = useState(start?.categoryId ?? "");
+  const [occurredOn, setOccurredOn] = useState(start && start.occurredOn <= today ? start.occurredOn : today);
   // Fast entry: a preset account ("Received cash as income?"), else the latest expense's account, else the only one.
   const [accountId, setAccountId] = useState(
-    editing?.accountId ??
+    start?.accountId ??
       (usable(presetAccountId) ||
         (type === "expense" ? usable(data.lastExpenseAccountId) : "") ||
         (accounts.length === 1 ? accounts[0]!.id : ""))
   );
   const [accountTouched, setAccountTouched] = useState(Boolean(editing || presetAccountId));
-  const [counterAccountId, setCounterAccountId] = useState(editing?.counterAccountId ?? "");
-  const [paymentMode, setPaymentMode] = useState<string>(editing?.paymentMode ?? "");
-  const [note, setNote] = useState(editing?.note ?? "");
+  const [counterAccountId, setCounterAccountId] = useState(start?.counterAccountId ?? "");
+  const [paymentMode, setPaymentMode] = useState<string>(start?.paymentMode ?? "");
+  const [note, setNote] = useState(start?.note ?? "");
   const { save, busy, fieldErrors, formError } = useSave();
 
   if (!editing && accounts.filter((a) => !a.archived).length === 0) {
@@ -160,7 +176,7 @@ function TransactionForm({
           setCategoryId(""); // categories belong to one type
           onTypeChange(next);
         }}
-        disabled={Boolean(editing)}
+        disabled={Boolean(editing || recurring)}
       />
       {editing ? <Text style={text.caption}>The type can&apos;t change. To turn this into another type, void it and add a new entry.</Text> : null}
 
@@ -178,6 +194,13 @@ function TransactionForm({
       />
       {type === "transfer" ? (
         <SelectField label="From" value={accountId} options={accountOptions()} onChange={setAccountId} error={fieldErrors.accountId} searchPlaceholder="Search accounts" />
+      ) : recurring ? (
+        <TextField
+          label={type === "income" ? "Source" : "Category"}
+          value={data.categories.find((c) => c.id === categoryId)?.name ?? ""}
+          editable={false}
+          hint="Set by the recurring item."
+        />
       ) : (
         <SelectField
           label={type === "income" ? "Source" : "Category"}
@@ -271,7 +294,20 @@ function TransactionForm({
         loading={busy}
         onPress={() =>
           void save(() =>
-            saveTransaction(getSupabase(), {
+            (recurring
+              ? confirmRecurringOccurrence(getSupabase(), {
+                  ruleId: recurring.rule.id,
+                  occurrenceDate: recurring.date ?? "",
+                  type,
+                  amount,
+                  occurredOn,
+                  accountId,
+                  counterAccountId: type === "transfer" ? counterAccountId : "",
+                  paymentMode: type === "expense" ? paymentMode : "",
+                  note,
+                  idempotencyKey: requestKey,
+                })
+              : saveTransaction(getSupabase(), {
               transactionId: editing?.id ?? "",
               type,
               amount,
@@ -282,7 +318,8 @@ function TransactionForm({
               occurredOn,
               note,
               idempotencyKey: requestKey,
-            }).catch(() => ({ status: "error" as const, message: NETWORK_ERROR }))
+            })
+            ).catch(() => ({ status: "error" as const, message: NETWORK_ERROR }))
           )
         }
       />
