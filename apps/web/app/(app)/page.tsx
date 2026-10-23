@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowDownToLine, Inbox, UserRound } from "lucide-react"
 import { PageHeader } from "@/components/shell/app-shell"
+import { cn } from "cn"
 import { buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
@@ -22,11 +23,11 @@ export default function OverviewPage() {
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-3">
-          <Link href="/income" className={buttonVariants()}>
+          <Link href="/income" className={cn(buttonVariants())}>
             <ArrowDownToLine aria-hidden="true" />
             Go to Income
           </Link>
-          <Link href="/settings" className={buttonVariants({ variant: "secondary" })}>
+          <Link href="/settings" className={cn(buttonVariants({ variant: "secondary" }))}>
             <UserRound aria-hidden="true" />
             Set up your profile
           </Link>
