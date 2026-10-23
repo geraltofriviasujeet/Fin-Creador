@@ -53,7 +53,7 @@ export type TransactionsViewProps = {
   open: { kind: "edit" | "history"; entry: LedgerItem } | null
 }
 
-export function TransactionsView({ context, filters: f, range, first, totals, prevTotals, open }: TransactionsViewProps) {
+export function TransactionsView({ context, filters: loaded, range, first, totals, prevTotals, open }: TransactionsViewProps) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -71,9 +71,16 @@ export function TransactionsView({ context, filters: f, range, first, totals, pr
   const [voiding, setVoiding] = useState<LedgerItem | null>(null)
   const [historyOf, setHistoryOf] = useState<LedgerItem | null>(open?.kind === "history" ? open.entry : null)
 
+  // Filter controls show the new choice at once while the page reloads for it (a new
+  // filter set remounts this view, which clears the choice).
+  const [chosen, setChosen] = useState<Partial<Filters>>({})
+  const f: Filters = { ...loaded, ...chosen }
   const href = (next: Partial<Filters>, more: Record<string, string> = {}) => `${pathname}${filtersToQuery({ ...f, ...next }, more)}`
   // Filters reload the page from the server; the URL keeps links and the back button working.
-  const go = (next: Partial<Filters>) => startNavigation(() => router.replace(href(next), { scroll: false }))
+  const go = (next: Partial<Filters>) => {
+    setChosen((c) => ({ ...c, ...next }))
+    startNavigation(() => router.replace(href(next), { scroll: false }))
+  }
   // Opening and closing the Add dialog only changes the URL (no reload).
   const replaceUrl = (url: string) => window.history.replaceState(null, "", url)
   const addParam = params.get("add")
@@ -95,7 +102,7 @@ export function TransactionsView({ context, filters: f, range, first, totals, pr
     setLoadingMore(true)
     setMoreError(false)
     try {
-      const next = await loadMoreTransactionsAction({ filters: toApiFilters(f, range), currency, cursor: pages.nextCursor })
+      const next = await loadMoreTransactionsAction({ filters: toApiFilters(loaded, range), currency, cursor: pages.nextCursor })
       if (next.ok) setPages((p) => ({ ...p, items: [...p.items, ...next.items], nextCursor: next.nextCursor }))
       else setMoreError(true)
     } catch {
@@ -108,13 +115,14 @@ export function TransactionsView({ context, filters: f, range, first, totals, pr
   const groups = groupByDay(rows)
   const incomeTrend = prevTotals ? incomeTrendBasisPoints(totals.incomeMinor, prevTotals.incomeMinor) : null
   const savingsRate = savingsRateBasisPoints(totals)
-  const label = periodLabel(f)
-  const tabLabel = TYPE_TABS.find((t) => t.value === f.type)?.label ?? "All"
+  // Text about the rows shown follows the loaded filters, not a choice still loading.
+  const label = periodLabel(loaded)
+  const tabLabel = TYPE_TABS.find((t) => t.value === loaded.type)?.label ?? "All"
   const clearHref = `${pathname}${filtersToQuery(readFilters(new URLSearchParams(), today))}`
   // The exact number of rows, when the totals give it (they never count voided entries,
   // and count other currencies only overall).
-  const typeCount = { all: totals.incomeCount + totals.expenseCount + totals.transferCount + totals.otherCurrencyCount, income: totals.incomeCount, expense: totals.expenseCount, transfer: totals.transferCount }[f.type]
-  const exactCount = !f.showVoided && (f.type === "all" || totals.otherCurrencyCount === 0) ? typeCount : null
+  const typeCount = { all: totals.incomeCount + totals.expenseCount + totals.transferCount + totals.otherCurrencyCount, income: totals.incomeCount, expense: totals.expenseCount, transfer: totals.transferCount }[loaded.type]
+  const exactCount = !loaded.showVoided && (loaded.type === "all" || totals.otherCurrencyCount === 0) ? typeCount : null
   const formProps = { accounts: context.accounts, categories: context.categories, today }
 
   const addLink = (type: EntryType, text: string, variant: "primary" | "secondary" = "primary") => (
@@ -289,11 +297,11 @@ export function TransactionsView({ context, filters: f, range, first, totals, pr
         <Card className="px-0 md:px-0">
           <div className="flex flex-wrap items-end justify-between gap-2 px-5 md:px-6">
             <div>
-              <CardTitle>{f.type === "all" ? "All transactions" : tabLabel}</CardTitle>
+              <CardTitle>{loaded.type === "all" ? "All transactions" : tabLabel}</CardTitle>
               <CardDescription className="mt-1">
                 {label}
                 {exactCount !== null && ` · ${exactCount} ${exactCount === 1 ? "entry" : "entries"}`}
-                {f.q && ` matching “${f.q}”`}
+                {loaded.q && ` matching “${loaded.q}”`}
               </CardDescription>
             </div>
           </div>
@@ -325,7 +333,7 @@ export function TransactionsView({ context, filters: f, range, first, totals, pr
                 <>
                   <p className="font-heading text-xl font-semibold">Nothing matches these filters</p>
                   <p className="max-w-md text-sm text-muted-foreground">
-                    {f.q ? "Search looks in notes, category and account names, and exact amounts. " : ""}Try another period or clear the filters.
+                    {loaded.q ? "Search looks in notes, category and account names, and exact amounts. " : ""}Try another period or clear the filters.
                   </p>
                   <Link href={clearHref} replace scroll={false} className={cn(buttonVariants({ variant: "secondary" }))}>
                     Clear filters

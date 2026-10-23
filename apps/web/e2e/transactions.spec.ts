@@ -8,7 +8,8 @@ const SHOTS = "e2e-screenshots"
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true })
 
 const totals = (page: Page) => page.getByRole("region", { name: "Totals for these filters" })
-const stat = (page: Page, label: string) => totals(page).locator("[data-slot=card]").filter({ hasText: label })
+// By the card's label ("Income · This month"), not text elsewhere in a card ("No income…").
+const stat = (page: Page, label: string) => totals(page).locator("[data-slot=card]").filter({ hasText: new RegExp(`^${label}`) })
 const row = (page: Page, text: string) => page.locator("main li").filter({ hasText: text })
 const holding = (page: Page, label: string) =>
   page.locator("[data-slot=card]").filter({ has: page.getByText("Where your money is", { exact: true }) }).getByRole("listitem").filter({ hasText: label })
