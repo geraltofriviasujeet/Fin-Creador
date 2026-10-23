@@ -98,14 +98,14 @@ select ok(
 -- ------------------------------------------------- default sources at sign-up (20-21)
 select results_eq(
   $$ select name, source_type, is_default from public.categories
-     where user_id = '11111111-1111-4111-8111-111111111111' and is_default order by name $$,
+     where user_id = '11111111-1111-4111-8111-111111111111' and kind = 'income' and is_default order by name $$,
   $$ values ('Business'::text, 'business'::text, true), ('Freelance', 'freelance', true),
             ('Interest & dividends', 'interest', true), ('Other income', 'other', true),
             ('Rental income', 'rent', true), ('Salary', 'salary', true) $$,
   'sign-up creates the six default income sources'
 );
 select is(
-  (select count(*) from public.categories where user_id = '22222222-2222-4222-8222-222222222222' and is_default),
+  (select count(*) from public.categories where user_id = '22222222-2222-4222-8222-222222222222' and kind = 'income' and is_default),
   6::bigint, 'every new user gets the defaults'
 );
 
@@ -386,8 +386,8 @@ select throws_ok(
   '23505', null, 'source names are unique per user, ignoring case and spaces'
 );
 select throws_ok(
-  $$ insert into public.categories (kind, name) values ('expense', 'Food') $$,
-  '23514', null, 'expense categories are not enabled yet'
+  $$ insert into public.categories (kind, name, source_type) values ('expense', 'Food', 'other') $$,
+  '23514', null, 'an expense category cannot have a source type'
 );
 select throws_ok(
   $$ insert into public.categories (kind, name) values ('income', 'No type') $$,
@@ -482,14 +482,14 @@ select throws_ok(
   $$ insert into public.transactions (user_id, type, amount_minor, currency, account_id, occurred_on, idempotency_key)
      values ('11111111-1111-4111-8111-111111111111', 'expense', 1000, 'INR',
              'a0000000-0000-4000-8000-000000000001', current_date - 1, 'e0000000-0000-4000-8000-000000000020') $$,
-  '23514', null, 'expense entries are not enabled yet (schema check)'
+  '23514', null, 'an expense needs a category (schema check)'
 );
 select throws_ok(
   $$ insert into public.transactions (user_id, type, amount_minor, currency, account_id, counter_account_id, occurred_on, idempotency_key)
      values ('11111111-1111-4111-8111-111111111111', 'transfer', 1000, 'INR',
-             'a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000002',
+             'a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000001',
              current_date - 1, 'e0000000-0000-4000-8000-000000000021') $$,
-  '23514', null, 'transfer entries are not enabled yet (schema check)'
+  '23514', null, 'a transfer cannot go to the same account (schema check)'
 );
 
 -- Backfill: a user who has no sources gets the defaults once.
@@ -527,7 +527,7 @@ select is(public.ensure_my_income_sources(), 6, 'the lazy fallback creates the d
 select is(public.ensure_my_income_sources(), 0, 'and only once');
 reset role;
 select is(
-  (select count(*) from public.categories where user_id = '11111111-1111-4111-8111-111111111111'),
+  (select count(*) from public.categories where user_id = '11111111-1111-4111-8111-111111111111' and kind = 'income'),
   9::bigint, 'the lazy fallback only touches the caller''s own sources (user A still has 6 defaults + 3 own)'
 );
 
