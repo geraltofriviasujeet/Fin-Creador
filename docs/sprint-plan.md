@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-23.
+Last updated: 2026-10-24.
 
 ## Sprint status
 
@@ -26,7 +26,7 @@ Last updated: 2026-10-23.
 | **1** | Foundation, authentication & profile | Done | Completed 2026-10-22; released to `main` via PR #7. Mobile app runs on Android and iPhone in Expo Go 58 (iPhone from 2026-10-22). See Sprint 1 steps below. |
 | **2** | Accounts & Income page | Done | Completed 2026-10-22 (PRs #9–#16). Accounts, income sources, income entries with void, one cash account with "Update cash in hand", the Income page on web and mobile. Tested on web (E2E in CI) and on Android and iPhone (Expo Go 58). Scope widened from the original plan (see decisions). See Sprint 2 steps below. |
 | **3** | Expense & transaction tracking | Done | Completed 2026-10-23 (PR #20 into the sprint branch; PR #19 merged into `main` 2026-10-23, merge commit ac916de). Expenses, one-row transfers, edits with history, voids with request keys, search and filters in the database with keyset paging, expense categories (web Settings), the Transactions page on web and the Activity tab and Add / Edit sheet on mobile (checked in Expo Go). Migrations 20261023120000 and 20261023180000 applied to fin-creador-dev. See Sprint 3 steps. |
-| **4** | Recurring items | In progress | Recurring rules with due items you confirm (decisions 2026-10-23). Phase 1 prototype on demo data first. See Sprint 4 steps. |
+| **4** | Recurring items | Done | Completed 2026-10-24 (PR #22 into the sprint branch, PR #21 merged into `main`, merge commit 1964d50). Recurring rules with due items you confirm or skip, the /recurring page with cost tiles and groups, the Upcoming card on Income and Transactions, the Recurring screen on mobile (tested in Expo Go). Migration 20261024120000 applied to fin-creador-dev. See Sprint 4 steps. |
 | **5** | Dashboard & analytics | Not started | |
 | **6** | Budgets & savings goals | Not started | |
 | **7** | Investment portfolio | Not started | |
@@ -74,8 +74,8 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **Phase 2.4 Remove the prototype** | Done | `/dev/transactions`, its demo data and the dev-only sign-in exception removed; unit test (no exception) and E2E against the production build (redirect signed out, 404 signed in). |
 | **Phase 2.5 E2E tests** | Done | 7 Playwright journeys in `e2e/transactions.spec.ts` (validation, totals and balances, edit and history, void, double submit, stale edit, search and filters, income edit, production check, cross-user), green in CI on PR #19; screenshots of the final pages only. |
 | **Phase 2.5b Expense categories (web)** | Done | Settings → Categories: add, rename (and icon), archive, restore; defaults archivable, never deleted; no duplicate active names; archived categories keep their history. Shared writers in `packages/api`; E2E `e2e/categories.spec.ts` with one screenshot. |
-| **Phase 2.6 Mobile** | In progress | Branch `sprint-4-mobile` (draft PR into the sprint branch): Recurring screen (cost tiles, Due / Needs attention / Coming in 30 days / Ended, groups, archived with Restore, Undo skip) from the shared view builder; rule sheet (add, edit, fix, archive), skip sheet, Confirm in the Add / Edit sheet (type and category fixed); Overview Recurring card and an Activity link. Device test in Expo Go pending. |
-| **Phase 2.7 Status and PR** | Done | Status and decisions updated; PR #19 merged into `main` 2026-10-23. |
+| **Phase 2.6 Mobile** | Done | PR #22: Recurring screen (cost tiles, panels, groups, archived with Restore, Undo skip), rule and skip sheets, Confirm in the Add / Edit sheet, Overview Recurring card and an Activity link. Tested in Expo Go 2026-10-24. |
+| **Phase 2.7 Status and PR** | Done | PR #22 merged into `sprint-4-recurring`, then PR #21 into `main` (2026-10-24). |
 
 ## Sprint 4 steps
 
@@ -166,6 +166,8 @@ Pending tests:
 - **Financial year setting:** optional April–March financial year for "this year" figures (Sprint 2 uses the calendar year).
 - **Repeated sign-up email:** see Sprint 10.
 - **Mobile category management:** add, rename, archive and restore expense categories in the mobile app (web has it on Settings since Sprint 3; owner, 2026-10-23).
+- **Recurring reminders:** notify when a recurring item is due (deferred from Sprint 4; belongs with Sprint 10 notifications, using Supabase scheduling).
+- **Recurring on the web Overview:** a Recurring card like the mobile one (deferred from Sprint 4 to the Sprint 5 dashboard).
 - **Payee / merchant on entries:** a "paid to" field (the Figma shows merchant names). Not in Sprint 3 (owner, 2026-10-23).
 - **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
 
