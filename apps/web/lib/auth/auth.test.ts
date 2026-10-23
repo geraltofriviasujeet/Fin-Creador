@@ -82,6 +82,14 @@ describe("route rules", () => {
     expect(decideRoute("/dev/transactions", "", false)).toEqual({ redirectTo: "/sign-in?next=%2Fdev%2Ftransactions" })
     expect(decideRoute("/transactions", "?q=rent", false)).toEqual({ redirectTo: "/sign-in?next=%2Ftransactions%3Fq%3Drent" })
   })
+
+  it("opens the recurring demo-data prototype without a session in development only", () => {
+    expect(decideRoute("/dev/recurring", "", false, false)).toBeNull()
+    expect(decideRoute("/dev/recurring", "", false, true)).toEqual({ redirectTo: "/sign-in?next=%2Fdev%2Frecurring" })
+    // Exact path only: other dev pages and look-alikes stay protected.
+    expect(routeKind("/dev/design", false)).toBe("protected")
+    expect(routeKind("/dev/recurring/x", false)).toBe("protected")
+  })
 })
 
 describe("public env guard", () => {

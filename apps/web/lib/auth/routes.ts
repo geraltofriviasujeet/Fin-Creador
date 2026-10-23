@@ -9,12 +9,22 @@ export const RECOVERY_PAGE = "/update-password"
 /** Always reachable: the email/OAuth callback must work with or without a session. */
 const PUBLIC_PREFIXES = ["/auth/"]
 
+/**
+ * Development-only prototypes on in-memory demo data (no Supabase reads or writes). Open
+ * without a session in `next dev` so they can be reviewed; protected (and 404) in
+ * production builds. Removed with the prototype in Phase 2.
+ */
+const DEV_PUBLIC_PAGES = ["/dev/recurring"]
+
+const isProduction = () => process.env.NODE_ENV === "production"
+
 export type RouteKind = "auth" | "recovery" | "public" | "protected"
 
-export function routeKind(pathname: string): RouteKind {
+export function routeKind(pathname: string, production = isProduction()): RouteKind {
   if (AUTH_PAGES.some((p) => pathname === p)) return "auth"
   if (pathname === RECOVERY_PAGE) return "recovery"
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return "public"
+  if (!production && DEV_PUBLIC_PAGES.includes(pathname)) return "public"
   return "protected"
 }
 
@@ -27,9 +37,10 @@ export type RouteDecision = { redirectTo: string } | null
 export function decideRoute(
   pathname: string,
   search: string,
-  signedIn: boolean
+  signedIn: boolean,
+  production = isProduction()
 ): RouteDecision {
-  const kind = routeKind(pathname)
+  const kind = routeKind(pathname, production)
   if (kind === "protected" && !signedIn) {
     const next = `${pathname}${search}`
     return { redirectTo: next === "/" ? "/sign-in" : `/sign-in?next=${encodeURIComponent(next)}` }

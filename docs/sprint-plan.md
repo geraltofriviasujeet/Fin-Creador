@@ -25,8 +25,8 @@ Last updated: 2026-10-23.
 |----|----|----|----|
 | **1** | Foundation, authentication & profile | Done | Completed 2026-10-22; released to `main` via PR #7. Mobile app runs on Android and iPhone in Expo Go 58 (iPhone from 2026-10-22). See Sprint 1 steps below. |
 | **2** | Accounts & Income page | Done | Completed 2026-10-22 (PRs #9–#16). Accounts, income sources, income entries with void, one cash account with "Update cash in hand", the Income page on web and mobile. Tested on web (E2E in CI) and on Android and iPhone (Expo Go 58). Scope widened from the original plan (see decisions). See Sprint 2 steps below. |
-| **3** | Expense & transaction tracking | In progress | Income entry, the transactions table and safe void moved into Sprint 2. Two phases (see Sprint 3 steps): Phase 1 prototype done and approved 2026-10-23; Phase 2 (database, wiring, E2E, mobile) in progress. |
-| **4** | Recurring items | Not started | Income sources and the Income page moved into Sprint 2; recurring rules and mark received/paid stay here. |
+| **3** | Expense & transaction tracking | Done | Completed 2026-10-23 (PRs #19, #20). Expenses, one-row transfers, edits with history, voids with request keys, search and filters in the database with keyset paging, expense categories (web Settings), the Transactions page on web and the Activity tab and Add / Edit sheet on mobile (checked in Expo Go). Migrations 20261023120000 and 20261023180000 applied to fin-creador-dev. See Sprint 3 steps. |
+| **4** | Recurring items | In progress | Recurring rules with due items you confirm (decisions 2026-10-23). Phase 1 prototype on demo data first. See Sprint 4 steps. |
 | **5** | Dashboard & analytics | Not started | |
 | **6** | Budgets & savings goals | Not started | |
 | **7** | Investment portfolio | Not started | |
@@ -67,14 +67,29 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 
 | **Step** | **Status** | **Notes** |
 |----|----|----|
-| **Phase 1. Web prototype** | Done (owner's click-through pending) | `/dev/transactions` on in-memory demo data (development only), `packages/domain/src/ledger.ts` with unit tests, screenshots in `docs/design/transactions-prototype/`. UI and rules approved 2026-10-23, subject to the owner's click-through. |
-| **Phase 2.1 Migration and pgTAP** | Done (one push pending) | Migration 20261023120000 applied to fin-creador-dev 2026-10-23 (97 pgTAP tests, green in CI on draft PR #19). Follow-up 20261023180000 (drops `void_income`) is not yet on fin-creador-dev (`migration list --linked`, 2026-10-23). |
+| **Phase 1. Web prototype** | Done | `/dev/transactions` on in-memory demo data (removed in Phase 2.4), `packages/domain/src/ledger.ts` with unit tests, screenshots in `docs/design/transactions-prototype/`. Approved 2026-10-23. |
+| **Phase 2.1 Migration and pgTAP** | Done | Migrations 20261023120000 and 20261023180000 (drops `void_income`) applied to fin-creador-dev 2026-10-23; 97 pgTAP tests for the new functions, green in CI. |
 | **Phase 2.2 Shared schemas, loaders and writers** | Done | `packages/schemas` transaction form; `packages/api/src/transactions`: context, page (opaque keyset cursor), totals, history, `saveTransaction`, `voidTransaction`; every write takes a request key. Income page and mobile void moved to `void_transaction`. |
 | **Phase 2.3 Web wiring** | Done | `/transactions` on real data (filters in the URL, run in the database), add / edit / void / history dialogs; topbar Add transaction and search go there. Income page: Edit and History open the same dialogs on `/transactions`. |
 | **Phase 2.4 Remove the prototype** | Done | `/dev/transactions`, its demo data and the dev-only sign-in exception removed; unit test (no exception) and E2E against the production build (redirect signed out, 404 signed in). |
 | **Phase 2.5 E2E tests** | Done | 7 Playwright journeys in `e2e/transactions.spec.ts` (validation, totals and balances, edit and history, void, double submit, stale edit, search and filters, income edit, production check, cross-user), green in CI on PR #19; screenshots of the final pages only. |
 | **Phase 2.5b Expense categories (web)** | Done | Settings → Categories: add, rename (and icon), archive, restore; defaults archivable, never deleted; no duplicate active names; archived categories keep their history. Shared writers in `packages/api`; E2E `e2e/categories.spec.ts` with one screenshot. |
-| **Phase 2.6 Mobile** | In progress | Branch `sprint-3-mobile` (draft PR into the sprint branch). Activity tab (type tabs, search, filters, totals, grouped list, Show more on the shared cursor) and one Add / Edit sheet for expenses, income and transfers, plus an entry sheet with Void and History. Device test in Expo Go pending. |
+| **Phase 2.6 Mobile** | Done | PR #20: Activity tab (type tabs, search, filters, totals, grouped list, Show more on the shared cursor) and one Add / Edit sheet for expenses, income and transfers, plus an entry sheet with Void and History. Checked in Expo Go 2026-10-23. |
+| **Phase 2.7 Status and PR** | Done | Status and decisions updated; PR #19 into `main`. |
+
+## Sprint 4 steps
+
+Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo data with no database changes; Phase 2 builds the real feature (web first, mobile in its own PR).
+
+| **Step** | **Status** | **Notes** |
+|----|----|----|
+| **Phase 1. Web prototype** | Done (owner review pending) | `/dev/recurring` on in-memory demo data (development only; dev sign-in exception in `lib/auth/routes.ts`), shared `components/recurring/upcoming.tsx`, `packages/domain/src/recurrence.ts` with unit tests, 8 screenshots in `docs/design/recurring-prototype/`. |
+| **Phase 2.1 Migration and pgTAP** | Not started | Rules table, posting function (date within start..min(end, today); rule + date posts once among non-voided entries), RLS. |
+| **Phase 2.2 Shared loaders and writers** | Not started | `packages/api`; every write takes a request key. |
+| **Phase 2.3 Web wiring** | Not started | Upcoming on the Income and Transactions pages; manage rules. |
+| **Phase 2.4 Remove the prototype** | Not started | |
+| **Phase 2.5 E2E tests** | Not started | |
+| **Phase 2.6 Mobile** | Not started | Separate PR. |
 | **Phase 2.7 Status and PR** | Not started | |
 
 ## Decisions
@@ -120,6 +135,10 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **2026-10-23** | Income entries are edited from the Income page by opening `/transactions?edit=<id>` (and `?history=<id>`), the same dialog as every other entry; the Income page hides versions an edit replaced. | One edit form and one set of rules on web. |
 | **2026-10-23** | Expense categories are managed on web only, in a "Categories" section on Settings, following the Income sources pattern: add, rename, archive, restore. Defaults can be archived, never deleted; no duplicate active names; archived categories keep their history. Mobile category management is in the backlog. | Owner decision after Phase 2.5. |
 | **2026-10-23** | On mobile one Add / Edit transaction sheet (Expense, Income, Transfer) replaces the Add income sheet; the header + opens it on Expense, the Income screen on Income. Entry text, filters and the balance preview live in `packages/api` and are used by web and mobile. | One form and one set of rules per platform; no duplicated money logic (CLAUDE.md §4–5). |
+| **2026-10-23** | Sprint 4 recurring rules (owner): (A) a rule creates due items you confirm; nothing posts by itself. (B) Weekly, monthly, quarterly and yearly, always anchored to the original day; a day 29–31 falls on the month's last day in shorter months. (C) A fixed amount, editable when confirming. (D) Income, expense and transfer. | Explicit control over every posted entry; no surprise balances. |
+| **2026-10-23** | (E) Only the latest missed occurrence shows as due; Skip covers an entry already added by hand. (F) One occurrence can be skipped; editing a rule changes future occurrences only; posted entries never change. (G) A rule ends with an end date or by archiving; no pause. | Keeps the Upcoming list short and history immutable. |
+| **2026-10-23** | (H) One shared Upcoming component on the Income and Transactions pages, filtered by type. (I) Due items are computed from the rules (no cron); the date logic lives in `packages/domain` with unit tests; the database checks the date is within start..min(end, today) and that a rule and date post at most once among non-voided entries. (J) Prototype on demo data first, at most 8 screenshots. | One calculation for web and mobile; the database is the final guard against double posting. |
+| **2026-10-23** | (K) Voiding a posted occurrence makes it due again (the once-only rule counts non-voided entries). (L) A rule whose account or category is archived shows "Needs attention" and must be fixed before it can post. | Mistakes stay correctable; nothing posts into an archived account or category. |
 
 ## Before production (open items)
 
