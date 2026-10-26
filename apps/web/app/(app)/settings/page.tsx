@@ -38,7 +38,7 @@ async function SettingsContent() {
   ])
 
   return (
-    <div className="grid max-w-2xl gap-6">
+    <div className="grid max-w-2xl gap-4">
       <Card>
         <CardTitle>Profile</CardTitle>
         <CardDescription className="mt-1">
@@ -46,7 +46,7 @@ async function SettingsContent() {
           months start.
         </CardDescription>
         {error || !profile ? (
-          <FormMessage tone="error" className="mt-6">
+          <FormMessage tone="error" className="mt-4">
             We couldn’t load your profile. Refresh the page to try again.
           </FormMessage>
         ) : (
@@ -69,7 +69,7 @@ async function SettingsContent() {
         {categories.ok ? (
           <ExpenseCategories categories={categories.categories} />
         ) : (
-          <FormMessage tone="error" className="mt-6">
+          <FormMessage tone="error" className="mt-4">
             We couldn’t load your categories. Refresh the page to try again.
           </FormMessage>
         )}
@@ -91,7 +91,7 @@ async function SettingsContent() {
 
 function SettingsSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading settings" className="grid max-w-2xl gap-6">
+    <div aria-busy="true" aria-label="Loading settings" className="grid max-w-2xl gap-4">
       {[0, 1, 2].map((i) => (
         <Card key={i} className="grid gap-4">
           <span className="h-5 w-32 rounded bg-canvas" />

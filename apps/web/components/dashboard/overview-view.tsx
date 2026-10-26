@@ -164,7 +164,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           }
         />
       </section>
-      <p className="mt-3 mb-6 text-xs text-muted-foreground">
+      <p className="mt-3 mb-4 text-xs text-muted-foreground">
         {rangeText(range)}
         {comparison && `, compared with ${rangeText(comparison.previous)}`}. Transfers between your accounts aren’t income or expenses; voided entries never count.
         {totals.otherCurrencyCount > 0 &&
@@ -172,7 +172,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         {otherAccounts > 0 && ` ${otherAccounts} ${otherAccounts === 1 ? "account" : "accounts"} in other currencies aren’t in the total balance.`}
       </p>
 
-      <div className="grid gap-6 lg:grid-cols-[1.75fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.75fr_1fr]">
         <Card aria-labelledby="spending-title">
           <CardHeading id="spending-title" title="Spending overview" switcher={hasSpending && <ChartSwitch chart="spending" title="Spending overview" period={period} range={range} charts={charts} />}>
             Your expenses {PERIOD_PHRASE[period]}, {breakdownUnit(range)}
@@ -186,7 +186,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         <CategoryCard breakdown={breakdown} range={range} currency={currency} lookup={lookup} period={period} charts={charts} />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.75fr_1fr]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.75fr_1fr]">
         <Card aria-labelledby="flow-title">
           <CardHeading id="flow-title" title="Income vs expenses" switcher={hasActivity && <ChartSwitch chart="flow" title="Income vs expenses" period={period} range={range} charts={charts} />}>
             Money in and out {PERIOD_PHRASE[period]}, {breakdownUnit(range)}
@@ -207,9 +207,9 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         <BudgetOverviewCard view={goals} />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <RecentCard recent={recent} lookup={lookup} today={today} />
-        <div className="grid content-start gap-6">
+        <div className="grid content-start gap-4">
           {upcoming}
           <GoalsOverviewCard view={goals} />
         </div>
@@ -307,7 +307,7 @@ function PeriodSwitcher({ period, charts }: { period: DashboardPeriod; charts: C
 // A plain GET form: works without JavaScript and keeps the range in the URL.
 function CustomRangeForm({ range, today, charts }: { range: DateRange; today: string; charts: ChartChoices }) {
   return (
-    <Card className="mb-6">
+    <Card className="mb-4">
       <form action="/" method="get" className="grid items-end gap-4 md:grid-cols-[1fr_1fr_auto]">
         <input type="hidden" name="period" value="custom" />
         <TextField name="from" type="date" label="From" max={today} defaultValue={range.start} required />
@@ -323,7 +323,7 @@ function CustomRangeForm({ range, today, charts }: { range: DateRange; today: st
 
 function FirstRun({ hasAccounts }: { hasAccounts: boolean }) {
   return (
-    <Card className="mb-6 flex flex-col items-start gap-4 md:flex-row md:items-center">
+    <Card className="mb-4 flex flex-col items-start gap-4 md:flex-row md:items-center">
       <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-chip-mint text-ink">
         <Inbox aria-hidden="true" className="size-6" />
       </span>
@@ -520,7 +520,7 @@ export function OverviewSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading overview">
       <PageHeader title={OVERVIEW_HEADER.title} description={OVERVIEW_HEADER.description} />
-      <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-4 w-28 rounded bg-canvas" />
@@ -529,7 +529,7 @@ export function OverviewSkeleton() {
           </Card>
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-[1.75fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.75fr_1fr]">
         {[0, 1].map((i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-5 w-40 rounded bg-canvas" />

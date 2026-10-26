@@ -11,7 +11,7 @@ function Card({ className, tone = "default", ...props }: CardProps) {
     <div
       data-slot="card"
       className={cn(
-        "rounded-2xl border p-5 md:p-6",
+        "rounded-2xl border p-4 md:p-5",
         tone === "default" && "border-line bg-surface text-ink",
         tone === "deep" && "on-dark border-transparent bg-brand-deep text-nav-text",
         className
@@ -28,7 +28,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function CardTitle({ className, ...props }: React.ComponentProps<"h2">) {
-  return <h2 data-slot="card-title" className={cn("font-heading text-lg font-semibold", className)} {...props} />
+  return <h2 data-slot="card-title" className={cn("font-heading text-xl font-semibold", className)} {...props} />
 }
 
 function CardDescription({ className, ...props }: React.ComponentProps<"p">) {
@@ -36,14 +36,14 @@ function CardDescription({ className, ...props }: React.ComponentProps<"p">) {
 }
 
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="card-content" className={cn("mt-5", className)} {...props} />
+  return <div data-slot="card-content" className={cn("mt-4", className)} {...props} />
 }
 
 function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-footer"
-      className={cn("mt-5 flex items-center justify-between gap-3 border-t border-line pt-4", className)}
+      className={cn("mt-4 flex items-center justify-between gap-3 border-t border-line pt-3", className)}
       {...props}
     />
   )

@@ -45,8 +45,9 @@ Put these in `packages/design-tokens` (single source) and map them into Tailwind
 
 ## 4. Web layout (desktop >= 1100px)
 
-- Sidebar: fixed, 248px, background nav. Items: Overview, Income, Recurring, Transactions, Goals, Investments (Goals holds planned expenses and monthly budgets, one route `/goals`). Bottom: Settings, then profile row (avatar initials, name, email, more). Active item: lime background, dark bold text.
-- Topbar: sticky, 76px, white 82% with blur, bottom border. Left: search "Search transactions..." (330px). Right: bell with unread dot, dark primary "+ Add transaction" button.
+- Sidebar: fixed, 232px (nav items 40px), background nav. Items: Overview, Income, Recurring, Transactions, Goals, Investments (Goals holds planned expenses and monthly budgets, one route `/goals`). Bottom: Settings, then profile row (avatar initials, name, email, more). Active item: lime background, dark bold text.
+- Topbar: sticky, 56px, white 82% with blur, bottom border. Left: search "Search transactions..." (330px). Right: bell with unread dot, dark primary "+ Add transaction" button.
+- Web density (owner, 2026-10-26): 14px root on web (rem sizes 12.5% below the tokens), web type scale 12/13/14/16/18/22/28/32/38px (never below 12), radii 8/12/16, controls 36px (primary 40px), cards 16–20px padding, page title 28px, section titles 18px. Mobile keeps the token sizes.
 - Content: max-width 1510px, padding 33px 34px.
 - Welcome row: eyebrow (date, uppercase, letter-spaced), H1 "Good morning, {first name}", subtitle, period switcher Week / Month / Year (pill group).
 - Summary grid (4 cards): Total balance (dark green card with mini bar sparkline), Income, Expenses, Savings rate (with progress bar). Each: icon chip, label, more menu, big number, trend badge "+x% from last month", footer.

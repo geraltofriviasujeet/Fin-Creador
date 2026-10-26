@@ -18,7 +18,7 @@ const ADD_HREF = "/transactions?add=expense"
 
 export function Topbar() {
   return (
-    <header className="sticky top-0 z-20 flex h-(--fc-layout-topbar-height) items-center gap-3 border-b border-line bg-surface/82 px-4 backdrop-blur-md md:px-8.5">
+    <header className="sticky top-0 z-20 flex h-(--fc-layout-topbar-height) items-center gap-3 border-b border-line bg-surface/82 px-4 backdrop-blur-md md:px-7">
       <Logo tone="onLight" className="md:hidden" />
 
       <form
@@ -38,7 +38,7 @@ export function Topbar() {
           name="q"
           type="search"
           placeholder="Search transactions…"
-          className="h-11 w-full rounded-lg border border-line bg-canvas pr-3 pl-10 text-sm text-ink outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          className="h-[36px] w-full rounded-lg border border-line bg-canvas pr-3 pl-10 text-sm text-ink outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         />
       </form>
 

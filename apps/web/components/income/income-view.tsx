@@ -127,7 +127,7 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
         }
       />
 
-      <section aria-label="Summary" className="-mx-4 mb-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 lg:grid-cols-3">
+      <section aria-label="Summary" className="-mx-4 mb-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 lg:grid-cols-3">
         <StatCard
           label="Income this month"
           value={money(view.thisMonth, currency)}
@@ -178,9 +178,9 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
           }
         />
       </section>
-      {upcoming && <div className="mb-6">{upcoming}</div>}
+      {upcoming && <div className="mb-4">{upcoming}</div>}
 
-      <div className="grid gap-6 lg:grid-cols-[1.45fr_0.8fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.45fr_0.8fr]">
         <Card>
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -194,7 +194,7 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
           </div>
 
           {view.sourceRows.length === 0 ? (
-            <div className="mt-6 grid justify-items-start gap-3 rounded-xl bg-canvas p-5">
+            <div className="mt-4 grid justify-items-start gap-3 rounded-xl bg-canvas p-5">
               <p className="font-semibold">No income recorded yet</p>
               <p className="text-sm text-muted-foreground">Your sources appear here with this month&apos;s and this year&apos;s income.</p>
               <Button onClick={() => show({ type: "income" })}>
@@ -237,7 +237,7 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
           <CardDescription className="mt-1">Available balances</CardDescription>
 
           {view.holdings.rows.length === 0 ? (
-            <div className="mt-6 grid gap-3 rounded-xl bg-canvas p-5">
+            <div className="mt-4 grid gap-3 rounded-xl bg-canvas p-5">
               <p className="font-semibold">Add your first account</p>
               <p className="text-sm text-muted-foreground">Add the banks and cash where you keep money to see your total.</p>
               <div className="flex flex-wrap gap-2">

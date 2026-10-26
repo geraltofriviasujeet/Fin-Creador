@@ -105,7 +105,7 @@ export function RecurringPageView({ context, view }: { context: TransactionsCont
         }
       />
 
-      <div className="grid gap-6">
+      <div className="grid gap-4">
         {!hasAccounts && (
           <Card className="grid justify-items-start gap-2">
             <p className="font-semibold">Add an account first</p>
@@ -130,7 +130,7 @@ export function RecurringPageView({ context, view }: { context: TransactionsCont
           Active recurring expenses only (not income, transfers, ended or archived items). Each currency is totalled on its own; amounts are never converted.
         </p>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           <RecurringPanel title="Due" count={view.due.length} description="Confirm to save the entry, or skip this date." empty="Nothing is due.">
             {view.due.map((i) => (
               <RecurringRow key={i.rule.id} item={i} lookup={lookup} today={today}>
@@ -207,7 +207,7 @@ export function RecurringSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading recurring items">
       <PageHeader {...RECURRING_HEADER} />
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="mb-4 grid gap-4 md:grid-cols-3">
         {[0, 1, 2].map((i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-4 w-28 rounded bg-canvas" />
@@ -215,7 +215,7 @@ export function RecurringSkeleton() {
           </Card>
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {[0, 1, 2, 3].map((i) => (
           <Card key={i} className="grid gap-3">
             <span className="h-5 w-32 rounded bg-canvas" />
