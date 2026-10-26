@@ -21,24 +21,62 @@ import type { EntryType } from "../transactions/types"
 
 type Params = { get(name: string): string | null }
 
-export type DashboardSelection = { period: DashboardPeriod; range: DateRange }
+/** How each chart is drawn; the defaults are left out of URLs. */
+export type ChartChoices = { spending: "bar" | "line"; flow: "bar" | "line"; categories: "bars" | "pie" }
 
-/** The period from the URL: ?period=week|month|year|custom (&from=&to= for custom). Month by default. */
+export const DEFAULT_CHARTS: ChartChoices = { spending: "bar", flow: "bar", categories: "bars" }
+
+export const CHART_OPTIONS = {
+  spending: [
+    { value: "bar", label: "Bar" },
+    { value: "line", label: "Line" },
+  ],
+  flow: [
+    { value: "bar", label: "Bar" },
+    { value: "line", label: "Line" },
+  ],
+  categories: [
+    { value: "bars", label: "Bars" },
+    { value: "pie", label: "Pie" },
+  ],
+} as const satisfies { [K in keyof ChartChoices]: readonly { value: ChartChoices[K]; label: string }[] }
+
+export type DashboardSelection = { period: DashboardPeriod; range: DateRange; charts: ChartChoices }
+
+function readCharts(params: Params): ChartChoices {
+  const pick = <K extends keyof ChartChoices>(key: K): ChartChoices[K] => {
+    const raw = params.get(key)
+    return (CHART_OPTIONS[key] as readonly { value: string }[]).some((o) => o.value === raw) ? (raw as ChartChoices[K]) : DEFAULT_CHARTS[key]
+  }
+  return { spending: pick("spending"), flow: pick("flow"), categories: pick("categories") }
+}
+
+/**
+ * The period and chart types from the URL: ?period=week|month|year|custom (&from=&to= for
+ * custom), &spending=line, &flow=line, &categories=pie. Month and bar charts by default.
+ */
 export function readDashboardParams(params: Params, today: IsoDate): DashboardSelection {
+  const charts = readCharts(params)
   const raw = params.get("period")
   const period = DASHBOARD_PERIODS.some((p) => p.value === raw) ? (raw as DashboardPeriod) : "month"
-  if (period !== "custom") return { period, range: dashboardRange(period, today) }
+  if (period !== "custom") return { period, range: dashboardRange(period, today), charts }
   const from = params.get("from") ?? ""
   const to = params.get("to") ?? ""
   const custom = isIsoDate(from) && isIsoDate(to) ? { start: from, end: to } : { start: monthRange(today).start, end: today }
-  return { period, range: dashboardRange("custom", today, custom) }
+  return { period, range: dashboardRange("custom", today, custom), charts }
 }
 
-/** Query string for a dashboard period; the month (the default) has none. */
-export function dashboardQuery(period: DashboardPeriod, range?: DateRange): string {
-  if (period === "month") return ""
-  if (period !== "custom" || !range) return `?period=${period}`
-  return `?${new URLSearchParams({ period, from: range.start, to: range.end })}`
+/** Query string for a dashboard view; defaults (month, bar charts) are left out. */
+export function dashboardQuery(period: DashboardPeriod, range?: DateRange, charts: ChartChoices = DEFAULT_CHARTS): string {
+  const p = new URLSearchParams()
+  if (period !== "month") p.set("period", period)
+  if (period === "custom" && range) {
+    p.set("from", range.start)
+    p.set("to", range.end)
+  }
+  for (const key of ["spending", "flow", "categories"] as const) if (charts[key] !== DEFAULT_CHARTS[key]) p.set(key, charts[key])
+  const s = p.toString()
+  return s ? `?${s}` : ""
 }
 
 /** The Transactions page filtered to a date range (and optionally a type or category). */

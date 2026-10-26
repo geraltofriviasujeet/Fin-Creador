@@ -59,7 +59,7 @@ test("figures reconcile with the Transactions page; periods, links and other use
   // Nothing last month: changes show "—", never infinity.
   await expect(card(page, "Income")).toContainText("vs same days last month (nothing to compare)")
 
-  const categories = panel(page, "Spending by category").getByRole("listitem")
+  const categories = panel(page, "Spending by category").getByRole("list", { name: "Categories" }).getByRole("listitem")
   await expect(categories).toHaveCount(2)
   await expect(categories.first()).toContainText("Transport")
   await expect(categories.first()).toContainText("₹400 · 61.5%")
@@ -74,6 +74,23 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await page.setViewportSize({ width: 375, height: 812 })
   await shot(page, "overview-month-mobile")
   await page.setViewportSize({ width: 1440, height: 900 })
+
+  // Chart types: Bar or Line over time, Bars or Pie for categories, kept in the URL.
+  await page.getByRole("navigation", { name: "Chart type for Spending overview" }).getByRole("link", { name: "Line" }).click()
+  await expect(page).toHaveURL(/\?spending=line$/)
+  await expect(spending.getByRole("img")).toHaveAttribute("aria-label", /₹650 in total/)
+  await page.getByRole("navigation", { name: "Chart type for Spending by category" }).getByRole("link", { name: "Pie" }).click()
+  await expect(page).toHaveURL(/\?spending=line&categories=pie$/)
+  const pie = panel(page, "Spending by category")
+  await expect(pie.getByRole("img")).toHaveAttribute("aria-label", /Transport ₹400, Groceries ₹250/)
+  await expect(pie.getByRole("list", { name: "Categories" }).getByRole("listitem").first()).toContainText("₹400 · 61.5%")
+  await page.getByRole("navigation", { name: "Chart type for Income vs expenses" }).getByRole("link", { name: "Line" }).click()
+  await expect(page).toHaveURL(/\?spending=line&flow=line&categories=pie$/)
+  await expect(panel(page, "Income vs expenses").getByRole("img")).toBeVisible()
+  await shot(page, "overview-chart-types")
+  await page.getByRole("navigation", { name: "Period" }).getByRole("link", { name: "Week" }).click()
+  await expect(page).toHaveURL(/\?period=week&spending=line&flow=line&categories=pie$/)
+  await page.goto("/")
 
   // A category opens the Transactions page with the same range; its totals match.
   await categories.first().getByRole("link").click()
