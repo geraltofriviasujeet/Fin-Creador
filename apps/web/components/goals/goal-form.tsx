@@ -206,7 +206,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
         {formError && <FormMessage tone="error">{formError}</FormMessage>}
 
         <fieldset className="grid gap-1.5">
-          <legend className="mb-1.5 text-sm font-semibold text-ink">What are you planning?</legend>
+          <legend className="sr-only">What are you planning?</legend>
           <div role="radiogroup" aria-label="What are you planning?" className="flex flex-wrap gap-1.5">
             {GOAL_TYPE_OPTIONS.map((t) => (
               <button
@@ -239,9 +239,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
             {amountField("saved", "Saved so far (optional)")}
           </>
         )}
-        <p className="-mt-1.5 text-xs text-muted-foreground">
-          No target date: the monthly saving assumes 12 months. You enter the saved amount yourself; it isn&apos;t linked to your accounts.
-        </p>
+        <p className="-mt-1.5 text-xs text-muted-foreground">No target date assumes 12 months. The saved amount isn&apos;t linked to your accounts.</p>
 
         {type === "trip" && (
           <>
@@ -266,7 +264,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
             )}
             <fieldset className="grid gap-1.5">
               <legend className="mb-1.5 text-sm font-semibold text-ink">Your cost lines (totals for the whole trip)</legend>
-              <div className="grid items-start gap-3 md:grid-cols-3">{TRIP_COST_LINES.map((line) => amountField(`cost_${line}`, TRIP_COST_LABELS[line]))}</div>
+              <div className="grid items-start gap-x-3 gap-y-2.5 grid-cols-2 md:grid-cols-4">{TRIP_COST_LINES.map((line) => amountField(`cost_${line}`, TRIP_COST_LABELS[line]))}</div>
             </fieldset>
           </>
         )}
@@ -347,20 +345,21 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
               {amountField("amount", "Amount")}
             </>
           )}
+      </div>
 
-        <div aria-live="polite" className="grid gap-1 rounded-xl bg-canvas px-3.5 py-3 text-sm">
+      {/* Sticky footer: the figures stay in view next to the buttons, so the body stays short. */}
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-t border-line pt-3">
+        <div aria-live="polite" className="grid min-w-0 flex-1 basis-64 gap-0.5 text-sm">
           {preview ? (
             <>
-              <p className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-semibold">
-                  {type === "other" ? "Amount to save" : GOAL_UPFRONT_LABEL}
-                  {preview.figures.costTotalMinor !== null && <span className="font-normal text-muted-foreground"> · the sum of your cost lines</span>}
-                </span>
+              <p className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-semibold">{type === "other" ? "Amount to save" : GOAL_UPFRONT_LABEL}</span>
                 <span className="font-heading text-lg font-bold tabular-nums">{money(preview.targetMinor, goalCurrency)}</span>
+                {preview.figures.costTotalMinor !== null && <span className="text-xs text-muted-foreground">the sum of your cost lines</span>}
               </p>
               {preview.figures.loan && (
                 <>
-                  <p className="text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {preview.figures.loan.annualRateBps === 0 ? "No-cost EMI" : "EMI"} {money(preview.figures.loan.emiMinor, goalCurrency)} a month for {preview.figures.loan.months}{" "}
                     months on {money(preview.figures.loan.principalMinor, goalCurrency)} · total interest {money(preview.figures.loan.totalInterestMinor, goalCurrency)}
                   </p>
@@ -372,13 +371,12 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
             <p className="text-muted-foreground">Fill in the details to see the amount to save.</p>
           )}
         </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-line pt-3">
-        <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
-        <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
-          {pending ? "Saving…" : editing ? "Save changes" : "Add goal"}
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
+          <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
+            {pending ? "Saving…" : editing ? "Save changes" : "Add goal"}
+          </Button>
+        </div>
       </div>
     </form>
   )

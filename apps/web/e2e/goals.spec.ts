@@ -51,9 +51,11 @@ test("trip: cost lines add up; no target date assumes 12 months; AI insights is 
   await d.getByLabel("Saved so far (optional)").fill("10,000")
   await expect(d.getByText("Amount to save upfront")).toBeVisible()
   await expect(d).toContainText("₹1,54,000") // 90,000 + 64,000
-  // The whole Trip form fits a 1440×900 window: its scrolling body doesn't need to scroll.
+  // The whole Trip form fits a 1440×720 window (a laptop browser): its body doesn't scroll.
+  await page.setViewportSize({ width: 1440, height: 720 })
   const body = d.locator("form > div").first()
   expect(await body.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true)
+  await page.setViewportSize({ width: 1440, height: 900 })
   await shot(page, "goals-add-trip")
   await d.getByRole("button", { name: "Add goal" }).click()
   await expect(toast(page, "Goal added.")).toBeVisible()
