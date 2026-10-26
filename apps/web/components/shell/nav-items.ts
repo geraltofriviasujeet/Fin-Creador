@@ -35,7 +35,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     available: true,
     inTabBar: true,
   },
-  { key: "goals", label: "Goals", href: "/goals", icon: Goal, available: false, inTabBar: true },
+  { key: "goals", label: "Goals", href: "/goals", icon: Goal, available: true, inTabBar: true },
   { key: "investments", label: "Investments", href: "/investments", icon: ArrowUpToLine, available: false, inTabBar: true },
 ]
 

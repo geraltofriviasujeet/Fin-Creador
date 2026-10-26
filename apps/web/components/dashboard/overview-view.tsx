@@ -1,9 +1,10 @@
 import type * as React from "react"
 import Link from "next/link"
-import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, PiggyBank, Target, Wallet } from "lucide-react"
+import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, PiggyBank, Wallet } from "lucide-react"
 import {
   type ChartChoices,
   type DashboardBreakdown,
+  type GoalsView,
   CHART_OPTIONS,
   DEFAULT_CHARTS,
   type LedgerItem,
@@ -35,6 +36,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { TextField } from "@/components/ui/field"
 import { EntryIcon, dayHeading, entryKindLabel, entryTitle, fullDate, money, rangeText, signedAmount } from "@/components/transactions/display"
+import { BudgetOverviewCard, GoalsOverviewCard } from "@/components/goals/overview-cards"
 import { CategoryPie } from "./category-pie"
 import { TimeChart } from "./time-chart"
 
@@ -60,6 +62,8 @@ export type OverviewViewProps = {
   charts: ChartChoices
   /** The Recurring card (null when recurring items couldn't load). */
   upcoming: React.ReactNode
+  /** Budgets and goals (null when they couldn't load; the cards say so). */
+  goals: GoalsView | null
 }
 
 function greeting(name: string | null, timeZone: string): string {
@@ -74,7 +78,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, goals }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = {
     accounts: new Map(context.accounts.map((a) => [a.id, a])),
@@ -200,24 +204,14 @@ export function OverviewView({ context, name, period, range, comparison, totals,
             <EmptyPanel>No income or expenses recorded {PERIOD_PHRASE[period]}.</EmptyPanel>
           )}
         </Card>
-        <ComingSoon
-          id="budget-title"
-          icon={<Target aria-hidden="true" className="size-5" />}
-          title="Monthly budget"
-          text="Set a monthly budget and see how much is left to spend. Coming soon."
-        />
+        <BudgetOverviewCard view={goals} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_1fr]">
         <RecentCard recent={recent} lookup={lookup} today={today} />
         <div className="grid content-start gap-6">
           {upcoming}
-          <ComingSoon
-            id="goals-title"
-            icon={<PiggyBank aria-hidden="true" className="size-5" />}
-            title="Your goals"
-            text="Save towards a trip, a home or an emergency fund. Coming soon."
-          />
+          <GoalsOverviewCard view={goals} />
         </div>
       </div>
     </>
@@ -517,20 +511,6 @@ function RecentCard({ recent, lookup, today }: { recent: LedgerItem[]; lookup: L
   )
 }
 
-function ComingSoon({ id, icon, title, text }: { id: string; icon: React.ReactNode; title: string; text: string }) {
-  return (
-    <Card aria-labelledby={id} className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <CardTitle id={id}>{title}</CardTitle>
-        <Badge tone="neutral">Coming soon</Badge>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-canvas text-muted-foreground">{icon}</span>
-        <p className="text-sm text-muted-foreground">{text}</p>
-      </div>
-    </Card>
-  )
-}
 
 function EmptyPanel({ children }: { children: React.ReactNode }) {
   return <p className="flex min-h-32 items-center justify-center rounded-xl bg-canvas px-4 text-center text-sm text-muted-foreground">{children}</p>

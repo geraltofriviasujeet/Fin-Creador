@@ -3,7 +3,9 @@ import { Suspense } from "react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import {
+  buildGoalsView,
   buildRecurringView,
+  loadGoalsData,
   loadDashboardBreakdown,
   loadRecurringData,
   loadTransactionPage,
@@ -49,13 +51,14 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   const { period, range, charts } = readDashboardParams(params, today)
   const comparison = comparisonFor(period, range, today)
 
-  const [totals, prevTotals, breakdown, recent, recurring, profile] = await Promise.all([
+  const [totals, prevTotals, breakdown, recent, recurring, profile, goals] = await Promise.all([
     loadTransactionTotals(supabase, { from: range.start, to: range.end }, currency),
     comparison ? loadTransactionTotals(supabase, { from: comparison.previous.start, to: comparison.previous.end }, currency) : null,
     loadDashboardBreakdown(supabase, range, currency),
     loadTransactionPage(supabase, { from: ALL_TIME_START, to: today }, { currency, limit: 5 }),
     loadRecurringData(supabase),
     supabase.from("profiles").select("display_name").maybeSingle(),
+    loadGoalsData(supabase),
   ])
   if (!totals.ok || (prevTotals && !prevTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
 
@@ -83,6 +86,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
       recent={recent.items}
       charts={charts}
       upcoming={upcoming}
+      goals={goals.ok ? buildGoalsView(goals.data) : null}
     />
   )
 }
