@@ -30,8 +30,8 @@ test("first run: empty states and no invented figures", async ({ page }) => {
   await expect(panel(page, "Spending by category")).toContainText("No spending recorded this month.")
   await expect(panel(page, "Income vs expenses")).toContainText("No income or expenses recorded this month.")
   await expect(page.getByRole("main").getByRole("img")).toHaveCount(0) // no chart without data
-  await expect(panel(page, "Monthly budget")).toContainText("Coming soon")
-  await expect(panel(page, "Your goals")).toContainText("Coming soon")
+  await expect(panel(page, "Monthly budget")).toContainText("Set a budget")
+  await expect(panel(page, "Your goals")).toContainText("Plan an expense")
   await expect(panel(page, "Recent transactions")).toContainText("No entries yet")
   await shot(page, "overview-empty")
 })

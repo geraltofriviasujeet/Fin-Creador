@@ -1,5 +1,5 @@
 // Maps database errors from accounts, categories, entries and recurring items (supabase/
-// migrations 20261022150000, 20261023120000, 20261024120000) to messages for web and mobile. Raw database messages are never shown.
+// migrations 20261022150000, 20261023120000, 20261024120000, 20261026180000) to messages for web and mobile. Raw database messages are never shown.
 
 export type LedgerErrorLike = { code?: string | undefined; message?: string | undefined } | null | undefined
 
@@ -34,6 +34,9 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC021: { message: "Only the latest saved or skipped date can be undone." },
   FC022: { message: "The end date can't be before an entry already saved for this item.", field: "endDate" },
   FC023: { message: "We couldn't find that recurring item." },
+  FC024: { message: "This goal is archived. Restore it first." },
+  FC025: { message: "Budgets can start this month or later. Past months keep their budget.", field: "month" },
+  FC026: { message: "That category can't have a budget. Choose another.", field: "categoryId" },
 }
 
 /** `dateField` names the date input on the current form (occurredOn or openingBalanceDate). */

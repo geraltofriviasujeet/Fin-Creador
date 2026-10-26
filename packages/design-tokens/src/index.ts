@@ -145,8 +145,8 @@ export const spacing = {
 
 /** Shell dimensions in px (design-spec §4–5). */
 export const layout = {
-  sidebarWidth: 248,
-  topbarHeight: 76,
+  sidebarWidth: 232,
+  topbarHeight: 56,
   tabBarHeight: 66,
   contentMaxWidth: 1510,
   searchWidth: 330,

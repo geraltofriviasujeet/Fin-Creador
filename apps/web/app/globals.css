@@ -81,26 +81,31 @@
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-manrope), var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
 
-  /* Type scale (min 12px) */
-  --text-xs: var(--fc-text-xs);
-  --text-sm: var(--fc-text-sm);
-  --text-base: var(--fc-text-base);
-  --text-lg: var(--fc-text-lg);
-  --text-xl: var(--fc-text-xl);
-  --text-2xl: var(--fc-text-2xl);
-  --text-3xl: var(--fc-text-3xl);
-  --text-4xl: var(--fc-text-4xl);
-  --text-5xl: var(--fc-text-5xl);
+  /* Web density (owner, 2026-10-26): the root is 14px (see html below), so every rem-based
+     size (spacing, heights) is 12.5% smaller than the shared tokens. The type scale is
+     restated here in rem of that 14px root, one step denser than the tokens, never below
+     12px: xs 12 · sm 13 · base 14 · lg 16 · xl 18 · 2xl 22 · 3xl 28 · 4xl 32 · 5xl 38. */
+  --text-xs: calc(12rem / 14);
+  --text-sm: calc(13rem / 14);
+  --text-base: 1rem;
+  --text-lg: calc(16rem / 14);
+  --text-xl: calc(18rem / 14);
+  --text-2xl: calc(22rem / 14);
+  --text-3xl: calc(28rem / 14);
+  --text-4xl: calc(32rem / 14);
+  --text-5xl: calc(38rem / 14);
 
-  /* Radii: rounded-lg = buttons/inputs (10), rounded-xl = inner blocks (14), rounded-2xl = cards (20) */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: var(--fc-radius-control);
-  --radius-xl: var(--fc-radius-md);
-  --radius-2xl: var(--fc-radius-lg);
-  --radius-control: var(--fc-radius-control);
-  --radius-block: var(--fc-radius-md);
-  --radius-card: var(--fc-radius-lg);
+  /* Radii, one step smaller than the tokens on web: rounded-lg = buttons/inputs (8),
+     rounded-xl = inner blocks (12), rounded-2xl = cards (16). */
+  --radius-sm: 5px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
+  --radius-control: 8px;
+  --radius-block: 12px;
+  --radius-card: 16px;
 
   --shadow-raised: var(--fc-shadow-raised);
 }
@@ -151,6 +156,8 @@
     @apply border-border;
   }
   html {
+    /* 14px at the browser's default size; still follows the person's own font-size setting. */
+    font-size: 87.5%;
     @apply bg-background font-sans text-foreground antialiased;
   }
   body {

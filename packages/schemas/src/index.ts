@@ -5,3 +5,5 @@ export * from "./profile";
 export * from "./recurring-forms";
 export * from "./regions";
 export * from "./transaction-forms";
+export * from "./goal-data";
+export * from "./goal-forms";

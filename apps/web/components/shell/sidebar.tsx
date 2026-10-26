@@ -11,7 +11,7 @@ import { NAV_ITEMS, comingSoonMessage, isActive } from "@/components/shell/nav-i
 import type { ShellUser } from "@/components/shell/app-shell"
 
 const itemClasses =
-  "flex h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-base transition-colors [&_svg]:size-5 [&_svg]:shrink-0"
+  "flex h-[40px] w-full items-center gap-3 rounded-xl px-3.5 text-left text-base transition-colors [&_svg]:size-5 [&_svg]:shrink-0"
 
 /** Fixed dark sidebar, shown at ≥ 761px (design-spec §4). */
 export function Sidebar({ user }: { user: ShellUser | null }) {
@@ -21,8 +21,8 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
     <aside className="on-dark fixed inset-y-0 left-0 z-30 hidden w-(--fc-layout-sidebar-width) flex-col bg-nav px-4 pt-7 pb-5 text-nav-text md:flex">
       <Logo tone="onDark" className="ml-1.5" />
 
-      <nav aria-label="Main" className="mt-10 flex-1">
-        <ul className="grid gap-1.5">
+      <nav aria-label="Main" className="mt-8 flex-1">
+        <ul className="grid gap-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon
             const active = item.available && isActive(item, pathname)

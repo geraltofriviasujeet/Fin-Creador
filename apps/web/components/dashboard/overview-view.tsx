@@ -1,9 +1,10 @@
 import type * as React from "react"
 import Link from "next/link"
-import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, PiggyBank, Target, Wallet } from "lucide-react"
+import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, PiggyBank, Wallet } from "lucide-react"
 import {
   type ChartChoices,
   type DashboardBreakdown,
+  type GoalsView,
   CHART_OPTIONS,
   DEFAULT_CHARTS,
   type LedgerItem,
@@ -35,6 +36,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { TextField } from "@/components/ui/field"
 import { EntryIcon, dayHeading, entryKindLabel, entryTitle, fullDate, money, rangeText, signedAmount } from "@/components/transactions/display"
+import { BudgetOverviewCard, GoalsOverviewCard } from "@/components/goals/overview-cards"
 import { CategoryPie } from "./category-pie"
 import { TimeChart } from "./time-chart"
 
@@ -60,6 +62,8 @@ export type OverviewViewProps = {
   charts: ChartChoices
   /** The Recurring card (null when recurring items couldn't load). */
   upcoming: React.ReactNode
+  /** Budgets and goals (null when they couldn't load; the cards say so). */
+  goals: GoalsView | null
 }
 
 function greeting(name: string | null, timeZone: string): string {
@@ -74,7 +78,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, goals }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = {
     accounts: new Map(context.accounts.map((a) => [a.id, a])),
@@ -160,7 +164,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           }
         />
       </section>
-      <p className="mt-3 mb-6 text-xs text-muted-foreground">
+      <p className="mt-3 mb-4 text-xs text-muted-foreground">
         {rangeText(range)}
         {comparison && `, compared with ${rangeText(comparison.previous)}`}. Transfers between your accounts aren’t income or expenses; voided entries never count.
         {totals.otherCurrencyCount > 0 &&
@@ -168,7 +172,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         {otherAccounts > 0 && ` ${otherAccounts} ${otherAccounts === 1 ? "account" : "accounts"} in other currencies aren’t in the total balance.`}
       </p>
 
-      <div className="grid gap-6 lg:grid-cols-[1.75fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.75fr_1fr]">
         <Card aria-labelledby="spending-title">
           <CardHeading id="spending-title" title="Spending overview" switcher={hasSpending && <ChartSwitch chart="spending" title="Spending overview" period={period} range={range} charts={charts} />}>
             Your expenses {PERIOD_PHRASE[period]}, {breakdownUnit(range)}
@@ -182,7 +186,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         <CategoryCard breakdown={breakdown} range={range} currency={currency} lookup={lookup} period={period} charts={charts} />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.75fr_1fr]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.75fr_1fr]">
         <Card aria-labelledby="flow-title">
           <CardHeading id="flow-title" title="Income vs expenses" switcher={hasActivity && <ChartSwitch chart="flow" title="Income vs expenses" period={period} range={range} charts={charts} />}>
             Money in and out {PERIOD_PHRASE[period]}, {breakdownUnit(range)}
@@ -200,24 +204,14 @@ export function OverviewView({ context, name, period, range, comparison, totals,
             <EmptyPanel>No income or expenses recorded {PERIOD_PHRASE[period]}.</EmptyPanel>
           )}
         </Card>
-        <ComingSoon
-          id="budget-title"
-          icon={<Target aria-hidden="true" className="size-5" />}
-          title="Monthly budget"
-          text="Set a monthly budget and see how much is left to spend. Coming soon."
-        />
+        <BudgetOverviewCard view={goals} />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <RecentCard recent={recent} lookup={lookup} today={today} />
-        <div className="grid content-start gap-6">
+        <div className="grid content-start gap-4">
           {upcoming}
-          <ComingSoon
-            id="goals-title"
-            icon={<PiggyBank aria-hidden="true" className="size-5" />}
-            title="Your goals"
-            text="Save towards a trip, a home or an emergency fund. Coming soon."
-          />
+          <GoalsOverviewCard view={goals} />
         </div>
       </div>
     </>
@@ -313,7 +307,7 @@ function PeriodSwitcher({ period, charts }: { period: DashboardPeriod; charts: C
 // A plain GET form: works without JavaScript and keeps the range in the URL.
 function CustomRangeForm({ range, today, charts }: { range: DateRange; today: string; charts: ChartChoices }) {
   return (
-    <Card className="mb-6">
+    <Card className="mb-4">
       <form action="/" method="get" className="grid items-end gap-4 md:grid-cols-[1fr_1fr_auto]">
         <input type="hidden" name="period" value="custom" />
         <TextField name="from" type="date" label="From" max={today} defaultValue={range.start} required />
@@ -329,7 +323,7 @@ function CustomRangeForm({ range, today, charts }: { range: DateRange; today: st
 
 function FirstRun({ hasAccounts }: { hasAccounts: boolean }) {
   return (
-    <Card className="mb-6 flex flex-col items-start gap-4 md:flex-row md:items-center">
+    <Card className="mb-4 flex flex-col items-start gap-4 md:flex-row md:items-center">
       <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-chip-mint text-ink">
         <Inbox aria-hidden="true" className="size-6" />
       </span>
@@ -517,20 +511,6 @@ function RecentCard({ recent, lookup, today }: { recent: LedgerItem[]; lookup: L
   )
 }
 
-function ComingSoon({ id, icon, title, text }: { id: string; icon: React.ReactNode; title: string; text: string }) {
-  return (
-    <Card aria-labelledby={id} className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <CardTitle id={id}>{title}</CardTitle>
-        <Badge tone="neutral">Coming soon</Badge>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-canvas text-muted-foreground">{icon}</span>
-        <p className="text-sm text-muted-foreground">{text}</p>
-      </div>
-    </Card>
-  )
-}
 
 function EmptyPanel({ children }: { children: React.ReactNode }) {
   return <p className="flex min-h-32 items-center justify-center rounded-xl bg-canvas px-4 text-center text-sm text-muted-foreground">{children}</p>
@@ -540,7 +520,7 @@ export function OverviewSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading overview">
       <PageHeader title={OVERVIEW_HEADER.title} description={OVERVIEW_HEADER.description} />
-      <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-4 w-28 rounded bg-canvas" />
@@ -549,7 +529,7 @@ export function OverviewSkeleton() {
           </Card>
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-[1.75fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.75fr_1fr]">
         {[0, 1].map((i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-5 w-40 rounded bg-canvas" />

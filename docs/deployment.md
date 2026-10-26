@@ -94,19 +94,26 @@ are fixed at build time), and the allow list must contain `<site>/auth/callback*
 
 ## 4. Backups (until the Pro upgrade)
 
-Supabase Free has no automatic backups. Take a manual backup of the **production** database:
-
-- every week, and
-- before every migration you push to it.
+Supabase Free has no automatic backups. Back up the **production** database every week and
+before every migration you push to it:
 
 ```sh
-# Connection string: Supabase dashboard → Connect → Session pooler. Keep it out of the repo.
-pg_dump "<prod-connection-string>" --no-owner --no-privileges -f fincreador-prod-YYYY-MM-DD.sql
+./scripts/backup-prod.sh
 ```
 
-Store the file encrypted outside the repository (it contains personal financial data) and
-keep at least the last four. Check now and then that a backup restores into a scratch
-database.
+- It needs `pg_dump` (`brew install libpq`; no Docker).
+- It asks for the prod **Session pooler** connection string (Supabase dashboard → Connect →
+  Session pooler). The input is hidden and the string is never saved, echoed or put in shell
+  history.
+- It writes `~/FinCreador-backups/prod-YYYYMMDD-HHMM.dump` (schemas `public`, `auth` and
+  `supabase_migrations`, custom format), checks it with `pg_restore --list`, and prints the
+  path, size and number of tables.
+- Plain messages for a wrong password, a `pg_dump` older than the server
+  (`brew upgrade libpq`) and connection failures.
+
+Backups contain personal financial data: keep them in `~/FinCreador-backups` or another
+encrypted place, **never inside the repository**, and keep at least the last four. Check now
+and then that a backup restores into a scratch database (`pg_restore`).
 
 ## 5. Upgrade before any commercial launch
 

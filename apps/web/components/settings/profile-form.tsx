@@ -27,7 +27,7 @@ export function ProfileForm({
   const errors = state.fieldErrors ?? {}
 
   return (
-    <form action={formAction} noValidate className="mt-6 grid gap-5">
+    <form action={formAction} noValidate className="mt-4 grid gap-5">
       {state.status !== "idle" && state.message && <FormMessage tone={state.status}>{state.message}</FormMessage>}
 
       <div className="grid gap-5 md:grid-cols-2">

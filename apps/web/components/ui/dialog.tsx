@@ -32,19 +32,19 @@ function DialogContent({
       <DialogPrimitive.Viewport className="fixed inset-0 z-50 grid items-end justify-items-center overflow-y-auto p-0 md:items-center md:p-4">
         <DialogPrimitive.Popup
           className={cn(
-            "relative w-full max-w-xl rounded-t-3xl bg-surface p-6 text-ink shadow-(--shadow-raised) outline-none transition-[opacity,transform] duration-150 data-[ending-style]:translate-y-2 data-[ending-style]:opacity-0 data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0 md:rounded-3xl md:p-8",
-            "pb-[max(1.5rem,env(safe-area-inset-bottom))] md:pb-8",
+            "relative w-full max-w-xl rounded-t-3xl bg-surface p-5 text-ink shadow-(--shadow-raised) outline-none transition-[opacity,transform] duration-150 data-[ending-style]:translate-y-2 data-[ending-style]:opacity-0 data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0 md:rounded-3xl md:p-6",
+            "pb-[max(1.25rem,env(safe-area-inset-bottom))] md:pb-6",
             className
           )}
         >
-          <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
             <div className="grid gap-1.5">
               {eyebrow && (
                 <p className="text-xs font-semibold tracking-(--fc-tracking-eyebrow) text-muted-foreground uppercase">
                   {eyebrow}
                 </p>
               )}
-              <DialogPrimitive.Title className="font-heading text-2xl font-semibold tracking-(--fc-tracking-heading) md:text-3xl">
+              <DialogPrimitive.Title className="font-heading text-xl font-semibold tracking-(--fc-tracking-heading) md:text-2xl">
                 {title}
               </DialogPrimitive.Title>
               {description && (
@@ -53,7 +53,7 @@ function DialogContent({
             </div>
             <DialogPrimitive.Close
               aria-label="Close"
-              className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-line bg-surface text-ink outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="flex size-[36px] shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-ink outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <X aria-hidden="true" className="size-5" />
             </DialogPrimitive.Close>

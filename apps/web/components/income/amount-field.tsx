@@ -13,6 +13,7 @@ export function AmountField({
   hint,
   autoFocus,
   onChange,
+  compact = false,
 }: {
   name: string
   label: string
@@ -22,12 +23,17 @@ export function AmountField({
   hint?: string
   autoFocus?: boolean
   onChange?: (value: string) => void
+  /** Smaller control for forms with many amounts (e.g. a trip's cost lines). */
+  compact?: boolean
 }) {
   return (
     <Field id={name} label={label} error={error} hint={hint}>
       {(aria) => (
         <div className="relative">
-          <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-heading text-xl font-semibold text-ink">
+          <span
+            aria-hidden="true"
+            className={cn("pointer-events-none absolute top-1/2 -translate-y-1/2 font-heading font-semibold text-ink", compact ? "left-3 text-sm" : "left-3.5 text-lg")}
+          >
             {currencySymbol(currency)}
           </span>
           <input
@@ -38,7 +44,7 @@ export function AmountField({
             defaultValue={defaultValue}
             autoFocus={autoFocus}
             onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-            className={cn(controlClasses, "h-14 pl-10 font-heading text-2xl font-semibold tabular-nums")}
+            className={cn(controlClasses, "font-heading font-semibold tabular-nums", compact ? "pl-7 text-sm" : "h-[44px] pl-9 text-xl")}
             {...aria}
           />
         </div>
