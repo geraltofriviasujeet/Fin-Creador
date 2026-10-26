@@ -7,7 +7,7 @@
 On **dev only** (Sprint 6): `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals.
 Check `supabase migration list --linked` against each project before any database work. Status, steps and decisions: `docs/sprint-plan.md`; deploy steps: `docs/deployment.md`.
 
-**Every new migration goes to dev AND prod.** Dev first, after the owner's SQL review and green CI. Prod only from a clean `main` checkout after the PR is merged, and only after a manual `pg_dump` backup of prod (`docs/deployment.md` section 4). Push prod before deploying code that needs the migration; link back to dev afterwards. Never edit an applied migration or reset a database.
+**Every new migration goes to dev AND prod.** Dev first, after the owner's SQL review and green CI. Prod only from a clean `main` checkout after the PR is merged, and only after a manual backup of prod (`./scripts/backup-prod.sh`, `docs/deployment.md` section 4). Push prod before deploying code that needs the migration; link back to dev afterwards. Never edit an applied migration or reset a database.
 
 **Before production.**
 - Sprint 6 on prod: after PR #30 is merged, back up prod, then push `20261026180000`, `20261026200000` and `20261026210000` from `main`, then deploy.

@@ -38,3 +38,6 @@ test-results/
 playwright-report/
 blob-report/
 e2e-screenshots/
+
+# Database backups contain personal data; they live in ~/FinCreador-backups, never here.
+*.dump
