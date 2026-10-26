@@ -206,14 +206,9 @@ update public.profiles set currency = 'INR' where id = '11111111-1111-4111-8111-
 -- ------------------------------------------------------------ B cannot reach A's rows
 select set_config('request.jwt.claims', '{"sub": "22222222-2222-4222-8222-222222222222", "role": "authenticated"}', true);
 select is((select count(*)::int from public.goals) + (select count(*)::int from public.budgets), 0, 'B sees none of A''s goals or budgets');
-select is(
-  (with u as (update public.goals set saved_amount_minor = 1 returning 1) select count(*)::int from u),
-  0, 'B cannot change A''s goals'
-);
-select is(
-  (with u as (update public.budgets set amount_minor = 1 returning 1) select count(*)::int from u),
-  0, 'B cannot change A''s budgets'
-);
+-- B's updates match no rows; A's rows are checked unchanged below, as the owner.
+update public.goals set saved_amount_minor = 1;
+update public.budgets set amount_minor = 1;
 select throws_ok(
   $$ select public.set_category_budget('c0000000-0000-4000-8000-0000000000a1', public.t_month(0), 100) $$,
   'FC026', null, 'B cannot budget A''s category'
@@ -230,8 +225,18 @@ set local role anon;
 select throws_ok($$ select public.set_category_budget('c0000000-0000-4000-8000-0000000000a1', current_date, 1) $$,
   '42501', null, 'anon cannot set budgets');
 
--- ------------------------------------------------------------ account deletion
+-- ------------------------------------------------------------ B's updates changed nothing
 reset role;
+select is(
+  (select saved_amount_minor from public.goals where idempotency_key = 'f6000000-0000-4000-8000-000000000001'),
+  100::bigint, 'B could not change A''s goals'
+);
+select is(
+  (select count(*)::int from public.budgets where amount_minor = 1 and user_id = '11111111-1111-4111-8111-111111111111'),
+  0, 'B could not change A''s budgets'
+);
+
+-- ------------------------------------------------------------ account deletion
 delete from auth.users where id = '11111111-1111-4111-8111-111111111111';
 select is(
   (select count(*)::int from public.goals where user_id = '11111111-1111-4111-8111-111111111111')
