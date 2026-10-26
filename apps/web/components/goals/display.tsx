@@ -54,11 +54,10 @@ export function BudgetBadge({ status }: { status: BudgetStatus | null }) {
   return null
 }
 
-export function budgetLine(item: BudgetItem, currency: string): string {
-  if (!item.status) return `Budget is in ${item.budget.currency}; your currency is now ${currency}.`
-  const s = item.status
-  const left = s.leftMinor >= 0 ? `${money(s.leftMinor, currency)} left` : `${money(-s.leftMinor, currency)} over`
-  return `${money(s.spentMinor, currency)} of ${money(s.budgetMinor, currency)} · ${pct(s.usedBps)} used · ${left}`
+/** "₹500 / ₹7,500" this month (profile currency only), or the budget's own currency on a mismatch. */
+export function budgetAmounts(item: BudgetItem, currency: string): string {
+  if (!item.status) return money(item.budget.amountMinor, item.budget.currency)
+  return `${money(item.status.spentMinor, currency)} / ${money(item.status.budgetMinor, currency)}`
 }
 
 /** Donut for the month's budgets together (Overview and the Goals page). */
@@ -67,7 +66,7 @@ export function BudgetDonut({ status, currency }: { status: BudgetStatus; curren
   const circumference = 2 * Math.PI * r
   const filled = (Math.min(status.usedBps, 10_000) / 10_000) * circumference
   return (
-    <div className="relative size-36 shrink-0">
+    <div className="relative size-[120px] shrink-0">
       <svg
         role="img"
         aria-label={`${pct(status.usedBps)} of this month's budgets used: ${money(status.spentMinor, currency)} of ${money(status.budgetMinor, currency)}`}
@@ -87,7 +86,7 @@ export function BudgetDonut({ status, currency }: { status: BudgetStatus; curren
         />
       </svg>
       <div aria-hidden="true" className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-heading text-2xl font-bold tabular-nums">{pct(status.usedBps)}</span>
+        <span className="font-heading text-xl font-bold tabular-nums">{pct(status.usedBps)}</span>
         <span className="text-xs text-muted-foreground">used</span>
       </div>
     </div>

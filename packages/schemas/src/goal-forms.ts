@@ -70,6 +70,8 @@ export const ITEM_PAYMENTS = [
 export const GOAL_UPFRONT_LABEL = "Amount to save upfront";
 /** Shown next to every EMI figure. */
 export const EMI_ROUNDING_NOTE = "Your bank's EMI can differ by a few paise because of its own rounding.";
+/** The same note, short enough for a goal card. */
+export const EMI_ROUNDING_NOTE_SHORT = "Bank EMI can differ by a few paise.";
 
 /** Compact JSON cap; the database allows twice this for its own text form (spaces). */
 export const MAX_GOAL_DETAILS_BYTES = 4096;

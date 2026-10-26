@@ -141,7 +141,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
     <TextField name={name} label={label} value={values[name] ?? ""} error={errors[name]} onChange={(e) => set(name)(e.target.value)} {...props} />
   )
   const amountField = (name: string, label: string, hint?: string) => (
-    <AmountField key={`${type}-${name}`} name={name} label={label} currency={goalCurrency} defaultValue={values[name] ?? ""} error={errors[name]} onChange={set(name)} hint={hint} />
+    <AmountField key={`${type}-${name}`} compact name={name} label={label} currency={goalCurrency} defaultValue={values[name] ?? ""} error={errors[name]} onChange={set(name)} hint={hint} />
   )
   const select = (name: string, label: string, options: readonly { value: string; label: string }[], placeholder: string) => (
     <SelectField name={name} label={label} value={values[name] ?? ""} error={errors[name]} onChange={(e) => set(name)(e.target.value)}>
@@ -153,10 +153,11 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
       ))}
     </SelectField>
   )
+  /** Small segmented control (radio group) with its label above, like a field. */
   const choice = (name: string, label: string, options: readonly { value: string; label: string }[]) => (
     <fieldset className="grid gap-1.5">
       <legend className="mb-1.5 text-sm font-semibold text-ink">{label}</legend>
-      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1 rounded-xl bg-canvas p-1">
+      <div role="radiogroup" aria-label={label} className="flex h-[36px] gap-0.5 rounded-lg bg-canvas p-0.5">
         {options.map((o) => (
           <button
             key={o.value}
@@ -165,7 +166,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
             aria-checked={values[name] === o.value}
             onClick={() => set(name)(o.value)}
             className={cn(
-              "flex h-10 flex-1 items-center justify-center rounded-lg px-3 text-sm font-semibold whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-ring",
+              "flex flex-1 items-center justify-center rounded-md px-2 text-sm font-semibold whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-ring",
               values[name] === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
             )}
           >
@@ -177,149 +178,194 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
     </fieldset>
   )
 
-  const loanFields = (payment: string, item = false) =>
+  const loanFields = (payment: string, isItem = false) =>
     payment !== "cash" && payment !== "" ? (
-      <div className="grid items-start gap-5 md:grid-cols-2">
-        {(!item || payment === "emi") && text("rate", "Yearly interest rate (%)", { inputMode: "decimal", placeholder: "e.g. 8.5", hint: "From your lender's offer" })}
-        {text("months", item ? "Number of EMIs" : "Loan tenure (months)", { inputMode: "numeric", placeholder: item ? "e.g. 6" : "e.g. 60" })}
-      </div>
+      <>
+        {(!isItem || payment === "emi") && text("rate", "Yearly interest rate (%)", { inputMode: "decimal", placeholder: "e.g. 8.5" })}
+        {text("months", isItem ? "Number of EMIs" : "Loan tenure (months)", { inputMode: "numeric", placeholder: isItem ? "e.g. 6" : "e.g. 60" })}
+      </>
     ) : null
 
+  const row = (cols: 2 | 3 | 4, children: React.ReactNode) => (
+    <div className={cn("grid items-start gap-3", cols === 2 && "md:grid-cols-2", cols === 3 && "md:grid-cols-3", cols === 4 && "md:grid-cols-4")}>{children}</div>
+  )
+
   return (
-    <form onSubmit={submit} noValidate className="grid gap-5">
-      {formError && <FormMessage tone="error">{formError}</FormMessage>}
+    <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
+      <div className="-mx-1 grid min-h-0 flex-1 content-start gap-3.5 overflow-y-auto px-1 pb-1">
+        {formError && <FormMessage tone="error">{formError}</FormMessage>}
 
-      <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-semibold text-ink">What are you planning?</legend>
-        <div role="radiogroup" aria-label="What are you planning?" className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {GOAL_TYPE_OPTIONS.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              role="radio"
-              aria-checked={t.value === type}
-              disabled={editing && t.value !== type}
-              onClick={() => {
-                setValues((v) => ({ type: t.value, name: v.name ?? "", targetDate: v.targetDate ?? "", saved: v.saved ?? "", scope: "domestic", payment: "cash" }))
-                setErrors({})
-              }}
-              className={cn(
-                "flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4",
-                t.value === type ? "border-ink bg-primary text-primary-foreground" : "border-line bg-surface text-ink hover:bg-canvas"
-              )}
-            >
-              {GOAL_ICON[t.value]}
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </fieldset>
-
-      <div className="grid items-start gap-5 md:grid-cols-2">
-        {text("name", "Name", { placeholder: type === "trip" ? "e.g. Goa with family" : "e.g. New sofa", autoFocus: !editing, maxLength: 80 })}
-        {text("targetDate", "Target date (optional)", { type: "date", min: today, hint: "Without one, the monthly saving assumes 12 months." })}
-      </div>
-
-      {type === "trip" && (
-        <>
-          {choice("scope", "Trip", [
-            { value: "domestic", label: "Domestic" },
-            { value: "international", label: "International" },
-          ])}
-          <div className="grid items-start gap-5 md:grid-cols-3">
-            {text("place", values.scope === "international" ? "Country" : "State", { maxLength: 80 })}
-            {text("people", "People", { inputMode: "numeric" })}
-            {text("days", "Days", { inputMode: "numeric" })}
+        <fieldset className="grid gap-1.5">
+          <legend className="mb-1.5 text-sm font-semibold text-ink">What are you planning?</legend>
+          <div role="radiogroup" aria-label="What are you planning?" className="flex flex-wrap gap-1.5">
+            {GOAL_TYPE_OPTIONS.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                role="radio"
+                aria-checked={t.value === type}
+                disabled={editing && t.value !== type}
+                onClick={() => {
+                  setValues((v) => ({ type: t.value, name: v.name ?? "", targetDate: v.targetDate ?? "", saved: v.saved ?? "", scope: "domestic", payment: "cash" }))
+                  setErrors({})
+                }}
+                className={cn(
+                  "flex h-[30px] items-center gap-1.5 rounded-full border px-2.5 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-3.5",
+                  t.value === type ? "border-ink bg-primary text-primary-foreground" : "border-line bg-surface text-ink hover:bg-canvas"
+                )}
+              >
+                {GOAL_ICON[t.value]}
+                {t.label}
+              </button>
+            ))}
           </div>
-          <div className="grid items-start gap-5 md:grid-cols-2">
-            {select("travelMode", "Travel by", TRAVEL_MODES, "Choose how you'll travel")}
-            {select("stay", "Stay type", STAY_TYPES, "Choose where you'll stay")}
-          </div>
-          <fieldset className="grid gap-3">
-            <legend className="mb-1 text-sm font-semibold text-ink">Your cost lines (totals for the whole trip)</legend>
-            <div className="grid items-start gap-4 md:grid-cols-2">{TRIP_COST_LINES.map((line) => amountField(`cost_${line}`, TRIP_COST_LABELS[line]))}</div>
-          </fieldset>
-        </>
-      )}
+        </fieldset>
 
-      {type === "car" && (
-        <>
-          {choice("condition", "Car", [
-            { value: "new", label: "New" },
-            { value: "used", label: "Used" },
-          ])}
-          {text("model", "Which car", { placeholder: "Make and model", maxLength: 80 })}
-          <div className="grid items-start gap-5 md:grid-cols-2">
-            {amountField("price", "Price")}
-            {amountField("extras", "Extras (optional)", "Registration, insurance, accessories; paid upfront")}
-          </div>
-          {choice("payment", "Payment", LOAN_PAYMENTS)}
-          {values.payment === "loan_down_payment" && amountField("downPayment", "Down payment")}
-          {loanFields(values.payment ?? "")}
-        </>
-      )}
-
-      {type === "house" && (
-        <>
-          {choice("purpose", "Plan", [
-            { value: "buy", label: "Buy" },
-            { value: "renovate", label: "Renovate" },
-          ])}
-          <div className="grid items-start gap-5 md:grid-cols-2">
-            {text("city", "City", { maxLength: 80 })}
-            {amountField("price", values.purpose === "renovate" ? "Cost" : "Price")}
-          </div>
-          {choice("payment", "Payment", LOAN_PAYMENTS)}
-          {values.payment === "loan_down_payment" && amountField("downPayment", "Down payment")}
-          {loanFields(values.payment ?? "")}
-        </>
-      )}
-
-      {(type === "furniture" || type === "electronics" || type === "mobile") && (
-        <>
-          <div className="grid items-start gap-5 md:grid-cols-2">
-            {text("item", "Item", { maxLength: 80 })}
-            {amountField("price", "Price")}
-          </div>
-          {choice("payment", "Payment", ITEM_PAYMENTS)}
-          {loanFields(values.payment ?? "", true)}
-        </>
-      )}
-
-      {type === "other" && (
-        <>
-          {text("description", "What it's for", { maxLength: 280 })}
-          {amountField("amount", "Amount")}
-        </>
-      )}
-
-      {amountField("saved", "Saved so far (optional)", "Enter it yourself; it isn't linked to your accounts.")}
-
-      <div aria-live="polite" className="grid gap-1.5 rounded-xl bg-canvas p-4 text-sm">
-        {preview ? (
+        {row(
+          3,
           <>
-            <p className="flex flex-wrap justify-between gap-2">
-              <span className="font-semibold">{type === "other" ? "Amount to save" : GOAL_UPFRONT_LABEL}</span>
-              <span className="font-heading font-bold tabular-nums">{money(preview.targetMinor, goalCurrency)}</span>
-            </p>
-            {preview.figures.costTotalMinor !== null && <p className="text-muted-foreground">The sum of your cost lines.</p>}
-            {preview.figures.loan && (
+            {text("name", "Name", { placeholder: type === "trip" ? "e.g. Goa with family" : "e.g. New sofa", autoFocus: !editing, maxLength: 80 })}
+            {text("targetDate", "Target date (optional)", { type: "date", min: today })}
+            {amountField("saved", "Saved so far (optional)")}
+          </>
+        )}
+        <p className="-mt-1.5 text-xs text-muted-foreground">
+          No target date: the monthly saving assumes 12 months. You enter the saved amount yourself; it isn&apos;t linked to your accounts.
+        </p>
+
+        {type === "trip" && (
+          <>
+            {row(
+              4,
               <>
-                <p className="text-muted-foreground">
-                  {preview.figures.loan.annualRateBps === 0 ? "No-cost EMI" : "EMI"} {money(preview.figures.loan.emiMinor, goalCurrency)} a month for {preview.figures.loan.months}{" "}
-                  months on {money(preview.figures.loan.principalMinor, goalCurrency)} · total interest {money(preview.figures.loan.totalInterestMinor, goalCurrency)}
-                </p>
-                <p className="text-xs text-muted-foreground">{EMI_ROUNDING_NOTE}</p>
+                {choice("scope", "Trip", [
+                  { value: "domestic", label: "Domestic" },
+                  { value: "international", label: "International" },
+                ])}
+                {text("place", values.scope === "international" ? "Country" : "State", { maxLength: 80 })}
+                {text("people", "People", { inputMode: "numeric" })}
+                {text("days", "Days", { inputMode: "numeric" })}
+              </>
+            )}
+            {row(
+              2,
+              <>
+                {select("travelMode", "Travel by", TRAVEL_MODES, "Choose how you'll travel")}
+                {select("stay", "Stay type", STAY_TYPES, "Choose where you'll stay")}
+              </>
+            )}
+            <fieldset className="grid gap-1.5">
+              <legend className="mb-1.5 text-sm font-semibold text-ink">Your cost lines (totals for the whole trip)</legend>
+              <div className="grid items-start gap-3 md:grid-cols-3">{TRIP_COST_LINES.map((line) => amountField(`cost_${line}`, TRIP_COST_LABELS[line]))}</div>
+            </fieldset>
+          </>
+        )}
+
+        {type === "car" && (
+          <>
+            {row(
+              3,
+              <>
+                {choice("condition", "Car", [
+                  { value: "new", label: "New" },
+                  { value: "used", label: "Used" },
+                ])}
+                <div className="md:col-span-2">{text("model", "Which car", { placeholder: "Make and model", maxLength: 80 })}</div>
+              </>
+            )}
+            {row(
+              2,
+              <>
+                {amountField("price", "Price")}
+                {amountField("extras", "Extras (optional)", "Registration, insurance, accessories; paid upfront")}
+              </>
+            )}
+            {choice("payment", "Payment", LOAN_PAYMENTS)}
+            {row(
+              3,
+              <>
+                {values.payment === "loan_down_payment" && amountField("downPayment", "Down payment")}
+                {loanFields(values.payment ?? "")}
               </>
             )}
           </>
-        ) : (
-          <p className="text-muted-foreground">Fill in the details to see the amount to save.</p>
         )}
+
+        {type === "house" && (
+          <>
+            {row(
+              3,
+              <>
+                {choice("purpose", "Plan", [
+                  { value: "buy", label: "Buy" },
+                  { value: "renovate", label: "Renovate" },
+                ])}
+                {text("city", "City", { maxLength: 80 })}
+                {amountField("price", values.purpose === "renovate" ? "Cost" : "Price")}
+              </>
+            )}
+            {choice("payment", "Payment", LOAN_PAYMENTS)}
+            {row(
+              3,
+              <>
+                {values.payment === "loan_down_payment" && amountField("downPayment", "Down payment")}
+                {loanFields(values.payment ?? "")}
+              </>
+            )}
+          </>
+        )}
+
+        {(type === "furniture" || type === "electronics" || type === "mobile") && (
+          <>
+            {row(
+              2,
+              <>
+                {text("item", "Item", { maxLength: 80 })}
+                {amountField("price", "Price")}
+              </>
+            )}
+            {choice("payment", "Payment", ITEM_PAYMENTS)}
+            {row(2, loanFields(values.payment ?? "", true))}
+          </>
+        )}
+
+        {type === "other" &&
+          row(
+            2,
+            <>
+              {text("description", "What it's for", { maxLength: 280 })}
+              {amountField("amount", "Amount")}
+            </>
+          )}
+
+        <div aria-live="polite" className="grid gap-1 rounded-xl bg-canvas px-3.5 py-3 text-sm">
+          {preview ? (
+            <>
+              <p className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="font-semibold">
+                  {type === "other" ? "Amount to save" : GOAL_UPFRONT_LABEL}
+                  {preview.figures.costTotalMinor !== null && <span className="font-normal text-muted-foreground"> · the sum of your cost lines</span>}
+                </span>
+                <span className="font-heading text-lg font-bold tabular-nums">{money(preview.targetMinor, goalCurrency)}</span>
+              </p>
+              {preview.figures.loan && (
+                <>
+                  <p className="text-muted-foreground">
+                    {preview.figures.loan.annualRateBps === 0 ? "No-cost EMI" : "EMI"} {money(preview.figures.loan.emiMinor, goalCurrency)} a month for {preview.figures.loan.months}{" "}
+                    months on {money(preview.figures.loan.principalMinor, goalCurrency)} · total interest {money(preview.figures.loan.totalInterestMinor, goalCurrency)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{EMI_ROUNDING_NOTE}</p>
+                </>
+              )}
+            </>
+          ) : (
+            <p className="text-muted-foreground">Fill in the details to see the amount to save.</p>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-wrap justify-end gap-2">
-        <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
+      <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-line pt-3">
+        <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Saving…" : editing ? "Save changes" : "Add goal"}
         </Button>

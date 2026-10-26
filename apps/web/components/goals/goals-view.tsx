@@ -4,18 +4,17 @@ import { useState, useTransition } from "react"
 import { Plus, Sparkles } from "lucide-react"
 import type { BudgetCategory, BudgetItem, GoalItem, GoalsView, WriteResult } from "@fin-creador/api"
 import { type GoalType, formatPercentFromBasisPoints, minorToInputString } from "@fin-creador/domain"
-import { EMI_ROUNDING_NOTE, GOAL_TYPE_OPTIONS, GOAL_UPFRONT_LABEL, ITEM_PAYMENTS, LOAN_PAYMENTS } from "@fin-creador/schemas"
+import { EMI_ROUNDING_NOTE_SHORT, GOAL_TYPE_OPTIONS, GOAL_UPFRONT_LABEL, ITEM_PAYMENTS, LOAN_PAYMENTS } from "@fin-creador/schemas"
 import { setCategoryBudgetAction, setGoalArchivedAction, setGoalSavedAction } from "@/app/(app)/goals/actions"
 import { AmountField } from "@/components/income/amount-field"
 import { PageHeader } from "@/components/shell/app-shell"
 import { fullDate, money } from "@/components/transactions/display"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
-import { FormMessage, SelectField, TextField } from "@/components/ui/field"
+import { FormMessage, SelectField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import { BudgetBadge, BudgetDonut, GOALS_HEADER, GOAL_ICON, GoalSummary, IconChip, Meter, SET_BUDGET_AGAIN, budgetLine, pct, savingText } from "./display"
+import { BudgetBadge, BudgetDonut, GOALS_HEADER, GOAL_ICON, GoalSummary, IconChip, Meter, SET_BUDGET_AGAIN, budgetAmounts, pct, savingText } from "./display"
 import { GoalForm } from "./goal-form"
 
 type Open =
@@ -62,7 +61,7 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
         }
       />
 
-      <section aria-labelledby="planned-title" className="grid gap-4">
+      <section aria-labelledby="planned-title" className="grid gap-3">
         <h2 id="planned-title" className="font-heading text-xl font-bold">
           Planned expenses
         </h2>
@@ -78,7 +77,7 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
             </Button>
           </Card>
         ) : (
-          <ul className="grid gap-4 lg:grid-cols-2">
+          <ul className="grid items-start gap-3 md:grid-cols-2 lg:grid-cols-3">
             {view.active.map((item) => (
               <GoalCard key={item.goal.id} item={item} onOpen={(kind) => setOpen({ kind, item })} />
             ))}
@@ -106,7 +105,7 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
         )}
       </section>
 
-      <section aria-labelledby="budgets-title" className="mt-10 grid gap-4">
+      <section aria-labelledby="budgets-title" className="mt-7 grid gap-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 id="budgets-title" className="font-heading text-xl font-bold">
@@ -129,39 +128,44 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
             <p className="text-sm text-muted-foreground">Set a monthly amount for a category. You&apos;ll see a warning at 80% and when it&apos;s used up.</p>
           </Card>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
-            <Card aria-labelledby="budget-total-title" className="grid content-start justify-items-center gap-4">
-              <CardTitle id="budget-total-title" className="justify-self-start">
+          <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,17rem)_1fr]">
+            <Card aria-labelledby="budget-total-title" className="flex items-center gap-4 lg:grid lg:justify-items-center">
+              <CardTitle id="budget-total-title" className="sr-only">
                 This month
               </CardTitle>
               {view.total ? (
                 <>
                   <BudgetDonut status={view.total} currency={view.currency} />
-                  <p className="text-center text-sm text-muted-foreground tabular-nums">
-                    {money(view.total.spentMinor, view.currency)} spent of {money(view.total.budgetMinor, view.currency)}
-                  </p>
-                  <BudgetBadge status={view.total} />
+                  <div className="grid gap-1 lg:justify-items-center">
+                    <p className="text-sm text-muted-foreground tabular-nums">
+                      {money(view.total.spentMinor, view.currency)} of {money(view.total.budgetMinor, view.currency)}
+                    </p>
+                    <BudgetBadge status={view.total} />
+                  </div>
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">Your budgets are in another currency. {SET_BUDGET_AGAIN} in {view.currency}.</p>
               )}
             </Card>
-            <Card>
-              <ul>
+            <Card className="py-2 md:py-2.5">
+              <ul className="grid md:grid-cols-2 md:gap-x-6">
                 {view.budgets.map((b) => (
-                  <li key={b.category.id} className="grid gap-2 border-b border-line py-4 first:pt-0 last:border-b-0 last:pb-0">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="flex items-center gap-2 text-sm font-semibold">
-                        {b.category.name}
-                        {b.category.archived && <Badge tone="neutral">Archived</Badge>}
-                        <BudgetBadge status={b.status} />
-                      </p>
-                      <Button variant="ghost" size="sm" aria-label={`${b.status ? "Change" : SET_BUDGET_AGAIN}: ${b.category.name}`} onClick={() => setOpen({ kind: "budget", item: b })}>
-                        {b.status ? "Change" : "Set again"}
-                      </Button>
+                  <li key={b.category.id} className="flex min-h-[44px] items-center gap-3 border-b border-line py-1.5 last:border-b-0 md:[&:nth-last-child(2):nth-child(odd)]:border-b-0">
+                    <div className="flex w-32 min-w-0 shrink-0 flex-col">
+                      <span className="truncate text-sm font-semibold">{b.category.name}</span>
+                      <BudgetBadge status={b.status} />
                     </div>
-                    {b.status && <Meter valueBp={b.status.usedBps} label={`${b.category.name}: ${pct(b.status.usedBps)} of budget used`} tone={b.status.level === "ok" ? "default" : b.status.level} />}
-                    <p className="text-xs text-muted-foreground tabular-nums">{budgetLine(b, view.currency)}</p>
+                    {b.status ? (
+                      <div className="min-w-0 flex-1" title={`${pct(b.status.usedBps)} used`}>
+                        <Meter valueBp={b.status.usedBps} label={`${b.category.name}: ${pct(b.status.usedBps)} of budget used`} tone={b.status.level === "ok" ? "default" : b.status.level} />
+                      </div>
+                    ) : (
+                      <span className="min-w-0 flex-1 text-xs text-muted-foreground">{b.budget.currency} budget</span>
+                    )}
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{budgetAmounts(b, view.currency)}</span>
+                    <Button variant="ghost" size="sm" className="-mr-2 shrink-0" aria-label={`${b.status ? "Change" : SET_BUDGET_AGAIN}: ${b.category.name}`} onClick={() => setOpen({ kind: "budget", item: b })}>
+                      {b.status ? "Change" : "Set again"}
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -172,12 +176,12 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
 
       <Dialog open={open !== null} onOpenChange={(o) => !o && close()}>
         {open?.kind === "add" && (
-          <DialogContent eyebrow="Goals" title="Plan an expense" description="Use your own figures. Nothing here is an estimate.">
+          <DialogContent eyebrow="Goals" title="Plan an expense" description="Use your own figures. Nothing here is an estimate." className="flex max-h-dvh flex-col md:max-h-[calc(100dvh-2rem)] md:max-w-[640px]">
             <GoalForm currency={view.currency} today={view.today} onDone={close} />
           </DialogContent>
         )}
         {open?.kind === "edit" && (
-          <DialogContent eyebrow="Goals" title={`Edit ${open.item.goal.name}`}>
+          <DialogContent eyebrow="Goals" title={`Edit ${open.item.goal.name}`} className="flex max-h-dvh flex-col md:max-h-[calc(100dvh-2rem)] md:max-w-[640px]">
             <GoalForm currency={view.currency} today={view.today} item={open.item} onDone={close} />
           </DialogContent>
         )}
@@ -226,11 +230,11 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
   const loan = figures?.loan
   return (
     <li>
-      <Card aria-labelledby={`goal-${goal.id}`} className="grid h-full content-start gap-4">
-        <div className="flex gap-3">
-          <IconChip>{GOAL_ICON[type] ?? GOAL_ICON.other}</IconChip>
+      <Card aria-labelledby={`goal-${goal.id}`} className="grid content-start gap-3">
+        <div className="flex items-start gap-2.5">
+          <IconChip className="size-9 rounded-lg [&_svg]:size-4">{GOAL_ICON[type] ?? GOAL_ICON.other}</IconChip>
           <div className="min-w-0 flex-1">
-            <h3 id={`goal-${goal.id}`} className="truncate font-heading text-lg font-bold">
+            <h3 id={`goal-${goal.id}`} className="truncate font-heading text-base font-bold">
               {goal.name}
             </h3>
             <p className="truncate text-xs text-muted-foreground">
@@ -238,14 +242,18 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
               {answersLine(item) ? ` · ${answersLine(item)}` : ""}
             </p>
           </div>
+          <span aria-disabled="true" title="AI insights are coming in a later update" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-line px-2 py-0.5 text-xs text-muted-foreground">
+            <Sparkles aria-hidden="true" className="size-3" />
+            AI insights · soon
+          </span>
         </div>
 
         {!item.answers && <FormMessage tone="info">We couldn&apos;t read this plan&apos;s details. Edit it to enter them again.</FormMessage>}
 
-        <div className="grid gap-2">
+        <div className="grid gap-1.5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="text-sm text-muted-foreground">{type === "other" ? "Amount to save" : GOAL_UPFRONT_LABEL}</p>
-            <p className="font-heading text-xl font-bold tabular-nums">{money(goal.targetMinor, goal.currency)}</p>
+            <p className="font-heading text-2xl font-bold tabular-nums">{money(goal.targetMinor, goal.currency)}</p>
           </div>
           {plan.progressBps !== null && <Meter valueBp={plan.progressBps} label={`${goal.name}: ${pct(plan.progressBps)} saved`} />}
           <p className="text-xs text-muted-foreground tabular-nums">
@@ -253,30 +261,19 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
           </p>
         </div>
 
-        <p className="rounded-xl bg-canvas px-3 py-2.5 text-sm font-semibold">{savingText(item)}</p>
-
-        {loan && (
-          <div className="grid gap-1 text-sm">
-            <p>
-              {loan.annualRateBps === 0 ? "No-cost EMI" : "EMI"} <span className="font-semibold tabular-nums">{money(loan.emiMinor, goal.currency)}</span> a month for {loan.months} months on{" "}
-              {money(loan.principalMinor, goal.currency)}
-              {loan.annualRateBps > 0 && ` at ${formatPercentFromBasisPoints(loan.annualRateBps, { maximumFractionDigits: 2 })} a year`}
+        <div className="grid gap-0.5 rounded-lg bg-canvas px-3 py-2 text-sm">
+          <p className="font-semibold">{savingText(item)}</p>
+          {loan && (
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {loan.annualRateBps === 0 ? "No-cost EMI" : "EMI"} {money(loan.emiMinor, goal.currency)} × {loan.months}
+              {loan.annualRateBps > 0 && ` at ${formatPercentFromBasisPoints(loan.annualRateBps, { maximumFractionDigits: 2 })}`} · interest{" "}
+              {money(loan.totalInterestMinor, goal.currency)}. {EMI_ROUNDING_NOTE_SHORT}
             </p>
-            <p className="text-muted-foreground tabular-nums">
-              Total interest {money(loan.totalInterestMinor, goal.currency)} · total payable {money(loan.totalPayableMinor, goal.currency)}
-            </p>
-            <p className="text-xs text-muted-foreground">{EMI_ROUNDING_NOTE}</p>
-          </div>
-        )}
-
-        <div aria-disabled="true" className="flex items-center gap-3 rounded-xl border border-dashed border-line px-3 py-2.5 text-sm text-muted-foreground">
-          <Sparkles aria-hidden="true" className="size-4 shrink-0" />
-          <span className="flex-1">AI insights</span>
-          <Badge tone="neutral">Coming soon</Badge>
+          )}
         </div>
 
-        <div className="flex flex-wrap gap-1">
-          <Button variant="secondary" size="sm" aria-label={`Update saved amount for ${goal.name}`} onClick={() => onOpen("saved")}>
+        <div className="-mx-2 -mb-1 flex flex-wrap gap-0.5">
+          <Button variant="ghost" size="sm" aria-label={`Update saved amount for ${goal.name}`} onClick={() => onOpen("saved")}>
             Update saved
           </Button>
           <Button variant="ghost" size="sm" aria-label={`Edit ${goal.name}`} onClick={() => onOpen("edit")}>
@@ -310,7 +307,7 @@ function SavedForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
     <form onSubmit={submit} noValidate className="grid gap-5">
       <AmountField name="saved" label="Saved so far" currency={item.goal.currency} defaultValue={saved} error={error} onChange={setSaved} autoFocus />
       <div className="flex flex-wrap justify-end gap-2">
-        <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
+        <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Saving…" : "Save"}
         </Button>
@@ -335,13 +332,25 @@ function ArchiveForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
     <div className="grid gap-5">
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <div className="flex flex-wrap justify-end gap-2">
-        <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
+        <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="button" size="lg" disabled={pending} aria-busy={pending} onClick={archive}>
           {pending ? "Archiving…" : "Archive"}
         </Button>
       </div>
     </div>
   )
+}
+
+/** This month and the next 23, as "YYYY-MM" with a readable label (a month picker that works in every browser). */
+function monthOptions(today: string): { value: string; label: string }[] {
+  const year = Number(today.slice(0, 4))
+  const month = Number(today.slice(5, 7))
+  const format = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })
+  return Array.from({ length: 24 }, (_, k) => {
+    const y = year + Math.floor((month - 1 + k) / 12)
+    const m = ((month - 1 + k) % 12) + 1
+    return { value: `${y}-${String(m).padStart(2, "0")}`, label: format.format(new Date(Date.UTC(y, m - 1, 1))) }
+  })
 }
 
 function BudgetForm({ view, item, onDone }: { view: GoalsView; item?: BudgetItem; onDone: () => void }) {
@@ -369,7 +378,7 @@ function BudgetForm({ view, item, onDone }: { view: GoalsView; item?: BudgetItem
     setErrors(result.fieldErrors ?? {})
   }
   return (
-    <form onSubmit={submit} noValidate className="grid gap-5">
+    <form onSubmit={submit} noValidate className="grid gap-3.5">
       {formError && <FormMessage tone="error">{formError}</FormMessage>}
       {item && !item.status && (
         <FormMessage tone="info">
@@ -384,12 +393,18 @@ function BudgetForm({ view, item, onDone }: { view: GoalsView; item?: BudgetItem
           </option>
         ))}
       </SelectField>
-      <div className="grid items-start gap-5 md:grid-cols-2">
-        <AmountField name="amount" label="Monthly budget" currency={view.currency} defaultValue={amount} error={errors.amount} onChange={setAmount} hint={item ? "0 or blank removes it from that month on." : undefined} autoFocus />
-        <TextField name="month" label="From" type="month" min={thisMonth} value={month} error={errors.month} onChange={(e) => setMonth(e.target.value)} />
+      <div className="grid items-start gap-3 md:grid-cols-2">
+        <AmountField compact name="amount" label="Monthly budget" currency={view.currency} defaultValue={amount} error={errors.amount} onChange={setAmount} hint={item ? "0 or blank removes it from that month on." : undefined} autoFocus />
+        <SelectField name="month" label="From" value={month} error={errors.month} onChange={(e) => setMonth(e.target.value)}>
+          {monthOptions(view.today).map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </SelectField>
       </div>
       <div className="flex flex-wrap justify-end gap-2">
-        <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
+        <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Saving…" : "Save budget"}
         </Button>

@@ -3,7 +3,7 @@ import { addBank, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "
 
 // Goals page end to end (Sprint 6): planned expenses and monthly budgets, against the
 // throwaway local Supabase. Expected figures are worked out by hand from the amounts
-// entered (and checked independently in packages/domain tests). At most 8 screenshots in
+// entered (and checked independently in packages/domain tests). Five screenshots in
 // e2e-screenshots/ for the owner's review.
 
 const SHOTS = "e2e-screenshots"
@@ -33,7 +33,6 @@ test("navigation and empty states", async ({ page }) => {
   await expect(nav.getByText("Budgets")).toHaveCount(0)
   await expect(page.getByText("Plan your first expense")).toBeVisible()
   await expect(budgets(page)).toContainText("No budgets this month")
-  await shot(page, "goals-empty")
 })
 
 test("trip: cost lines add up; no target date assumes 12 months; AI insights is disabled", async ({ page }) => {
@@ -52,6 +51,9 @@ test("trip: cost lines add up; no target date assumes 12 months; AI insights is 
   await d.getByLabel("Saved so far (optional)").fill("10,000")
   await expect(d.getByText("Amount to save upfront")).toBeVisible()
   await expect(d).toContainText("₹1,54,000") // 90,000 + 64,000
+  // The whole Trip form fits a 1440×900 window: its scrolling body doesn't need to scroll.
+  const body = d.locator("form > div").first()
+  expect(await body.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true)
   await shot(page, "goals-add-trip")
   await d.getByRole("button", { name: "Add goal" }).click()
   await expect(toast(page, "Goal added.")).toBeVisible()
@@ -60,8 +62,7 @@ test("trip: cost lines add up; no target date assumes 12 months; AI insights is 
   await expect(card).toContainText("International · Japan · 2 people · 8 days")
   await expect(card).toContainText("₹1,54,000")
   await expect(card).toContainText("₹12,000 a month, assuming 12 months (no target date)") // (1,54,000 − 10,000) ÷ 12
-  await expect(card.getByText("AI insights")).toBeVisible()
-  await expect(card).toContainText("Coming soon")
+  await expect(card.getByText("AI insights · soon")).toBeVisible()
 
   // Saved amount, archive and restore.
   await card.getByRole("button", { name: "Update saved amount for Japan in spring" }).click()
@@ -80,6 +81,7 @@ test("trip: cost lines add up; no target date assumes 12 months; AI insights is 
 
 test("car loan with down payment: upfront amount, EMI and the rounding note", async ({ page }) => {
   await newUser(page, "goals-car")
+  await page.setViewportSize({ width: 1440, height: 1100 }) // the screenshot shows the EMI lines
   const d = await openPlan(page)
   await d.getByRole("radio", { name: "Car" }).click()
   await d.getByLabel("Name", { exact: true }).fill("Family car")
@@ -101,7 +103,7 @@ test("car loan with down payment: upfront amount, EMI and the rounding note", as
   await d.getByRole("button", { name: "Add goal" }).dblclick()
   await expect(toast(page, "Goal added.")).toBeVisible()
   await expect(page.getByRole("heading", { name: "Family car", exact: true })).toHaveCount(1)
-  await expect(goalCard(page, "Family car")).toContainText("at 9.5% a year")
+  await expect(goalCard(page, "Family car")).toContainText("EMI ₹12,601.12 × 60 at 9.5%")
 })
 
 test("budgets: warning at 80%, over at 100%, on the page and the Overview", async ({ page }) => {
@@ -117,8 +119,9 @@ test("budgets: warning at 80%, over at 100%, on the page and the Overview", asyn
   await d.getByLabel("Monthly budget").fill("300")
   await d.getByRole("button", { name: "Save budget" }).click()
   await expect(toast(page, "Budget saved.")).toBeVisible()
-  await expect(budgets(page)).toContainText("₹250 of ₹300 · 83% used · ₹50 left")
+  await expect(budgets(page)).toContainText("₹250 / ₹300")
   await expect(budgets(page)).toContainText("Near limit")
+  await expect(budgets(page).getByRole("progressbar", { name: "Groceries: 83% of budget used" })).toBeVisible()
 
   await page.goto("/")
   await expect(panel(page, "Monthly budget")).toContainText("₹50 left")
@@ -126,9 +129,27 @@ test("budgets: warning at 80%, over at 100%, on the page and the Overview", asyn
 
   await addEntry(page, { amount: "100", category: "Groceries", from: "HDFC Bank ··4821" })
   await page.goto("/goals")
-  await expect(budgets(page)).toContainText("₹350 of ₹300 · 117% used · ₹50 over")
+  await expect(budgets(page)).toContainText("₹350 / ₹300")
   await expect(budgets(page)).toContainText("Over budget")
-  await shot(page, "goals-budgets")
+
+  // A fuller page for the screenshot: a second budget and two planned expenses.
+  await budgets(page).getByRole("button", { name: "Set a budget" }).click()
+  await dialog(page, "Set a budget").getByLabel("Category").selectOption({ label: "Transport" })
+  await dialog(page, "Set a budget").getByLabel("Monthly budget").fill("2,000")
+  await dialog(page, "Set a budget").getByRole("button", { name: "Save budget" }).click()
+  await expect(toast(page, "Budget saved.")).toBeVisible()
+  for (const [name, amount, date] of [["Wedding gift", "25,000", ""], ["Emergency fund", "1,50,000", "2027-09-30"]]) {
+    const plan = await openPlan(page)
+    await plan.getByRole("radio", { name: "Other" }).click()
+    await plan.getByLabel("Name", { exact: true }).fill(name!)
+    await plan.getByLabel("What it's for").fill(name!)
+    await plan.getByLabel("Amount", { exact: true }).fill(amount!)
+    if (date) await plan.getByLabel("Target date (optional)").fill(date)
+    await plan.getByRole("button", { name: "Add goal" }).click()
+    await expect(toast(page, "Goal added.")).toBeVisible()
+    await expect(plan).toBeHidden()
+  }
+  await shot(page, "goals-page")
   await page.goto("/")
   await expect(panel(page, "Monthly budget")).toContainText("Over budget")
   await panel(page, "Monthly budget").scrollIntoViewIfNeeded()
@@ -150,15 +171,14 @@ test("a budget in another currency asks to be set again, with no percentage", as
 
   await page.goto("/goals")
   await expect(budgets(page)).toContainText("Set your budget again")
-  await expect(budgets(page)).not.toContainText("% used")
-  await expect(budgets(page)).toContainText("Budget is in INR; your currency is now USD.")
-  await shot(page, "goals-budget-currency")
+  await expect(budgets(page).getByRole("progressbar")).toHaveCount(0)
+  await expect(budgets(page)).toContainText("INR budget")
   await budgets(page).getByRole("button", { name: "Set your budget again: Transport" }).click()
   const d = dialog(page, "Budget for Transport")
   await expect(d).toContainText("This budget is in INR. Enter it again in USD.")
   await d.getByLabel("Monthly budget").fill("25")
   await d.getByRole("button", { name: "Save budget" }).click()
-  await expect(budgets(page)).toContainText("0% used")
+  await expect(budgets(page).getByRole("progressbar", { name: "Transport: 0% of budget used" })).toBeVisible()
   await expect(budgets(page)).not.toContainText("Set your budget again")
 })
 

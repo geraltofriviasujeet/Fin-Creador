@@ -37,7 +37,7 @@ function DialogContent({
             className
           )}
         >
-          <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
             <div className="grid gap-1.5">
               {eyebrow && (
                 <p className="text-xs font-semibold tracking-(--fc-tracking-eyebrow) text-muted-foreground uppercase">
