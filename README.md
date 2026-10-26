@@ -1,4 +1,4 @@
-# Fin Creador
+# FinCreador
 
 A personal financial operating system: record daily money activity, understand your
 financial position, manage investments and plan future expenses. Web (Next.js) and mobile
