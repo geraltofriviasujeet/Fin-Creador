@@ -1,6 +1,6 @@
 # Next session: Sprint 5 in progress (SQL review)
 
-**State (2026-10-26).** Sprints 1–4 are done and on `main`. Sprint 5 (web dashboard) is on branch `sprint-5-dashboard`, pushed. Done: `docs/deployment.md`, `packages/domain/src/dashboard.ts` with unit tests. SQL for `20261026120000_dashboard_breakdown` approved (owner, 2026-10-26) and pushed in a draft PR. **Waiting for CI, then the owner's `db push`.** Start the loader and web Overview (step 5.4) only after the owner says the push is done; label a partial first month bucket on custom ranges.
+**State (2026-10-26).** Sprints 1–4 are done and on `main`. Sprint 5 (web dashboard) is on branch `sprint-5-dashboard`, pushed. Done: `docs/deployment.md`, `packages/domain/src/dashboard.ts` with unit tests. SQL for `20261026120000_dashboard_breakdown` approved (owner, 2026-10-26) and pushed in draft PR #25; CI green (2026-10-26). **Waiting for the owner's `db push`.** Start the loader and web Overview (step 5.4) only after the owner says the push is done; label a partial first month bucket on custom ranges.
 Applied to fin-creador-dev, all in `supabase/migrations/`:
 `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules.
 Check with `supabase migration list --linked` before any database work. Status, steps and decisions: `docs/sprint-plan.md`.
