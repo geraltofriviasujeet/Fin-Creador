@@ -12,7 +12,7 @@ export default function SignInPage() {
       description="Sign in to see where your money is going."
       footer={
         <>
-          New to Fin Creador? <AuthLink href="/sign-up">Create an account</AuthLink>
+          New to FinCreador? <AuthLink href="/sign-up">Create an account</AuthLink>
         </>
       }
     >

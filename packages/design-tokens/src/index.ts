@@ -1,4 +1,4 @@
-// Single source of truth for Fin Creador brand tokens (docs/design-spec.md §2).
+// Single source of truth for FinCreador brand tokens (docs/design-spec.md §2).
 // Plain values only, so web (CSS variables, generated into tokens.css) and
 // mobile (React Native styles) consume the same numbers.
 // After changing anything here run `npm run tokens` to regenerate tokens.css.

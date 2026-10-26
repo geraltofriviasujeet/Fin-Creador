@@ -2,8 +2,8 @@ import { type Page, expect } from "@playwright/test"
 import { waitForAuthLink } from "./mailpit"
 
 export const PASSWORD = "correct-horse-42"
-export const CONFIRM_SUBJECT = "Confirm your Fin Creador account"
-export const RESET_SUBJECT = "Reset your Fin Creador password"
+export const CONFIRM_SUBJECT = "Confirm your FinCreador account"
+export const RESET_SUBJECT = "Reset your FinCreador password"
 
 /** A fresh address per test, so tests never share users. */
 export function uniqueEmail(label: string) {

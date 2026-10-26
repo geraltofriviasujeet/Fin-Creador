@@ -1,4 +1,4 @@
-# Fin Creador --- Claude Code Project Instructions
+# FinCreador --- Claude Code Project Instructions
 
 > **Purpose:** This file is the persistent source of truth for Claude
 > Code. Read it before making changes. Follow it across every sprint so
@@ -44,7 +44,7 @@
 
 ## 2. Product definition
 
-**Product name:** Fin Creador\
+**Product name:** FinCreador\
 **Product type:** Personal Financial Operating System\
 **Primary goal:** Make it effortless for a person to record daily money
 activity, understand their financial position, manage investments, and
@@ -163,9 +163,15 @@ explicitly approved decision says otherwise.
 
 ### Hosting, CI and scheduling
 
--   Web hosting: Vercel Hobby for now. Hobby is non-commercial only;
-    upgrade to Pro (or move hosting) before any paid or commercial
-    launch.
+-   MVP runs on Vercel Hobby and Supabase Free, for my own use and
+    invited testers only: no payments, no paying customers, no public
+    commercial launch (Vercel Hobby is non-commercial personal use
+    only). Upgrade to Vercel Pro and Supabase Pro only when the product
+    is complete and QA is passed, and before any commercial use.
+-   Free-tier limits: Supabase Free has no automatic backups or
+    point-in-time recovery, pauses after 1 week of inactivity, 500 MB
+    per project, 2 active projects. Until the upgrade, take a manual
+    backup of the MVP database weekly and before every migration.
 -   CI: GitHub Actions on pull requests (`.github/workflows/ci.yml`)
     runs lint, typecheck, unit tests, build, migrations and pgTAP tests
     on a throwaway database. Database and RLS tests run there, not on
@@ -176,6 +182,13 @@ explicitly approved decision says otherwise.
     to an hour of drift).
 -   Visual source of truth: `docs/design-spec.md`; token values live
     only in `packages/design-tokens`.
+
+### QA agent
+
+-   The development agent builds; `fincreador-qa`
+    (`.claude/agents/fincreador-qa.md`) verifies, and runs only when the
+    owner asks. It changes tests, not application code. CI is the test
+    runner for database and E2E tests.
 
 ### Suggested monorepo layout
 

@@ -50,7 +50,7 @@ export default function SignInScreen() {
       description="Sign in to see where your money is going."
       footer={
         <View style={styles.row}>
-          <Text style={text.bodySmall}>New to Fin Creador?</Text>
+          <Text style={text.bodySmall}>New to FinCreador?</Text>
           <TextLink label="Create an account" onPress={() => router.replace("/sign-up")} />
         </View>
       }

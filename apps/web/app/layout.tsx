@@ -21,7 +21,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Fin Creador", template: "%s · Fin Creador" },
+  title: { default: "FinCreador", template: "%s · FinCreador" },
   description: "Personal financial operating system",
 };
 

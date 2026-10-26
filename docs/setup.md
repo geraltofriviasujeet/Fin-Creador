@@ -1,6 +1,6 @@
 # Setup guide
 
-How to configure, run and test Fin Creador. Every value below is a placeholder: use your
+How to configure, run and test FinCreador. Every value below is a placeholder: use your
 own project's values, and never commit them.
 
 - [1. Prerequisites](#1-prerequisites)
@@ -83,10 +83,10 @@ the repository (`supabase/config.toml` configures only the throwaway CI database
 Use the same templates as `supabase/templates/`. Their token-hash links work even when
 the email is opened on a different device or browser.
 
-**Confirm signup.** Subject: `Confirm your Fin Creador account`. Body: the contents of
+**Confirm signup.** Subject: `Confirm your FinCreador account`. Body: the contents of
 [`supabase/templates/confirmation.html`](../supabase/templates/confirmation.html).
 
-**Reset password.** Subject: `Reset your Fin Creador password`. Body: the contents of
+**Reset password.** Subject: `Reset your FinCreador password`. Body: the contents of
 [`supabase/templates/recovery.html`](../supabase/templates/recovery.html).
 
 Supabase's built-in email sender allows only a few emails per hour; add custom SMTP before
