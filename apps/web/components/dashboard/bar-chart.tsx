@@ -65,6 +65,7 @@ export function BarChart({
   const byDay = bucketSizeFor(range) === "day"
   const isWeek = byDay && n === 7
   const every = n <= 7 ? 1 : Math.ceil(n / 6)
+  const everyOnPhone = n <= 4 ? every : every * 2
   const partials = buckets.flatMap((b) => {
     const part = partialBucket(b.start, range)
     return part ? [{ start: b.start, part }] : []
@@ -125,8 +126,9 @@ export function BarChart({
             i % every === 0 ? (
               <span
                 key={b.start}
-                className={cn("absolute whitespace-nowrap", i === 0 ? "" : "-translate-x-1/2")}
-                style={{ left: i === 0 ? 0 : `${((i + 0.5) / n) * 100}%` }}
+                // Phones show about half as many labels so they never run together.
+                className={cn("absolute -translate-x-1/2 whitespace-nowrap", i % everyOnPhone !== 0 && "hidden md:inline")}
+                style={{ left: `${((i + 0.5) / n) * 100}%` }}
               >
                 {isWeek ? weekdayLabel(b.start) : bucketLabel(b.start, range, true)}
                 {isPartial(b.start) && "*"}

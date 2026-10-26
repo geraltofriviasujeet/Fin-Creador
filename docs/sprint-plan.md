@@ -86,8 +86,8 @@ No demo-data prototype (owner, 2026-10-26): built on real data with real loading
 | **5.1 Deployment guide** | Done | `docs/deployment.md`: separate production Supabase project, Vercel env vars (public URL and publishable key only), redirects, weekly backups, upgrade checklist. |
 | **5.2 Domain** | Done | `packages/domain/src/dashboard.ts`: Monday weeks, periods, comparisons over the same elapsed days, change in basis points, buckets, top 5 categories; unit tests. |
 | **5.3 Migration and pgTAP** | Done | `20261026120000_dashboard_breakdown.sql` (one read-only function), `supabase/tests/database/dashboard.test.sql` (24 tests), green in CI on draft PR #25; applied to fin-creador-dev 2026-10-26 (owner's db push); types regenerated. |
-| **5.4 Loader and web Overview** | Not started | Cards, spending chart, categories, income vs expenses, recent transactions, Recurring card, filtered links. Month-bucket charts on a custom range label a partial first (or last) month as partial (owner, 2026-10-26). |
-| **5.5 E2E, screenshots, PR** | Not started | At most 8 screenshots for the owner. |
+| **5.4 Loader and web Overview** | Done | `packages/api/src/dashboard` (URL period, breakdown loader, Transactions links); Overview: cards with comparisons, spending and income-vs-expenses SVG charts with table alternatives and partial-month labels, top categories, recent transactions, the Recurring card (backlog item done); budget and goals "Coming soon". |
+| **5.5 E2E, screenshots, PR** | Owner review | `e2e/overview.spec.ts` green in CI on draft PR #25; screenshots in `docs/design/dashboard/`. Next: owner's screenshot review, then the first Vercel deploy (`docs/deployment.md`). |
 
 ## Sprint 4 steps
 
@@ -187,7 +187,6 @@ Pending tests:
 - **Repeated sign-up email:** see Sprint 10.
 - **Mobile category management:** add, rename, archive and restore expense categories in the mobile app (web has it on Settings since Sprint 3; owner, 2026-10-23).
 - **Recurring reminders:** notify when a recurring item is due (deferred from Sprint 4; belongs with Sprint 10 notifications, using Supabase scheduling).
-- **Recurring on the web Overview:** a Recurring card like the mobile one (deferred from Sprint 4 to the Sprint 5 dashboard).
 - **Mobile Overview dashboard:** the Sprint 5 dashboard on mobile, reusing `dashboard_breakdown`, `transaction_summary` and `packages/domain/src/dashboard.ts` (owner, 2026-10-26: web only in Sprint 5).
 - **Payee / merchant on entries:** a "paid to" field (the Figma shows merchant names). Not in Sprint 3 (owner, 2026-10-23).
 - **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
