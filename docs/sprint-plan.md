@@ -85,10 +85,10 @@ No demo-data prototype (owner, 2026-10-26). Web only; at most 8 screenshots for 
 |----|----|----|
 | **6.1 Domain and schemas** | Done | `packages/domain/src/goals.ts`: EMI and total interest (integer/BigInt only), percent of an amount, monthly saving, cost-line sum, upfront amount per type, budget per month, 80% / 100% warnings; tests against independently computed values. `packages/schemas/src/goal-forms.ts`: guided form per type, stored-details check, budget form. |
 | **6.2 Navigation** | Done | "Budgets" renamed to "Goals" (`/goals`) in its place after Transactions; the old last "Goals" item removed (web and mobile); `design-spec.md` updated. |
-| **6.3 Migration and pgTAP** | In review | `20261026180000_goals_and_budgets.sql` (SQL approved with edits), `supabase/tests/database/goals_budgets.test.sql` (50 tests). Then the owner's db push: dev, and prod only from `main` after a backup. |
-| **6.4 Writers** | Done | `packages/api/src/goals`: `saveGoal` (target always recomputed; a repeated request key returns the existing goal), `setGoalSaved`, `setGoalArchived`, `setCategoryBudget`; FC024–FC026 messages. Types for the new tables hand-written until regenerated after the dev push. |
-| **6.5 Web Goals page and Overview** | Not started | Planned expenses and Monthly budgets sections, "Amount to save upfront", the EMI rounding note, a disabled "AI insights: coming soon" card per goal; Overview budget donut and goals card. |
-| **6.6 E2E, screenshots, PR** | Not started | |
+| **6.3 Migration and pgTAP** | Done | `20261026180000_goals_and_budgets.sql` (SQL approved with edits), `supabase/tests/database/goals_budgets.test.sql` (50 tests, green in CI on draft PR #30); applied to fin-creador-dev 2026-10-26 (owner's db push); generated types match. Prod: only from `main` after a backup. |
+| **6.4 Writers** | Done | `packages/api/src/goals`: `saveGoal` (target always recomputed; a repeated request key returns the existing goal), `setGoalSaved`, `setGoalArchived`, `setCategoryBudget`; loader and `buildGoalsView` (budgets compared only in the profile currency, else "Set your budget again"); FC024–FC026 messages. |
+| **6.5 Web Goals page and Overview** | Done | `/goals`: Planned expenses (guided form per type with live figures, "Amount to save upfront", EMI and rounding note, disabled "AI insights: coming soon" card, saved amount, archive and restore) and Monthly budgets (donut, per-category progress, Near limit / Over budget). Overview: Monthly budget and Your goals cards on real data; Goals nav item live. |
+| **6.6 E2E, screenshots, PR** | In progress | `e2e/goals.spec.ts` (6 journeys, 7 screenshots in `e2e-screenshots/`); draft PR #30. |
 
 ## Sprint 5 steps
 
