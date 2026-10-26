@@ -1,0 +1,6 @@
+{
+  // `npm run typecheck` (CI): everything, tests and e2e included. tsconfig.json (used by
+  // next build) leaves tests out, because their tools (vitest) are root devDependencies.
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules"]
+}
