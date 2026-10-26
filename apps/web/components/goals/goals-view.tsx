@@ -4,8 +4,8 @@ import { useState, useTransition } from "react"
 import { Plus, Sparkles } from "lucide-react"
 import type { BudgetCategory, BudgetItem, GoalItem, GoalsView, WriteResult } from "@fin-creador/api"
 import { type GoalType, formatPercentFromBasisPoints, minorToInputString } from "@fin-creador/domain"
-import { EMI_ROUNDING_NOTE_SHORT, GOAL_TYPE_OPTIONS, GOAL_UPFRONT_LABEL, ITEM_PAYMENTS, LOAN_PAYMENTS } from "@fin-creador/schemas"
-import { setCategoryBudgetAction, setGoalArchivedAction, setGoalSavedAction } from "@/app/(app)/goals/actions"
+import { EMI_ROUNDING_NOTE_SHORT, GOAL_TYPE_OPTIONS, GOAL_UPFRONT_LABEL, ITEM_PAYMENTS, LOAN_PAYMENTS, VEHICLE_KIND_OPTIONS } from "@fin-creador/schemas"
+import { deleteGoalAction, setCategoryBudgetAction, setGoalArchivedAction, setGoalSavedAction } from "@/app/(app)/goals/actions"
 import { AmountField } from "@/components/income/amount-field"
 import { PageHeader } from "@/components/shell/app-shell"
 import { fullDate, money } from "@/components/transactions/display"
@@ -14,12 +14,12 @@ import { Card, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage, SelectField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import { BudgetBadge, BudgetDonut, GOALS_HEADER, GOAL_ICON, GoalSummary, IconChip, Meter, SET_BUDGET_AGAIN, budgetAmounts, pct, savingText } from "./display"
+import { BudgetBadge, BudgetDonut, GOALS_HEADER, GoalSummary, IconChip, Meter, SET_BUDGET_AGAIN, budgetAmounts, goalIcon, pct, savingText } from "./display"
 import { GoalForm } from "./goal-form"
 
 type Open =
   | { kind: "add" }
-  | { kind: "edit" | "saved" | "archive"; item: GoalItem }
+  | { kind: "edit" | "saved" | "archive" | "delete"; item: GoalItem }
   | { kind: "budget"; item?: BudgetItem }
   | null
 
@@ -33,6 +33,7 @@ async function run(save: () => Promise<WriteResult>): Promise<WriteResult> {
 }
 
 const TYPE_LABEL = Object.fromEntries(GOAL_TYPE_OPTIONS.map((t) => [t.value, t.label])) as Record<GoalType, string>
+const VEHICLE_LABEL = Object.fromEntries(VEHICLE_KIND_OPTIONS.map((k) => [k.value, k.label])) as Record<string, string>
 const PAYMENT_LABEL = Object.fromEntries([...LOAN_PAYMENTS, ...ITEM_PAYMENTS].map((p) => [p.value, p.label])) as Record<string, string>
 
 /** The Goals page (Sprint 6): Planned expenses and Monthly budgets. */
@@ -93,9 +94,14 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
                 <ul>
                   {view.archived.map((item) => (
                     <GoalSummary key={item.goal.id} item={item}>
-                      <Button variant="ghost" size="sm" disabled={busy} aria-label={`Restore ${item.goal.name}`} onClick={() => restore(item)}>
-                        Restore
-                      </Button>
+                      <div className="flex shrink-0 flex-wrap items-start gap-0.5">
+                        <Button variant="ghost" size="sm" disabled={busy} aria-label={`Restore ${item.goal.name}`} onClick={() => restore(item)}>
+                          Restore
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-danger" aria-label={`Delete ${item.goal.name} permanently`} onClick={() => setOpen({ kind: "delete", item })}>
+                          Delete permanently
+                        </Button>
+                      </div>
                     </GoalSummary>
                   ))}
                 </ul>
@@ -195,6 +201,11 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
             <ArchiveForm item={open.item} onDone={close} />
           </DialogContent>
         )}
+        {open?.kind === "delete" && (
+          <DialogContent eyebrow="Goals" title={`Delete ${open.item.goal.name} permanently?`} description="The goal and its answers are removed for good. This can't be undone. Your accounts and transactions don't change.">
+            <DeleteForm item={open.item} onDone={close} />
+          </DialogContent>
+        )}
         {open?.kind === "budget" && (
           <DialogContent eyebrow="Monthly budgets" title={open.item ? `Budget for ${open.item.category.name}` : "Set a budget"} description="The amount applies from the month you choose onward. Past months keep their budget.">
             <BudgetForm view={view} item={open.item} onDone={close} />
@@ -211,8 +222,8 @@ function answersLine(item: GoalItem): string | null {
   switch (a.type) {
     case "trip":
       return `${a.details.scope === "international" ? "International" : "Domestic"} · ${a.details.place} · ${a.details.people} ${a.details.people === 1 ? "person" : "people"} · ${a.details.days} ${a.details.days === 1 ? "day" : "days"}`
-    case "car":
-      return `${a.details.condition === "new" ? "New" : "Used"} · ${a.details.model} · ${PAYMENT_LABEL[a.details.payment]}`
+    case "vehicle":
+      return `${VEHICLE_LABEL[a.details.vehicle]} · ${a.details.condition === "new" ? "New" : "Used"} · ${[a.details.make, a.details.model].filter(Boolean).join(" ")} · ${PAYMENT_LABEL[a.details.payment]}`
     case "house":
       return `${a.details.purpose === "buy" ? "Buy" : "Renovate"} · ${a.details.city} · ${PAYMENT_LABEL[a.details.payment]}`
     case "furniture":
@@ -232,7 +243,7 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
     <li>
       <Card aria-labelledby={`goal-${goal.id}`} className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
         <div className="flex items-start gap-2.5">
-          <IconChip className="size-9 rounded-lg [&_svg]:size-4">{GOAL_ICON[type] ?? GOAL_ICON.other}</IconChip>
+          <IconChip className="size-9 rounded-lg [&_svg]:size-4">{goalIcon(item)}</IconChip>
           <div className="min-w-0 flex-1">
             <h3 id={`goal-${goal.id}`} className="truncate font-heading text-base font-bold">
               {goal.name}
@@ -351,6 +362,31 @@ function monthOptions(today: string): { value: string; label: string }[] {
     const m = ((month - 1 + k) % 12) + 1
     return { value: `${y}-${String(m).padStart(2, "0")}`, label: format.format(new Date(Date.UTC(y, m - 1, 1))) }
   })
+}
+
+function DeleteForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  async function remove() {
+    setPending(true)
+    const result = await run(() => deleteGoalAction({ goalId: item.goal.id }))
+    setPending(false)
+    if (result.status === "success") {
+      toast.success(result.message)
+      onDone()
+    } else setError(result.message)
+  }
+  return (
+    <div className="grid gap-4">
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <div className="flex flex-wrap justify-end gap-2">
+        <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
+        <Button type="button" variant="destructive" size="lg" disabled={pending} aria-busy={pending} onClick={remove}>
+          {pending ? "Deleting…" : "Delete permanently"}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 function BudgetForm({ view, item, onDone }: { view: GoalsView; item?: BudgetItem; onDone: () => void }) {

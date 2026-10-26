@@ -41,7 +41,7 @@ test("trip: cost lines add up; no target date assumes 12 months; AI insights is 
   await d.getByRole("radio", { name: "Trip" }).click()
   await d.getByLabel("Name", { exact: true }).fill("Japan in spring")
   await d.getByRole("radio", { name: "International" }).click()
-  await d.getByLabel("Country").fill("Japan")
+  await d.getByLabel("Country").selectOption({ label: "Japan" })
   await d.getByLabel("People").fill("2")
   await d.getByLabel("Days").fill("8")
   await d.getByLabel("Travel by").selectOption({ label: "Flight" })
@@ -79,16 +79,32 @@ test("trip: cost lines add up; no target date assumes 12 months; AI insights is 
   await page.getByRole("button", { name: "Restore Japan in spring" }).click()
   await expect(toast(page, "Goal restored.")).toBeVisible()
   await expect(goalCard(page, "Japan in spring").getByRole("heading")).toBeVisible()
+
+  // Active goals can only be archived; permanent delete is offered for archived goals only.
+  const active = goalCard(page, "Japan in spring")
+  await expect(active.getByRole("button", { name: /Delete/ })).toHaveCount(0)
+  await active.getByRole("button", { name: "Archive Japan in spring" }).click()
+  await dialog(page, "Archive Japan in spring?").getByRole("button", { name: "Archive" }).click()
+  await expect(toast(page, "Goal archived.")).toBeVisible()
+  await page.getByRole("button", { name: "Delete Japan in spring permanently" }).click()
+  const confirm = dialog(page, "Delete Japan in spring permanently?")
+  await expect(confirm).toContainText("This can't be undone.")
+  await confirm.getByRole("button", { name: "Delete permanently" }).click()
+  await expect(toast(page, "Goal deleted.")).toBeVisible()
+  await expect(page.getByText("Japan in spring")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: /Show archived/ })).toHaveCount(0)
 })
 
-test("car loan with down payment: upfront amount, EMI and the rounding note", async ({ page }) => {
+test("wheeler (car) loan with down payment: upfront amount, EMI and the rounding note", async ({ page }) => {
   await newUser(page, "goals-car")
   await page.setViewportSize({ width: 1440, height: 1100 }) // the screenshot shows the EMI lines
   const d = await openPlan(page)
-  await d.getByRole("radio", { name: "Car" }).click()
+  await d.getByRole("radio", { name: "Wheeler" }).click()
   await d.getByLabel("Name", { exact: true }).fill("Family car")
+  await d.getByRole("radio", { name: "Car", exact: true }).click()
   await d.getByRole("radio", { name: "New" }).click()
-  await d.getByLabel("Which car").fill("Hatchback")
+  await d.getByLabel("Make").fill("Maruti Suzuki") // offered in the list; any make can be typed
+  await d.getByLabel("Model").fill("Swift")
   await d.getByLabel("Price").fill("8,00,000")
   await d.getByLabel("Extras (optional)").fill("60,000")
   await d.getByRole("radio", { name: "Loan with down payment" }).click()
@@ -106,6 +122,7 @@ test("car loan with down payment: upfront amount, EMI and the rounding note", as
   await expect(toast(page, "Goal added.")).toBeVisible()
   await expect(page.getByRole("heading", { name: "Family car", exact: true })).toHaveCount(1)
   await expect(goalCard(page, "Family car")).toContainText("EMI ₹12,601.12 × 60 at 9.5%")
+  await expect(goalCard(page, "Family car")).toContainText("Wheeler · Car · New · Maruti Suzuki Swift")
   // A long subtitle and EMI line stay inside the card (nothing wider than the card).
   await page.setViewportSize({ width: 1440, height: 900 })
   const carCard = goalCard(page, "Family car").locator("[data-slot=card]")

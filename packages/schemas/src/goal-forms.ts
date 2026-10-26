@@ -5,6 +5,7 @@ import {
   MAX_RATE_BPS,
   MAX_TENURE_MONTHS,
   TRIP_COST_LINES,
+  VEHICLE_KINDS,
   goalFigures,
   isIsoDate,
   parseAmount,
@@ -12,6 +13,8 @@ import {
   type GoalType,
 } from "@fin-creador/domain";
 import { z } from "zod";
+import { INDIAN_STATES } from "./goal-data";
+import { COUNTRY_NAMES } from "./region-data";
 
 // Goals (planned expenses) and monthly budgets, shared by web and mobile. Mirrors the
 // Sprint 6 migration: the database checks types, ranges, ownership and that `details` is a
@@ -20,7 +23,7 @@ import { z } from "zod";
 
 export const GOAL_TYPE_OPTIONS: readonly { value: GoalType; label: string }[] = [
   { value: "trip", label: "Trip" },
-  { value: "car", label: "Car" },
+  { value: "vehicle", label: "Wheeler" },
   { value: "house", label: "House" },
   { value: "furniture", label: "Furniture" },
   { value: "electronics", label: "Electronics" },
@@ -65,6 +68,17 @@ export const ITEM_PAYMENTS = [
   { value: "emi", label: "EMI" },
   { value: "no_cost_emi", label: "No-cost EMI" },
 ] as const;
+
+export const VEHICLE_KIND_OPTIONS = [
+  { value: "bike", label: "Bike" },
+  { value: "car", label: "Car" },
+  { value: "hmv", label: "HMV" },
+] as const;
+
+/** Countries for an international trip (every country except India), in name order. */
+export const FOREIGN_COUNTRIES: readonly string[] = Object.entries(COUNTRY_NAMES)
+  .filter(([code]) => code !== "IN")
+  .map(([, name]) => name);
 
 /** Label for the target derived from the answers (every type except "other"). */
 export const GOAL_UPFRONT_LABEL = "Amount to save upfront";
@@ -121,8 +135,16 @@ function checkLoan(d: LoanShape, ctx: z.RefinementCtx) {
   }
 }
 
-const carDetails = z
-  .strictObject({ v: z.literal(1), condition: z.enum(["new", "used"]), model: shortText, extrasMinor: minor, ...loanFields })
+const vehicleDetails = z
+  .strictObject({
+    v: z.literal(1),
+    vehicle: z.enum(VEHICLE_KINDS),
+    condition: z.enum(["new", "used"]),
+    make: shortText.nullable(),
+    model: shortText,
+    extrasMinor: minor,
+    ...loanFields,
+  })
   .superRefine(checkLoan);
 
 const houseDetails = z
@@ -147,7 +169,7 @@ const otherDetails = z.strictObject({ v: z.literal(1), description: z.string().t
 
 const DETAILS_BY_TYPE: Record<GoalType, z.ZodType> = {
   trip: tripDetails,
-  car: carDetails,
+  vehicle: vehicleDetails,
   house: houseDetails,
   furniture: itemDetails,
   electronics: itemDetails,
@@ -223,6 +245,12 @@ function choice<T extends string>(ctx: Ctx, v: Fields, field: string, options: r
   return found ? found.value : fail(ctx, field, message);
 }
 
+/** One of a complete list (states, countries): the form offers it as a dropdown. */
+function listed(ctx: Ctx, v: Fields, field: string, options: readonly string[], message: string): string | typeof z.NEVER {
+  const value = v[field] ?? "";
+  return options.includes(value) ? value : fail(ctx, field, message);
+}
+
 function loanAnswers(ctx: Ctx, v: Fields, currency: string, priceMinor: number) {
   const payment = choice(ctx, v, "payment", LOAN_PAYMENTS, "Choose how you'll pay");
   let downPaymentMinor: number | null = null;
@@ -254,7 +282,7 @@ function detailsFrom(ctx: Ctx, type: GoalType, v: Fields, currency: string): Goa
         details: {
           v: 1,
           scope,
-          place: requiredText(ctx, v, "place", scope === "domestic" ? "the state" : "the country"),
+          place: listed(ctx, v, "place", scope === "domestic" ? INDIAN_STATES : FOREIGN_COUNTRIES, scope === "domestic" ? "Choose a state" : "Choose a country"),
           people: wholeNumber(ctx, v, "people", "the number of people", 100),
           days: wholeNumber(ctx, v, "days", "the number of days", 365),
           travelMode: choice(ctx, v, "travelMode", TRAVEL_MODES, "Choose how you'll travel"),
@@ -263,12 +291,15 @@ function detailsFrom(ctx: Ctx, type: GoalType, v: Fields, currency: string): Goa
         },
       };
     }
-    case "car": {
+    case "vehicle": {
+      const vehicle = choice(ctx, v, "vehicle", VEHICLE_KIND_OPTIONS, "Choose bike, car or HMV");
       const condition = v.condition === "new" || v.condition === "used" ? v.condition : fail(ctx, "condition", "Choose new or used");
-      const model = requiredText(ctx, v, "model", "which car");
+      // Makes and models are suggestions: anything typed is accepted (the lists go out of date).
+      const make = requiredText(ctx, v, "make", "the make");
+      const model = requiredText(ctx, v, "model", "the model");
       const priceMinor = amountField(ctx, v, "price", currency);
       const extrasMinor = v.extras ? amountField(ctx, v, "extras", currency, { allowZero: true }) : 0;
-      return { type, details: { v: 1, condition, model, extrasMinor, ...loanAnswers(ctx, v, currency, priceMinor) } };
+      return { type, details: { v: 1, vehicle, condition, make, model, extrasMinor, ...loanAnswers(ctx, v, currency, priceMinor) } };
     }
     case "house": {
       const purpose = v.purpose === "buy" || v.purpose === "renovate" ? v.purpose : fail(ctx, "purpose", "Choose buy or renovate");

@@ -1,5 +1,5 @@
 import type * as React from "react"
-import { Armchair, Car, House, Laptop, Plane, Smartphone, Sparkles } from "lucide-react"
+import { Armchair, Bike, Car, House, Laptop, Plane, Smartphone, Sparkles, Truck } from "lucide-react"
 import type { BudgetItem, GoalItem } from "@fin-creador/api"
 import { type BudgetStatus, type GoalType, formatPercentFromBasisPoints } from "@fin-creador/domain"
 import { cn } from "cn"
@@ -19,12 +19,21 @@ export const SET_BUDGET_AGAIN = "Set your budget again"
 
 export const GOAL_ICON: Record<GoalType, React.ReactNode> = {
   trip: <Plane aria-hidden="true" />,
-  car: <Car aria-hidden="true" />,
+  vehicle: <Car aria-hidden="true" />,
   house: <House aria-hidden="true" />,
   furniture: <Armchair aria-hidden="true" />,
   electronics: <Laptop aria-hidden="true" />,
   mobile: <Smartphone aria-hidden="true" />,
   other: <Sparkles aria-hidden="true" />,
+}
+
+/** The goal's icon; a vehicle shows its kind (bike, car or HMV). */
+export function goalIcon(item: GoalItem): React.ReactNode {
+  if (item.answers?.type === "vehicle") {
+    if (item.answers.details.vehicle === "bike") return <Bike aria-hidden="true" />
+    if (item.answers.details.vehicle === "hmv") return <Truck aria-hidden="true" />
+  }
+  return GOAL_ICON[item.goal.type as GoalType] ?? GOAL_ICON.other
 }
 
 export const pct = (bp: number) => formatPercentFromBasisPoints(bp, { maximumFractionDigits: 0 })
@@ -114,7 +123,7 @@ export function GoalSummary({ item, children }: { item: GoalItem; children?: Rea
   const { goal, plan } = item
   return (
     <li className="flex gap-3 border-b border-line py-4 last:border-b-0">
-      <IconChip>{GOAL_ICON[goal.type as GoalType] ?? GOAL_ICON.other}</IconChip>
+      <IconChip>{goalIcon(item)}</IconChip>
       <div className="grid min-w-0 flex-1 gap-2">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
           <p className="truncate text-sm font-semibold">{goal.name}</p>

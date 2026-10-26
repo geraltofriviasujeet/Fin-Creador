@@ -1,9 +1,10 @@
--- pgTAP tests for goals and monthly budgets (migration 20261026180000). Run with
+-- pgTAP tests for goals and monthly budgets (migrations 20261026180000, 20261026200000 and
+-- 20261026210000). Run with
 -- `supabase test db` (CI). Everything is rolled back.
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(50);
+select plan(55);
 
 -- Users A and B (fictional). Sign-up gives each a profile and default categories.
 insert into auth.users (id, email) values
@@ -33,7 +34,7 @@ insert into public.budgets (user_id, category_id, effective_from, amount_minor, 
 alter table public.budgets enable trigger budgets_validate;
 
 -- ------------------------------------------------------------ privileges
-select ok(not has_table_privilege('authenticated', 'public.goals', 'DELETE'), 'clients cannot delete goals');
+select ok(has_table_privilege('authenticated', 'public.goals', 'DELETE'), 'clients may delete goals (RLS: only their archived ones)');
 select ok(not has_table_privilege('authenticated', 'public.budgets', 'DELETE'), 'clients cannot delete budgets');
 select ok(not has_column_privilege('authenticated', 'public.goals', 'currency', 'INSERT'), 'clients cannot set a goal''s currency');
 select ok(not has_column_privilege('authenticated', 'public.goals', 'type', 'UPDATE'), 'clients cannot change a goal''s type');
@@ -87,6 +88,18 @@ select throws_ok(
      values ('other', 'Minus', -1, '{"v": 1, "description": "x"}', 'f6000000-0000-4000-8000-000000000006') $$,
   '23514', null, 'a negative target is refused'
 );
+select throws_ok(
+  $$ insert into public.goals (type, name, target_amount_minor, details, idempotency_key)
+     values ('car', 'Old type', 100, '{"v": 1}', 'f6000000-0000-4000-8000-00000000000a') $$,
+  '23514', null, 'the old ''car'' type is refused (now ''vehicle'')'
+);
+select lives_ok(
+  $$ insert into public.goals (type, name, target_amount_minor, details, idempotency_key)
+     values ('vehicle', 'Bike', 9000000,
+             '{"v": 1, "vehicle": "bike", "condition": "new", "make": "Royal Enfield", "model": "Classic 350", "extrasMinor": 0, "payment": "cash", "priceMinor": 9000000, "downPaymentMinor": null, "loanRateBps": null, "loanMonths": null}',
+             'f6000000-0000-4000-8000-00000000000b') $$,
+  'a vehicle goal (bike, car or HMV) can be added'
+);
 select lives_ok(
   $$ insert into public.goals (type, name, target_amount_minor, details, idempotency_key)
      values ('mobile', 'Phone', 0, '{"v": 1, "item": "Phone", "payment": "no_cost_emi", "priceMinor": 6000000, "emiRateBps": null, "emiMonths": 6}',
@@ -115,8 +128,21 @@ select lives_ok(
   $$ update public.goals set saved_amount_minor = 100, name = 'Gift for Meera' where idempotency_key = 'f6000000-0000-4000-8000-000000000001' $$,
   'and edited again after restoring'
 );
-select throws_ok($$ delete from public.goals $$, '42501', null, 'a client cannot delete goals');
-select is((select count(*)::int from public.goals), 2, 'A sees their two goals');
+-- Permanent delete: only archived goals.
+delete from public.goals where idempotency_key = 'f6000000-0000-4000-8000-000000000001';
+select is(
+  (select count(*)::int from public.goals where idempotency_key = 'f6000000-0000-4000-8000-000000000001'),
+  1, 'an active goal cannot be deleted (the delete matches no row)'
+);
+update public.goals set archived_at = now() where idempotency_key = 'f6000000-0000-4000-8000-000000000007';
+delete from public.goals where idempotency_key = 'f6000000-0000-4000-8000-000000000007';
+select is(
+  (select count(*)::int from public.goals where idempotency_key = 'f6000000-0000-4000-8000-000000000007'),
+  0, 'an archived goal can be deleted permanently'
+);
+-- Archived, for the other-user check below.
+update public.goals set archived_at = now() where idempotency_key = 'f6000000-0000-4000-8000-00000000000b';
+select is((select count(*)::int from public.goals), 2, 'A sees their two remaining goals');
 
 -- ------------------------------------------------------------ budgets as A
 select is(
@@ -206,9 +232,10 @@ update public.profiles set currency = 'INR' where id = '11111111-1111-4111-8111-
 -- ------------------------------------------------------------ B cannot reach A's rows
 select set_config('request.jwt.claims', '{"sub": "22222222-2222-4222-8222-222222222222", "role": "authenticated"}', true);
 select is((select count(*)::int from public.goals) + (select count(*)::int from public.budgets), 0, 'B sees none of A''s goals or budgets');
--- B's updates match no rows; A's rows are checked unchanged below, as the owner.
+-- B's updates and deletes match no rows; A's rows are checked unchanged below, as the owner.
 update public.goals set saved_amount_minor = 1;
 update public.budgets set amount_minor = 1;
+delete from public.goals;
 select throws_ok(
   $$ select public.set_category_budget('c0000000-0000-4000-8000-0000000000a1', public.t_month(0), 100) $$,
   'FC026', null, 'B cannot budget A''s category'
@@ -224,6 +251,7 @@ reset role;
 set local role anon;
 select throws_ok($$ select public.set_category_budget('c0000000-0000-4000-8000-0000000000a1', current_date, 1) $$,
   '42501', null, 'anon cannot set budgets');
+select throws_ok($$ delete from public.goals $$, '42501', null, 'anon cannot delete goals');
 
 -- ------------------------------------------------------------ B's updates changed nothing
 reset role;
@@ -234,6 +262,10 @@ select is(
 select is(
   (select count(*)::int from public.budgets where amount_minor = 1 and user_id = '11111111-1111-4111-8111-111111111111'),
   0, 'B could not change A''s budgets'
+);
+select is(
+  (select count(*)::int from public.goals where idempotency_key = 'f6000000-0000-4000-8000-00000000000b'),
+  1, 'B could not delete A''s archived goal'
 );
 
 -- ------------------------------------------------------------ account deletion

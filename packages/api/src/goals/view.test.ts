@@ -48,7 +48,7 @@ describe("buildGoalsView: goals", () => {
   })
 
   it("keeps a goal whose stored answers can't be read, without derived figures", () => {
-    const view = buildGoalsView({ ...base, goals: [goal({ type: "car", details: { v: 9 } })] })
+    const view = buildGoalsView({ ...base, goals: [goal({ type: "vehicle", details: { v: 9 } })] })
     expect(view.active[0]).toMatchObject({ answers: null, figures: null })
     expect(view.active[0]?.plan.remainingMinor).toBe(12_000_00)
   })

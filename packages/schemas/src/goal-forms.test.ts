@@ -52,11 +52,13 @@ describe("goalFormSchema", () => {
 
   it("car with a down payment: target is the down payment and extras", () => {
     const result = schema.parse({
-      type: "car",
+      type: "vehicle",
       name: "New car",
       idempotencyKey: KEY,
+      vehicle: "car",
       condition: "new",
-      model: "Hatchback",
+      make: "Maruti Suzuki",
+      model: "Swift",
       payment: "loan_down_payment",
       price: "8,00,000",
       extras: "60,000",
@@ -68,8 +70,10 @@ describe("goalFormSchema", () => {
     expect(result.targetDate).toBeNull();
     expect(result.details).toEqual({
       v: 1,
+      vehicle: "car",
       condition: "new",
-      model: "Hatchback",
+      make: "Maruti Suzuki",
+      model: "Swift",
       extrasMinor: 60_000_00,
       payment: "loan_down_payment",
       priceMinor: 8_00_000_00,
@@ -77,6 +81,34 @@ describe("goalFormSchema", () => {
       loanRateBps: 950,
       loanMonths: 60,
     });
+  });
+
+  it("vehicle: makes and models that aren't listed are accepted; bike, car or HMV is required", () => {
+    const base = { type: "vehicle", name: "Truck", idempotencyKey: KEY, condition: "used", make: "Some new maker", model: "Model Z", payment: "cash", price: "25,00,000" }
+    expect(schema.parse({ ...base, vehicle: "hmv" }).details).toMatchObject({ vehicle: "hmv", make: "Some new maker", model: "Model Z" })
+    expect(errors(schema.safeParse(base)).vehicle).toBe("Choose bike, car or HMV")
+    expect(errors(schema.safeParse({ ...base, vehicle: "boat" })).vehicle).toBe("Choose bike, car or HMV")
+  });
+
+  it("trip places come from the lists: a state for domestic, a country other than India for international", () => {
+    const trip = { type: "trip", name: "Trip", idempotencyKey: KEY, people: "2", days: "3", travelMode: "train", stay: "hotel", cost_transport: "100" }
+    expect(schema.safeParse({ ...trip, scope: "domestic", place: "Assam" }).success).toBe(true)
+    expect(errors(schema.safeParse({ ...trip, scope: "domestic", place: "Japan" })).place).toBe("Choose a state")
+    expect(schema.safeParse({ ...trip, scope: "international", place: "Japan" }).success).toBe(true)
+    expect(errors(schema.safeParse({ ...trip, scope: "international", place: "India" })).place).toBe("Choose a country")
+  });
+
+  it("a 'car' goal migrated by 20261026200000 reads back as a vehicle, keeping its model", () => {
+    // The stored 'car' answers (keys before the rename) …
+    const oldCar = {
+      v: 1, condition: "new", model: "Audi A6", extrasMinor: 1_50_000_00, payment: "loan_down_payment",
+      priceMinor: 65_00_000_00, downPaymentMinor: 15_00_000_00, loanRateBps: 850, loanMonths: 60,
+    }
+    // … merged exactly as the migration does: details || '{"vehicle": "car", "make": null}'.
+    const migrated = { ...oldCar, vehicle: "car", make: null }
+    expect(parseGoalDetails("vehicle", migrated)).toEqual({ type: "vehicle", details: migrated })
+    expect(parseGoalDetails("vehicle", migrated)?.details).toMatchObject({ model: "Audi A6", make: null })
+    expect(parseGoalDetails("car", migrated)).toBeNull()
   });
 
   it("rejects a down payment at or above the price", () => {

@@ -9,7 +9,7 @@ import {
   percentOfMinor,
   savingPlan,
   type BudgetRow,
-  type CarDetails,
+  type VehicleDetails,
   type HouseDetails,
   type ItemDetails,
   type TripDetails,
@@ -180,10 +180,12 @@ describe("goalFigures", () => {
     expect(goalFigures({ type: "trip", details: trip })).toEqual({ upfrontMinor: 211_000_00, costTotalMinor: 211_000_00, loan: null });
   });
 
-  const car: CarDetails = {
+  const car: VehicleDetails = {
     v: 1,
+    vehicle: "car",
     condition: "new",
-    model: "Hatchback",
+    make: "Maruti Suzuki",
+    model: "Swift",
     payment: "cash",
     priceMinor: 8_00_000_00,
     extrasMinor: 60_000_00,
@@ -193,12 +195,12 @@ describe("goalFigures", () => {
   };
 
   it("car paid in cash needs price and extras upfront", () => {
-    expect(goalFigures({ type: "car", details: car })).toEqual({ upfrontMinor: 8_60_000_00, costTotalMinor: null, loan: null });
+    expect(goalFigures({ type: "vehicle", details: car })).toEqual({ upfrontMinor: 8_60_000_00, costTotalMinor: null, loan: null });
   });
 
   it("car loan with a down payment finances the rest", () => {
     const figures = goalFigures({
-      type: "car",
+      type: "vehicle",
       details: { ...car, payment: "loan_down_payment", downPaymentMinor: 2_00_000_00, loanRateBps: 950, loanMonths: 60 },
     });
     expect(figures.upfrontMinor).toBe(2_60_000_00);
@@ -211,7 +213,7 @@ describe("goalFigures", () => {
   });
 
   it("full car loan leaves only the extras upfront", () => {
-    const figures = goalFigures({ type: "car", details: { ...car, payment: "loan", loanRateBps: 950, loanMonths: 60 } });
+    const figures = goalFigures({ type: "vehicle", details: { ...car, payment: "loan", loanRateBps: 950, loanMonths: 60 } });
     expect(figures.upfrontMinor).toBe(60_000_00);
     expect(figures.loan?.principalMinor).toBe(8_00_000_00);
   });
@@ -234,7 +236,7 @@ describe("goalFigures", () => {
 
   it("rejects a down payment above the price", () => {
     expect(() =>
-      goalFigures({ type: "car", details: { ...car, payment: "loan_down_payment", downPaymentMinor: 9_00_000_00, loanRateBps: 950, loanMonths: 60 } }),
+      goalFigures({ type: "vehicle", details: { ...car, payment: "loan_down_payment", downPaymentMinor: 9_00_000_00, loanRateBps: 950, loanMonths: 60 } }),
     ).toThrow(RangeError);
   });
 

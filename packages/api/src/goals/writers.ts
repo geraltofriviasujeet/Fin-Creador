@@ -106,6 +106,17 @@ export async function setGoalArchived(supabase: UserClient, input: { goalId: str
   return { status: "success", message: input.archived ? "Goal archived." : "Goal restored.", goalId: input.goalId }
 }
 
+/**
+ * Deletes an archived goal permanently (it can't be undone). The database allows it only
+ * for the owner's archived goals; an active goal matches no row and is reported as such.
+ */
+export async function deleteGoal(supabase: UserClient, input: { goalId: string }): Promise<WriteResult> {
+  const { data, error } = await supabase.from("goals").delete().eq("id", input.goalId).not("archived_at", "is", null).select("id")
+  if (error) return dbError(error)
+  if (!data?.length) return { status: "error", message: "Only an archived goal can be deleted. Reload and try again." }
+  return { status: "success", message: "Goal deleted." }
+}
+
 /** Sets a category's monthly budget from a month onward (0 or blank ends it). Repeat-safe. */
 export async function setCategoryBudget(supabase: UserClient, input: FormInput): Promise<WriteResult> {
   const day = await userToday(supabase)

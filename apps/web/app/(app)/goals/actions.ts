@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { type FormInput, type WriteResult, saveGoal, setCategoryBudget, setGoalArchived, setGoalSaved } from "@fin-creador/api"
+import { type FormInput, type WriteResult, deleteGoal, saveGoal, setCategoryBudget, setGoalArchived, setGoalSaved } from "@fin-creador/api"
 import { TRIP_COST_LINES } from "@fin-creador/domain"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
@@ -51,6 +51,15 @@ export async function setGoalArchivedAction(input: unknown): Promise<WriteResult
   const r = goalRef.safeParse(input)
   if (!r.success) return { status: "error", message: "We couldn't find that goal." }
   return refreshed(await setGoalArchived(await client(), r.data))
+}
+
+const goalId = z.object({ goalId: z.uuid() })
+
+/** Permanent delete of an archived goal (the database refuses any other). */
+export async function deleteGoalAction(input: unknown): Promise<WriteResult> {
+  const r = goalId.safeParse(input)
+  if (!r.success) return { status: "error", message: "We couldn't find that goal." }
+  return refreshed(await deleteGoal(await client(), r.data))
 }
 
 export async function setCategoryBudgetAction(input: unknown): Promise<WriteResult> {

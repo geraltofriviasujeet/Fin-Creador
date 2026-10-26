@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { UserClient } from "../income/client"
-import { saveGoal, setCategoryBudget, setGoalSaved } from "./writers"
+import { deleteGoal, saveGoal, setCategoryBudget, setGoalSaved } from "./writers"
 
 const KEY = "e6000000-0000-4000-8000-000000000001"
 const GOAL = "90000000-0000-4000-8000-000000000001"
@@ -26,6 +26,8 @@ function fakeClient(answer: (call: Call) => Answer = () => ({ data: null, error:
       select: () => builder,
       insert: (values: Record<string, unknown>) => Object.assign(call, { op: "insert", values }) && builder,
       update: (values: Record<string, unknown>) => Object.assign(call, { op: "update", values }) && builder,
+      delete: () => Object.assign(call, { op: "delete" }) && builder,
+      not: (column: string, operator: string, value: unknown) => (call.filters.push([`not ${column} ${operator}`, value]), builder),
       eq: (column: string, value: unknown) => (call.filters.push([column, value]), builder),
       single: settle,
       maybeSingle: settle,
@@ -93,7 +95,7 @@ describe("saveGoal", () => {
 
   it("an edit recomputes the target, keeps the goal's type and currency", async () => {
     const { client, calls } = fakeClient((call) => {
-      if (call.op === "select") return { data: { id: GOAL, type: "car", currency: "INR", target_date: "2026-10-01", archived_at: null }, error: null }
+      if (call.op === "select") return { data: { id: GOAL, type: "vehicle", currency: "INR", target_date: "2026-10-01", archived_at: null }, error: null }
       return { data: [{ id: GOAL }], error: null }
     })
     const result = await saveGoal(client, {
@@ -101,8 +103,10 @@ describe("saveGoal", () => {
       type: "trip", // ignored: the stored type wins
       name: "Car",
       targetDate: "2026-10-01", // in the past but unchanged: allowed
+      vehicle: "car",
       condition: "used",
-      model: "Sedan",
+      make: "Honda",
+      model: "City",
       payment: "loan_down_payment",
       price: "6,00,000",
       extras: "20,000",
@@ -154,5 +158,18 @@ describe("setCategoryBudget", () => {
     const result = await setCategoryBudget(client, { categoryId: CAT, month: "2026-09", amount: "100" })
     expect(result.status === "error" && result.fieldErrors?.month).toBeTruthy()
     expect(rpcs).toEqual([])
+  })
+})
+
+describe("deleteGoal", () => {
+  it("deletes only an archived goal", async () => {
+    const { client, calls } = fakeClient(() => ({ data: [{ id: GOAL }], error: null }))
+    expect(await deleteGoal(client, { goalId: GOAL })).toEqual({ status: "success", message: "Goal deleted." })
+    expect(calls).toEqual([{ table: "goals", op: "delete", filters: [["id", GOAL], ["not archived_at is", null]] }])
+  })
+
+  it("reports an active (or missing) goal instead of pretending it was deleted", async () => {
+    const { client } = fakeClient(() => ({ data: [], error: null }))
+    expect(await deleteGoal(client, { goalId: GOAL })).toEqual({ status: "error", message: "Only an archived goal can be deleted. Reload and try again." })
   })
 })

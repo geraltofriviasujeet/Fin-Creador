@@ -215,7 +215,7 @@ export function budgetStatus(spentMinor: number, budgetMinor: number): BudgetSta
 // The answers are stored as the goal's `details` (validated per type in packages/schemas,
 // version `v` so later sprints, such as AI insights, can read them safely).
 
-export const GOAL_TYPES = ["trip", "car", "house", "furniture", "electronics", "mobile", "other"] as const;
+export const GOAL_TYPES = ["trip", "vehicle", "house", "furniture", "electronics", "mobile", "other"] as const;
 export type GoalType = (typeof GOAL_TYPES)[number];
 
 export const TRIP_COST_LINES = ["transport", "stay", "food", "activities", "visaInsurance", "shopping", "buffer"] as const;
@@ -236,9 +236,16 @@ export interface TripDetails {
   costs: Record<TripCostLine, number>;
 }
 
-export interface CarDetails {
+export const VEHICLE_KINDS = ["bike", "car", "hmv"] as const;
+export type VehicleKind = (typeof VEHICLE_KINDS)[number];
+
+/** A bike, car or heavy motor vehicle (HMV). */
+export interface VehicleDetails {
   v: 1;
+  vehicle: VehicleKind;
   condition: "new" | "used";
+  /** Null only for goals saved before the make was asked (renamed from "car", 2026-10-26). */
+  make: string | null;
   model: string;
   payment: LoanPayment;
   priceMinor: number;
@@ -280,7 +287,7 @@ export interface OtherDetails {
 
 export type GoalDetails =
   | { type: "trip"; details: TripDetails }
-  | { type: "car"; details: CarDetails }
+  | { type: "vehicle"; details: VehicleDetails }
   | { type: "house"; details: HouseDetails }
   | { type: "furniture" | "electronics" | "mobile"; details: ItemDetails }
   | { type: "other"; details: OtherDetails };
@@ -316,9 +323,9 @@ function financed(payment: LoanPayment, priceMinor: number, downPaymentMinor: nu
 /**
  * Upfront amount, cost total and loan for a planned expense:
  *  - trip: upfront = the sum of the cost lines;
- *  - car: cash → price + extras; loan → extras, the price financed; loan with down payment
+ *  - vehicle (bike, car, HMV): cash → price + extras; loan → extras, the price financed; loan with down payment
  *    → down payment + extras, price − down payment financed;
- *  - house: as car without extras;
+ *  - house: as a vehicle without extras;
  *  - furniture, electronics, mobile: cash → price; EMI or no-cost EMI → nothing upfront,
  *    the price financed (no-cost EMI at 0%);
  *  - other: the amount entered is the target.
@@ -329,10 +336,10 @@ export function goalFigures(goal: GoalDetails): GoalFigures {
       const total = addMinor(...TRIP_COST_LINES.map((line) => goal.details.costs[line]));
       return { upfrontMinor: total, costTotalMinor: total, loan: null };
     }
-    case "car":
+    case "vehicle":
     case "house": {
       const d = goal.details;
-      const extras = goal.type === "car" ? goal.details.extrasMinor : 0;
+      const extras = goal.type === "vehicle" ? goal.details.extrasMinor : 0;
       const { upfront, principal } = financed(d.payment, d.priceMinor, d.downPaymentMinor);
       return {
         upfrontMinor: addMinor(upfront, extras),

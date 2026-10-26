@@ -2,17 +2,23 @@
 
 import { useMemo, useState } from "react"
 import { type GoalItem, type WriteResult, newRequestKey } from "@fin-creador/api"
-import { GOAL_TYPES, type GoalType, TRIP_COST_LINES, goalFigures, minorToInputString } from "@fin-creador/domain"
+import { GOAL_TYPES, type GoalType, TRIP_COST_LINES, VEHICLE_KINDS, type VehicleKind, goalFigures, minorToInputString } from "@fin-creador/domain"
 import {
   EMI_ROUNDING_NOTE,
+  FOREIGN_COUNTRIES,
   GOAL_TYPE_OPTIONS,
+  INDIAN_CITIES,
+  INDIAN_STATES,
   GOAL_UPFRONT_LABEL,
   ITEM_PAYMENTS,
   LOAN_PAYMENTS,
   STAY_TYPES,
   TRAVEL_MODES,
   TRIP_COST_LABELS,
+  VEHICLE_KIND_OPTIONS,
   goalFormSchema,
+  vehicleMakes,
+  vehicleModels,
 } from "@fin-creador/schemas"
 import { cn } from "cn"
 import { saveGoalAction } from "@/app/(app)/goals/actions"
@@ -31,6 +37,9 @@ type Values = Record<string, string>
 
 const NETWORK = "We couldn't reach the server. Your details are kept; try again."
 const PREVIEW_KEY = "00000000-0000-4000-8000-000000000000"
+
+/** Answers that depend on another choice and are cleared when it changes (different lists). */
+const CLEARS: Record<string, string[]> = { scope: ["place"], vehicle: ["make", "model"] }
 
 /** 850 → "8.5" (display of a stored rate, integer arithmetic only). */
 function bpsToInput(bps: number | null): string {
@@ -63,7 +72,7 @@ function valuesFrom(item: GoalItem): Values {
       })
       for (const line of TRIP_COST_LINES) v[`cost_${line}`] = answers.details.costs[line] ? amount(answers.details.costs[line]) : ""
       break
-    case "car":
+    case "vehicle":
     case "house":
       Object.assign(v, {
         payment: answers.details.payment,
@@ -72,7 +81,14 @@ function valuesFrom(item: GoalItem): Values {
         rate: bpsToInput(answers.details.loanRateBps),
         months: answers.details.loanMonths ? String(answers.details.loanMonths) : "",
       })
-      if (answers.type === "car") Object.assign(v, { condition: answers.details.condition, model: answers.details.model, extras: amount(answers.details.extrasMinor) || "" })
+      if (answers.type === "vehicle")
+        Object.assign(v, {
+          vehicle: answers.details.vehicle,
+          condition: answers.details.condition,
+          make: answers.details.make ?? "",
+          model: answers.details.model,
+          extras: amount(answers.details.extrasMinor) || "",
+        })
       else Object.assign(v, { purpose: answers.details.purpose, city: answers.details.city })
       break
     case "furniture":
@@ -98,7 +114,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
   const goalCurrency = item?.goal.currency ?? currency
   // One key per opened form; a retry after a failure reuses it, so the goal is added once.
   const [requestKey] = useState(newRequestKey)
-  const [values, setValues] = useState<Values>(() => (item ? valuesFrom(item) : { type: "trip", scope: "domestic", payment: "cash" }))
+  const [values, setValues] = useState<Values>(() => (item ? valuesFrom(item) : { type: "trip", scope: "domestic", payment: "cash", vehicle: "car" }))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -153,6 +169,19 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
       ))}
     </SelectField>
   )
+  /** Free text with suggestions (a searchable list; anything typed is accepted). */
+  const suggest = (name: string, label: string, options: readonly string[], placeholder: string) => (
+    <>
+      {text(name, label, { list: `${name}-options`, placeholder, maxLength: 80, autoComplete: "off" })}
+      <datalist id={`${name}-options`}>
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+    </>
+  )
+  const vehicleKind = (VEHICLE_KINDS as readonly string[]).includes(values.vehicle ?? "") ? (values.vehicle as VehicleKind) : "car"
+
   /** Small segmented control (radio group) with its label above, like a field. */
   const choice = (name: string, label: string, options: readonly { value: string; label: string }[]) => (
     <fieldset className="grid gap-1.5">
@@ -164,7 +193,9 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
             type="button"
             role="radio"
             aria-checked={values[name] === o.value}
-            onClick={() => set(name)(o.value)}
+            onClick={() =>
+              setValues((v) => (v[name] === o.value ? v : { ...v, [name]: o.value, ...Object.fromEntries((CLEARS[name] ?? []).map((f) => [f, ""])) }))
+            }
             className={cn(
               "flex flex-1 items-center justify-center rounded-md px-2.5 text-sm font-semibold whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-ring",
               values[name] === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
@@ -216,7 +247,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
                 aria-checked={t.value === type}
                 disabled={editing && t.value !== type}
                 onClick={() => {
-                  setValues((v) => ({ type: t.value, name: v.name ?? "", targetDate: v.targetDate ?? "", saved: v.saved ?? "", scope: "domestic", payment: "cash" }))
+                  setValues((v) => ({ type: t.value, name: v.name ?? "", targetDate: v.targetDate ?? "", saved: v.saved ?? "", scope: "domestic", payment: "cash", vehicle: "car" }))
                   setErrors({})
                 }}
                 className={cn(
@@ -250,7 +281,12 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
                   { value: "domestic", label: "Domestic" },
                   { value: "international", label: "International" },
                 ])}
-                {text("place", values.scope === "international" ? "Country" : "State", { maxLength: 80 })}
+                {select(
+                  "place",
+                  values.scope === "international" ? "Country" : "State",
+                  (values.scope === "international" ? FOREIGN_COUNTRIES : INDIAN_STATES).map((name) => ({ value: name, label: name })),
+                  values.scope === "international" ? "Choose a country" : "Choose a state"
+                )}
                 {text("people", "People", { inputMode: "numeric" })}
                 {text("days", "Days", { inputMode: "numeric" })}
               </>
@@ -269,16 +305,23 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
           </>
         )}
 
-        {type === "car" && (
+        {type === "vehicle" && (
           <>
             {row(
-              3,
+              2,
               <>
-                {choice("condition", "Car", [
+                {choice("vehicle", "Vehicle", VEHICLE_KIND_OPTIONS)}
+                {choice("condition", "Condition", [
                   { value: "new", label: "New" },
                   { value: "used", label: "Used" },
                 ])}
-                <div className="md:col-span-2">{text("model", "Which car", { placeholder: "Make and model", maxLength: 80 })}</div>
+              </>
+            )}
+            {row(
+              2,
+              <>
+                {suggest("make", "Make", vehicleMakes(vehicleKind), "Type or choose a make")}
+                {suggest("model", "Model", vehicleModels(vehicleKind, values.make ?? ""), "Type or choose a model")}
               </>
             )}
             {row(
@@ -308,7 +351,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
                   { value: "buy", label: "Buy" },
                   { value: "renovate", label: "Renovate" },
                 ])}
-                {text("city", "City", { maxLength: 80 })}
+                {suggest("city", "City", INDIAN_CITIES, "Type or choose a city")}
                 {amountField("price", values.purpose === "renovate" ? "Cost" : "Price")}
               </>
             )}
