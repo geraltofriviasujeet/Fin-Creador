@@ -1,0 +1,115 @@
+# Deployment guide (web MVP)
+
+How the FinCreador web app is deployed for controlled testing. The owner creates and
+configures the Vercel and Supabase projects; nothing here is automated. Placeholders such as
+`<prod-project-ref>` and `<your-app>` stand for your own values; never commit real ones.
+
+## Hosting decision and its limits
+
+- **Vercel Hobby** (web) and **Supabase Free** (database and auth), for the owner's own use
+  and invited testers only.
+- Vercel Hobby is for **non-commercial personal use**: no payments, no paying customers, no
+  public commercial launch while on it.
+- Supabase Free: **no automatic backups and no point-in-time recovery**, the project pauses
+  after 1 week of inactivity, 500 MB per project, 2 active projects (one for development,
+  one for production).
+- Scheduled jobs use Supabase scheduling (`pg_cron`, Edge Functions), never Vercel Cron.
+
+## 1. Production Supabase project
+
+Use the second free project slot. `fin-creador-dev` stays the development project; the
+deployed app never points at it.
+
+1. Create a new Supabase project (e.g. `fin-creador-prod`), region close to your users.
+   Keep the database password in your password manager.
+2. Push every migration to it from a clean `main` checkout:
+
+   ```sh
+   supabase link --project-ref <prod-project-ref>
+   supabase migration list --linked     # all migrations show as local only
+   supabase db push --dry-run           # review the list
+   supabase db push
+   supabase migration list --linked     # every migration now shows as remote
+   supabase link --project-ref <dev-project-ref>   # link back to dev afterwards
+   ```
+
+   The same rules as development apply: never edit an applied migration, never reset the
+   database, push only migrations whose CI is green. A Docker socket error after "Applying
+   migration" is harmless; check the migration list.
+3. **Authentication → URL Configuration:**
+   - **Site URL:** `https://<your-app>.vercel.app`
+   - **Redirect URLs:** `https://<your-app>.vercel.app/auth/callback` only. Do not add
+     `localhost`, `exp://**` or wildcards to the production project.
+4. **Authentication → Sign In / Providers:** Email on with "Confirm email" and a minimum
+   password length of 8, as in development. For Google, add
+   `https://<prod-project-ref>.supabase.co/auth/v1/callback` to the OAuth client's authorized
+   redirect URIs in Google Cloud Console and enter the client ID and secret in this project's
+   dashboard (never in the repository).
+5. **Authentication → Email Templates:** the same subjects and templates as
+   `supabase/templates/` (see `docs/setup.md` section 4).
+6. **Custom SMTP** before inviting testers: the built-in sender allows only a few emails an
+   hour.
+
+## 2. Vercel project
+
+1. Import the GitHub repository in Vercel. Framework: **Next.js**. Root directory:
+   **`apps/web`** (the npm workspace packages in `packages/` are part of the build).
+2. Environment variables, for the **Production** environment only, all from the
+   **production** Supabase project (Project Settings → API):
+
+   | Variable | Value |
+   |----|----|
+   | `NEXT_PUBLIC_SUPABASE_URL` | `https://<prod-project-ref>.supabase.co` |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the project's publishable (anon) key |
+   | `NEXT_PUBLIC_SITE_URL` | `https://<your-app>.vercel.app` (no trailing slash) |
+
+   **Never** give Vercel the service-role or secret key: the web app does not use it, and
+   any `NEXT_PUBLIC_` value is bundled into the browser.
+3. Preview deployments: leave their variables unset (previews then show a configuration
+   error), or point them at the development project. Never point a preview at production
+   data you care about.
+4. Deploy from `main`. The production Supabase project must already have every migration
+   the deployed commit needs (step 1.2) before the deploy.
+
+## 3. After the first deploy
+
+Check on the deployed domain, with a test account (never real financial data):
+
+- [ ] The app loads, and the browser's network requests go to `<prod-project-ref>`, not the
+      development project.
+- [ ] Sign-up email confirmation, password reset and Google sign-in all return to
+      `https://<your-app>.vercel.app/...`, never `localhost`.
+- [ ] Signed-out visits to app pages redirect to the deployed sign-in page.
+
+If any redirect lands on `localhost`, build it from `NEXT_PUBLIC_SITE_URL` instead of the
+request URL (`apps/web/app/auth/callback/route.ts`, `apps/web/lib/supabase/proxy.ts`). The
+E2E tests keep running on `localhost:3000`.
+
+## 4. Backups (until the Pro upgrade)
+
+Supabase Free has no automatic backups. Take a manual backup of the **production** database:
+
+- every week, and
+- before every migration you push to it.
+
+```sh
+# Connection string: Supabase dashboard → Connect → Session pooler. Keep it out of the repo.
+pg_dump "<prod-connection-string>" --no-owner --no-privileges -f fincreador-prod-YYYY-MM-DD.sql
+```
+
+Store the file encrypted outside the repository (it contains personal financial data) and
+keep at least the last four. Check now and then that a backup restores into a scratch
+database.
+
+## 5. Upgrade before any commercial launch
+
+Do all of these before payments, paying customers or a public launch, and only once the
+product is complete and QA has passed:
+
+- [ ] Move the web app to **Vercel Pro**.
+- [ ] Move the production database to **Supabase Pro** (daily backups; add point-in-time
+      recovery if needed) and stop relying on manual backups.
+- [ ] Clear the "Before production" list in `docs/sprint-plan.md` (redirect allow list,
+      dev scripts, fixed `fincreador://` scheme, Site URL, custom SMTP).
+- [ ] Re-check the auth redirects (section 3) on the production domain.
+- [ ] Point the mobile release builds at the production project (Sprint 12).

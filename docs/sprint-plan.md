@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-24.
+Last updated: 2026-10-26.
 
 ## Sprint status
 
@@ -27,7 +27,7 @@ Last updated: 2026-10-24.
 | **2** | Accounts & Income page | Done | Completed 2026-10-22 (PRs #9–#16). Accounts, income sources, income entries with void, one cash account with "Update cash in hand", the Income page on web and mobile. Tested on web (E2E in CI) and on Android and iPhone (Expo Go 58). Scope widened from the original plan (see decisions). See Sprint 2 steps below. |
 | **3** | Expense & transaction tracking | Done | Completed 2026-10-23 (PR #20 into the sprint branch; PR #19 merged into `main` 2026-10-23, merge commit ac916de). Expenses, one-row transfers, edits with history, voids with request keys, search and filters in the database with keyset paging, expense categories (web Settings), the Transactions page on web and the Activity tab and Add / Edit sheet on mobile (checked in Expo Go). Migrations 20261023120000 and 20261023180000 applied to fin-creador-dev. See Sprint 3 steps. |
 | **4** | Recurring items | Done | Completed 2026-10-24 (PR #22 into the sprint branch, PR #21 merged into `main`, merge commit 1964d50). Recurring rules with due items you confirm or skip, the /recurring page with cost tiles and groups, the Upcoming card on Income and Transactions, the Recurring screen on mobile (tested in Expo Go). Migration 20261024120000 applied to fin-creador-dev. See Sprint 4 steps. |
-| **5** | Dashboard & analytics | Not started | |
+| **5** | Dashboard & analytics | In progress | Web only (mobile Overview in the backlog). Branch `sprint-5-dashboard`. See Sprint 5 steps. |
 | **6** | Budgets & savings goals | Not started | |
 | **7** | Investment portfolio | Not started | |
 | **8** | Loans, liabilities & reports | Not started | |
@@ -76,6 +76,18 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **Phase 2.5b Expense categories (web)** | Done | Settings → Categories: add, rename (and icon), archive, restore; defaults archivable, never deleted; no duplicate active names; archived categories keep their history. Shared writers in `packages/api`; E2E `e2e/categories.spec.ts` with one screenshot. |
 | **Phase 2.6 Mobile** | Done | PR #22: Recurring screen (cost tiles, panels, groups, archived with Restore, Undo skip), rule and skip sheets, Confirm in the Add / Edit sheet, Overview Recurring card and an Activity link. Tested in Expo Go 2026-10-24. |
 | **Phase 2.7 Status and PR** | Done | PR #22 merged into `sprint-4-recurring`, then PR #21 into `main` (2026-10-24). |
+
+## Sprint 5 steps
+
+No demo-data prototype (owner, 2026-10-26): built on real data with real loading, empty, error and success states; budget and goals stay "Coming soon". Web only.
+
+| **Step** | **Status** | **Notes** |
+|----|----|----|
+| **5.1 Deployment guide** | Done | `docs/deployment.md`: separate production Supabase project, Vercel env vars (public URL and publishable key only), redirects, weekly backups, upgrade checklist. |
+| **5.2 Domain** | Done | `packages/domain/src/dashboard.ts`: Monday weeks, periods, comparisons over the same elapsed days, change in basis points, buckets, top 5 categories; unit tests. |
+| **5.3 Migration and pgTAP** | SQL approved; CI pending, then the owner's db push | `20261026120000_dashboard_breakdown.sql` (one read-only function), `supabase/tests/database/dashboard.test.sql` (24 tests). |
+| **5.4 Loader and web Overview** | Not started | Cards, spending chart, categories, income vs expenses, recent transactions, Recurring card, filtered links. Month-bucket charts on a custom range label a partial first (or last) month as partial (owner, 2026-10-26). |
+| **5.5 E2E, screenshots, PR** | Not started | At most 8 screenshots for the owner. |
 
 ## Sprint 4 steps
 
@@ -147,6 +159,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-24** | Voiding an entry confirmed from a recurring item is done on the Transactions page like any entry; the occurrence then shows as due again. The Recurring page has no "Void last" button (the prototype had one). | One place to void; no second void path. |
 | **2026-10-26** | The product name is written "FinCreador" (capital F and C, one word) wherever people read it: UI text, page titles, emails, the mobile app name, docs, comments and screen-reader text. Wordmark "Fin" + "Creador": on dark, Fin white and Creador lime; on light, both ink. Technical identifiers (package names, repo and folders, the `fincreador://` scheme, bundle ids, env vars, URLs, the Supabase project name) are unchanged. | Owner's decision; supersedes the lowercase wordmark of 2026-10-22. |
 | **2026-10-26** | Hosting (owner): MVP runs on Vercel Hobby and Supabase Free, for my own use and invited testers only: no payments, no paying customers, no public commercial launch (Vercel Hobby is non-commercial personal use only). Upgrade to Vercel Pro and Supabase Pro only when the product is complete and QA is passed, and before any commercial use. Free-tier limits: Supabase Free has no automatic backups or point-in-time recovery, pauses after 1 week of inactivity, 500 MB per project, 2 active projects. Until the upgrade, take a manual backup of the MVP database weekly and before every migration. | Stays within the free tiers' terms until a commercial launch; manual backups cover the missing automatic backups. |
+| **2026-10-26** | Sprint 5 dashboard (owner): periods Week (Monday to Sunday), Month, Year and Custom (no Day). Each compares the days so far with the same elapsed days of the previous period ("vs same days last month"); a custom range with the same number of days just before it. Changes in integer basis points; "—" when the previous value is 0; savings rate "—" when income is 0. Totals in the profile currency only (total balance = active accounts' balances); other currencies get a one-line note, never summed. Totals come from `transaction_summary`; chart and category breakdowns from one read-only, security-invoker function `dashboard_breakdown` on `transactions_matching` (by day up to 62 days, else by month). Category chart: top 5 plus "Everything else"; archived categories keep their history. Charts are plain SVG with the tokens, 12px minimum text, not colour alone, each with a text or table alternative. Recent transactions: the last 5 from `list_transactions`, any period. | Aggregating in the database avoids paging a year of entries on every load (and over mobile networks); one source for totals keeps the dashboard equal to the Transactions page. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -175,6 +188,7 @@ Pending tests:
 - **Mobile category management:** add, rename, archive and restore expense categories in the mobile app (web has it on Settings since Sprint 3; owner, 2026-10-23).
 - **Recurring reminders:** notify when a recurring item is due (deferred from Sprint 4; belongs with Sprint 10 notifications, using Supabase scheduling).
 - **Recurring on the web Overview:** a Recurring card like the mobile one (deferred from Sprint 4 to the Sprint 5 dashboard).
+- **Mobile Overview dashboard:** the Sprint 5 dashboard on mobile, reusing `dashboard_breakdown`, `transaction_summary` and `packages/domain/src/dashboard.ts` (owner, 2026-10-26: web only in Sprint 5).
 - **Payee / merchant on entries:** a "paid to" field (the Figma shows merchant names). Not in Sprint 3 (owner, 2026-10-23).
 - **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
 
