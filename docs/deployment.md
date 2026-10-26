@@ -85,6 +85,12 @@ If any redirect lands on `localhost`, build it from `NEXT_PUBLIC_SITE_URL` inste
 request URL (`apps/web/app/auth/callback/route.ts`, `apps/web/lib/supabase/proxy.ts`). The
 E2E tests keep running on `localhost:3000`.
 
+If Google sign-in lands on `/?code=…`, Supabase did not accept the `redirectTo`
+(`NEXT_PUBLIC_SITE_URL` + `/auth/callback?next=…`) and fell back to the Site URL. The app
+forwards a root `?code` to `/auth/callback`, but fix the cause: `NEXT_PUBLIC_SITE_URL` must be
+exactly the Site URL host (set for Production, then **redeploy**, since `NEXT_PUBLIC_` values
+are fixed at build time), and the allow list must contain `<site>/auth/callback**`.
+
 ## 4. Backups (until the Pro upgrade)
 
 Supabase Free has no automatic backups. Take a manual backup of the **production** database:
