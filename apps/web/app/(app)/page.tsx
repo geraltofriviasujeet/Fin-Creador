@@ -46,7 +46,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   if (!context.ok) return <LoadError />
 
   const { today, currency } = context.data
-  const { period, range } = readDashboardParams(params, today)
+  const { period, range, charts } = readDashboardParams(params, today)
   const comparison = comparisonFor(period, range, today)
 
   const [totals, prevTotals, breakdown, recent, recurring, profile] = await Promise.all([
@@ -81,6 +81,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
       prevTotals={prevTotals?.ok ? prevTotals.totals : null}
       breakdown={breakdown.data}
       recent={recent.items}
+      charts={charts}
       upcoming={upcoming}
     />
   )

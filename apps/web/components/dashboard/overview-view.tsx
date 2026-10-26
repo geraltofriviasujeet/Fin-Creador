@@ -2,7 +2,10 @@ import type * as React from "react"
 import Link from "next/link"
 import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, PiggyBank, Target, Wallet } from "lucide-react"
 import {
+  type ChartChoices,
   type DashboardBreakdown,
+  CHART_OPTIONS,
+  DEFAULT_CHARTS,
   type LedgerItem,
   type Lookup,
   type TransactionTotals,
@@ -32,7 +35,8 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { TextField } from "@/components/ui/field"
 import { EntryIcon, dayHeading, entryKindLabel, entryTitle, fullDate, money, rangeText, signedAmount } from "@/components/transactions/display"
-import { BarChart } from "./bar-chart"
+import { CategoryPie } from "./category-pie"
+import { TimeChart } from "./time-chart"
 
 export const OVERVIEW_HEADER = { title: "Overview", description: "Your money at a glance." }
 
@@ -53,6 +57,7 @@ export type OverviewViewProps = {
   prevTotals: TransactionTotals | null
   breakdown: DashboardBreakdown
   recent: LedgerItem[]
+  charts: ChartChoices
   /** The Recurring card (null when recurring items couldn't load). */
   upcoming: React.ReactNode
 }
@@ -69,7 +74,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, upcoming }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = {
     accounts: new Map(context.accounts.map((a) => [a.id, a])),
@@ -89,10 +94,10 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         eyebrow={longDate(today)}
         title={greeting(name, timeZone)}
         description={`Here’s how your money is looking ${PERIOD_PHRASE[period]}.`}
-        actions={<PeriodSwitcher period={period} />}
+        actions={<PeriodSwitcher period={period} charts={charts} />}
       />
 
-      {period === "custom" && <CustomRangeForm range={range} today={today} />}
+      {period === "custom" && <CustomRangeForm range={range} today={today} charts={charts} />}
 
       {!context.hasEntries && <FirstRun hasAccounts={holdings.rows.length > 0} />}
 
@@ -165,23 +170,26 @@ export function OverviewView({ context, name, period, range, comparison, totals,
 
       <div className="grid gap-6 lg:grid-cols-[1.75fr_1fr]">
         <Card aria-labelledby="spending-title">
-          <CardTitle id="spending-title">Spending overview</CardTitle>
-          <CardDescription className="mt-1 mb-4">Your expenses {PERIOD_PHRASE[period]}, {breakdownUnit(range)}</CardDescription>
+          <CardHeading id="spending-title" title="Spending overview" switcher={hasSpending && <ChartSwitch chart="spending" title="Spending overview" period={period} range={range} charts={charts} />}>
+            Your expenses {PERIOD_PHRASE[period]}, {breakdownUnit(range)}
+          </CardHeading>
           {hasSpending ? (
-            <BarChart buckets={breakdown.buckets} range={range} series={["expense"]} currency={currency} summary={chartSummary(breakdown, range, currency)} />
+            <TimeChart kind={charts.spending} buckets={breakdown.buckets} range={range} series={["expense"]} currency={currency} summary={chartSummary(breakdown, range, currency)} />
           ) : (
             <EmptyPanel>No spending recorded {PERIOD_PHRASE[period]}.</EmptyPanel>
           )}
         </Card>
-        <CategoryCard breakdown={breakdown} range={range} currency={currency} lookup={lookup} period={period} />
+        <CategoryCard breakdown={breakdown} range={range} currency={currency} lookup={lookup} period={period} charts={charts} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.75fr_1fr]">
         <Card aria-labelledby="flow-title">
-          <CardTitle id="flow-title">Income vs expenses</CardTitle>
-          <CardDescription className="mt-1 mb-4">Money in and out {PERIOD_PHRASE[period]}, {breakdownUnit(range)}</CardDescription>
+          <CardHeading id="flow-title" title="Income vs expenses" switcher={hasActivity && <ChartSwitch chart="flow" title="Income vs expenses" period={period} range={range} charts={charts} />}>
+            Money in and out {PERIOD_PHRASE[period]}, {breakdownUnit(range)}
+          </CardHeading>
           {hasActivity ? (
-            <BarChart
+            <TimeChart
+              kind={charts.flow}
               buckets={breakdown.buckets}
               range={range}
               series={["income", "expense"]}
@@ -227,14 +235,64 @@ function chartSummary(breakdown: DashboardBreakdown, range: DateRange, currency:
   return `Expenses ${breakdownUnit(range)}, ${rangeText(range)}: ${money(total, currency)} in total; highest ${money(highest.expenseMinor, currency)} on ${when}. "Show as a table" lists every amount.`
 }
 
-function PeriodSwitcher({ period }: { period: DashboardPeriod }) {
+function CardHeading({ id, title, switcher, children }: { id: string; title: string; switcher?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <CardTitle id={id}>{title}</CardTitle>
+        <CardDescription className="mt-1">{children}</CardDescription>
+      </div>
+      {switcher}
+    </div>
+  )
+}
+
+/** Chart type links (kept in the URL with the period and the other charts' types). */
+function ChartSwitch<K extends keyof ChartChoices>({
+  chart,
+  title,
+  period,
+  range,
+  charts,
+}: {
+  chart: K
+  title: string
+  period: DashboardPeriod
+  range: DateRange
+  charts: ChartChoices
+}) {
+  return (
+    <nav aria-label={`Chart type for ${title}`}>
+      <ul className="flex rounded-lg bg-canvas p-0.5">
+        {CHART_OPTIONS[chart].map((o) => (
+          <li key={o.value}>
+            <Link
+              href={`/${dashboardQuery(period, range, { ...charts, [chart]: o.value })}`}
+              aria-current={charts[chart] === o.value ? "true" : undefined}
+              scroll={false}
+              className={cn(
+                "flex min-h-8 items-center rounded-md px-3 text-xs font-semibold text-muted-foreground transition-colors motion-reduce:transition-none",
+                "hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-deep",
+                charts[chart] === o.value && "bg-surface text-ink shadow-sm"
+              )}
+            >
+              {o.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
+function PeriodSwitcher({ period, charts }: { period: DashboardPeriod; charts: ChartChoices }) {
   return (
     <nav aria-label="Period">
       <ul className="flex rounded-xl bg-line/60 p-1">
         {DASHBOARD_PERIODS.map((p) => (
           <li key={p.value}>
             <Link
-              href={`/${dashboardQuery(p.value)}`}
+              href={`/${dashboardQuery(p.value, undefined, charts)}`}
               aria-current={p.value === period ? "page" : undefined}
               scroll={false}
               className={cn(
@@ -253,7 +311,7 @@ function PeriodSwitcher({ period }: { period: DashboardPeriod }) {
 }
 
 // A plain GET form: works without JavaScript and keeps the range in the URL.
-function CustomRangeForm({ range, today }: { range: DateRange; today: string }) {
+function CustomRangeForm({ range, today, charts }: { range: DateRange; today: string; charts: ChartChoices }) {
   return (
     <Card className="mb-6">
       <form action="/" method="get" className="grid items-end gap-4 md:grid-cols-[1fr_1fr_auto]">
@@ -261,6 +319,9 @@ function CustomRangeForm({ range, today }: { range: DateRange; today: string }) 
         <TextField name="from" type="date" label="From" max={today} defaultValue={range.start} required />
         <TextField name="to" type="date" label="To" max={today} defaultValue={range.end} required />
         <Button type="submit">Show range</Button>
+        {(["spending", "flow", "categories"] as const).map((key) =>
+          charts[key] !== DEFAULT_CHARTS[key] ? <input key={key} type="hidden" name={key} value={charts[key]} /> : null
+        )}
       </form>
     </Card>
   )
@@ -360,21 +421,30 @@ function CategoryCard({
   currency,
   lookup,
   period,
+  charts,
 }: {
   breakdown: DashboardBreakdown
   range: DateRange
   currency: string
   lookup: Lookup
   period: DashboardPeriod
+  charts: ChartChoices
 }) {
   const total = addMinor(...breakdown.categories.map((c) => c.expenseMinor))
   const largest = breakdown.categories[0]?.expenseMinor ?? 0
   return (
     <Card aria-labelledby="categories-title">
-      <CardTitle id="categories-title">Spending by category</CardTitle>
-      <CardDescription className="mt-1 mb-4">Top five {PERIOD_PHRASE[period]}</CardDescription>
+      <CardHeading
+        id="categories-title"
+        title="Spending by category"
+        switcher={breakdown.categories.length > 0 && <ChartSwitch chart="categories" title="Spending by category" period={period} range={range} charts={charts} />}
+      >
+        Top five {PERIOD_PHRASE[period]}
+      </CardHeading>
       {breakdown.categories.length === 0 ? (
         <EmptyPanel>No spending recorded {PERIOD_PHRASE[period]}.</EmptyPanel>
+      ) : charts.categories === "pie" ? (
+        <CategoryPie categories={breakdown.categories} range={range} currency={currency} lookup={lookup} />
       ) : (
         <ul className="grid gap-3.5">
           {breakdown.categories.map((c) => {

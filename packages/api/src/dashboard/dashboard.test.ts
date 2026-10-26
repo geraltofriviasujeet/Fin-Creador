@@ -5,7 +5,11 @@ const params = (q: string) => new URLSearchParams(q)
 
 describe("readDashboardParams", () => {
   it("defaults to this month", () => {
-    expect(readDashboardParams(params(""), "2026-10-26")).toEqual({ period: "month", range: { start: "2026-10-01", end: "2026-10-31" } })
+    expect(readDashboardParams(params(""), "2026-10-26")).toEqual({
+      period: "month",
+      range: { start: "2026-10-01", end: "2026-10-31" },
+      charts: { spending: "bar", flow: "bar", categories: "bars" },
+    })
     expect(readDashboardParams(params("period=day"), "2026-10-26").period).toBe("month")
   })
   it("reads week and year", () => {
@@ -21,6 +25,23 @@ describe("readDashboardParams", () => {
       start: "2026-10-01",
       end: "2026-10-26",
     })
+  })
+})
+
+describe("chart choices", () => {
+  it("reads chart types and ignores unknown ones", () => {
+    expect(readDashboardParams(params("spending=line&flow=pie&categories=pie"), "2026-10-26").charts).toEqual({
+      spending: "line",
+      flow: "bar",
+      categories: "pie",
+    })
+  })
+  it("keeps chart types in the query, leaving defaults out", () => {
+    const charts = { spending: "line", flow: "bar", categories: "pie" } as const
+    expect(dashboardQuery("month", undefined, charts)).toBe("?spending=line&categories=pie")
+    expect(dashboardQuery("custom", { start: "2026-08-01", end: "2026-09-30" }, charts)).toBe(
+      "?period=custom&from=2026-08-01&to=2026-09-30&spending=line&categories=pie",
+    )
   })
 })
 

@@ -2,15 +2,18 @@ import { type BucketTotals, type DateRange, type IsoDate, bucketSizeFor, formatM
 import { fullDate } from "@/components/transactions/display"
 import { cn } from "cn"
 
-// Plain SVG bar chart (design-spec §4, Sprint 5 decisions). The SVG only draws bars and
-// stretches to the card; all text (axis labels, legend, notes) is HTML so it never drops
+// Plain SVG bar or line chart over time (design-spec §4, Sprint 5 decisions). The SVG only
+// draws marks and stretches to the card; all text (axis labels, legend, notes) is HTML so it never drops
 // below 12px. Every chart has a table alternative.
 
 export type Series = "income" | "expense"
 
-const SERIES: Record<Series, { label: string; bar: string; swatch: string }> = {
-  income: { label: "Income", bar: "fill-brand-deep", swatch: "bg-brand-deep" },
-  expense: { label: "Expenses", bar: "fill-chart", swatch: "bg-chart" },
+export type TimeChartKind = "bar" | "line"
+
+// With two lines, expenses are dashed, so the lines differ by more than colour.
+const SERIES: Record<Series, { label: string; bar: string; stroke: string; area: string; swatch: string; border: string }> = {
+  income: { label: "Income", bar: "fill-brand-deep", stroke: "stroke-brand-deep", area: "fill-brand-deep/10", swatch: "bg-brand-deep", border: "border-brand-deep" },
+  expense: { label: "Expenses", bar: "fill-chart", stroke: "stroke-chart", area: "fill-chart/15", swatch: "bg-chart", border: "border-chart" },
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -45,13 +48,15 @@ const partialText = (part: DateRange) => {
   return `${d1}–${d2} ${MONTHS[m1 - 1]} only`
 }
 
-export function BarChart({
+export function TimeChart({
+  kind,
   buckets,
   range,
   series,
   currency,
   summary,
 }: {
+  kind: TimeChartKind
   buckets: BucketTotals[]
   range: DateRange
   series: Series[]
@@ -72,8 +77,11 @@ export function BarChart({
   })
   const isPartial = (start: IsoDate) => partials.some((p) => p.start === start)
 
-  // Each bucket is 10 units wide; bars share 7 of them.
+  // Each bucket is 10 units wide; bars share 7 of them. A line needs at least two points.
   const barWidth = 7 / series.length
+  const asLine = kind === "line" && n > 1
+  const dashed = (s: Series) => asLine && series.length > 1 && s === "expense"
+  const y = (v: number) => 100 - (v / top) * 100
 
   return (
     <div>
@@ -81,7 +89,11 @@ export function BarChart({
         <ul className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground" aria-label="Legend">
           {series.map((s) => (
             <li key={s} className="flex items-center gap-1.5">
-              <span aria-hidden="true" className={cn("size-3 rounded-sm", SERIES[s].swatch)} />
+              {asLine ? (
+                <span aria-hidden="true" className={cn("w-5 border-t-2", SERIES[s].border, dashed(s) && "border-dashed")} />
+              ) : (
+                <span aria-hidden="true" className={cn("size-3 rounded-sm", SERIES[s].swatch)} />
+              )}
               {SERIES[s].label}
             </li>
           ))}
@@ -106,18 +118,43 @@ export function BarChart({
             preserveAspectRatio="none"
             className="absolute inset-0 size-full overflow-visible"
           >
-            {buckets.map((b, i) =>
-              series.map((s, j) => {
-                const v = value(b, s)
-                if (v <= 0) return null
-                const h = Math.max((v / top) * 100, 0.8)
-                return (
-                  <rect key={`${b.start}-${s}`} x={i * 10 + 1.5 + j * barWidth} y={100 - h} width={barWidth * 0.92} height={h} rx={0.6} className={SERIES[s].bar}>
-                    <title>{`${bucketLabel(b.start, range, false)}: ${SERIES[s].label.toLowerCase()} ${money(v)}`}</title>
-                  </rect>
-                )
-              })
-            )}
+            {asLine
+              ? series.map((s) => {
+                  const points = buckets.map((b, i) => `${i * 10 + 5},${y(value(b, s))}`).join(" ")
+                  return (
+                    <g key={s}>
+                      {series.length === 1 && <polygon points={`5,100 ${points} ${n * 10 - 5},100`} className={SERIES[s].area} />}
+                      <polyline
+                        points={points}
+                        fill="none"
+                        strokeWidth={2.5}
+                        strokeLinejoin="round"
+                        strokeDasharray={dashed(s) ? "7 5" : undefined}
+                        vectorEffect="non-scaling-stroke"
+                        className={SERIES[s].stroke}
+                      />
+                    </g>
+                  )
+                })
+              : buckets.map((b, i) =>
+                  series.map((s, j) => {
+                    const v = value(b, s)
+                    if (v <= 0) return null
+                    const h = Math.max((v / top) * 100, 0.8)
+                    return (
+                      <rect key={`${b.start}-${s}`} x={i * 10 + 1.5 + j * barWidth} y={100 - h} width={barWidth * 0.92} height={h} rx={0.6} className={SERIES[s].bar}>
+                        <title>{`${bucketLabel(b.start, range, false)}: ${SERIES[s].label.toLowerCase()} ${money(v)}`}</title>
+                      </rect>
+                    )
+                  })
+                )}
+            {asLine &&
+              buckets.map((b, i) => (
+                // Invisible hover targets, one per bucket, for the values under the pointer.
+                <rect key={`hover-${b.start}`} x={i * 10} y={0} width={10} height={100} fill="transparent">
+                  <title>{`${bucketLabel(b.start, range, false)}: ${series.map((s) => `${SERIES[s].label.toLowerCase()} ${money(value(b, s))}`).join(", ")}`}</title>
+                </rect>
+              ))}
           </svg>
         </div>
         <div aria-hidden="true" />
