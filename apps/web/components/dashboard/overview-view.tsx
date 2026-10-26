@@ -446,7 +446,7 @@ function CategoryCard({
       ) : charts.categories === "pie" ? (
         <CategoryPie categories={breakdown.categories} range={range} currency={currency} lookup={lookup} />
       ) : (
-        <ul className="grid gap-3.5">
+        <ul aria-label="Categories" className="grid gap-3.5">
           {breakdown.categories.map((c) => {
             const category = c.categoryId ? lookup.categories.get(c.categoryId) : undefined
             const label = c.categoryId === null ? "Everything else" : `${category?.name ?? "Category"}${category?.archived ? " (archived)" : ""}`

@@ -75,7 +75,7 @@ export function CategoryPie({
           <span className="font-heading text-lg font-semibold tabular-nums">{money(total)}</span>
         </p>
       </div>
-      <ul className="grid gap-2">
+      <ul aria-label="Categories" className="grid gap-2">
         {named.map((c) => {
           const body = (
             <>

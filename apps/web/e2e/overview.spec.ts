@@ -59,7 +59,7 @@ test("figures reconcile with the Transactions page; periods, links and other use
   // Nothing last month: changes show "—", never infinity.
   await expect(card(page, "Income")).toContainText("vs same days last month (nothing to compare)")
 
-  const categories = panel(page, "Spending by category").getByRole("listitem")
+  const categories = panel(page, "Spending by category").getByRole("list", { name: "Categories" }).getByRole("listitem")
   await expect(categories).toHaveCount(2)
   await expect(categories.first()).toContainText("Transport")
   await expect(categories.first()).toContainText("₹400 · 61.5%")
@@ -83,7 +83,7 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await expect(page).toHaveURL(/\?spending=line&categories=pie$/)
   const pie = panel(page, "Spending by category")
   await expect(pie.getByRole("img")).toHaveAttribute("aria-label", /Transport ₹400, Groceries ₹250/)
-  await expect(pie.getByRole("listitem").first()).toContainText("₹400 · 61.5%")
+  await expect(pie.getByRole("list", { name: "Categories" }).getByRole("listitem").first()).toContainText("₹400 · 61.5%")
   await page.getByRole("navigation", { name: "Chart type for Income vs expenses" }).getByRole("link", { name: "Line" }).click()
   await expect(page).toHaveURL(/\?spending=line&flow=line&categories=pie$/)
   await expect(panel(page, "Income vs expenses").getByRole("img")).toBeVisible()
