@@ -141,11 +141,12 @@ select is(
 );
 -- As user B, who has no cash account: user A already has one, and the one-cash rule
 -- (FC012, migration 20261022190000) would reject the insert before this check runs.
+-- current_date - 1: user B is in Pago Pago (UTC-11), so the UTC date can be their tomorrow (FC003).
 select set_config('request.jwt.claims',
   '{"sub": "22222222-2222-4222-8222-222222222222", "role": "authenticated"}', true);
 select throws_ok(
   $$ insert into public.accounts (kind, name, currency, opening_balance_minor, opening_balance_date)
-     values ('cash', 'Wallet', 'INR', -1, current_date) $$,
+     values ('cash', 'Wallet', 'INR', -1, current_date - 1) $$,
   '23514', null, 'cash cannot open below zero'
 );
 select set_config('request.jwt.claims',
@@ -166,7 +167,7 @@ select set_config('request.jwt.claims',
   '{"sub": "22222222-2222-4222-8222-222222222222", "role": "authenticated"}', true);
 select throws_ok(
   $$ insert into public.accounts (kind, bank_type, name, currency, opening_balance_date)
-     values ('cash', 'savings', 'Cash', 'INR', current_date) $$,
+     values ('cash', 'savings', 'Cash', 'INR', current_date - 1) $$,
   '23514', null, 'only bank accounts have a bank type'
 );
 select set_config('request.jwt.claims',
