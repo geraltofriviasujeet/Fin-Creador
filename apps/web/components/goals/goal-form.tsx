@@ -166,7 +166,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
             aria-checked={values[name] === o.value}
             onClick={() => set(name)(o.value)}
             className={cn(
-              "flex flex-1 items-center justify-center rounded-md px-2 text-sm font-semibold whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-ring",
+              "flex flex-1 items-center justify-center rounded-md px-2.5 text-sm font-semibold whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-ring",
               values[name] === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
             )}
           >
@@ -186,8 +186,18 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
       </>
     ) : null
 
-  const row = (cols: 2 | 3 | 4, children: React.ReactNode) => (
-    <div className={cn("grid items-start gap-3", cols === 2 && "md:grid-cols-2", cols === 3 && "md:grid-cols-3", cols === 4 && "md:grid-cols-4")}>{children}</div>
+  const row = (cols: 2 | 3 | "trip", children: React.ReactNode) => (
+    <div
+      className={cn(
+        "grid items-start gap-3",
+        cols === 2 && "md:grid-cols-2",
+        cols === 3 && "md:grid-cols-3",
+        // The Domestic / International control takes the width it needs.
+        cols === "trip" && "grid-cols-2 md:grid-cols-[auto_minmax(0,1fr)_4.5rem_4.5rem]"
+      )}
+    >
+      {children}
+    </div>
   )
 
   return (
@@ -236,7 +246,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
         {type === "trip" && (
           <>
             {row(
-              4,
+              "trip",
               <>
                 {choice("scope", "Trip", [
                   { value: "domestic", label: "Domestic" },
