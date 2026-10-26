@@ -230,7 +230,7 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
   const loan = figures?.loan
   return (
     <li>
-      <Card aria-labelledby={`goal-${goal.id}`} className="grid content-start gap-3">
+      <Card aria-labelledby={`goal-${goal.id}`} className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
         <div className="flex items-start gap-2.5">
           <IconChip className="size-9 rounded-lg [&_svg]:size-4">{GOAL_ICON[type] ?? GOAL_ICON.other}</IconChip>
           <div className="min-w-0 flex-1">
@@ -253,7 +253,7 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
         <div className="grid gap-1.5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="text-sm text-muted-foreground">{type === "other" ? "Amount to save" : GOAL_UPFRONT_LABEL}</p>
-            <p className="font-heading text-2xl font-bold tabular-nums">{money(goal.targetMinor, goal.currency)}</p>
+            <p className="min-w-0 font-heading text-2xl font-bold tabular-nums">{money(goal.targetMinor, goal.currency)}</p>
           </div>
           {plan.progressBps !== null && <Meter valueBp={plan.progressBps} label={`${goal.name}: ${pct(plan.progressBps)} saved`} />}
           <p className="text-xs text-muted-foreground tabular-nums">

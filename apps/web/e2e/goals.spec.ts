@@ -104,6 +104,10 @@ test("car loan with down payment: upfront amount, EMI and the rounding note", as
   await expect(toast(page, "Goal added.")).toBeVisible()
   await expect(page.getByRole("heading", { name: "Family car", exact: true })).toHaveCount(1)
   await expect(goalCard(page, "Family car")).toContainText("EMI ₹12,601.12 × 60 at 9.5%")
+  // A long subtitle and EMI line stay inside the card (nothing wider than the card).
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const carCard = goalCard(page, "Family car").locator("[data-slot=card]")
+  expect(await carCard.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
 })
 
 test("budgets: warning at 80%, over at 100%, on the page and the Overview", async ({ page }) => {
