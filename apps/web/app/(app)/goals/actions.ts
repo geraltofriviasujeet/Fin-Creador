@@ -34,7 +34,7 @@ function refreshed<R extends { status: "success" | "error" }>(result: R): R {
 const GOAL_FIELDS = [
   "goalId", "type", "name", "targetDate", "saved", "idempotencyKey", "amount", "description",
   "scope", "place", "people", "days", "travelMode", "stay", ...TRIP_COST_LINES.map((l) => `cost_${l}`),
-  "condition", "model", "purpose", "city", "item", "payment", "price", "extras", "downPayment", "rate", "months",
+  "vehicle", "condition", "make", "model", "purpose", "city", "item", "payment", "price", "extras", "downPayment", "rate", "months",
 ] as const
 
 export async function saveGoalAction(input: unknown): Promise<WriteResult> {

@@ -238,7 +238,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
 
         <fieldset className="grid gap-1.5">
           <legend className="sr-only">What are you planning?</legend>
-          <div role="radiogroup" aria-label="What are you planning?" className="flex flex-wrap gap-1.5">
+          <div role="radiogroup" aria-label="What are you planning?" className="flex flex-wrap gap-1">
             {GOAL_TYPE_OPTIONS.map((t) => (
               <button
                 key={t.value}
@@ -251,7 +251,7 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
                   setErrors({})
                 }}
                 className={cn(
-                  "flex h-[30px] items-center gap-1.5 rounded-full border px-2.5 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-3.5",
+                  "flex h-[30px] items-center gap-1 rounded-full border px-2 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-3.5",
                   t.value === type ? "border-ink bg-primary text-primary-foreground" : "border-line bg-surface text-ink hover:bg-canvas"
                 )}
               >
