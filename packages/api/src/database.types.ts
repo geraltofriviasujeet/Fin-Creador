@@ -62,6 +62,47 @@ export type Database = {
         }
         Relationships: []
       }
+      budgets: {
+        Row: {
+          amount_minor: number
+          category_id: string
+          created_at: string
+          currency: string
+          effective_from: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_minor: number
+          category_id: string
+          created_at?: string
+          currency: string
+          effective_from: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          amount_minor?: number
+          category_id?: string
+          created_at?: string
+          currency?: string
+          effective_from?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budgets_category_owned"
+            columns: ["category_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           archived_at: string | null
@@ -121,6 +162,54 @@ export type Database = {
             referencedColumns: ["id", "user_id"]
           },
         ]
+      }
+      goals: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          currency: string
+          details: Json
+          id: string
+          idempotency_key: string
+          name: string
+          saved_amount_minor: number
+          target_amount_minor: number
+          target_date: string | null
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          currency: string
+          details: Json
+          id?: string
+          idempotency_key: string
+          name: string
+          saved_amount_minor?: number
+          target_amount_minor: number
+          target_date?: string | null
+          type: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          currency?: string
+          details?: Json
+          id?: string
+          idempotency_key?: string
+          name?: string
+          saved_amount_minor?: number
+          target_amount_minor?: number
+          target_date?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -759,6 +848,29 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_category_budget: {
+        Args: {
+          p_amount_minor: number
+          p_category_id: string
+          p_effective_from: string
+        }
+        Returns: {
+          amount_minor: number
+          category_id: string
+          created_at: string
+          currency: string
+          effective_from: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "budgets"
           isOneToOne: true
           isSetofReturn: false
         }

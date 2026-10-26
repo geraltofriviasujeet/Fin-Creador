@@ -1,7 +1,6 @@
 import {
   ArrowDownToLine,
   ArrowUpToLine,
-  ChartNoAxesColumn,
   Goal,
   LayoutGrid,
   Repeat,
@@ -22,7 +21,7 @@ export type NavItem = {
   inTabBar: boolean
 }
 
-// Order follows design-spec §4. Flip `available` when a page ships.
+// Order follows design-spec §4 (Goals holds planned expenses and monthly budgets, Sprint 6). Flip `available` when a page ships.
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "overview", label: "Overview", href: "/", icon: LayoutGrid, available: true, inTabBar: true },
   { key: "income", label: "Income", href: "/income", icon: ArrowDownToLine, available: true, inTabBar: false },
@@ -36,9 +35,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
     available: true,
     inTabBar: true,
   },
-  { key: "budgets", label: "Budgets", href: "/budgets", icon: ChartNoAxesColumn, available: false, inTabBar: true },
-  { key: "investments", label: "Investments", href: "/investments", icon: ArrowUpToLine, available: false, inTabBar: true },
   { key: "goals", label: "Goals", href: "/goals", icon: Goal, available: false, inTabBar: true },
+  { key: "investments", label: "Investments", href: "/investments", icon: ArrowUpToLine, available: false, inTabBar: true },
 ]
 
 

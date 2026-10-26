@@ -45,7 +45,7 @@ Put these in `packages/design-tokens` (single source) and map them into Tailwind
 
 ## 4. Web layout (desktop >= 1100px)
 
-- Sidebar: fixed, 248px, background nav. Items: Overview, Income, Transactions, Budgets, Investments, Goals. Bottom: Settings, then profile row (avatar initials, name, email, more). Active item: lime background, dark bold text.
+- Sidebar: fixed, 248px, background nav. Items: Overview, Income, Recurring, Transactions, Goals, Investments (Goals holds planned expenses and monthly budgets, one route `/goals`). Bottom: Settings, then profile row (avatar initials, name, email, more). Active item: lime background, dark bold text.
 - Topbar: sticky, 76px, white 82% with blur, bottom border. Left: search "Search transactions..." (330px). Right: bell with unread dot, dark primary "+ Add transaction" button.
 - Content: max-width 1510px, padding 33px 34px.
 - Welcome row: eyebrow (date, uppercase, letter-spaced), H1 "Good morning, {first name}", subtitle, period switcher Week / Month / Year (pill group).
@@ -57,7 +57,7 @@ Put these in `packages/design-tokens` (single source) and map them into Tailwind
 ## 5. Mobile web and Expo app
 
 - <= 760px web: sidebar hidden; topbar shows logo mark + wordmark, bell, icon-only "+" button; search hidden.
-- Bottom tab bar (66px): Overview, Activity (Transactions), Budgets, Investments, Goals. Income is reached from an Income card on Overview (and Add income from the header +), Settings from the header.
+- Bottom tab bar (66px): Overview, Activity (Transactions), Goals, Investments. Income is reached from an Income card on Overview (and Add income from the header +), Settings from the header.
 - Summary cards become a horizontal scroll-snap row (min-width 245px). Panels full width, 17px padding.
 - Expo app mirrors this with React Native components: bottom tabs, safe areas, same tokens, expo-font for Manrope and DM Sans. Do not import web components. Use native date picker and bottom sheet instead of a centered modal for Add transaction.
 
@@ -84,7 +84,7 @@ Income categories in Figma: Salary, Freelance, Rental income, Interest, Other in
 | 3 | Add expense and transfer in the transaction modal / sheet, Transactions list, search and filters |
 | 4 | Recurring items, mark received/paid |
 | 5 | Dashboard: summary cards, spending chart, budget donut, recent transactions |
-| 6 | Budgets and Goals pages |
+| 6 | Goals page: Planned expenses and Monthly budgets |
 | 7 | Investments page |
 | 10 | Notification and reminder settings |
 
