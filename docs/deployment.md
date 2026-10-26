@@ -38,8 +38,9 @@ deployed app never points at it.
    migration" is harmless; check the migration list.
 3. **Authentication → URL Configuration:**
    - **Site URL:** `https://<your-app>.vercel.app`
-   - **Redirect URLs:** `https://<your-app>.vercel.app/auth/callback` only. Do not add
-     `localhost`, `exp://**` or wildcards to the production project.
+   - **Redirect URLs:** `https://<your-app>.vercel.app/auth/callback**` only (the `**` is
+     needed because the app adds a query string to the callback). Do not add `localhost`,
+     `exp://**` or other wildcards to the production project.
 4. **Authentication → Sign In / Providers:** Email on with "Confirm email" and a minimum
    password length of 8, as in development. For Google, add
    `https://<prod-project-ref>.supabase.co/auth/v1/callback` to the OAuth client's authorized
@@ -54,7 +55,7 @@ deployed app never points at it.
 
 1. Import the GitHub repository in Vercel. Framework: **Next.js**. Root directory:
    **`apps/web`** (the npm workspace packages in `packages/` are part of the build).
-2. Environment variables, for the **Production** environment only, all from the
+2. Environment variables (type **Config**, not Secret), for the **Production** environment only, all from the
    **production** Supabase project (Project Settings → API):
 
    | Variable | Value |

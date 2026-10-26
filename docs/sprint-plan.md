@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-26.
+Last updated: 2026-10-26 (Sprint 5 done).
 
 ## Sprint status
 
@@ -27,7 +27,7 @@ Last updated: 2026-10-26.
 | **2** | Accounts & Income page | Done | Completed 2026-10-22 (PRs #9–#16). Accounts, income sources, income entries with void, one cash account with "Update cash in hand", the Income page on web and mobile. Tested on web (E2E in CI) and on Android and iPhone (Expo Go 58). Scope widened from the original plan (see decisions). See Sprint 2 steps below. |
 | **3** | Expense & transaction tracking | Done | Completed 2026-10-23 (PR #20 into the sprint branch; PR #19 merged into `main` 2026-10-23, merge commit ac916de). Expenses, one-row transfers, edits with history, voids with request keys, search and filters in the database with keyset paging, expense categories (web Settings), the Transactions page on web and the Activity tab and Add / Edit sheet on mobile (checked in Expo Go). Migrations 20261023120000 and 20261023180000 applied to fin-creador-dev. See Sprint 3 steps. |
 | **4** | Recurring items | Done | Completed 2026-10-24 (PR #22 into the sprint branch, PR #21 merged into `main`, merge commit 1964d50). Recurring rules with due items you confirm or skip, the /recurring page with cost tiles and groups, the Upcoming card on Income and Transactions, the Recurring screen on mobile (tested in Expo Go). Migration 20261024120000 applied to fin-creador-dev. See Sprint 4 steps. |
-| **5** | Dashboard & analytics | In progress | Web only (mobile Overview in the backlog). Branch `sprint-5-dashboard`. See Sprint 5 steps. |
+| **5** | Dashboard & analytics | Done | Completed 2026-10-26 (PRs #25–#28 merged into `main`). Web Overview dashboard with chart types; first production deploy on Vercel Hobby and Supabase Free works, including Google sign-in. Migration 20261026120000 applied to dev and prod. Mobile Overview in the backlog. See Sprint 5 steps. |
 | **6** | Budgets & savings goals | Not started | |
 | **7** | Investment portfolio | Not started | |
 | **8** | Loans, liabilities & reports | Not started | |
@@ -88,7 +88,8 @@ No demo-data prototype (owner, 2026-10-26): built on real data with real loading
 | **5.3 Migration and pgTAP** | Done | `20261026120000_dashboard_breakdown.sql` (one read-only function), `supabase/tests/database/dashboard.test.sql` (24 tests), green in CI on draft PR #25; applied to fin-creador-dev 2026-10-26 (owner's db push); types regenerated. |
 | **5.4 Loader and web Overview** | Done | `packages/api/src/dashboard` (URL period, breakdown loader, Transactions links); Overview: cards with comparisons, spending and income-vs-expenses SVG charts with table alternatives and partial-month labels, top categories, recent transactions, the Recurring card (backlog item done); budget and goals "Coming soon". |
 | **5.5 E2E, screenshots, PR** | Done (PR #25 merged) | `e2e/overview.spec.ts` green in CI on draft PR #25; screenshots in `docs/design/dashboard/`. Next: owner's screenshot review, then the first Vercel deploy (`docs/deployment.md`). |
-| **5.6 Chart types** | In review | Spending overview and Income vs expenses: Bar or Line; Spending by category: Bars or Pie (donut). Choice kept in the URL (`spending`, `flow`, `categories`), carried across periods and the custom range. Branch `sprint-5-chart-types`. |
+| **5.6 Chart types** | Done (PR #26 merged) | Spending overview and Income vs expenses: Bar or Line; Spending by category: Bars or Pie (donut). Choice kept in the URL (`spending`, `flow`, `categories`), carried across periods and the custom range. |
+| **5.7 First production deploy** | Done | PR #27 (test files and `e2e` out of the Next build type check), PR #28 (a `?code` that lands on `/` is forwarded to `/auth/callback`; one callback URL helper). Production Supabase project has every migration; deploy, email auth and Google sign-in checked on the deployed domain 2026-10-26. |
 
 ## Sprint 4 steps
 
@@ -162,6 +163,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-26** | Hosting (owner): MVP runs on Vercel Hobby and Supabase Free, for my own use and invited testers only: no payments, no paying customers, no public commercial launch (Vercel Hobby is non-commercial personal use only). Upgrade to Vercel Pro and Supabase Pro only when the product is complete and QA is passed, and before any commercial use. Free-tier limits: Supabase Free has no automatic backups or point-in-time recovery, pauses after 1 week of inactivity, 500 MB per project, 2 active projects. Until the upgrade, take a manual backup of the MVP database weekly and before every migration. | Stays within the free tiers' terms until a commercial launch; manual backups cover the missing automatic backups. |
 | **2026-10-26** | Sprint 5 dashboard (owner): periods Week (Monday to Sunday), Month, Year and Custom (no Day). Each compares the days so far with the same elapsed days of the previous period ("vs same days last month"); a custom range with the same number of days just before it. Changes in integer basis points; "—" when the previous value is 0; savings rate "—" when income is 0. Totals in the profile currency only (total balance = active accounts' balances); other currencies get a one-line note, never summed. Totals come from `transaction_summary`; chart and category breakdowns from one read-only, security-invoker function `dashboard_breakdown` on `transactions_matching` (by day up to 62 days, else by month). Category chart: top 5 plus "Everything else"; archived categories keep their history. Charts are plain SVG with the tokens, 12px minimum text, not colour alone, each with a text or table alternative. Recent transactions: the last 5 from `list_transactions`, any period. | Aggregating in the database avoids paging a year of entries on every load (and over mobile networks); one source for totals keeps the dashboard equal to the Transactions page. |
 | **2026-10-26** | Dashboard chart types (owner): Bar or Line for charts over time (Spending overview, Income vs expenses); Bars or Pie for Spending by category. No pie over time (one slice per day or month hides the trend). The choice lives in the URL only (no profile setting, no migration); defaults are bar charts and bars. Pie slices follow the legend order, which gives name, amount and share; two lines differ by dash as well as colour. | Each type only where it reads correctly; nothing to store. |
+| **2026-10-26** | First production deploy (Vercel Hobby, Supabase Free) works, including Google sign-in. Vercel `NEXT_PUBLIC_*` variables are added with type **Config**, not Secret. The production Supabase redirect allow list uses the pattern `https://<your-app>.vercel.app/auth/callback**`, because the app adds a query string (`next`) to the callback URL. Every new migration goes to both dev and prod; prod only from a clean `main` checkout, after a manual backup. No real project refs or URLs in the repository. | `NEXT_PUBLIC_*` values are public and bundled into the browser anyway; an exact callback entry without `**` rejects the redirect. Dev and prod must never drift in schema. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -174,7 +176,8 @@ Development-only settings that must be removed or replaced before any production
 - **Supabase redirect allow list:** remove `exp://**` (Expo Go) and the `http://localhost:3000/...` entries; keep only the production web URL and the app's own scheme.
 - **Dev scripts:** drop `npm run dev:mobile:google` (`apps/mobile/scripts/start-lan-hostname.sh`); it exists only so Google sign-in can return to Expo Go during development.
 - **App scheme:** use a fixed `fincreador://` scheme in the release builds (and keep `fincreador://auth/callback` as the only mobile OAuth return address). Remove the Expo Go `exp://` branch in `oauthRedirectUrl` once development builds replace Expo Go.
-- **Site URL:** set it to the production web URL.
+- **Site URL:** done for the production project (the deployed web URL, 2026-10-26).
+- **Migrations:** every new migration goes to dev and prod; prod only from a clean `main` after a manual backup (`docs/deployment.md`).
 
 - **Email sender:** add custom SMTP (Supabase's built-in sender allows only a few emails per hour).
 - **Upgrade before commercial launch:** move to Vercel Pro and Supabase Pro once the product is complete and QA is passed, and before any payments, paying customers or public commercial launch. Until then, back up the MVP database manually every week and before every migration.
