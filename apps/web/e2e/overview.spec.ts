@@ -97,8 +97,8 @@ test("figures reconcile with the Transactions page; periods, links and other use
   const [y, m] = today.split("-").map(Number) as [number, number]
   const start = new Date(Date.UTC(y, m - 4, 15)).toISOString().slice(0, 10)
   await page.getByRole("navigation", { name: "Period" }).getByRole("link", { name: "Custom" }).click()
-  await page.getByLabel("From").fill(start)
-  await page.getByLabel("To").fill(today)
+  await page.getByLabel("From", { exact: true }).fill(start)
+  await page.getByLabel("To", { exact: true }).fill(today)
   await page.getByRole("button", { name: "Show range" }).click()
   await expect(page).toHaveURL(new RegExp(`period=custom&from=${start}&to=${today}`))
   await expect(card(page, "Expenses")).toContainText("₹650")
