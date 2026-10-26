@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, addCash, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Transactions page end to end, against the throwaway local Supabase. One user per test.
 // Screenshots (final real-data pages only) go to e2e-screenshots/ for visual review.
@@ -13,30 +13,6 @@ const stat = (page: Page, label: string) => totals(page).locator("[data-slot=car
 const row = (page: Page, text: string) => page.locator("main li").filter({ hasText: text })
 const holding = (page: Page, label: string) =>
   page.locator("[data-slot=card]").filter({ has: page.getByText("Where your money is", { exact: true }) }).getByRole("listitem").filter({ hasText: label })
-
-type Entry = { type?: "Expense" | "Income" | "Transfer"; amount: string; category?: string; from: string; to?: string; note?: string; mode?: string }
-
-/** Opens Add transaction from the topbar and saves one entry. */
-async function addEntry(page: Page, e: Entry) {
-  await page.getByRole("link", { name: "Add transaction" }).first().click()
-  await expect(dialog(page, "Add expense")).toBeVisible()
-  const type = e.type ?? "Expense"
-  if (type !== "Expense") await dialog(page, "Add expense").getByRole("radio", { name: type }).click()
-  const d = dialog(page, `Add ${type.toLowerCase()}`)
-  await d.getByLabel("Amount").fill(e.amount)
-  if (type === "Transfer") {
-    await d.getByLabel("From").selectOption({ label: e.from })
-    await d.getByLabel("To").selectOption({ label: e.to! })
-  } else {
-    await d.getByLabel(type === "Income" ? "Source" : "Category").selectOption({ label: e.category! })
-    await d.getByLabel(type === "Income" ? "Received into" : "Paid from").selectOption({ label: e.from })
-  }
-  if (e.mode) await d.getByLabel("Payment mode (optional)").selectOption({ label: e.mode })
-  if (e.note) await d.getByLabel("Note").fill(e.note)
-  await d.getByRole("button", { name: `Save ${type.toLowerCase()}` }).click()
-  await expect(toast(page, `${type} saved.`)).toBeVisible()
-  await expect(d).toBeHidden()
-}
 
 async function newUserWithBank(page: Page, label: string, opening = "10,000") {
   await signUpConfirmed(page, "Test Person", uniqueEmail(label))

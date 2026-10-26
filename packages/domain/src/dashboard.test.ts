@@ -6,6 +6,7 @@ import {
   dashboardRange,
   daysBetween,
   fillBuckets,
+  partialBucket,
   pointsChange,
   rangeLength,
   topCategories,
@@ -140,6 +141,19 @@ describe("buckets", () => {
     ]);
     expect(filled.map((b) => b.start)).toEqual(["2025-11-01", "2025-12-01", "2026-01-01", "2026-02-01"]);
     expect(filled[2]).toEqual({ start: "2026-01-01", incomeMinor: 100, expenseMinor: 0 });
+  });
+});
+
+describe("partialBucket", () => {
+  const range = { start: "2025-11-15", end: "2026-02-10" };
+  it("gives the in-range part of a partial first or last month", () => {
+    expect(partialBucket("2025-11-01", range)).toEqual({ start: "2025-11-15", end: "2025-11-30" });
+    expect(partialBucket("2026-02-01", range)).toEqual({ start: "2026-02-01", end: "2026-02-10" });
+  });
+  it("is null for whole months and day buckets", () => {
+    expect(partialBucket("2025-12-01", range)).toBeNull();
+    expect(partialBucket("2026-10-01", { start: "2026-01-01", end: "2026-12-31" })).toBeNull();
+    expect(partialBucket("2026-10-05", { start: "2026-10-01", end: "2026-10-31" })).toBeNull();
   });
 });
 
