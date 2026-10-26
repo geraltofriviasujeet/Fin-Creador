@@ -1,7 +1,8 @@
-# Next session: start of Sprint 5
+# Next session: Sprint 5 in progress (screenshot review)
 
-**State (2026-10-24).** Sprints 1–4 are done and on `main` (Sprint 4 merge: `1964d50`, PR #21). Applied to fin-creador-dev, all in `supabase/migrations/`:
-`20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules.
+**State (2026-10-26).** Sprints 1–4 are on `main`. Sprint 5 (web dashboard) is on branch `sprint-5-dashboard`, draft PR #25, CI green: deployment guide, domain and API code, migration `20261026120000` (applied to fin-creador-dev), the web Overview and its E2E tests. **Waiting for the owner's screenshot review** (`docs/design/dashboard/`). Then: the owner's first Vercel deploy following `docs/deployment.md` and the redirect check; mobile Overview is in the backlog.
+Applied to fin-creador-dev, all in `supabase/migrations/`:
+`20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown.
 Check with `supabase migration list --linked` before any database work. Status, steps and decisions: `docs/sprint-plan.md`.
 
 **Working rules (owner).**

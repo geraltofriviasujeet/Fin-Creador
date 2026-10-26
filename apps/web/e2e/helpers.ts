@@ -26,14 +26,17 @@ export async function signUpConfirmed(page: Page, name: string, email: string) {
   const startedAt = Date.now() - 1000
   await submitSignUp(page, { name, email })
   const confirmationNeeded = page.getByText("Check your email for a link to confirm your account")
-  await expect(confirmationNeeded.or(page.getByRole("heading", { name: "Overview" }))).toBeVisible()
+  await expect(confirmationNeeded.or(overviewHeading(page))).toBeVisible()
   if (await confirmationNeeded.isVisible()) {
     const link = await waitForAuthLink(email, CONFIRM_SUBJECT, { after: startedAt })
     await page.goto(link)
   }
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible()
+  await expect(overviewHeading(page)).toBeVisible()
 }
+
+/** The Overview page's greeting ("Good morning, Asha"). */
+export const overviewHeading = (page: Page) => page.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening)/ })
 
 export async function signIn(page: Page, email: string, password = PASSWORD) {
   await page.getByLabel("Email").fill(email)
@@ -68,5 +71,29 @@ export async function addCash(page: Page, amount: string) {
   const d = dialog(page, "Add cash")
   await d.getByLabel("Amount").fill(amount)
   await d.getByRole("button", { name: "Add cash" }).click()
+  await expect(d).toBeHidden()
+}
+
+export type Entry = { type?: "Expense" | "Income" | "Transfer"; amount: string; category?: string; from: string; to?: string; note?: string; mode?: string }
+
+/** Opens Add transaction from the topbar and saves one entry. */
+export async function addEntry(page: Page, e: Entry) {
+  await page.getByRole("link", { name: "Add transaction" }).first().click()
+  await expect(dialog(page, "Add expense")).toBeVisible()
+  const type = e.type ?? "Expense"
+  if (type !== "Expense") await dialog(page, "Add expense").getByRole("radio", { name: type }).click()
+  const d = dialog(page, `Add ${type.toLowerCase()}`)
+  await d.getByLabel("Amount").fill(e.amount)
+  if (type === "Transfer") {
+    await d.getByLabel("From").selectOption({ label: e.from })
+    await d.getByLabel("To").selectOption({ label: e.to! })
+  } else {
+    await d.getByLabel(type === "Income" ? "Source" : "Category").selectOption({ label: e.category! })
+    await d.getByLabel(type === "Income" ? "Received into" : "Paid from").selectOption({ label: e.from })
+  }
+  if (e.mode) await d.getByLabel("Payment mode (optional)").selectOption({ label: e.mode })
+  if (e.note) await d.getByLabel("Note").fill(e.note)
+  await d.getByRole("button", { name: `Save ${type.toLowerCase()}` }).click()
+  await expect(toast(page, `${type} saved.`)).toBeVisible()
   await expect(d).toBeHidden()
 }

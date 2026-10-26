@@ -1,38 +1,101 @@
+import type { Metadata } from "next"
+import { Suspense } from "react"
 import Link from "next/link"
-import { ArrowDownToLine, Inbox, UserRound } from "lucide-react"
+import { redirect } from "next/navigation"
+import {
+  buildRecurringView,
+  loadDashboardBreakdown,
+  loadRecurringData,
+  loadTransactionPage,
+  loadTransactionTotals,
+  loadTransactionsContext,
+  readDashboardParams,
+} from "@fin-creador/api"
+import { comparisonFor } from "@fin-creador/domain"
+import { OVERVIEW_HEADER, OverviewSkeleton, OverviewView } from "@/components/dashboard/overview-view"
+import { UpcomingSection } from "@/components/recurring/upcoming"
 import { PageHeader } from "@/components/shell/app-shell"
-import { cn } from "cn"
-import { buttonVariants } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { FormMessage } from "@/components/ui/field"
+import { createClient } from "@/lib/supabase/server"
 
-// First-run empty state. The real dashboard (summary cards, charts) is Sprint 5.
-// No figures are shown until they come from the user's own data.
-export default function OverviewPage() {
+export const metadata: Metadata = { title: "Overview" }
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>
+
+// Overview dashboard (Sprint 5): read as the signed-in user (RLS). Totals come from
+// transaction_summary (the same as the Transactions page), charts from dashboard_breakdown,
+// periods and comparisons from packages/domain. Nothing is shown that isn't in the data.
+export default function OverviewPage({ searchParams }: { searchParams: SearchParams }) {
+  return (
+    <Suspense fallback={<OverviewSkeleton />}>
+      <OverviewContent searchParams={searchParams} />
+    </Suspense>
+  )
+}
+
+/** The earliest date the "Recent transactions" list looks back to (any period). */
+const ALL_TIME_START = "1900-01-01"
+
+async function OverviewContent({ searchParams }: { searchParams: SearchParams }) {
+  const raw = await searchParams
+  const params = new URLSearchParams(Object.entries(raw).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : [])))
+  const supabase = await createClient()
+
+  const context = await loadTransactionsContext(supabase)
+  if (!context.ok && context.reason === "unauthenticated") redirect("/sign-in")
+  if (!context.ok) return <LoadError />
+
+  const { today, currency } = context.data
+  const { period, range } = readDashboardParams(params, today)
+  const comparison = comparisonFor(period, range, today)
+
+  const [totals, prevTotals, breakdown, recent, recurring, profile] = await Promise.all([
+    loadTransactionTotals(supabase, { from: range.start, to: range.end }, currency),
+    comparison ? loadTransactionTotals(supabase, { from: comparison.previous.start, to: comparison.previous.end }, currency) : null,
+    loadDashboardBreakdown(supabase, range, currency),
+    loadTransactionPage(supabase, { from: ALL_TIME_START, to: today }, { currency, limit: 5 }),
+    loadRecurringData(supabase),
+    supabase.from("profiles").select("display_name").maybeSingle(),
+  ])
+  if (!totals.ok || (prevTotals && !prevTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
+
+  // The Recurring card is optional: if it can't load, the rest of the Overview still shows.
+  const upcoming = recurring.ok ? (
+    <UpcomingSection
+      view={buildRecurringView({ ...recurring.data, ...context.data })}
+      accounts={context.data.accounts}
+      categories={context.data.categories}
+      today={today}
+      currency={currency}
+    />
+  ) : null
+
+  return (
+    <OverviewView
+      context={context.data}
+      name={profile.data?.display_name ?? null}
+      period={period}
+      range={range}
+      comparison={comparison}
+      totals={totals.totals}
+      prevTotals={prevTotals?.ok ? prevTotals.totals : null}
+      breakdown={breakdown.data}
+      recent={recent.items}
+      upcoming={upcoming}
+    />
+  )
+}
+
+function LoadError() {
   return (
     <>
-      <PageHeader title="Overview" description="Your money at a glance, once you start recording it." />
-      <Card className="flex flex-col items-center gap-4 px-6 py-12 text-center md:py-16">
-        <span className="flex size-12 items-center justify-center rounded-xl bg-chip-mint text-ink">
-          <Inbox aria-hidden="true" className="size-6" />
-        </span>
-        <div className="grid max-w-md gap-1.5">
-          <h2 className="text-xl font-semibold">Nothing to show yet</h2>
-          <p className="text-sm text-muted-foreground">
-            Your balance, income and spending will appear here as you record them. Add your
-            accounts and income on the Income page.
-          </p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Link href="/income" className={cn(buttonVariants())}>
-            <ArrowDownToLine aria-hidden="true" />
-            Go to Income
-          </Link>
-          <Link href="/settings" className={cn(buttonVariants({ variant: "secondary" }))}>
-            <UserRound aria-hidden="true" />
-            Set up your profile
-          </Link>
-        </div>
-      </Card>
+      <PageHeader title={OVERVIEW_HEADER.title} description={OVERVIEW_HEADER.description} />
+      <FormMessage tone="error">
+        We couldn’t load your overview.{" "}
+        <Link href="/" className="font-semibold underline underline-offset-4">
+          Try again
+        </Link>
+      </FormMessage>
     </>
   )
 }
