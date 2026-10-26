@@ -543,6 +543,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      dashboard_breakdown: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          bucket_start: string
+          category_id: string
+          currency: string
+          entry_count: number
+          expense_minor: number
+          income_minor: number
+          kind: string
+        }[]
+      }
       edit_transaction: {
         Args: {
           p_account_id: string

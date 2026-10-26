@@ -85,7 +85,7 @@ No demo-data prototype (owner, 2026-10-26): built on real data with real loading
 |----|----|----|
 | **5.1 Deployment guide** | Done | `docs/deployment.md`: separate production Supabase project, Vercel env vars (public URL and publishable key only), redirects, weekly backups, upgrade checklist. |
 | **5.2 Domain** | Done | `packages/domain/src/dashboard.ts`: Monday weeks, periods, comparisons over the same elapsed days, change in basis points, buckets, top 5 categories; unit tests. |
-| **5.3 Migration and pgTAP** | SQL approved; CI green on draft PR #25; waiting for the owner's db push | `20261026120000_dashboard_breakdown.sql` (one read-only function), `supabase/tests/database/dashboard.test.sql` (24 tests). |
+| **5.3 Migration and pgTAP** | Done | Applied to fin-creador-dev 2026-10-26 (owner's db push); types regenerated. | `20261026120000_dashboard_breakdown.sql` (one read-only function), `supabase/tests/database/dashboard.test.sql` (24 tests). |
 | **5.4 Loader and web Overview** | Not started | Cards, spending chart, categories, income vs expenses, recent transactions, Recurring card, filtered links. Month-bucket charts on a custom range label a partial first (or last) month as partial (owner, 2026-10-26). |
 | **5.5 E2E, screenshots, PR** | Not started | At most 8 screenshots for the owner. |
 
