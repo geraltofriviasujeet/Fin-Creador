@@ -23,3 +23,29 @@ export function safeNextPath(raw: string | null | undefined, fallback = DEFAULT_
     return fallback
   }
 }
+
+export const AUTH_CALLBACK_PATH = "/auth/callback"
+
+/**
+ * Absolute callback URL on the configured site, never the request host. It must match
+ * Supabase's redirect allow list (`<site>/auth/callback**`); otherwise Supabase falls
+ * back to the Site URL and the code arrives at `/?code=…` (handled in routes.ts).
+ */
+export function authCallbackUrl(siteUrl: string, next: string): string {
+  return `${siteUrl.replace(/\/+$/, "")}${AUTH_CALLBACK_PATH}?next=${encodeURIComponent(safeNextPath(next))}`
+}
+
+// Supabase PKCE auth codes are UUIDs; allow a little slack but nothing URL-structural.
+const AUTH_CODE = /^[A-Za-z0-9._~-]{1,256}$/
+
+/**
+ * A `?code=` that landed on the site root (Supabase's Site URL fallback) is handed to the
+ * callback. Only the code is forwarded, to a fixed same-site path, so nothing in the
+ * query can choose the destination.
+ */
+export function rootCodeHandoff(pathname: string, search: string): string | null {
+  if (pathname !== "/") return null
+  const code = new URLSearchParams(search).get("code")
+  if (!code || !AUTH_CODE.test(code)) return null
+  return `${AUTH_CALLBACK_PATH}?${new URLSearchParams({ code })}`
+}

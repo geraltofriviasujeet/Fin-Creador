@@ -1,5 +1,7 @@
 // Route access rules, applied in proxy.ts and re-checked on the server in the app layout.
 
+import { rootCodeHandoff } from "./redirect"
+
 /** Pages for signed-out users; signed-in users are sent into the app instead. */
 export const AUTH_PAGES = ["/sign-in", "/sign-up", "/forgot-password"] as const
 
@@ -29,6 +31,8 @@ export function decideRoute(
   search: string,
   signedIn: boolean
 ): RouteDecision {
+  const handoff = rootCodeHandoff(pathname, search)
+  if (handoff) return { redirectTo: handoff }
   const kind = routeKind(pathname)
   if (kind === "protected" && !signedIn) {
     const next = `${pathname}${search}`

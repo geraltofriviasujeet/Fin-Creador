@@ -8,7 +8,7 @@ import {
   updatePasswordSchema,
 } from "@fin-creador/schemas"
 import { SIGN_UP_CHECK_EMAIL, authErrorMessage, isExistingAccountError } from "@fin-creador/api"
-import { safeNextPath } from "@/lib/auth/redirect"
+import { authCallbackUrl, safeNextPath } from "@/lib/auth/redirect"
 import { getPublicEnv } from "@/lib/env"
 import { type FormState, pick, readFields, validate } from "@/lib/form-state"
 import { createClient } from "@/lib/supabase/server"
@@ -16,9 +16,8 @@ import { createClient } from "@/lib/supabase/server"
 // All auth runs server-side with the publishable key and the user's cookies.
 // Messages never reveal whether an email is registered.
 
-/** Absolute callback URL on the configured site (must be in Supabase's redirect allow list). */
 function callbackUrl(next: string) {
-  return `${getPublicEnv().siteUrl}/auth/callback?next=${encodeURIComponent(next)}`
+  return authCallbackUrl(getPublicEnv().siteUrl, next)
 }
 
 function errorState(error: { code?: string; status?: number }, values: Record<string, string>): FormState {

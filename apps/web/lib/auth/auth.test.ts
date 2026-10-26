@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { parsePublicEnv } from "../env"
-import { safeNextPath } from "./redirect"
+import { authCallbackUrl, rootCodeHandoff, safeNextPath } from "./redirect"
 import { decideRoute, routeKind } from "./routes"
 
 describe("safeNextPath (open-redirect guard)", () => {
@@ -37,6 +37,43 @@ describe("safeNextPath (open-redirect guard)", () => {
 
   it("uses the provided fallback", () => {
     expect(safeNextPath("//evil", "/sign-in")).toBe("/sign-in")
+  })
+})
+
+describe("auth callback URL", () => {
+  it("is built from the site URL and matches the <site>/auth/callback** allow-list entry", () => {
+    const url = authCallbackUrl("https://app.example/", "/settings")
+    expect(url).toBe("https://app.example/auth/callback?next=%2Fsettings")
+    expect(url.startsWith("https://app.example/auth/callback")).toBe(true)
+  })
+
+  it("never carries an off-site next", () => {
+    expect(authCallbackUrl("https://app.example", "https://evil.example")).toBe("https://app.example/auth/callback?next=%2F")
+  })
+})
+
+describe("root ?code handoff", () => {
+  const code = "6f1c2b9e-3a4d-4c5e-9f00-1234567890ab"
+
+  it("sends a root code to the callback, signed in or out", () => {
+    expect(rootCodeHandoff("/", `?code=${code}`)).toBe(`/auth/callback?code=${code}`)
+    expect(decideRoute("/", `?code=${code}`, false)).toEqual({ redirectTo: `/auth/callback?code=${code}` })
+    expect(decideRoute("/", `?code=${code}`, true)).toEqual({ redirectTo: `/auth/callback?code=${code}` })
+  })
+
+  it("forwards only the code, so nothing else in the query picks the destination", () => {
+    expect(rootCodeHandoff("/", `?code=${code}&next=https://evil.example`)).toBe(`/auth/callback?code=${code}`)
+  })
+
+  it.each(["", "?code=", "?code=a/b", "?code=%2F%2Fevil.example", "?code=a%3Fnext%3D%2F%2Fevil", `?code=${"a".repeat(257)}`])(
+    "ignores a missing or malformed code %j",
+    (search) => {
+      expect(rootCodeHandoff("/", search)).toBeNull()
+    }
+  )
+
+  it("only applies at the site root", () => {
+    expect(rootCodeHandoff("/settings", `?code=${code}`)).toBeNull()
   })
 })
 
