@@ -34,13 +34,14 @@ export function Choice<V extends string>({
           <label
             key={o.value}
             className={cn(
-              "flex cursor-pointer items-center text-sm font-semibold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ring",
+              "relative flex cursor-pointer items-center text-sm font-semibold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ring",
               grid
                 ? "min-h-[36px] rounded-lg border border-line px-3 py-1.5 has-[:checked]:border-ink has-[:checked]:bg-primary has-[:checked]:text-primary-foreground"
                 : "h-[32px] rounded-md px-3 text-muted-foreground has-[:checked]:bg-primary has-[:checked]:text-primary-foreground",
             )}
           >
-            <input type="radio" className="sr-only" name={name} value={o.value} checked={value === o.value} onChange={() => onChange(o.value)} />
+            {/* Transparent over its label: clickable and announced as a radio. */}
+            <input type="radio" className="absolute inset-0 m-0 size-full cursor-pointer appearance-none opacity-0" name={name} value={o.value} checked={value === o.value} onChange={() => onChange(o.value)} />
             {o.label}
           </label>
         ))}
