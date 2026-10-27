@@ -274,8 +274,8 @@ select results_eq(
   $$ select public.t_parts(public.t_pay('1b000000-0000-4000-8000-000000000001')),
             (select status from public.due_items where id = public.t_due('1a000000-0000-4000-8000-000000000001', 1)),
             public.t_bal(public.t_acct('HDFC Bank')), public.t_bal(public.t_loan_account('1a000000-0000-4000-8000-000000000001')) $$,
-  $$ values (0::bigint, 'pending'::text, 10000000::bigint, -500000::bigint) $$,
-  'every part is voided: the EMI is pending, the bank and the loan are back');
+  $$ values (0::bigint, 'pending'::text, 10000000::bigint, -460576::bigint) $$,
+  'every part is voided: the EMI is pending, the bank and the loan are back (EMI 2''s principal stays repaid)');
 select lives_ok(
   $$ select public.void_due_payment(public.t_pay('1b000000-0000-4000-8000-000000000001'), '1c000000-0000-4000-8000-000000000001') $$,
   'a retried void returns the voided payment');
@@ -295,7 +295,7 @@ select results_eq(
   $$ select public.t_parts(public.t_pay('1b000000-0000-4000-8000-000000000011')), public.t_parts(public.t_pay('1d000000-0000-4000-8000-000000000001')),
             (select replaces_id from public.due_payments where id = public.t_pay('1d000000-0000-4000-8000-000000000001')) = public.t_pay('1b000000-0000-4000-8000-000000000011'),
             public.t_bal(public.t_acct('HDFC Bank')), public.t_bal(public.t_loan_account('1a000000-0000-4000-8000-000000000001')) $$,
-  $$ values (0::bigint, 3::bigint, true, 9964000::bigint, -470000::bigint) $$,
+  $$ values (0::bigint, 3::bigint, true, 9964000::bigint, -430576::bigint) $$,
   'the old parts are all voided and the new three posted, linked to the old payment');
 select is((select (public.edit_due_payment(public.t_pay('1b000000-0000-4000-8000-000000000011'), '1d000000-0000-4000-8000-000000000001',
              public.t_acct('HDFC Bank'), public.t_today(), 30000, 5000, 1000)).id),
