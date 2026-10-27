@@ -157,7 +157,7 @@ test("borrowing: received into an account, repay with interest, delete with its 
   await expect(toast(page, "Borrowing added.")).toBeVisible()
   const ravi = cardRow(page, "Ravi")
   await expect(ravi).toContainText("₹20,000")
-  await expect(ravi.getByText("Due", { exact: true })).toBeVisible()
+  await expect(ravi.locator("[data-slot=badge]")).toHaveText("Due")
 
   await ravi.getByRole("button", { name: "Repay Ravi" }).click()
   const repay = dialog(page, "Repay")
