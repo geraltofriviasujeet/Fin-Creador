@@ -247,7 +247,9 @@ test("starts later with a moratorium, then archive, restore and delete", async (
   await loansList(page).getByRole("button", { name: /^Masters/ }).click()
   await loansList(page).getByRole("button", { name: "Archive Masters" }).click()
   await dialog(page, "Archive Masters?").getByRole("button", { name: "Archive" }).click()
-  await page.getByRole("button", { name: "Show archived (1)" }).click()
+  await expect(toast(page, "Loan archived.").first()).toBeVisible()
+  // The archived list is still open from before.
+  await expect(page.getByRole("button", { name: "Hide archived (1)" })).toBeVisible()
   await page.getByRole("button", { name: "Delete Masters permanently" }).click()
   await dialog(page, "Delete Masters permanently?").getByRole("button", { name: "Delete permanently" }).click()
   await expect(toast(page, "Loan deleted.")).toBeVisible()
