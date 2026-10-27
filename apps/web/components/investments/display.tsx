@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 export const INVESTMENTS_HEADER = {
   eyebrow: "Track",
   title: "Investments",
-  description: "Shares, ETFs and mutual funds you hold, valued at the last closing price.",
+  description: "Shares, mutual funds and ETFs at the last closing price, and fixed deposits valued today.",
 }
 
 export const PRICES_NOTE = "Prices are the previous close from BSE and AMFI, for tracking only, not investment advice."

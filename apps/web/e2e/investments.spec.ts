@@ -234,6 +234,15 @@ test("gain, loss, old price and a holding without a current price; summary and O
   await expect(holdings(page)).not.toContainText(GILT)
   await page.goto("/investments?tab=etfs")
   await expect(page.getByText("No ETFs yet")).toBeVisible()
+  // Each tab adds its own kind: no fixed deposit button, and the search finds ETFs only.
+  await expect(page.getByRole("button", { name: "Add fixed deposit" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Add holding" })).toHaveCount(0)
+  await page.getByRole("button", { name: "Add ETF" }).first().click()
+  const etf = dialog(page, "Add ETF")
+  await etf.getByLabel("Search an ETF").fill("test")
+  await expect(etf.getByRole("list", { name: "Search results" })).toContainText("Test Nifty Bees ETF")
+  await expect(etf.getByRole("list", { name: "Search results" }).getByRole("listitem")).toHaveCount(1)
+  await etf.getByRole("button", { name: "Cancel" }).click()
   await page.goto("/investments?tab=fds")
   await expect(page.getByText("No fixed deposits yet")).toBeVisible()
   await page.goto("/investments?tab=nonsense") // anything else is All

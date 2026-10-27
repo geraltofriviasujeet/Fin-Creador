@@ -4,7 +4,15 @@ import type * as React from "react"
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { ChevronDown, Plus } from "lucide-react"
-import { type DepositItem, type HoldingGroup, type HoldingItem, type InvestmentsView, type WriteResult, CATEGORY_OF_KIND } from "@fin-creador/api"
+import {
+  type DepositItem,
+  type HoldingGroup,
+  type HoldingItem,
+  type InstrumentKind,
+  type InvestmentsView,
+  type WriteResult,
+  CATEGORY_OF_KIND,
+} from "@fin-creador/api"
 import { type PortfolioTotals, formatPercentFromBasisPoints, formatPriceScaled, formatUnits } from "@fin-creador/domain"
 import { FD_COMPOUNDING_OPTIONS } from "@fin-creador/schemas"
 import { cn } from "cn"
@@ -70,7 +78,18 @@ type Labels = { average: string; last: string }
 const PRICE_LABELS: Labels = { average: "Avg. buy price", last: "Last price" }
 const NAV_LABELS: Labels = { average: "Avg. NAV", last: "Latest NAV" }
 
-const EMPTY_NOUN: Record<InvestmentTab, string> = { all: "holdings", shares: "shares", funds: "mutual funds", etfs: "ETFs", fds: "fixed deposits" }
+/** The Shares, Mutual funds and ETFs tabs each add and search their own kind. */
+const TAB_KIND: Partial<Record<InvestmentTab, { kind: InstrumentKind; add: string; empty: string; hint: string }>> = {
+  shares: { kind: "share", add: "Add share", empty: "No shares yet", hint: "Search a share by name, ticker, BSE scrip code or ISIN, then enter your units and buy price." },
+  funds: { kind: "fund", add: "Add mutual fund", empty: "No mutual funds yet", hint: "Search a fund by scheme name, AMFI scheme code or ISIN, then enter your units and buy price." },
+  etfs: { kind: "etf", add: "Add ETF", empty: "No ETFs yet", hint: "Search an ETF by name, ticker, BSE scrip code or ISIN, then enter your units and buy price." },
+}
+const DIALOG_DESCRIPTION: Record<InstrumentKind | "any", string> = {
+  any: "Search the fund or share, then enter what you bought.",
+  share: "Search the share, then enter what you bought.",
+  fund: "Search the mutual fund, then enter what you bought.",
+  etf: "Search the ETF, then enter what you bought.",
+}
 
 const newest = (dates: string[]) => (dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : null)
 
@@ -97,10 +116,12 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
   const restore = (item: HoldingItem) => restoreWith(() => setHoldingArchivedAction({ holdingId: item.id, archived: false }))
   const restoreDeposit = (d: DepositItem) => restoreWith(() => setFixedDepositArchivedAction({ depositId: d.id, archived: false }))
 
+  const tabKind = TAB_KIND[tab]
+  // All: holdings of any kind and deposits; each other tab adds only its own kind.
   const addHoldingButton = (
-    <Button size="lg" variant={tab === "fds" ? "secondary" : "primary"} onClick={add}>
+    <Button size="lg" onClick={add}>
       <Plus aria-hidden="true" />
-      Add holding
+      {tabKind?.add ?? "Add holding"}
     </Button>
   )
   const addDepositButton = (
@@ -158,6 +179,18 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
             <DepositList deposits={view.deposits} onOpen={(kind, deposit) => setOpen({ kind, deposit })} />
           </>
         )
+      ) : tabKind && groups.length === 0 ? (
+        <Card className="grid justify-items-start gap-3">
+          <p className="font-semibold">{tabKind.empty}</p>
+          <p className="text-sm text-muted-foreground">{tabKind.hint}</p>
+          <Button variant="secondary" onClick={add}>
+            <Plus aria-hidden="true" />
+            {tabKind.add}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            {PRICES_NOTE} {NOT_IN_TOTAL}.
+          </p>
+        </Card>
       ) : !hasAny ? (
         <Card className="grid justify-items-start gap-3">
           <p className="font-semibold">Track your first investment</p>
@@ -177,14 +210,6 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
           <p className="text-xs text-muted-foreground">
             {PRICES_NOTE} {NOT_IN_TOTAL}.
           </p>
-        </Card>
-      ) : groups.length === 0 && tab !== "all" ? (
-        <Card className="grid justify-items-start gap-3">
-          <p className="font-semibold">No {EMPTY_NOUN[tab]} yet</p>
-          <Button variant="secondary" onClick={add}>
-            <Plus aria-hidden="true" />
-            Add holding
-          </Button>
         </Card>
       ) : (
         <>
@@ -295,11 +320,11 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
         {(open?.kind === "add" || open?.kind === "edit") && (
           <DialogContent
             eyebrow="Investments"
-            title={open.kind === "add" ? "Add holding" : `Edit ${open.item.instrument.name}`}
-            description={open.kind === "add" ? "Search the fund or share, then enter what you bought." : "The fund or share stays the same; change the units, price or date."}
+            title={open.kind === "add" ? (tabKind?.add ?? "Add holding") : `Edit ${open.item.instrument.name}`}
+            description={open.kind === "add" ? DIALOG_DESCRIPTION[tabKind?.kind ?? "any"] : "The fund or share stays the same; change the units, price or date."}
             className="flex max-h-dvh flex-col md:max-h-[calc(100dvh-2rem)] md:max-w-[600px]"
           >
-            <HoldingForm today={view.today} item={open.kind === "edit" ? open.item : undefined} onDone={close} />
+            <HoldingForm today={view.today} item={open.kind === "edit" ? open.item : undefined} kind={open.kind === "add" ? tabKind?.kind : undefined} onDone={close} />
           </DialogContent>
         )}
         {open?.kind === "archive" && (

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Search } from "lucide-react"
-import { type HoldingItem, type Instrument, type WriteResult, SEARCH_MIN_LENGTH, newRequestKey } from "@fin-creador/api"
+import { type HoldingItem, type Instrument, type InstrumentKind, type WriteResult, SEARCH_MIN_LENGTH, newRequestKey } from "@fin-creador/api"
 import { formatPriceScaled, holdingFigures, scaledToInputString } from "@fin-creador/domain"
 import { holdingFormSchema } from "@fin-creador/schemas"
 import { saveHoldingAction, searchInstrumentsAction } from "@/app/(app)/investments/actions"
@@ -25,7 +25,15 @@ type Values = { units: string; buyPrice: string; buyDate: string }
 
 const codeLine = (i: Instrument) => [i.source === "bse" ? `BSE ${i.sourceCode}` : `AMFI ${i.sourceCode}`, i.symbol, i.isin].filter(Boolean).join(" · ")
 
-export function HoldingForm({ today, item, onDone }: { today: string; item?: HoldingItem; onDone: () => void }) {
+/** What the search looks for: every kind (All tab) or one (Shares, Mutual funds, ETFs tabs). */
+const SEARCH_TEXT: Record<InstrumentKind | "any", { label: string; hint: string; none: string }> = {
+  any: { label: "Search a fund or share", hint: "Name, ticker, scheme or scrip code, or ISIN", none: "funds and shares" },
+  share: { label: "Search a share", hint: "Name, ticker, BSE scrip code or ISIN", none: "shares" },
+  fund: { label: "Search a mutual fund", hint: "Scheme name, AMFI scheme code or ISIN", none: "mutual funds" },
+  etf: { label: "Search an ETF", hint: "Name, ticker, BSE scrip code or ISIN", none: "ETFs" },
+}
+
+export function HoldingForm({ today, item, kind, onDone }: { today: string; item?: HoldingItem; kind?: InstrumentKind; onDone: () => void }) {
   const [instrument, setInstrument] = useState<Instrument | null>(item?.instrument ?? null)
   // One key per opened form; a retry after a failure reuses it, so the record is added once.
   const [requestKey] = useState(newRequestKey)
@@ -72,7 +80,7 @@ export function HoldingForm({ today, item, onDone }: { today: string; item?: Hol
     setErrors(result.fieldErrors ?? {})
   }
 
-  if (!instrument) return <InstrumentSearch onChoose={setInstrument} />
+  if (!instrument) return <InstrumentSearch kind={kind} onChoose={setInstrument} />
 
   return (
     <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
@@ -134,7 +142,8 @@ export function HoldingForm({ today, item, onDone }: { today: string; item?: Hol
 
 type SearchState = { status: "idle" } | { status: "searching" } | { status: "done"; query: string; results: Instrument[] } | { status: "error"; message: string }
 
-function InstrumentSearch({ onChoose }: { onChoose: (instrument: Instrument) => void }) {
+function InstrumentSearch({ kind, onChoose }: { kind?: InstrumentKind; onChoose: (instrument: Instrument) => void }) {
+  const text = SEARCH_TEXT[kind ?? "any"]
   const [query, setQuery] = useState("")
   const [state, setState] = useState<SearchState>({ status: "idle" })
   const latest = useRef(0)
@@ -154,7 +163,7 @@ function InstrumentSearch({ onChoose }: { onChoose: (instrument: Instrument) => 
     setState({ status: "searching" })
     timer.current = setTimeout(async () => {
       try {
-        const result = await searchInstrumentsAction(q)
+        const result = await searchInstrumentsAction(q, kind)
         if (request !== latest.current) return
         setState(result.ok ? { status: "done", query: q, results: result.results } : { status: "error", message: result.message })
       } catch {
@@ -170,8 +179,8 @@ function InstrumentSearch({ onChoose }: { onChoose: (instrument: Instrument) => 
         <TextField
           name="instrumentSearch"
           type="search"
-          label="Search a fund or share"
-          hint="Name, ticker, scheme or scrip code, or ISIN"
+          label={text.label}
+          hint={text.hint}
           autoComplete="off"
           className="[&_input]:pl-9"
           value={query}
@@ -187,7 +196,7 @@ function InstrumentSearch({ onChoose }: { onChoose: (instrument: Instrument) => 
         {state.status === "error" && <FormMessage tone="error">{state.message}</FormMessage>}
         {state.status === "done" && state.results.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            Nothing matches “{state.query}”. Only funds and shares with a price in the last 30 days are listed.
+            Nothing matches “{state.query}”. Only {text.none} with a price in the last 30 days are listed.
           </p>
         )}
         {state.status === "done" && state.results.length > 0 && (

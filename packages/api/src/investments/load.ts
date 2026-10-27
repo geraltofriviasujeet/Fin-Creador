@@ -79,14 +79,19 @@ export const SEARCH_MAX_LENGTH = 100
 
 export type InstrumentSearch = { ok: true; results: Instrument[] } | { ok: false; message: string }
 
+const SEARCH_RESULTS = 20
+
 /**
  * Funds and shares by name words, ticker, code or ISIN (search_instruments: prices at most
- * 30 days old, at most 20 results). A query under 2 characters returns nothing.
+ * 30 days old, at most 20 results). With `kind` (the Shares, Mutual funds or ETFs tab) only
+ * that kind is returned: the database's 50 best matches, filtered here. A query under 2
+ * characters returns nothing.
  */
-export async function searchInstruments(supabase: UserClient, query: string): Promise<InstrumentSearch> {
+export async function searchInstruments(supabase: UserClient, query: string, kind?: InstrumentKind): Promise<InstrumentSearch> {
   const q = query.trim().slice(0, SEARCH_MAX_LENGTH)
   if (q.length < SEARCH_MIN_LENGTH) return { ok: true, results: [] }
-  const { data, error } = await supabase.rpc("search_instruments", { p_query: q, p_limit: 20 })
+  const { data, error } = await supabase.rpc("search_instruments", { p_query: q, p_limit: kind ? 50 : SEARCH_RESULTS })
   if (error || !Array.isArray(data)) return { ok: false, message: "We couldn't search right now. Check your connection and try again." }
-  return { ok: true, results: data.map(toInstrument) }
+  const results = data.map(toInstrument).filter((i) => !kind || i.kind === kind)
+  return { ok: true, results: results.slice(0, SEARCH_RESULTS) }
 }

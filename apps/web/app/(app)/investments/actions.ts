@@ -65,9 +65,12 @@ export async function deleteHoldingAction(input: unknown): Promise<WriteResult> 
   return refreshed(await deleteHolding(await client(), r.data))
 }
 
-/** Instrument search for the Add holding dialog (read-only; shared instruments). */
-export async function searchInstrumentsAction(query: unknown): Promise<InstrumentSearch> {
-  return searchInstruments(await client(), typeof query === "string" ? query : "")
+const searchKind = z.enum(["share", "fund", "etf"]).optional()
+
+/** Instrument search for the Add holding dialog (read-only; shared instruments), optionally one kind. */
+export async function searchInstrumentsAction(query: unknown, kind?: unknown): Promise<InstrumentSearch> {
+  const k = searchKind.safeParse(kind)
+  return searchInstruments(await client(), typeof query === "string" ? query : "", k.success ? k.data : undefined)
 }
 
 const DEPOSIT_FIELDS = ["depositId", "bank", "label", "principal", "rate", "compounding", "startDate", "maturityDate", "idempotencyKey"] as const
