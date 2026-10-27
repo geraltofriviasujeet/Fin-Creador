@@ -152,6 +152,29 @@ The `refresh-prices` Edge Function loads AMFI NAVs and BSE closes into `instrume
    function logs (Dashboard → Edge Functions → refresh-prices → Logs) and
    `cron.job_run_details`. `no_file` for BSE on weekends and exchange holidays is normal.
 
+## 4b. Price refresh on production (Sprint 7 rollout)
+
+After PR #32 is merged and the prod migrations are in (section 1.2, after a backup), from a
+clean `main` checkout:
+
+1. **New secret for prod** (never reuse the dev one), in a private file outside the repo:
+   `umask 077; printf 'REFRESH_PRICES_SECRET=%s\n' "$(openssl rand -hex 32)" > ~/refresh-prod.env`
+2. `supabase secrets set --project-ref <prod-project-ref> --env-file ~/refresh-prod.env`
+3. Deploy: `supabase functions deploy refresh-prices --use-api --project-ref <prod-project-ref>`
+4. **Vault** on the prod project (Dashboard → Project Settings → Vault): `refresh_prices_secret`
+   (the same value) and `refresh_prices_url` = `https://<prod-project-ref>.supabase.co/functions/v1/refresh-prices`.
+5. **First manual run:**
+   `curl -sS -X POST -H @<(printf 'x-refresh-secret: %s\n' "$(cut -d= -f2 ~/refresh-prod.env)") https://<prod-project-ref>.supabase.co/functions/v1/refresh-prices`
+   answers `{"status":"accepted"}`; then delete `~/refresh-prod.env`.
+6. After about 2 minutes, run the last-7-days query of section 4a in the prod SQL editor: one
+   `amfi` and one `bse` row, both with `finished_at`.
+7. Relink the CLI to dev: `supabase link --project-ref <dev-project-ref>`.
+
+**A paused project stops the daily job.** Supabase Free pauses a project after a week without
+activity; a paused project runs no `pg_cron` jobs, so prices stop updating (holdings then show
+"Old price" and later "Stale, over 30 days"). After restoring the project, check
+`cron.job_run_details` and make one manual run (step 5).
+
 ## 5. Upgrade before any commercial launch
 
 Do all of these before payments, paying customers or a public launch, and only once the

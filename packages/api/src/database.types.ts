@@ -351,6 +351,48 @@ export type Database = {
           },
         ]
       }
+      price_refresh_runs: {
+        Row: {
+          error: string | null
+          finished_at: string
+          id: string
+          price_date: string | null
+          rows_loaded: number
+          rows_seen: number
+          rows_skipped: number
+          skip_reasons: Json
+          source: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          error?: string | null
+          finished_at: string
+          id?: string
+          price_date?: string | null
+          rows_loaded?: number
+          rows_seen?: number
+          rows_skipped?: number
+          skip_reasons?: Json
+          source: string
+          started_at: string
+          status: string
+        }
+        Update: {
+          error?: string | null
+          finished_at?: string
+          id?: string
+          price_date?: string | null
+          rows_loaded?: number
+          rows_seen?: number
+          rows_skipped?: number
+          skip_reasons?: Json
+          source?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
