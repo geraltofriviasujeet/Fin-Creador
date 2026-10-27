@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Search } from "lucide-react"
 import { type HoldingItem, type Instrument, type WriteResult, SEARCH_MIN_LENGTH, newRequestKey } from "@fin-creador/api"
-import { currentPriceScaled, formatPriceScaled, holdingFigures, scaledToInputString } from "@fin-creador/domain"
+import { formatPriceScaled, holdingFigures, scaledToInputString } from "@fin-creador/domain"
 import { holdingFormSchema } from "@fin-creador/schemas"
 import { saveHoldingAction, searchInstrumentsAction } from "@/app/(app)/investments/actions"
 import { fullDate, money } from "@/components/transactions/display"
@@ -43,8 +43,7 @@ export function HoldingForm({ today, item, onDone }: { today: string; item?: Hol
     if (!instrument) return null
     const parsed = holdingFormSchema({ today }).safeParse({ ...values, holdingId: "", instrumentId: instrument.id, idempotencyKey: PREVIEW_KEY })
     if (!parsed.success) return null
-    const price = currentPriceScaled(instrument.lastPriceScaled, instrument.priceDate, today)
-    return holdingFigures({ instrumentId: instrument.id, unitsScaled: parsed.data.unitsScaled, buyPriceScaled: parsed.data.buyPriceScaled }, price)
+    return holdingFigures({ instrumentId: instrument.id, unitsScaled: parsed.data.unitsScaled, buyPriceScaled: parsed.data.buyPriceScaled }, instrument.lastPriceScaled)
   }, [instrument, values, today])
 
   async function submit(event: React.FormEvent) {
@@ -112,12 +111,10 @@ export function HoldingForm({ today, item, onDone }: { today: string; item?: Hol
                 <span className="font-semibold">Invested</span>
                 <span className="font-heading text-lg font-bold tabular-nums">{money(preview.investedMinor, "INR")}</span>
               </p>
-              {preview.valueMinor !== null && preview.profitMinor !== null ? (
+              {preview.valueMinor !== null && preview.profitMinor !== null && (
                 <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground tabular-nums">
                   Value {money(preview.valueMinor, "INR")} at the last price · <ProfitText minor={preview.profitMinor} bps={preview.profitBps} className="text-xs" />
                 </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">No current price: value and profit aren&apos;t counted.</p>
               )}
             </>
           ) : (

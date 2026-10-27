@@ -213,13 +213,19 @@ export function investedMinorWithinLimit(unitsScaled: number, buyPriceScaled: nu
   return toSafe(divRoundHalfAway(exact, AMOUNT_DIVISOR));
 }
 
+/** After this many days the "Old price" badge reads "Stale, over 30 days". */
+export const STALE_PRICE_AFTER_DAYS = 30;
+
+export type PriceAge = "fresh" | "old" | "stale";
+
 /**
- * The price that counts for value and profit: the latest price unless it is more than
- * SEARCHABLE_PRICE_DAYS days old (the instrument has left the daily files, e.g. suspended or
- * delisted). An older price is still shown with its date, but the record counts as unpriced.
+ * How old the last price is: "old" after OLD_PRICE_AFTER_DAYS, "stale" after
+ * STALE_PRICE_AFTER_DAYS. A holding is always valued at its last known price whatever its
+ * age; the age only drives the badge shown with the price date.
  */
-export function currentPriceScaled(priceScaled: number, priceDate: IsoDate, today: IsoDate): number | null {
-  return addDays(priceDate, SEARCHABLE_PRICE_DAYS) < today ? null : priceScaled;
+export function priceAge(priceDate: IsoDate, today: IsoDate): PriceAge {
+  if (addDays(priceDate, STALE_PRICE_AFTER_DAYS) < today) return "stale";
+  return isOldPrice(priceDate, today) ? "old" : "fresh";
 }
 
 // ---------------------------------------------------------------------------

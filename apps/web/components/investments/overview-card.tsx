@@ -4,7 +4,7 @@ import type { InvestmentsView } from "@fin-creador/api"
 import { money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle } from "@/components/ui/card"
-import { NOT_IN_TOTAL, ProfitText, pricesAsOfText } from "./display"
+import { CATEGORY_LABEL, NOT_IN_TOTAL, ProfitText, pricesAsOfText } from "./display"
 
 // The Overview's Investments card (Sprint 7): value and profit at the last closing prices.
 // A tracker only: it never adds to Total available.
@@ -44,14 +44,28 @@ export function InvestmentsOverviewCard({ view }: { view: InvestmentsView | null
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <p className="font-heading text-2xl font-bold tabular-nums">
               <span className="sr-only">Current value </span>
-              {totals.pricedCount > 0 ? money(totals.valueMinor, "INR") : "—"}
+              {money(totals.valueMinor, "INR")}
             </p>
-            {totals.pricedCount > 0 && <ProfitText minor={totals.profitMinor} bps={totals.profitBps} />}
+            <ProfitText minor={totals.profitMinor} bps={totals.profitBps} />
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
             Invested {money(totals.investedMinor, "INR")} · {pricesAsOfText(view.pricesAsOf)}
-            {totals.unpricedCount > 0 && ` · ${totals.unpricedCount} without a current price`}
           </p>
+          <ul aria-label="By category" className="grid border-t border-line pt-1.5 text-sm">
+            {view.categories.map((c) => (
+              <li key={c.category} className="flex flex-wrap items-baseline justify-between gap-x-3 py-0.5">
+                <span className="text-muted-foreground">{CATEGORY_LABEL[c.category]}</span>
+                {c.count === 0 ? (
+                  <span className="text-xs text-muted-foreground">None</span>
+                ) : (
+                  <span className="flex items-baseline gap-2 tabular-nums">
+                    <span className="font-semibold">{money(c.totals.valueMinor, "INR")}</span>
+                    <ProfitText minor={c.totals.profitMinor} bps={c.totals.profitBps} className="text-xs" />
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </>
       )}
       <OpenInvestments>{empty ? "Add a holding" : `View all (${view.groups.length})`}</OpenInvestments>

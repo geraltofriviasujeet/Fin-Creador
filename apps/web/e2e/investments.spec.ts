@@ -13,7 +13,7 @@ const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${n
 const LOTUS = "Lotus Test Industries Ltd" // BSE close ₹1,250.50, yesterday
 const HARBOR = "Harbor Test Bank Ltd" // BSE close ₹480, yesterday
 const GILT = "Test Gilt Fund - Regular Plan - Growth" // NAV ₹35.9468, 10 days old
-const CLOSED = "Test Closed Ended Fund - Direct Plan - Growth" // NAV 45 days old: not searchable, not counted
+const CLOSED = "Test Closed Ended Fund - Direct Plan - Growth" // NAV 45 days old: not searchable, still valued
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const starts = (text: string) => new RegExp(`^${escape(text)}`)
@@ -113,6 +113,7 @@ test("add (double submit adds once), edit, archive, restore and delete a holding
   await expect(d).toContainText("₹10,000") // invested
   await expect(d).toContainText("+₹2,505") // 10 × (1,250.50 − 1,000)
   await expect(d).toContainText("+25.05%")
+  await shot(page, "investments-add-step2")
   // The form fits a 1440×720 window: its body doesn't scroll and the footer is in view.
   await page.setViewportSize({ width: 1440, height: 720 })
   const body = d.locator("form > div").first()
@@ -195,21 +196,48 @@ test("gain, loss, old price and a holding without a current price; summary and O
   // Gilt fund: a 10-day-old NAV is counted, with "Old price".
   await expect(group(page, GILT)).toContainText("Old price")
   await expect(group(page, GILT)).toContainText("+₹594.68")
-  // Closed fund: shown with its last NAV and date, but not counted.
+  // Closed fund: a 45-day-old NAV still values it (50 × ₹12.3456 = ₹617.28), marked stale.
   const closed = group(page, CLOSED)
-  await expect(closed).toContainText("No current price")
-  await expect(closed).toContainText("Not counted")
-  await expect(closed).toContainText("₹12.3456")
+  await expect(closed).toContainText("Stale, over 30 days")
+  await expect(closed).toContainText("₹617.28")
+  await expect(closed).toContainText("+₹117.28")
+  await expect(group(page, GILT)).toContainText("Old price ·")
 
-  // Totals: invested ₹22,000 (₹21,500 priced), value ₹24,752.18, +₹3,252.18 (+15.13%).
+  // Totals: invested ₹22,000, value ₹25,369.46, +₹3,369.46 (+15.32%); no unpriced banner.
   await expect(summary(page)).toContainText("₹22,000")
-  await expect(summary(page)).toContainText("₹24,752.18")
-  await expect(summary(page)).toContainText("+₹3,252.18")
-  await expect(summary(page)).toContainText("+15.13%")
+  await expect(summary(page)).toContainText("₹25,369.46")
+  await expect(summary(page)).toContainText("+₹3,369.46")
+  await expect(summary(page)).toContainText("+15.32%")
   await expect(summary(page)).toContainText("Prices as of")
   await expect(summary(page)).toContainText("not investment advice")
-  await expect(page.getByText("Invested ₹22,000 (₹21,500 of it priced). 1 holding without a current price is not counted in value and profit.")).toBeVisible()
+  await expect(page.getByText(/without a current price/)).toHaveCount(0)
+  // All tab: by category. Shares ₹18,500 → ₹21,157.50; mutual funds ₹3,500 → ₹4,211.96.
+  const byCategory = page.getByRole("table", { name: "By category" })
+  await expect(byCategory.getByRole("row", { name: /^Shares/ })).toContainText("+₹2,657.50")
+  await expect(byCategory.getByRole("row", { name: /^Mutual funds/ })).toContainText("₹4,211.96")
+  await expect(byCategory.getByRole("row", { name: /^ETFs/ })).toContainText("none")
+  await expect(byCategory.getByRole("row", { name: /^Fixed deposits/ })).toContainText("none")
   await shot(page, "investments-list")
+
+  // Tabs (also in the URL): each has its own summary and columns.
+  const tabs = page.getByRole("navigation", { name: "Investment types" })
+  await tabs.getByRole("link", { name: "Mutual funds" }).click()
+  await expect(page).toHaveURL(/\?tab=funds$/)
+  await expect(tabs.getByRole("link", { name: "Mutual funds" })).toHaveAttribute("aria-current", "page")
+  await expect(summary(page)).toContainText("₹3,500")
+  await expect(summary(page)).toContainText("+₹711.96")
+  await expect(holdings(page)).toContainText("Avg. NAV")
+  await expect(holdings(page)).toContainText("Latest NAV")
+  await expect(holdings(page)).not.toContainText(LOTUS)
+  await page.goto("/investments?tab=shares")
+  await expect(summary(page)).toContainText("₹18,500")
+  await expect(holdings(page)).not.toContainText(GILT)
+  await page.goto("/investments?tab=etfs")
+  await expect(page.getByText("No ETFs yet")).toBeVisible()
+  await page.goto("/investments?tab=fds")
+  await expect(page.getByText("Tracking fixed deposits is coming in a later update.")).toBeVisible()
+  await page.goto("/investments?tab=nonsense") // anything else is All
+  await expect(tabs.getByRole("link", { name: "All" })).toHaveAttribute("aria-current", "page")
 
   await expand(page, LOTUS)
   const records = page.getByRole("list", { name: `Records of ${LOTUS}` })
@@ -219,11 +247,15 @@ test("gain, loss, old price and a holding without a current price; summary and O
   await shot(page, "investments-expanded")
 
   await page.goto("/")
-  await expect(overviewCard(page)).toContainText("₹24,752.18")
-  await expect(overviewCard(page)).toContainText("+₹3,252.18")
+  await expect(overviewCard(page)).toContainText("₹25,369.46")
+  await expect(overviewCard(page)).toContainText("+₹3,369.46")
   await expect(overviewCard(page)).toContainText("Not included in Total available")
   await expect(overviewCard(page)).toContainText("Prices as of")
-  await expect(overviewCard(page)).toContainText("1 without a current price")
+  const lines = overviewCard(page).getByRole("list", { name: "By category" })
+  await expect(lines.getByRole("listitem")).toHaveCount(4)
+  await expect(lines.getByRole("listitem").filter({ hasText: "Shares" })).toContainText("₹21,157.50")
+  await expect(lines.getByRole("listitem").filter({ hasText: "Mutual funds" })).toContainText("+₹711.96")
+  await expect(lines.getByRole("listitem").filter({ hasText: "Fixed deposits" })).toContainText("None")
   // The card on its own (a full-page shot of the Overview repeats the fixed sidebar).
   await overviewCard(page).screenshot({ path: `${SHOTS}/overview-investments.png` })
 

@@ -56,19 +56,41 @@ describe("buildInvestmentsView", () => {
     expect(v.groups[0]!.figures).toEqual({ investedMinor: 600_000, valueMinor: 500_000, profitMinor: -100_000, profitBps: -1_667 })
   })
 
-  it("marks a price older than 7 days and stops counting one older than 30 days", () => {
+  it("values every holding at its last price, whatever its age, and ages the badge", () => {
     const v = view(
       [row("Fresh", 10_000, 10_000_000), row("Old", 10_000, 10_000_000), row("Gone", 20_000, 5_000_000)],
       [instrument("Fresh"), instrument("Old", { priceDate: "2026-10-19" }), instrument("Gone", { priceDate: "2026-09-26" })],
     )
     const by = Object.fromEntries(v.groups.map((g) => [g.instrument.id, g]))
-    expect(by.Fresh).toMatchObject({ oldPrice: false, priced: true })
-    expect(by.Old).toMatchObject({ oldPrice: true, priced: true })
-    expect(by.Gone).toMatchObject({ oldPrice: true, priced: false })
-    expect(by.Gone!.figures).toEqual({ investedMinor: 100_000, valueMinor: null, profitMinor: null, profitBps: null })
-    // Invested ₹3,000 (₹2,000 of it priced); 1 holding without a current price.
-    expect(v.totals).toMatchObject({ investedMinor: 300_000, pricedInvestedMinor: 200_000, valueMinor: 200_000, profitMinor: 0, pricedCount: 2, unpricedCount: 1 })
+    expect(by.Fresh!.priceAge).toBe("fresh")
+    expect(by.Old!.priceAge).toBe("old")
+    expect(by.Gone!.priceAge).toBe("stale")
+    // 2 units × ₹1,000 against 2 × ₹500 invested: still counted.
+    expect(by.Gone!.figures).toEqual({ investedMinor: 100_000, valueMinor: 200_000, profitMinor: 100_000, profitBps: 10_000 })
+    expect(v.totals).toMatchObject({ investedMinor: 300_000, valueMinor: 400_000, profitMinor: 100_000, pricedCount: 3, unpricedCount: 0 })
     expect(v.pricesAsOf).toBe("2026-10-26")
+  })
+
+  it("totals each category: shares, mutual funds, ETFs and (none yet) fixed deposits", () => {
+    const v = view(
+      [row("S1", 10_000, 8_000_000), row("S2", 10_000, 12_000_000), row("F1", 1_000_000, 100_000), row("E1", 20_000, 2_500_000)],
+      [
+        instrument("S1"),
+        instrument("S2"),
+        instrument("F1", { source: "amfi", kind: "fund", lastPriceScaled: 120_000 }),
+        instrument("E1", { kind: "etf", lastPriceScaled: 2_594_800 }),
+      ],
+    )
+    expect(v.categories.map((c) => c.category)).toEqual(["shares", "funds", "etfs", "fds"])
+    const [shares, funds, etfs, fds] = v.categories
+    // Shares: 1 × 800 + 1 × 1,200 invested, 2 × 1,000 value.
+    expect(shares).toMatchObject({ count: 2, totals: { investedMinor: 200_000, valueMinor: 200_000, profitMinor: 0 } })
+    // Funds: 100 units, ₹10 → ₹12.
+    expect(funds).toMatchObject({ count: 1, totals: { investedMinor: 100_000, valueMinor: 120_000, profitMinor: 20_000, profitBps: 2_000 } })
+    // ETFs: 2 units, ₹250 → ₹259.48.
+    expect(etfs).toMatchObject({ count: 1, totals: { investedMinor: 50_000, valueMinor: 51_896, profitMinor: 1_896, profitBps: 379 } })
+    expect(fds).toMatchObject({ count: 0, totals: { investedMinor: 0, valueMinor: 0 } })
+    expect(v.totals).toMatchObject({ investedMinor: 350_000, valueMinor: 371_896, profitMinor: 21_896 })
   })
 
   it("flags a changed identifier, but not when the record has none", () => {

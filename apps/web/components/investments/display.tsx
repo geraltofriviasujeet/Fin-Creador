@@ -1,8 +1,8 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react"
-import type { HoldingGroup, InstrumentKind } from "@fin-creador/api"
-import { type PortfolioTotals, formatMoney, formatPercentFromBasisPoints } from "@fin-creador/domain"
+import type { HoldingGroup, InstrumentKind, InvestmentCategory } from "@fin-creador/api"
+import { formatMoney, formatPercentFromBasisPoints } from "@fin-creador/domain"
 import { cn } from "cn"
-import { fullDate, money } from "@/components/transactions/display"
+import { fullDate } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 
 // Display pieces shared by the Investments page and the Overview card (Sprint 7). Figures
@@ -51,21 +51,34 @@ export function ProfitText({ minor, bps, className, size = "sm" }: { minor: numb
   )
 }
 
-/** The badges a group can carry (text, never colour alone). */
-export function GroupBadges({ group }: { group: Pick<HoldingGroup, "priced" | "oldPrice" | "identifierChanged"> }) {
+export const CATEGORY_LABEL: Record<InvestmentCategory, string> = {
+  shares: "Shares",
+  funds: "Mutual funds",
+  etfs: "ETFs",
+  fds: "Fixed deposits",
+}
+
+export type InvestmentTab = "all" | InvestmentCategory
+export const INVESTMENT_TABS: readonly { value: InvestmentTab; label: string }[] = [
+  { value: "all", label: "All" },
+  ...(["shares", "funds", "etfs", "fds"] as const).map((value) => ({ value, label: CATEGORY_LABEL[value] })),
+]
+
+/** `?tab=` from the URL; anything else is the All tab. */
+export function readInvestmentTab(value: unknown): InvestmentTab {
+  return INVESTMENT_TABS.some((t) => t.value === value) ? (value as InvestmentTab) : "all"
+}
+
+/** The badges a group can carry (text, never colour alone). Every holding is valued at its last price. */
+export function GroupBadges({ group }: { group: Pick<HoldingGroup, "priceAge" | "identifierChanged" | "instrument"> }) {
+  const date = fullDate(group.instrument.priceDate)
   return (
     <>
-      {!group.priced ? <Badge tone="neutral">No current price</Badge> : group.oldPrice && <Badge tone="info">Old price</Badge>}
+      {group.priceAge === "old" && <Badge tone="info">Old price · {date}</Badge>}
+      {group.priceAge === "stale" && <Badge tone="negative">Stale, over 30 days · {date}</Badge>}
       {group.identifierChanged && <Badge tone="negative">Identifier changed, check your units</Badge>}
     </>
   )
 }
 
-/** "Invested ₹X (₹Y of it priced). N holdings without a current price are not counted in value and profit." */
-export function unpricedNote(totals: PortfolioTotals): string | null {
-  if (totals.unpricedCount === 0) return null
-  const n = totals.unpricedCount
-  return `Invested ${money(totals.investedMinor, "INR")} (${money(totals.pricedInvestedMinor, "INR")} of it priced). ${n} ${n === 1 ? "holding" : "holdings"} without a current price ${n === 1 ? "is" : "are"} not counted in value and profit.`
-}
-
-export const pricesAsOfText = (date: string | null) => (date ? `Prices as of ${fullDate(date)}` : "No current prices")
+export const pricesAsOfText = (date: string | null) => (date ? `Prices as of ${fullDate(date)}` : "No prices yet")

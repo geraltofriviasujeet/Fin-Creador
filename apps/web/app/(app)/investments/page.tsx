@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { buildInvestmentsView, loadInvestmentsData } from "@fin-creador/api"
-import { INVESTMENTS_HEADER } from "@/components/investments/display"
+import { INVESTMENTS_HEADER, type InvestmentTab, readInvestmentTab } from "@/components/investments/display"
 import { InvestmentsPageView, InvestmentsSkeleton } from "@/components/investments/investments-view"
 import { PageHeader } from "@/components/shell/app-shell"
 import { FormMessage } from "@/components/ui/field"
@@ -13,18 +13,21 @@ export const metadata: Metadata = { title: "Investments" }
 // Investments page (Sprint 7): a holdings tracker, read as the signed-in user (RLS). Value and
 // profit are computed in packages/domain from the stored units, buy prices and the last
 // closing prices (BSE close, AMFI NAV); nothing here is a live price.
-export default function InvestmentsPage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>
+
+export default function InvestmentsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <Suspense fallback={<InvestmentsSkeleton />}>
-      <InvestmentsContent />
+      <InvestmentsContent searchParams={searchParams} />
     </Suspense>
   )
 }
 
-async function InvestmentsContent() {
+async function InvestmentsContent({ searchParams }: { searchParams: SearchParams }) {
+  const tab: InvestmentTab = readInvestmentTab((await searchParams).tab)
   const supabase = await createClient()
   const data = await loadInvestmentsData(supabase)
-  if (!data.ok && data.reason === "unauthenticated") redirect("/sign-in?next=%2Finvestments")
+  if (!data.ok && data.reason === "unauthenticated") redirect(`/sign-in?next=${encodeURIComponent(tab === "all" ? "/investments" : `/investments?tab=${tab}`)}`)
   if (!data.ok) {
     return (
       <>
@@ -38,5 +41,5 @@ async function InvestmentsContent() {
       </>
     )
   }
-  return <InvestmentsPageView view={buildInvestmentsView(data.data)} />
+  return <InvestmentsPageView view={buildInvestmentsView(data.data)} tab={tab} />
 }

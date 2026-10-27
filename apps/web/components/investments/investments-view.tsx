@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import Link from "next/link"
 import { ChevronDown, Plus } from "lucide-react"
-import type { HoldingGroup, HoldingItem, InvestmentsView, WriteResult } from "@fin-creador/api"
-import { formatPriceScaled, formatUnits } from "@fin-creador/domain"
+import { type HoldingGroup, type HoldingItem, type InvestmentsView, type WriteResult, CATEGORY_OF_KIND } from "@fin-creador/api"
+import { type PortfolioTotals, formatPriceScaled, formatUnits } from "@fin-creador/domain"
 import { cn } from "cn"
 import { deleteHoldingAction, setHoldingArchivedAction } from "@/app/(app)/investments/actions"
 import { PageHeader } from "@/components/shell/app-shell"
@@ -14,7 +15,19 @@ import { Card } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import { GroupBadges, INVESTMENTS_HEADER, KindChip, NOT_IN_TOTAL, PRICES_NOTE, ProfitText, priceLabel, pricesAsOfText, unpricedNote } from "./display"
+import {
+  CATEGORY_LABEL,
+  GroupBadges,
+  INVESTMENTS_HEADER,
+  INVESTMENT_TABS,
+  type InvestmentTab,
+  KindChip,
+  NOT_IN_TOTAL,
+  PRICES_NOTE,
+  ProfitText,
+  priceLabel,
+  pricesAsOfText,
+} from "./display"
 import { HoldingForm } from "./holding-form"
 
 type Open = { kind: "add" } | { kind: "edit" | "archive" | "delete"; item: HoldingItem } | null
@@ -34,14 +47,25 @@ const recordName = (item: HoldingItem) => `${item.instrument.name}, ${formatUnit
 /** Desktop columns: name, units, average buy, last price, value, profit or loss. */
 const COLUMNS = "md:grid-cols-[minmax(0,2.4fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.35fr)]"
 
+/** Column labels: funds speak of NAV, shares and ETFs of prices. */
+type Labels = { average: string; last: string }
+const PRICE_LABELS: Labels = { average: "Avg. buy price", last: "Last price" }
+const NAV_LABELS: Labels = { average: "Avg. NAV", last: "Latest NAV" }
+
+const EMPTY_NOUN: Record<InvestmentTab, string> = { all: "holdings", shares: "shares", funds: "mutual funds", etfs: "ETFs", fds: "fixed deposits" }
+
+const newest = (dates: string[]) => (dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : null)
+
 /** The Investments page (Sprint 7): a holdings tracker, not linked to accounts. */
-export function InvestmentsPageView({ view }: { view: InvestmentsView }) {
+export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab: InvestmentTab }) {
   const [open, setOpen] = useState<Open>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [busy, startBusy] = useTransition()
   const close = () => setOpen(null)
   const add = () => setOpen({ kind: "add" })
-  const note = unpricedNote(view.totals)
+  const groups = tab === "all" ? view.groups : view.groups.filter((g) => CATEGORY_OF_KIND[g.instrument.kind] === tab)
+  const totals = tab === "all" ? view.totals : view.categories.find((c) => c.category === tab)!.totals
+  const labels = tab === "funds" ? NAV_LABELS : PRICE_LABELS
 
   const restore = (item: HoldingItem) =>
     startBusy(async () => {
@@ -62,7 +86,14 @@ export function InvestmentsPageView({ view }: { view: InvestmentsView }) {
         }
       />
 
-      {view.groups.length === 0 ? (
+      <TabBar current={tab} />
+
+      {tab === "fds" ? (
+        <Card className="grid justify-items-start gap-2">
+          <p className="font-semibold">Fixed deposits</p>
+          <p className="text-sm text-muted-foreground">Tracking fixed deposits is coming in a later update.</p>
+        </Card>
+      ) : view.groups.length === 0 ? (
         <Card className="grid justify-items-start gap-3">
           <p className="font-semibold">Track your first investment</p>
           <p className="text-sm text-muted-foreground">
@@ -76,14 +107,18 @@ export function InvestmentsPageView({ view }: { view: InvestmentsView }) {
             {PRICES_NOTE} {NOT_IN_TOTAL}.
           </p>
         </Card>
+      ) : groups.length === 0 ? (
+        <Card className="grid justify-items-start gap-3">
+          <p className="font-semibold">No {EMPTY_NOUN[tab]} yet</p>
+          <Button variant="secondary" onClick={add}>
+            <Plus aria-hidden="true" />
+            Add holding
+          </Button>
+        </Card>
       ) : (
         <>
-          <Summary view={view} />
-          {note && (
-            <FormMessage tone="info" className="mt-3">
-              {note}
-            </FormMessage>
-          )}
+          <Summary totals={totals} pricesAsOf={newest(groups.map((g) => g.instrument.priceDate))} />
+          {tab === "all" && <CategoryTable view={view} />}
           <section aria-labelledby="holdings-title" className="mt-5 grid gap-2">
             <h2 id="holdings-title" className="font-heading text-xl font-bold">
               Holdings
@@ -92,14 +127,19 @@ export function InvestmentsPageView({ view }: { view: InvestmentsView }) {
               <div aria-hidden="true" className={cn("hidden gap-3 border-b border-line px-5 py-2 text-xs font-semibold text-muted-foreground md:grid", COLUMNS)}>
                 <span>Name</span>
                 <span className="text-right">Units</span>
-                <span className="text-right">Avg. buy price</span>
-                <span className="text-right">Last price</span>
+                <span className="text-right">{labels.average}</span>
+                <span className="text-right">{labels.last}</span>
                 <span className="text-right">Value</span>
                 <span className="text-right">Profit or loss</span>
               </div>
               <ul>
-                {view.groups.map((group) => (
-                  <GroupRow key={group.instrument.id} group={group} onOpen={(kind, item) => setOpen({ kind, item })} />
+                {groups.map((group) => (
+                  <GroupRow
+                    key={group.instrument.id}
+                    group={group}
+                    labels={tab === "all" && group.instrument.kind === "fund" ? NAV_LABELS : labels}
+                    onOpen={(kind, item) => setOpen({ kind, item })}
+                  />
                 ))}
               </ul>
             </Card>
@@ -177,8 +217,31 @@ export function InvestmentsPageView({ view }: { view: InvestmentsView }) {
   )
 }
 
-function Summary({ view }: { view: InvestmentsView }) {
-  const { totals } = view
+function TabBar({ current }: { current: InvestmentTab }) {
+  return (
+    <nav aria-label="Investment types" className="-mx-4 mb-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+      <ul className="flex w-max gap-0.5 rounded-lg bg-canvas p-0.5">
+        {INVESTMENT_TABS.map((t) => (
+          <li key={t.value}>
+            <Link
+              href={t.value === "all" ? "/investments" : `/investments?tab=${t.value}`}
+              aria-current={t.value === current ? "page" : undefined}
+              scroll={false}
+              className={cn(
+                "flex h-[32px] items-center rounded-md px-3 text-sm font-semibold whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                t.value === current ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
+              )}
+            >
+              {t.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
+function Summary({ totals, pricesAsOf }: { totals: PortfolioTotals; pricesAsOf: string | null }) {
   const stat = "grid content-start gap-0.5"
   const label = "text-xs font-semibold text-muted-foreground"
   return (
@@ -190,21 +253,69 @@ function Summary({ view }: { view: InvestmentsView }) {
         </div>
         <div className={stat}>
           <dt className={label}>Current value</dt>
-          <dd className="font-heading text-lg font-bold tabular-nums md:text-xl">{totals.pricedCount > 0 ? money(totals.valueMinor, "INR") : "—"}</dd>
+          <dd className="font-heading text-lg font-bold tabular-nums md:text-xl">{money(totals.valueMinor, "INR")}</dd>
         </div>
         <div className={cn(stat, "col-span-2")}>
           <dt className={label}>Profit or loss</dt>
-          <dd>{totals.pricedCount > 0 ? <ProfitText minor={totals.profitMinor} bps={totals.profitBps} size="lg" /> : <span className="text-sm text-muted-foreground">No current prices</span>}</dd>
+          <dd>
+            <ProfitText minor={totals.profitMinor} bps={totals.profitBps} size="lg" />
+          </dd>
         </div>
       </dl>
       <p className="border-t border-line pt-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-ink">{pricesAsOfText(view.pricesAsOf)}</span> · {PRICES_NOTE} {NOT_IN_TOTAL}.
+        <span className="font-semibold text-ink">{pricesAsOfText(pricesAsOf)}</span> · {PRICES_NOTE} {NOT_IN_TOTAL}.
       </p>
     </Card>
   )
 }
 
-function GroupRow({ group, onOpen }: { group: HoldingGroup; onOpen: (kind: "edit" | "archive", item: HoldingItem) => void }) {
+/** All tab: invested, value and profit or loss per category. */
+function CategoryTable({ view }: { view: InvestmentsView }) {
+  const cell = "px-3 py-2 text-right tabular-nums first:pl-4 first:text-left last:pr-4 md:first:pl-5 md:last:pr-5"
+  return (
+    <Card className="mt-3 overflow-x-auto px-0 py-1 md:px-0 md:py-1">
+      <table className="w-full min-w-[520px] text-sm">
+        <caption className="sr-only">By category</caption>
+        <thead>
+          <tr className="border-b border-line text-xs text-muted-foreground">
+            {["Category", "Invested", "Value", "Profit or loss"].map((h) => (
+              <th key={h} scope="col" className={cn(cell, "font-semibold")}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {view.categories.map((c) => (
+            <tr key={c.category} className="border-b border-line last:border-b-0">
+              <th scope="row" className={cn(cell, "font-semibold")}>
+                {CATEGORY_LABEL[c.category]}
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">{c.count === 0 ? "none" : c.count}</span>
+              </th>
+              <td className={cell}>{c.count === 0 ? "—" : money(c.totals.investedMinor, "INR")}</td>
+              <td className={cell}>{c.count === 0 ? "—" : money(c.totals.valueMinor, "INR")}</td>
+              <td className={cell}>{c.count === 0 ? "—" : <ProfitText minor={c.totals.profitMinor} bps={c.totals.profitBps} />}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-line">
+            <th scope="row" className={cn(cell, "font-semibold")}>
+              Total
+            </th>
+            <td className={cn(cell, "font-semibold")}>{money(view.totals.investedMinor, "INR")}</td>
+            <td className={cn(cell, "font-semibold")}>{money(view.totals.valueMinor, "INR")}</td>
+            <td className={cell}>
+              <ProfitText minor={view.totals.profitMinor} bps={view.totals.profitBps} />
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </Card>
+  )
+}
+
+function GroupRow({ group, labels, onOpen }: { group: HoldingGroup; labels: Labels; onOpen: (kind: "edit" | "archive", item: HoldingItem) => void }) {
   const [expanded, setExpanded] = useState(false)
   const { instrument, figures } = group
   const id = `group-${instrument.id}`
@@ -240,11 +351,11 @@ function GroupRow({ group, onOpen }: { group: HoldingGroup; onOpen: (kind: "edit
           <span className="text-sm tabular-nums">{formatUnits(group.totalUnitsScaled)}</span>
         </div>
         <div className={cell}>
-          <span className={cellLabel}>Avg. buy price</span>
+          <span className={cellLabel}>{labels.average}</span>
           <span className="text-sm tabular-nums">{formatPriceScaled(group.averageBuyPriceScaled)}</span>
         </div>
         <div className={cell}>
-          <span className={cellLabel}>Last price</span>
+          <span className={cellLabel}>{labels.last}</span>
           <span className="text-sm tabular-nums">{formatPriceScaled(instrument.lastPriceScaled)}</span>
           <span className="block text-xs text-muted-foreground">
             {priceLabel(instrument.source)} {fullDate(instrument.priceDate)}
@@ -257,7 +368,7 @@ function GroupRow({ group, onOpen }: { group: HoldingGroup; onOpen: (kind: "edit
         </div>
         <div className={cell}>
           <span className={cellLabel}>Profit or loss</span>
-          {figures.profitMinor !== null ? <ProfitText minor={figures.profitMinor} bps={figures.profitBps} /> : <span className="text-xs text-muted-foreground">Not counted</span>}
+          {figures.profitMinor !== null && <ProfitText minor={figures.profitMinor} bps={figures.profitBps} />}
         </div>
       </div>
 

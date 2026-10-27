@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_PRICE_SCALED,
   MAX_UNITS_SCALED,
-  currentPriceScaled,
   formatPriceScaled,
   formatUnits,
   groupHoldings,
@@ -12,6 +11,7 @@ import {
   isOldPrice,
   parseScaledInput,
   portfolioTotals,
+  priceAge,
   scaledToDecimalString,
   type HoldingRecord,
 } from "./investments";
@@ -172,11 +172,12 @@ describe("price age and identifier changes", () => {
     expect(isOldPrice("2028-02-22", "2028-03-01")).toBe(true); // across 29 February
   });
 
-  it("counts a price for value up to 30 days old (shown, but unpriced after that)", () => {
-    expect(currentPriceScaled(12_505_000, "2026-09-26", "2026-10-26")).toBe(12_505_000);
-    expect(currentPriceScaled(12_505_000, "2026-09-25", "2026-10-26")).toBeNull();
-    expect(currentPriceScaled(5, "2028-01-31", "2028-03-01")).toBe(5); // 30 days across 29 February
-    expect(currentPriceScaled(5, "2028-01-30", "2028-03-01")).toBeNull();
+  it("ages a price: fresh up to 7 days, old after 7, stale after 30", () => {
+    expect(priceAge("2026-10-19", "2026-10-26")).toBe("fresh");
+    expect(priceAge("2026-10-19", "2026-10-27")).toBe("old");
+    expect(priceAge("2026-09-26", "2026-10-26")).toBe("old"); // exactly 30 days
+    expect(priceAge("2026-09-25", "2026-10-26")).toBe("stale");
+    expect(priceAge("2028-01-30", "2028-03-01")).toBe("stale"); // 31 days across 29 February
   });
 
   it("flags a changed ISIN only when both are known", () => {

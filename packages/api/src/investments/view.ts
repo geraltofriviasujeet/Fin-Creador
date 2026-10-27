@@ -2,12 +2,12 @@ import {
   type HoldingFigures,
   type IsoDate,
   type PortfolioTotals,
-  currentPriceScaled,
+  type PriceAge,
   groupHoldings,
   holdingFigures,
   identifierChanged,
-  isOldPrice,
   portfolioTotals,
+  priceAge,
 } from "@fin-creador/domain"
 
 // The Investments page and the Overview card (Sprint 7), built from the loaded rows with the
@@ -59,11 +59,22 @@ export type HoldingGroup = {
   totalUnitsScaled: number
   averageBuyPriceScaled: number
   figures: HoldingFigures
-  /** False when the last price is more than 30 days old: shown, but not counted. */
-  priced: boolean
-  /** "Old price" badge: more than 7 days old. */
-  oldPrice: boolean
+  /** "Old price" after 7 days, "Stale, over 30 days" after 30; always valued at the last price. */
+  priceAge: PriceAge
   identifierChanged: boolean
+}
+
+/** The tabs and the by-category lines. Fixed deposits come in a later step (no rows yet). */
+export const INVESTMENT_CATEGORIES = ["shares", "funds", "etfs", "fds"] as const
+export type InvestmentCategory = (typeof INVESTMENT_CATEGORIES)[number]
+
+export const CATEGORY_OF_KIND: Record<InstrumentKind, InvestmentCategory> = { share: "shares", fund: "funds", etf: "etfs" }
+
+export type CategoryTotals = {
+  category: InvestmentCategory
+  /** Instruments held (groups) in this category. */
+  count: number
+  totals: PortfolioTotals
 }
 
 export type InvestmentsView = {
@@ -71,7 +82,9 @@ export type InvestmentsView = {
   groups: HoldingGroup[]
   archived: HoldingItem[]
   totals: PortfolioTotals
-  /** The newest price date among the active holdings' counted prices; null when none. */
+  /** Shares, mutual funds, ETFs and fixed deposits, always in that order. */
+  categories: CategoryTotals[]
+  /** The newest price date among the active holdings; null when there are none. */
   pricesAsOf: IsoDate | null
 }
 
@@ -81,10 +94,8 @@ const byBuyDate = (a: HoldingRow, b: HoldingRow) =>
 
 export function buildInvestmentsView(data: InvestmentsData): InvestmentsView {
   const { today, instruments } = data
-  const priceOf = (instrumentId: string) => {
-    const i = instruments.get(instrumentId)
-    return i ? currentPriceScaled(i.lastPriceScaled, i.priceDate, today) : null
-  }
+  // Always the last known price, whatever its age (prices are never 0 or missing).
+  const priceOf = (instrumentId: string) => instruments.get(instrumentId)?.lastPriceScaled ?? null
   const item = (row: HoldingRow, instrument: Instrument): HoldingItem => ({
     ...row,
     instrument,
@@ -107,19 +118,23 @@ export function buildInvestmentsView(data: InvestmentsData): InvestmentsView {
       totalUnitsScaled: g.totalUnitsScaled,
       averageBuyPriceScaled: g.averageBuyPriceScaled,
       figures: g.figures,
-      priced: priceOf(instrument.id) !== null,
-      oldPrice: isOldPrice(instrument.priceDate, today),
+      priceAge: priceAge(instrument.priceDate, today),
       identifierChanged: records.some((r) => r.identifierChanged),
     }
   })
   groups.sort((a, b) => a.instrument.name.localeCompare(b.instrument.name))
 
-  const pricedDates = groups.filter((g) => g.priced).map((g) => g.instrument.priceDate)
+  const categories = INVESTMENT_CATEGORIES.map((category) => {
+    const inCategory = groups.filter((g) => CATEGORY_OF_KIND[g.instrument.kind] === category)
+    return { category, count: inCategory.length, totals: portfolioTotals(inCategory.flatMap((g) => g.records), priceOf) }
+  })
+  const dates = groups.map((g) => g.instrument.priceDate)
   return {
     today,
     groups,
     archived,
     totals: portfolioTotals(active, priceOf),
-    pricesAsOf: pricedDates.length > 0 ? pricedDates.reduce((a, b) => (a > b ? a : b)) : null,
+    categories,
+    pricesAsOf: dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : null,
   }
 }
