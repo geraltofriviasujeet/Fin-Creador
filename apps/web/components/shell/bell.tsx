@@ -64,7 +64,7 @@ function BellButton({ count, items }: { count: number; items: BellReminder[] | n
             <Popover.Close
               render={
                 <Link href="/loans-liabilities" className="mt-2 inline-flex text-sm font-semibold text-ink underline underline-offset-4 hover:no-underline">
-                  Open Loans &amp; liabilities
+                  Open Loans &amp; Liabilities
                 </Link>
               }
             />

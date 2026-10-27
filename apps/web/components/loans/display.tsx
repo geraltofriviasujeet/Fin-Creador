@@ -4,14 +4,14 @@ import { formatPercentFromBasisPoints, isIsoDate } from "@fin-creador/domain"
 import { fullDate } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 
-// Display pieces shared by the Loans & liabilities page and the Overview "Due soon" card
+// Display pieces shared by the Loans & Liabilities page and the Overview "Due soon" card
 // (Sprint 8a). Figures come from packages/domain through packages/api/src/loans/view.ts.
 
 export const LOANS_PATH = "/loans-liabilities"
 
 export const LOANS_HEADER = {
   eyebrow: "Owe",
-  title: "Loans & liabilities",
+  title: "Loans & Liabilities",
   description: "Your loans, EMIs and what is due next. Principal you repay moves to the loan; interest and fees are expenses.",
 }
 

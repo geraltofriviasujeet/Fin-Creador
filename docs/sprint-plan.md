@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-27 (Sprint 8a: PR #34 merged, migration on dev; web Loans & liabilities page in a draft PR, step 8a.4).
+Last updated: 2026-10-27 (Sprint 8a: PR #34 merged, migration on dev; web Loans & Liabilities page in a draft PR, step 8a.4).
 
 ## Sprint status
 
@@ -31,8 +31,9 @@ Last updated: 2026-10-27 (Sprint 8a: PR #34 merged, migration on dev; web Loans 
 | **6** | Budgets & savings goals | Done | Completed 2026-10-26 (PR #30 merged into `main`, merge commit 672ab75). One Goals page (`/goals`): Planned expenses (Trip, Wheeler, House, Furniture, Electronics, Mobile, Other; exact maths, EMI, archive, restore, permanent delete of archived goals) and Monthly budgets (80% / 100% warnings, page and Overview); web density pass; `scripts/backup-prod.sh`. Migrations 20261026180000, 20261026200000, 20261026210000 applied to dev and prod (prod from `main` after a backup); live site checked. Web only (mobile Goals in the backlog). See Sprint 6 steps. |
 | **7** | Investment portfolio | Done | Completed 2026-10-27 (PR #32 merged into `main`). Holdings tracker (not trading), web only: shares, mutual funds and ETFs at the previous close (BSE, AMFI), fixed deposits, tabs per kind, Overview card. Migrations 20261027120000, 20261027180000 and 20261027200000 applied to dev and prod (prod from `main` after a backup); `refresh-prices` deployed on prod, first run ok (AMFI 14,172 and BSE 4,643 loaded, as on dev); live site checked. Mobile Investments in the backlog. See Sprint 7 steps. |
 | **8a** | Loans and EMIs | In progress | PR #34 merged into `main`; migration `20261028120000_loans.sql` applied to dev (not prod). Step 8a.4 (web page) in a draft PR. See Sprint 8a steps. |
-| **8b** | Credit cards and net worth | Not started | Own PR and prod push after 8a. |
+| **8b** | Credit cards, informal borrowing and net worth | Not started | Own PR and prod push after 8a. Fills the "Short-term & operational liabilities" box. |
 | **8c** | Cash-flow history and CSV export | Not started | Own PR and prod push after 8b. |
+| **8d** | Statutory dues | Not started | Own PR and prod push after 8c. Fills the "Statutory & legal liabilities" box. |
 | **9** | AI financial insights | Not started | |
 | **10** | Notifications & reminders | Not started | |
 | **11** | Mobile polish, offline & PWA | Not started | |
@@ -88,7 +89,7 @@ Loans only (owner, 2026-10-27): see Decisions. Web first; mobile in a separate P
 | **8a.1 Domain, schemas and SQL review** | Done | `packages/domain/src/loans.ts` (EMI estimate reusing `emi` from goals.ts, schedule that follows the EMI in use, moratorium interest, default split, progress) and `due-items.ts` (generic reminders, shortfall); `packages/schemas/src/loan-forms.ts` (add / edit loan, pay, will pay later, `LENDERS`); migration `20261028120000_loans.sql`. Approved 2026-10-27 with changes (see Decisions). |
 | **8a.2 pgTAP and draft PR** | Done | `supabase/tests/database/loans.test.sql` (posting from bank, cash and other; idempotency; shortfall with and without "Pay anyway"; before tracking; capitalisation once and again after a void; edit / void together; FC034–FC044; direct-write refusals; archive and delete; RLS and anon; user and planned-account deletion) and the generated `loan_dates_parity.test.sql` (`npm run fixtures:loans`); writers `addLoan`, `editLoan`, `setLoanArchived`, `deleteLoan`, `payDueItem`, `editDuePayment`, `voidDuePayment`, `planDueItem`, `clearDuePlan`, `loadPaymentContext` and `loanErrorMessage` in `packages/api/src/loans`; loan accounts filtered from every account loader (`MONEY_ACCOUNT_KINDS`). Draft PR. |
 | **8a.3 Dev db push** | Done | Owner pushed to dev 2026-10-27; `npm run db:types` replaced the hand-written entries (generated relationships and `transactions.due_payment_id`). Prod not pushed. |
-| **8a.4 Web Loans page** | In progress | Draft PR: `/loans-liabilities` (`components/loans/*`), loader and view `packages/api/src/loans/{load,view}.ts`, bell (`components/shell/bell.tsx`, streamed from the app layout), Overview Due soon card, nav tab, E2E `e2e/loans.spec.ts`. Plan: Add loan flow, EMI cards with schedule, pay / will pay later, the shortfall warning with "Pay anyway" (also ahead of time on the EMI card), bell and Overview "Due soon". Helper text for an ongoing loan whose interest was added to the balance: enter the current outstanding as the amount taken. For a capitalised moratorium: "Interest added when EMIs start (estimate X)". Navigation (owner, 2026-10-27): a new tab "Loans & liabilities" after Investments, route `/loans-liabilities`, the same page title and heading; on narrow screens the nav may show the short label "Liabilities" (nav only), kept compact and reachable (More menu if needed). Page: "Due soon" card and "Add loan" at the top; loan list (lender, type, outstanding, next EMI date and amount, badge Paid / Due / Overdue); archived loans in a collapsed section; empty state "No loans yet" with Add loan. 8b adds credit cards and net worth to this page (no new tab). Nav test updated. At most 8 screenshots from CI. |
+| **8a.4 Web Loans page** | In progress | Draft PR: `/loans-liabilities` (`components/loans/*`), loader and view `packages/api/src/loans/{load,view}.ts`, bell (`components/shell/bell.tsx`, streamed from the app layout), Overview Due soon card, nav tab, E2E `e2e/loans.spec.ts`. Plan: Add loan flow, EMI cards with schedule, pay / will pay later, the shortfall warning with "Pay anyway" (also ahead of time on the EMI card), bell and Overview "Due soon". Helper text for an ongoing loan whose interest was added to the balance: enter the current outstanding as the amount taken. For a capitalised moratorium: "Interest added when EMIs start (estimate X)". Navigation (owner, 2026-10-27): a new tab "Loans & Liabilities" after Investments, route `/loans-liabilities`, the same page title and heading; on narrow screens the nav may show the short label "Liabilities" (nav only), kept compact and reachable (More menu if needed). Page: "Due soon" card and "Add loan" at the top; loan list (lender, type, outstanding, next EMI date and amount, badge Paid / Due / Overdue); archived loans in a collapsed section; empty state "No loans yet" with Add loan. Layout (owner, 2026-10-27): Due soon at the top, then three boxes: "Long-term liabilities" (loans, Add loan, "No loans yet" inside), "Short-term & operational liabilities" (8b) and "Statutory & legal liabilities" (8d), the last two as "Coming next" until built (no new tab). Nav test updated. At most 8 screenshots from CI. |
 | **8a.5 Wrap-up and prod** | Not started | Docs, QA agent, prod from `main` after a backup. |
 
 ## Sprint 7 steps
@@ -217,6 +218,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-27** | Sprint 8a reminders (owner): in-app only. The bell and an Overview "Due soon" card show EMIs due tomorrow (within 24 hours; entries have no time of day), due today, overdue, and the day before and on a planned pay date, derived from stored dates (`packages/domain/src/due-items.ts`), no scheduled job. Email, web push and phone push are a later notifications step (backlog). | |
 | **2026-10-27** | Sprint 8a SQL review (owner, changes): (1) a shortfall is a warning, not a block: `pay_due_item` and `edit_due_payment` take `p_allow_shortfall` (default false); without it FC035 (detail = shortfall) is raised, and "Pay anyway" sends the same request key again with it; this replaces "may not take the paying account below zero" above. (2) Deleting a planned account clears the whole plan (date and account). (3) Account names need not be unique; a loan account is named after the nickname or lender and shown as "<name> (loan)" in lists. (4) `loan_category_id` adopts an archived same-name category (restored) and never returns null. (5) SQL due dates come from one function, `loan_due_date`, checked against the domain by a generated parity test. (6) Loan accounts are never in Total available, account pickers, the Accounts page or balances. Optional parameters of `create_loan` and `update_loan` come last, with defaults. | Approved 2026-10-27. |
 | **2026-10-27** | Sprint 8 due items (owner): one generic model for anything due on a date and paid from an account (`due_items` + `due_payments`): due date, amount due, optional minimum due, status (pending, paid, before tracking), planned pay date and account, paying account, the atomic idempotent posting, the shortfall refusal, the in-app reminders and the Due soon card. Loan EMIs and moratorium interest in 8a; card bills in 8b add only the card-specific parts (see Sprint 8b). | 8a must not block 8b. |
+| **2026-10-27** | Liability boxes (owner): the Loans & Liabilities page (capital L) has three boxes: Long-term (loans, 8a), Short-term & operational (credit card dues and EMIs, informal borrowing: 8b), Statutory & legal (income tax payable, fines, unpaid e-challans: 8d). 8b adds informal borrowing (liability account, optional due date, part payments as transfers, interest as an expense); new 8d statutory dues (type, amount, due date, paid / unpaid, reminders; payment is an expense, not a transfer). Net worth counts all three boxes. Never store card numbers or any digits of cards or accounts. | Same due-item model throughout. |
 | **2026-10-27** | Sprint 8a web page (8a.4): loan badge Paid / Due / Overdue, plus "Not due yet" before anything has fallen due (a loan that starts later) and "Closed" once nothing is owed; EMIs left after a loan is cleared show as "Not needed" and never remind. The EMI card warns ahead of time against the planned account, otherwise only when no account can cover the EMI (named after the one with the most money). Loan screens show account names only (no last four digits). Pending schedule rows are estimates from what is owed now. The bell's list streams from the app layout. | Built on the shared view `packages/api/src/loans/view.ts`, so mobile shows the same. |
 
 ## Sprint 7 Investments: market data decisions
@@ -632,9 +634,11 @@ portfolio composition and performance estimates.
 **Weeks 15–16 \| Usable outcome:** A user can see broader financial
 position and export records.
 
-Split into three releases (owner, 2026-10-27), each its own PR and prod
-push: 8a loans, 8b credit cards and net worth, 8c cash-flow history and
-CSV export. Rules for 8a are in the Decisions log above.
+Split into four releases (owner, 2026-10-27), each its own PR and prod
+push: 8a loans, 8b credit cards, informal borrowing and net worth, 8c
+cash-flow history and CSV export, 8d statutory dues. The Loans &
+Liabilities page has three boxes: Long-term (8a), Short-term &
+operational (8b), Statutory & legal (8d). Rules for 8a are in the Decisions log above.
 
 ### Sprint 8a — Loans and EMIs
 
@@ -651,7 +655,7 @@ CSV export. Rules for 8a are in the Decisions log above.
 
 - Credit card EMIs are loans of type "Credit card EMI".
 
-### Sprint 8b — Credit cards and net worth
+### Sprint 8b — Credit cards, informal borrowing and net worth
 
 Built on 8a's due items (`due_items`, `due_payments`): due date, amount
 due, minimum due, status, planned pay date and account, the posting,
@@ -680,9 +684,18 @@ the shortfall refusal, reminders and Due soon need no new mechanism.
 
 - Utilisation warnings at 80% and 100% of the limit.
 
-- Net worth: included assets minus included liabilities (loan and card
-  accounts), with valuation dates; decide whether investments and fixed
-  deposits count. Liabilities must include capitalised moratorium
+- Informal borrowing (friends, family, third parties): a liability
+  account named after the lender (a name only), the amount borrowed, an
+  optional due date (a due item, so Due soon and the bell remind), part
+  payments as transfers to the liability account, interest (if any) as
+  an expense. Shown in the "Short-term & operational liabilities" box
+  with credit card dues and card EMIs.
+
+- Net worth: included assets minus included liabilities, with valuation
+  dates; liabilities from all three boxes (long-term loans, short-term
+  and operational: cards and informal borrowing, statutory and legal:
+  unpaid statutory dues from 8d once built); decide whether investments
+  and fixed deposits count. Liabilities must include capitalised moratorium
   interest not yet posted (it is posted with the first EMI paid).
 
 ### Sprint 8c — Cash-flow history and CSV export
@@ -690,6 +703,20 @@ the shortfall refusal, reminders and Due soon need no new mechanism.
 - Cash-flow history over months; browse past months of income.
 
 - CSV export with date filters; PDF only if time permits.
+
+### Sprint 8d — Statutory dues
+
+- The "Statutory & legal liabilities" box: income tax payable, fines and
+  unpaid e-challans, and other statutory dues.
+
+- Each due: type, amount, due date, paid or unpaid, and reminders (a due
+  item, so Due soon and the bell need no new mechanism).
+
+- Paying a statutory due is an expense from the chosen account (a
+  category per type), not a transfer: there is no liability account.
+  Unpaid dues count in net worth.
+
+- No challan, vehicle, PAN or card numbers: names and amounts only.
 
 ### Acceptance criteria
 

@@ -53,7 +53,7 @@ export function DueSoonOverviewCard({ view }: { view: LoansView | null }) {
         <DueSoonList reminders={view.dueSoon} currency={view.currency} />
       )}
       <Link href={LOANS_PATH} className="inline-flex items-center gap-1 text-sm font-semibold text-ink underline-offset-4 hover:underline">
-        {view.dueSoon.length === 0 ? "View loans" : "Pay from Loans & liabilities"}
+        {view.dueSoon.length === 0 ? "View loans" : "Pay from Loans & Liabilities"}
         <ChevronRight aria-hidden="true" className="size-4" />
       </Link>
     </Card>

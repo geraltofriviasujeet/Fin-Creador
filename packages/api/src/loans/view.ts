@@ -21,7 +21,7 @@ import {
 } from "@fin-creador/domain"
 import { type PayingAccount, shortfallMessage } from "@fin-creador/schemas"
 
-// The Loans & liabilities page, the bell and the Overview "Due soon" card (Sprint 8a), built
+// The Loans & Liabilities page, the bell and the Overview "Due soon" card (Sprint 8a), built
 // from the loaded rows with the shared domain rules. Pure, so web and mobile show the same
 // figures. Nothing here posts money: payments go through the writers.
 

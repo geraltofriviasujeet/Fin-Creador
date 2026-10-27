@@ -3,7 +3,7 @@ import { type UserClient, userToday } from "../income/client"
 import { type LoansData, buildLoansView } from "./view"
 import { accountBalances } from "./writers"
 
-// Loads what the Loans & liabilities page, the bell and the Overview "Due soon" card need, as
+// Loads what the Loans & Liabilities page, the bell and the Overview "Due soon" card need, as
 // the signed-in user (RLS: only their own rows).
 
 export type LoansDataLoad = { ok: true; data: LoansData } | { ok: false; reason: "unauthenticated" | "unavailable" }

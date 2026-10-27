@@ -1,7 +1,7 @@
 import { type Page, expect, test } from "@playwright/test"
 import { addBank, addCash, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
-// Loans & liabilities end to end (Sprint 8a, web), against the throwaway local Supabase.
+// Loans & Liabilities end to end (Sprint 8a, web), against the throwaway local Supabase.
 // Expected figures come from packages/domain (loanEmiEstimate, defaultPaymentSplit,
 // loanSchedule): ₹3,00,000 at 12% a year over 12 EMIs is an EMI of ₹26,654.64, the first
 // split ₹23,654.64 principal + ₹3,000 interest, ₹19,855.63 interest in all. At most 8
@@ -21,7 +21,7 @@ function monthsAhead(months: number) {
   return d.toISOString().slice(0, 10)
 }
 
-const loansList = (page: Page) => page.getByRole("region", { name: "Loans" })
+const loansList = (page: Page) => page.getByRole("region", { name: "Long-term liabilities" })
 const dueSoon = (page: Page) => page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: "Due soon" }) })
 
 async function newUser(page: Page, label: string) {
@@ -30,7 +30,7 @@ async function newUser(page: Page, label: string) {
 
 async function openLoans(page: Page) {
   await page.goto(PATH)
-  await expect(page.getByRole("heading", { level: 1, name: "Loans & liabilities" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Loans & Liabilities" })).toBeVisible()
 }
 
 /** Adds the ₹3,00,000 personal loan (ongoing, this month's EMI still due on the 1st). */
@@ -70,12 +70,21 @@ test("navigation, empty state, and the Liabilities tab on a phone", async ({ bro
   // After Investments, same title as the page.
   const links = nav.getByRole("link")
   await expect(links.nth(5)).toHaveText("Investments")
-  await expect(links.nth(6)).toHaveText("Loans & liabilities")
+  await expect(links.nth(6)).toHaveText("Loans & Liabilities")
   await links.nth(6).click()
   await expect(page).toHaveURL(new RegExp(`${PATH}$`))
-  await expect(page.getByRole("heading", { level: 1, name: "Loans & liabilities" })).toBeVisible()
-  await expect(page.getByText("No loans yet")).toBeVisible()
-  await expect(page).toHaveTitle(/Loans & liabilities/)
+  await expect(page.getByRole("heading", { level: 1, name: "Loans & Liabilities" })).toBeVisible()
+  await expect(page).toHaveTitle(/Loans & Liabilities/)
+  // Three boxes: loans now (empty state inside), the other two coming next.
+  await expect(loansList(page).getByText("No loans yet")).toBeVisible()
+  await expect(loansList(page).getByRole("button", { name: "Add loan" })).toBeVisible()
+  const shortTerm = page.getByRole("region", { name: "Short-term & operational liabilities" })
+  await expect(shortTerm).toContainText("Coming next")
+  await expect(shortTerm).toContainText("Credit card dues and EMIs, and informal borrowing")
+  const statutory = page.getByRole("region", { name: "Statutory & legal liabilities" })
+  await expect(statutory).toContainText("Coming next")
+  await expect(statutory).toContainText("Income tax payable, fines and unpaid e-challans")
+  await expect(dueSoon(page)).toHaveCount(0)
   // No loans: no Due soon card on the Overview.
   await page.goto("/")
   await expect(dueSoon(page)).toHaveCount(0)
@@ -86,7 +95,7 @@ test("navigation, empty state, and the Liabilities tab on a phone", async ({ bro
   const tabs = phone.getByRole("navigation", { name: "Main" }).last()
   await expect(tabs.getByRole("link", { name: "Liabilities" })).toHaveAttribute("href", PATH)
   await tabs.getByRole("link", { name: "Liabilities" }).click()
-  await expect(phone.getByRole("heading", { level: 1, name: "Loans & liabilities" })).toBeVisible()
+  await expect(phone.getByRole("heading", { level: 1, name: "Loans & Liabilities" })).toBeVisible()
   await expect(tabs.getByRole("link", { name: "Liabilities" })).toHaveAttribute("aria-current", "page")
   await phone.screenshot({ path: `${SHOTS}/loans-phone.png` }) // the viewport, with the tab bar at the bottom
   await phone.close()
@@ -197,7 +206,7 @@ test("shortfall: the warning on the EMI card and in the form, then Pay anyway", 
   // The Overview shows the same Due soon item.
   await page.goto("/")
   await expect(dueSoon(page)).toContainText("EMI 2")
-  await expect(dueSoon(page).getByRole("link", { name: "Pay from Loans & liabilities" })).toHaveAttribute("href", PATH)
+  await expect(dueSoon(page).getByRole("link", { name: "Pay from Loans & Liabilities" })).toHaveAttribute("href", PATH)
   await dueSoon(page).screenshot({ path: `${SHOTS}/loans-overview-due-soon.png` })
 })
 

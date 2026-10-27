@@ -22,7 +22,7 @@ export type NavItem = {
   inTabBar: boolean
 }
 
-// Order follows design-spec §4 (Goals holds planned expenses and monthly budgets, Sprint 6; Loans & liabilities after Investments, Sprint 8a). Flip `available` when a page ships.
+// Order follows design-spec §4 (Goals holds planned expenses and monthly budgets, Sprint 6; Loans & Liabilities after Investments, Sprint 8a). Flip `available` when a page ships.
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "overview", label: "Overview", href: "/", icon: LayoutGrid, available: true, inTabBar: true },
   { key: "income", label: "Income", href: "/income", icon: ArrowDownToLine, available: true, inTabBar: false },
@@ -41,7 +41,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Sprint 8a: loans now; 8b adds credit cards and net worth to the same page.
   {
     key: "loans",
-    label: "Loans & liabilities",
+    label: "Loans & Liabilities",
     tabLabel: "Liabilities",
     href: "/loans-liabilities",
     icon: Landmark,

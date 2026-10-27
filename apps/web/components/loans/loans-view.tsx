@@ -1,5 +1,6 @@
 "use client"
 
+import type * as React from "react"
 import { useState, useTransition } from "react"
 import { ChevronDown, Plus } from "lucide-react"
 import { type DueItem, type LoanItem, type LoansView, type PaymentRecord, type WriteResult, newRequestKey } from "@fin-creador/api"
@@ -19,9 +20,9 @@ import { DueSoonList } from "./due-soon"
 import { AddLoanForm, EditLoanForm } from "./loan-form"
 import { PayForm } from "./pay-form"
 
-// The Loans & liabilities page (Sprint 8a, web). Due soon and Add loan at the top, the loan
-// list with each loan's detail and schedule, archived loans collapsed. 8b adds credit cards
-// and net worth to this page.
+// The Loans & Liabilities page (Sprint 8a, web). Due soon at the top, then three boxes:
+// Long-term liabilities (loans, each with its detail and schedule; archived collapsed), and
+// Short-term & operational (8b) and Statutory & legal (8d), shown as coming next.
 
 type Open =
   | { kind: "add" }
@@ -62,104 +63,111 @@ export function LoansPageView({ view }: { view: LoansView }) {
 
   return (
     <>
-      <PageHeader
-        {...LOANS_HEADER}
-        actions={
-          <Button size="lg" onClick={add}>
-            <Plus aria-hidden="true" />
-            Add loan
-          </Button>
-        }
-      />
+      <PageHeader {...LOANS_HEADER} />
 
-      {view.loans.length === 0 ? (
-        <Card className="grid justify-items-start gap-3">
-          <p className="font-semibold">No loans yet</p>
-          <p className="text-sm text-muted-foreground">
-            Add a home, vehicle, personal, education or other loan, or a credit card EMI. We estimate the EMI and schedule, and remind you when an EMI is due.
-          </p>
-          <Button variant="secondary" onClick={add}>
-            <Plus aria-hidden="true" />
-            Add loan
-          </Button>
+      {view.loans.length > 0 && (
+        <Card aria-labelledby="due-soon-title" className="mb-4 grid gap-1 py-3 md:py-3.5">
+          <CardTitle id="due-soon-title">Due soon</CardTitle>
+          {view.dueSoon.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing due today or tomorrow.</p>
+          ) : (
+            <DueSoonList reminders={view.dueSoon} currency={view.currency} onPay={(item) => setOpen({ kind: "pay", item })} />
+          )}
         </Card>
-      ) : (
-        <>
-          <Card aria-labelledby="due-soon-title" className="grid gap-1 py-3 md:py-3.5">
-            <CardTitle id="due-soon-title">Due soon</CardTitle>
-            {view.dueSoon.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing due today or tomorrow.</p>
-            ) : (
-              <DueSoonList reminders={view.dueSoon} currency={view.currency} onPay={(item) => setOpen({ kind: "pay", item })} />
-            )}
-          </Card>
+      )}
 
-          <section aria-labelledby="loans-title" className="mt-5 grid gap-2">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h2 id="loans-title" className="font-heading text-xl font-bold">
-                Loans
+      <div className="grid gap-4">
+        <Card role="region" aria-labelledby="long-term-title" className="px-0 py-0 md:px-0 md:py-0">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 pt-3.5 pb-2.5 md:px-5">
+            <div className="grid gap-0.5">
+              <h2 id="long-term-title" className="font-heading text-lg font-bold">
+                Long-term liabilities
               </h2>
-              <p className="text-sm text-muted-foreground tabular-nums">
-                Outstanding <span className="font-semibold text-ink">{money(view.totalOutstandingMinor, view.currency)}</span> · {NOT_IN_TOTAL}
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {view.loans.length > 0 && (
+                  <>
+                    Outstanding <span className="font-semibold text-ink">{money(view.totalOutstandingMinor, view.currency)}</span> ·{" "}
+                  </>
+                )}
+                {NOT_IN_TOTAL}
               </p>
             </div>
-            <Card className="px-0 py-1 md:px-0 md:py-1">
-              <div aria-hidden="true" className={cn("hidden gap-3 border-b border-line px-5 py-2 text-xs font-semibold text-muted-foreground md:grid", COLUMNS)}>
+            <Button onClick={add}>
+              <Plus aria-hidden="true" />
+              Add loan
+            </Button>
+          </div>
+
+          {view.loans.length === 0 ? (
+            <div className="grid justify-items-start gap-1.5 border-t border-line px-4 py-3 md:px-5">
+              <p className="text-sm font-semibold">No loans yet</p>
+              <p className="text-sm text-muted-foreground">
+                Add a home, vehicle, personal, education or other loan, or a credit card EMI. We estimate the EMI and schedule, and remind you when an EMI is due.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div aria-hidden="true" className={cn("hidden gap-3 border-y border-line px-5 py-2 text-xs font-semibold text-muted-foreground md:grid", COLUMNS)}>
                 <span>Loan</span>
                 <span className="text-right">Outstanding</span>
                 <span className="text-right">Next EMI</span>
                 <span className="text-right">Status</span>
                 <span className="sr-only">Details</span>
               </div>
-              <ul>
+              <ul aria-label="Loans" className="border-t border-line md:border-t-0">
                 {view.loans.map((l) => (
                   <LoanRow key={l.loan.id} item={l} today={view.today} onOpen={setOpen} />
                 ))}
               </ul>
-            </Card>
-          </section>
-        </>
-      )}
-
-      {view.archived.length > 0 && (
-        <div className="mt-3">
-          <Button variant="link" aria-expanded={showArchived} onClick={() => setShowArchived((s) => !s)}>
-            {showArchived ? "Hide" : "Show"} archived ({view.archived.length})
-          </Button>
-          {showArchived && (
-            <Card className="mt-2 py-1 md:py-1">
-              <ul aria-label="Archived loans">
-                {view.archived.map((l) => (
-                  <li key={l.loan.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-2.5 last:border-b-0">
-                    <div className="grid min-w-0 flex-1 basis-60 gap-0.5">
-                      <p className="text-sm font-semibold">{l.name}</p>
-                      <p className="text-xs text-muted-foreground tabular-nums">
-                        {l.typeLabel} · outstanding {money(l.outstandingMinor, l.loan.currency)}
-                        {l.hasPayments && " · has payments, so it can't be deleted"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-0.5">
-                      <Button variant="ghost" size="sm" disabled={busy} aria-label={`Restore ${l.name}`} onClick={() => restore(l)}>
-                        Restore
-                      </Button>
-                      {!l.hasPayments && (
-                        <Button variant="ghost" size="sm" className="text-danger" aria-label={`Delete ${l.name} permanently`} onClick={() => setOpen({ kind: "delete", loan: l })}>
-                          Delete permanently
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+            </>
           )}
-        </div>
-      )}
+
+          {view.archived.length > 0 && (
+            <div className="border-t border-line px-4 py-2 md:px-5">
+              <Button variant="link" size="sm" aria-expanded={showArchived} onClick={() => setShowArchived((s) => !s)}>
+                {showArchived ? "Hide" : "Show"} archived ({view.archived.length})
+              </Button>
+              {showArchived && (
+                <ul aria-label="Archived loans" className="mt-1">
+                  {view.archived.map((l) => (
+                    <li key={l.loan.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-2 last:border-b-0">
+                      <div className="grid min-w-0 flex-1 basis-60 gap-0.5">
+                        <p className="text-sm font-semibold">{l.name}</p>
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                          {l.typeLabel} · outstanding {money(l.outstandingMinor, l.loan.currency)}
+                          {l.hasPayments && " · has payments, so it can't be deleted"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-0.5">
+                        <Button variant="ghost" size="sm" disabled={busy} aria-label={`Restore ${l.name}`} onClick={() => restore(l)}>
+                          Restore
+                        </Button>
+                        {!l.hasPayments && (
+                          <Button variant="ghost" size="sm" className="text-danger" aria-label={`Delete ${l.name} permanently`} onClick={() => setOpen({ kind: "delete", loan: l })}>
+                            Delete permanently
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <ComingNext id="short-term" title="Short-term & operational liabilities">
+          Credit card dues and EMIs, and informal borrowing from friends, family or others.
+        </ComingNext>
+        <ComingNext id="statutory" title="Statutory & legal liabilities">
+          Income tax payable, fines and unpaid e-challans.
+        </ComingNext>
+      </div>
 
       <Dialog open={open !== null} onOpenChange={(o) => !o && close()}>
         {open?.kind === "add" && (
           <DialogContent
-            eyebrow="Loans & liabilities"
+            eyebrow="Loans & Liabilities"
             title="Add loan"
             description="Use the figures on your loan statement or sanction letter."
             className="flex max-h-dvh flex-col md:max-h-[calc(100dvh-2rem)] md:max-w-[640px]"
@@ -168,7 +176,7 @@ export function LoansPageView({ view }: { view: LoansView }) {
           </DialogContent>
         )}
         {open?.kind === "edit" && (
-          <DialogContent eyebrow="Loans & liabilities" title={`Edit ${open.loan.name}`} description="Amounts taken, dates and tenure stay as entered." className="md:max-w-[640px]">
+          <DialogContent eyebrow="Loans & Liabilities" title={`Edit ${open.loan.name}`} description="Amounts taken, dates and tenure stay as entered." className="md:max-w-[640px]">
             <EditLoanForm item={open.loan} onDone={close} />
           </DialogContent>
         )}
@@ -197,7 +205,7 @@ export function LoansPageView({ view }: { view: LoansView }) {
         )}
         {open?.kind === "archive" && (
           <DialogContent
-            eyebrow="Loans & liabilities"
+            eyebrow="Loans & Liabilities"
             title={`Archive ${open.loan.name}?`}
             description="It moves to Archived: no reminders and no payments until you restore it. Its history stays."
           >
@@ -206,7 +214,7 @@ export function LoansPageView({ view }: { view: LoansView }) {
         )}
         {open?.kind === "delete" && (
           <DialogContent
-            eyebrow="Loans & liabilities"
+            eyebrow="Loans & Liabilities"
             title={`Delete ${open.loan.name} permanently?`}
             description="The loan and its schedule are removed for good. This can't be undone."
           >
@@ -215,6 +223,21 @@ export function LoansPageView({ view }: { view: LoansView }) {
         )}
       </Dialog>
     </>
+  )
+}
+
+/** A box for a kind of liability that a later sprint adds (8b and 8d in docs/sprint-plan.md). */
+function ComingNext({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  return (
+    <Card role="region" aria-labelledby={`${id}-title`} className="grid gap-1 py-3 md:py-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 id={`${id}-title`} className="font-heading text-lg font-bold">
+          {title}
+        </h2>
+        <Badge tone="neutral">Coming next</Badge>
+      </div>
+      <p className="text-sm text-muted-foreground">{children}</p>
+    </Card>
   )
 }
 

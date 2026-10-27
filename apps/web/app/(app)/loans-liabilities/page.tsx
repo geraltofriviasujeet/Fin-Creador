@@ -8,9 +8,9 @@ import { PageHeader } from "@/components/shell/app-shell"
 import { FormMessage } from "@/components/ui/field"
 import { createClient } from "@/lib/supabase/server"
 
-export const metadata: Metadata = { title: "Loans & liabilities" }
+export const metadata: Metadata = { title: "Loans & Liabilities" }
 
-// Loans & liabilities (Sprint 8a): loans, their EMI schedules and payments, read as the
+// Loans & Liabilities (Sprint 8a): loans, their EMI schedules and payments, read as the
 // signed-in user (RLS). Figures come from packages/domain through the shared view.
 export default function LoansPage() {
   return (
