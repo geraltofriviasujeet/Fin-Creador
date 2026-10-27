@@ -1,14 +1,13 @@
 # Next session: Sprint 8 (Loans, liabilities and reports)
 
-**State (2026-10-27).** Sprints 1–6 are on `main` and deployed (Vercel Hobby, Supabase Free). Sprint 7 (Investments, web only: shares, mutual funds and ETFs at the previous close from BSE and AMFI, fixed deposits, per-kind tabs, Overview card, daily `refresh-prices` job) is on draft PR #32 and works on dev; step 7.5, the prod rollout, follows the owner's merge. Mobile Overview, Goals and Investments are in the backlog.
+**State (2026-10-27).** Sprints 1–7 are on `main` and deployed (Vercel Hobby, Supabase Free). Sprint 7 (Investments, web only: shares, mutual funds and ETFs at the previous close from BSE and AMFI, fixed deposits, per-kind tabs, Overview card, daily `refresh-prices` job) merged with PR #32; prod migrations, the prod function and its first run are done and the live site is checked. Mobile Overview, Goals and Investments are in the backlog.
 
 **Migrations.** All in `supabase/migrations/`.
-- On **dev and prod**: `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals.
-- On **dev only** until the Sprint 7 rollout: `20261027120000` instruments and investments · `20261027180000` price refresh run log and `pg_cron` job · `20261027200000` fixed deposits.
+On **dev and prod**: `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals · `20261027120000` instruments and investments · `20261027180000` price refresh run log and `pg_cron` job · `20261027200000` fixed deposits.
 
 Check `supabase migration list --linked` against each project before any database work. Status, steps and decisions: `docs/sprint-plan.md`; deploy steps: `docs/deployment.md` (4a dev refresh, 4b prod refresh).
 
-**Finish Sprint 7 first (owner).** After merging PR #32: back up prod (`./scripts/backup-prod.sh`), push the three Sprint 7 migrations to prod from a clean `main`, then the prod refresh steps in `docs/deployment.md` 4b (new prod secret, deploy with `--use-api`, Vault secrets, one manual run, run-log query, relink to dev), then check the live site. The Investments page needs `fixed_deposits` on the project it reads, so migrations go before the deploy.
+**First check (owner).** After 07:00 IST on 28 Oct 2026, check `price_refresh_runs` on dev and on prod (the last-7-days query in `docs/deployment.md` 4a): the first scheduled run should add one `amfi` and one `bse` row on each project, both with `finished_at`. A missing row means the run died (function logs and `cron.job_run_details`).
 
 **Every new migration goes to dev AND prod.** Dev first, after the owner's SQL review and green CI. Prod only from a clean `main` checkout after the PR is merged, and only after a manual backup of prod (`docs/deployment.md` section 4). Push prod before deploying code that needs the migration; link back to dev afterwards. Never edit an applied migration or reset a database.
 
