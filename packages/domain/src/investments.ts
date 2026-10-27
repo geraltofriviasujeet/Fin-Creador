@@ -15,6 +15,7 @@
 // missing or 0 means "no price": the record keeps its invested amount but gets no value or
 // profit and stays out of value and profit totals. Valuation happens here only, not in SQL.
 import { addDays, type IsoDate } from "./dates";
+import { DEFAULT_LOCALE, minorUnitsToDecimalString } from "./format";
 import { divRoundHalfAway } from "./goals";
 import { PRICE_SCALE } from "./market-files";
 import { MAX_AMOUNT_MINOR } from "./money";
@@ -211,3 +212,44 @@ export function investedMinorWithinLimit(unitsScaled: number, buyPriceScaled: nu
   if (exact > BigInt(MAX_AMOUNT_MINOR) * AMOUNT_DIVISOR) return null;
   return toSafe(divRoundHalfAway(exact, AMOUNT_DIVISOR));
 }
+
+/**
+ * The price that counts for value and profit: the latest price unless it is more than
+ * SEARCHABLE_PRICE_DAYS days old (the instrument has left the daily files, e.g. suspended or
+ * delisted). An older price is still shown with its date, but the record counts as unpriced.
+ */
+export function currentPriceScaled(priceScaled: number, priceDate: IsoDate, today: IsoDate): number | null {
+  return addDays(priceDate, SEARCHABLE_PRICE_DAYS) < today ? null : priceScaled;
+}
+
+// ---------------------------------------------------------------------------
+// Display: scaled values as exact decimal strings, formatted by Intl (no floats)
+// ---------------------------------------------------------------------------
+
+/** 125000 → "12.5"; keeps at least `minDecimals` places (exact, from the integer). */
+export function scaledToDecimalString(scaled: number, minDecimals = 0): string {
+  const text = minorUnitsToDecimalString(scaled, UNIT_SCALE);
+  const [whole, fraction = ""] = text.split(".");
+  const kept = fraction.replace(/0+$/, "").padEnd(minDecimals, "0");
+  return kept ? `${whole}.${kept}` : (whole ?? "0");
+}
+
+/** Units for display: 1234.5 units → "1,234.5" (up to 4 decimals, Indian grouping by default). */
+export function formatUnits(unitsScaled: number, locale = DEFAULT_LOCALE): string {
+  const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: UNIT_SCALE });
+  return formatter.format(scaledToDecimalString(unitsScaled) as unknown as number);
+}
+
+/** A price per unit in rupees: 12505000 → "₹1,250.50", 287924 → "₹28.7924" (2 to 4 decimals). */
+export function formatPriceScaled(priceScaled: number, locale = DEFAULT_LOCALE): string {
+  const formatter = new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: PRICE_SCALE,
+  });
+  return formatter.format(scaledToDecimalString(priceScaled, 2) as unknown as number);
+}
+
+/** A scaled value back into a form field: 12505000 → "1250.5". */
+export const scaledToInputString = (scaled: number): string => scaledToDecimalString(scaled);

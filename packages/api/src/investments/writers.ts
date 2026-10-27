@@ -6,7 +6,7 @@ import { ledgerErrorMessage } from "../ledger-errors"
 
 // Writes for investment holding records, shared by web and mobile. They run as the signed-in
 // user (RLS, column grants and the triggers of migration 20261027120000 apply). Archive,
-// restore and delete follow in step 7.4.
+// restore and permanent delete (archived records only) follow the goals pattern.
 
 const FIX_FIELDS = "Please fix the highlighted fields."
 const SIGNED_OUT = "Your session has ended. Please sign in again."
@@ -54,4 +54,27 @@ export async function saveHolding(supabase: UserClient, input: FormInput): Promi
   }
   if (error || !data) return dbError(error ?? {})
   return { status: "success", message: "Holding added.", holdingId: data.id }
+}
+
+/** Archive (kept, out of the totals) or restore a record. The database stamps the time. */
+export async function setHoldingArchived(supabase: UserClient, input: { holdingId: string; archived: boolean }): Promise<HoldingWriteResult> {
+  const { data, error } = await supabase
+    .from("investments")
+    .update({ archived_at: input.archived ? new Date().toISOString() : null })
+    .eq("id", input.holdingId)
+    .select("id")
+  if (error) return dbError(error)
+  if (!data?.length) return { status: "error", message: NOT_FOUND }
+  return { status: "success", message: input.archived ? "Holding archived." : "Holding restored.", holdingId: input.holdingId }
+}
+
+/**
+ * Deletes an archived record permanently (it can't be undone). The database allows it only
+ * for the owner's archived records; an active record matches no row and is reported as such.
+ */
+export async function deleteHolding(supabase: UserClient, input: { holdingId: string }): Promise<WriteResult> {
+  const { data, error } = await supabase.from("investments").delete().eq("id", input.holdingId).not("archived_at", "is", null).select("id")
+  if (error) return dbError(error)
+  if (!data?.length) return { status: "error", message: "Only an archived holding can be deleted. Reload and try again." }
+  return { status: "success", message: "Holding deleted." }
 }

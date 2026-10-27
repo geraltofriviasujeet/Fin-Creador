@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { UserClient } from "../income/client"
-import { saveHolding } from "./writers"
+import { deleteHolding, saveHolding, setHoldingArchived } from "./writers"
 
 const KEY = "e7000000-0000-4000-8000-000000000001"
 const HOLDING = "97000000-0000-4000-8000-000000000001"
@@ -22,7 +22,9 @@ function fakeClient(answer: (call: Call) => Answer) {
       select: () => builder,
       insert: (values: Record<string, unknown>) => Object.assign(call, { op: "insert", values }) && builder,
       update: (values: Record<string, unknown>) => Object.assign(call, { op: "update", values }) && builder,
+      delete: () => Object.assign(call, { op: "delete" }) && builder,
       eq: (column: string, value: unknown) => (call.filters.push([column, value]), builder),
+      not: (column: string, operator: string, value: unknown) => (call.filters.push([`not.${column}.${operator}`, value]), builder),
       single: settle,
       maybeSingle: settle,
       then: (resolve: (a: Answer) => unknown, reject: (e: unknown) => unknown) => settle().then(resolve, reject),
@@ -89,5 +91,48 @@ describe("saveHolding", () => {
     const { client, calls } = fakeClient(() => ({ data: null, error: null }))
     expect((await saveHolding(client, { ...input, units: "0" })).status).toBe("error")
     expect(calls).toHaveLength(0)
+  })
+})
+
+describe("archive, restore and delete", () => {
+  it("archives and restores by id (the database stamps the time)", async () => {
+    const { client, calls } = fakeClient(() => ({ data: [{ id: HOLDING }], error: null }))
+    expect(await setHoldingArchived(client, { holdingId: HOLDING, archived: true })).toEqual({
+      status: "success",
+      message: "Holding archived.",
+      holdingId: HOLDING,
+    })
+    expect(calls[0]).toMatchObject({ table: "investments", op: "update", filters: [["id", HOLDING]] })
+    expect(typeof calls[0]?.values?.archived_at).toBe("string")
+    expect(await setHoldingArchived(client, { holdingId: HOLDING, archived: false })).toMatchObject({ message: "Holding restored." })
+    expect(calls[1]?.values).toEqual({ archived_at: null })
+  })
+
+  it("reports a record it can't see (another user's, or gone)", async () => {
+    const { client } = fakeClient(() => ({ data: [], error: null }))
+    expect(await setHoldingArchived(client, { holdingId: HOLDING, archived: true })).toEqual({
+      status: "error",
+      message: "We couldn't find that holding. Reload and try again.",
+    })
+  })
+
+  it("maps an edit of an archived record to its message", async () => {
+    const { client } = fakeClient(() => ({ data: null, error: { code: "FC027", message: "x" } }))
+    expect(await saveHolding(client, { ...input, holdingId: HOLDING })).toEqual({
+      status: "error",
+      message: "This holding is archived. Restore it first.",
+    })
+  })
+
+  it("deletes archived records only", async () => {
+    const { client, calls } = fakeClient(() => ({ data: [{ id: HOLDING }], error: null }))
+    expect(await deleteHolding(client, { holdingId: HOLDING })).toEqual({ status: "success", message: "Holding deleted." })
+    expect(calls[0]).toMatchObject({ op: "delete", filters: [["id", HOLDING], ["not.archived_at.is", null]] })
+
+    const active = fakeClient(() => ({ data: [], error: null }))
+    expect(await deleteHolding(active.client, { holdingId: HOLDING })).toEqual({
+      status: "error",
+      message: "Only an archived holding can be deleted. Reload and try again.",
+    })
   })
 })

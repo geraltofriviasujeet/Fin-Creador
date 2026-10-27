@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_PRICE_SCALED,
   MAX_UNITS_SCALED,
+  currentPriceScaled,
+  formatPriceScaled,
+  formatUnits,
   groupHoldings,
   holdingFigures,
   identifierChanged,
@@ -9,6 +12,7 @@ import {
   isOldPrice,
   parseScaledInput,
   portfolioTotals,
+  scaledToDecimalString,
   type HoldingRecord,
 } from "./investments";
 
@@ -168,6 +172,13 @@ describe("price age and identifier changes", () => {
     expect(isOldPrice("2028-02-22", "2028-03-01")).toBe(true); // across 29 February
   });
 
+  it("counts a price for value up to 30 days old (shown, but unpriced after that)", () => {
+    expect(currentPriceScaled(12_505_000, "2026-09-26", "2026-10-26")).toBe(12_505_000);
+    expect(currentPriceScaled(12_505_000, "2026-09-25", "2026-10-26")).toBeNull();
+    expect(currentPriceScaled(5, "2028-01-31", "2028-03-01")).toBe(5); // 30 days across 29 February
+    expect(currentPriceScaled(5, "2028-01-30", "2028-03-01")).toBeNull();
+  });
+
   it("flags a changed ISIN only when both are known", () => {
     expect(identifierChanged("INE000X01011", "INE000X01029")).toBe(true);
     expect(identifierChanged("INE000X01011", "INE000X01011")).toBe(false);
@@ -202,5 +213,23 @@ describe("investedMinorWithinLimit", () => {
     expect(investedMinorWithinLimit(MAX_UNITS_SCALED, 1_000_000)).toBe(10_000_000_000_000);
     expect(investedMinorWithinLimit(MAX_UNITS_SCALED, 1_000_001)).toBeNull();
     expect(investedMinorWithinLimit(105_000, 1_002_500)).toBe(105_263);
+  });
+});
+
+describe("display of units and prices", () => {
+  it("writes scaled values as exact decimals", () => {
+    expect(scaledToDecimalString(125_000)).toBe("12.5");
+    expect(scaledToDecimalString(12_505_000, 2)).toBe("1250.50");
+    expect(scaledToDecimalString(1)).toBe("0.0001");
+    expect(scaledToDecimalString(MAX_PRICE_SCALED, 2)).toBe("1000000000.00");
+    expect(scaledToDecimalString(0)).toBe("0");
+  });
+
+  it("formats units and prices with Indian grouping", () => {
+    expect(formatUnits(12_345_678)).toBe("1,234.5678");
+    expect(formatUnits(1_000_000_000)).toBe("1,00,000");
+    expect(formatPriceScaled(12_505_000)).toBe("₹1,250.50");
+    expect(formatPriceScaled(287_924)).toBe("₹28.7924");
+    expect(formatPriceScaled(MAX_PRICE_SCALED)).toBe("₹1,00,00,00,000.00");
   });
 });
