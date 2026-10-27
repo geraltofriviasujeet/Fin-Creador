@@ -1,4 +1,4 @@
-import { type BankType, isMoneyAccountKind } from "@fin-creador/domain"
+import { type BankType, LIABILITY_KIND_LABELS, type LiabilityKind, isLiabilityKind, isMoneyAccountKind } from "@fin-creador/domain"
 import { type UserClient, userToday } from "../income/client"
 import { accountLabel } from "../income/load"
 import type { AccountLabel, LedgerAccount, LedgerCategory, TransactionsContext } from "./types"
@@ -55,11 +55,11 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
   }
 
   const balances = new Map(balancesRes.data.map((b) => [b.account_id, b]))
-  // Loan (liability) accounts only label the entries of loan payments; they are never in
-  // pickers, balances or Total available.
+  // Liability accounts (loans, cards, borrowing) only label the entries posted to them; they
+  // are never in pickers, balances or Total available.
   const loanAccounts: AccountLabel[] = accountsRes.data
-    .filter((a) => !isMoneyAccountKind(a.kind))
-    .map((a) => ({ id: a.id, label: `${accountLabel(a)} (loan)`, archived: a.archived_at !== null }))
+    .filter((a) => isLiabilityKind(a.kind))
+    .map((a) => ({ id: a.id, label: `${accountLabel(a)} (${LIABILITY_KIND_LABELS[a.kind as LiabilityKind]})`, archived: a.archived_at !== null }))
   const accounts: LedgerAccount[] = accountsRes.data.filter((a) => isMoneyAccountKind(a.kind)).map((a) => {
     const b = balances.get(a.id)
     return {

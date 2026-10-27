@@ -1,5 +1,6 @@
 // Due items (Sprint 8a): anything with a due date that is paid from an account. Loan EMIs and
-// moratorium interest now; credit-card bills (8b) use the same rows, reminders and checks.
+// moratorium interest (8a), credit-card bills and borrowing due dates (8b) use the same rows,
+// reminders and checks.
 //
 // Reminders are in-app only and derived from stored dates (no scheduled job). Entries carry
 // a date, not a time of day, so "within 24 hours" means due (or planned) tomorrow, in the
@@ -7,7 +8,7 @@
 import { type IsoDate, addDays } from "./dates";
 import { addMinor } from "./money";
 
-export const DUE_KINDS = ["loan_emi", "loan_interest"] as const;
+export const DUE_KINDS = ["loan_emi", "loan_interest", "card_bill", "borrowing_due"] as const;
 export type DueKind = (typeof DUE_KINDS)[number];
 
 /** Pending: to pay. Paid: posted from an account. Before tracking: paid before the loan was added (never posted). */
@@ -21,8 +22,10 @@ export interface DueItemLike {
   /** "Will pay later": the date the person plans to pay. */
   plannedOn: IsoDate | null;
   amountDueMinor: number;
-  /** Its loan (or card) is archived: no reminders, nothing to pay. */
+  /** Its loan, card or borrowing is archived: no reminders, nothing to pay. */
   sourceArchived?: boolean;
+  /** A card bill whose minimum is already paid (cardBillState): no reminders. */
+  covered?: boolean;
 }
 
 export type ReminderReason = "overdue" | "due_today" | "planned_today" | "due_tomorrow" | "planned_tomorrow";
@@ -44,7 +47,7 @@ function daysAfter(from: IsoDate, to: IsoDate): number {
 
 /** The reason a pending item needs attention on `today`, or null. */
 export function reminderReason(item: DueItemLike, today: IsoDate): ReminderReason | null {
-  if (item.status !== "pending" || item.sourceArchived) return null;
+  if (item.status !== "pending" || item.sourceArchived || item.covered) return null;
   const tomorrow = addDays(today, 1);
   if (item.dueDate < today) return "overdue";
   if (item.dueDate === today) return "due_today";

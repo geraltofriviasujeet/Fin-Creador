@@ -1,4 +1,4 @@
-import { MONEY_ACCOUNT_KINDS, outstandingFromBalance } from "@fin-creador/domain"
+import { type DueKind, MONEY_ACCOUNT_KINDS, outstandingFromBalance } from "@fin-creador/domain"
 import {
   type PayingAccount,
   firstFieldErrors,
@@ -153,45 +153,37 @@ export type PaymentContext = {
   accounts: PayingAccount[]
 }
 
-/** What the pay and plan forms check against, read as the signed-in user. */
-export async function loadPaymentContext(supabase: UserClient, dueItemId: string): Promise<{ ok: true; data: PaymentContext } | { ok: false; message: string }> {
+/** What the pay and plan forms check against, read as the signed-in user: a loan EMI or
+ * moratorium interest, a card bill (8b) or a borrowing's due date (planning only). */
+export async function loadPaymentContext(supabase: UserClient, dueItemId: string): Promise<{ ok: true; data: PaymentContext & { kind: DueKind } } | { ok: false; message: string }> {
   const day = await userToday(supabase)
   if (!day.ok) return { ok: false, message: day.reason === "unauthenticated" ? SIGNED_OUT : TODAY_UNAVAILABLE }
-  const { data: item, error } = await supabase.from("due_items").select("id, kind, loan_id, currency").eq("id", dueItemId).maybeSingle()
+  const { data: item, error } = await supabase
+    .from("due_items")
+    .select("id, kind, loan_id, card_statement_id, borrowing_id, currency")
+    .eq("id", dueItemId)
+    .maybeSingle()
   if (error) return { ok: false, message: UNAVAILABLE }
-  if (!item?.loan_id) return { ok: false, message: DUE_NOT_FOUND }
-  const [loanRes, accountsRes, itemsRes] = await Promise.all([
-    supabase.from("loans").select("account_id, tracking_started_on, moratorium_interest, capitalised_minor").eq("id", item.loan_id).maybeSingle(),
-    supabase
-      .from("accounts")
-      .select("id, name, currency, opening_balance_date")
-      .in("kind", [...MONEY_ACCOUNT_KINDS])
-      .is("archived_at", null)
-      .order("created_at"),
-    supabase.from("due_items").select("id").eq("loan_id", item.loan_id),
-  ])
-  if (loanRes.error || accountsRes.error || itemsRes.error || !loanRes.data) return { ok: false, message: UNAVAILABLE }
-  // Moratorium interest is added with the first EMI paid: is it already on this loan?
-  const capRes = await supabase
-    .from("due_payments")
-    .select("id")
-    .in("due_item_id", itemsRes.data.map((d) => d.id))
-    .is("voided_at", null)
-    .gt("capitalised_minor", 0)
-    .limit(1)
-  if (capRes.error) return { ok: false, message: UNAVAILABLE }
-  const loan = loanRes.data
-  const balances = await accountBalances(supabase, [loan.account_id, ...accountsRes.data.map((a) => a.id)])
+  const source = item ? await dueSource(supabase, item) : null
+  if (source === "unavailable") return { ok: false, message: UNAVAILABLE }
+  if (!item || !source) return { ok: false, message: DUE_NOT_FOUND }
+  const accountsRes = await supabase
+    .from("accounts")
+    .select("id, name, currency, opening_balance_date")
+    .in("kind", [...MONEY_ACCOUNT_KINDS])
+    .is("archived_at", null)
+    .order("created_at")
+  if (accountsRes.error) return { ok: false, message: UNAVAILABLE }
+  const balances = await accountBalances(supabase, [source.liabilityAccountId, ...accountsRes.data.map((a) => a.id)])
   if (!balances) return { ok: false, message: UNAVAILABLE }
-  const pendingCap =
-    item.kind === "loan_emi" && loan.moratorium_interest === "capitalise" && loan.capitalised_minor > 0 && capRes.data.length === 0 ? loan.capitalised_minor : 0
   return {
     ok: true,
     data: {
+      kind: item.kind as DueKind,
       today: day.today,
       currency: item.currency,
-      trackingStartedOn: loan.tracking_started_on,
-      outstandingMinor: outstandingFromBalance(balances.get(loan.account_id) ?? 0) + pendingCap,
+      trackingStartedOn: source.trackingStartedOn,
+      outstandingMinor: outstandingFromBalance(balances.get(source.liabilityAccountId) ?? 0) + source.pendingCapMinor,
       accounts: accountsRes.data.map((a) => ({
         id: a.id,
         // Names only: no card or account digits on loan screens.
@@ -204,6 +196,52 @@ export async function loadPaymentContext(supabase: UserClient, dueItemId: string
   }
 }
 
+type DueSource = { liabilityAccountId: string; trackingStartedOn: string; pendingCapMinor: number }
+
+/** The liability account a due item belongs to, when payments start, and moratorium interest still to be added. */
+async function dueSource(
+  supabase: UserClient,
+  item: { kind: string; loan_id: string | null; card_statement_id: string | null; borrowing_id: string | null },
+): Promise<DueSource | null | "unavailable"> {
+  if (item.loan_id) {
+    const [loanRes, itemsRes] = await Promise.all([
+      supabase.from("loans").select("account_id, tracking_started_on, moratorium_interest, capitalised_minor").eq("id", item.loan_id).maybeSingle(),
+      supabase.from("due_items").select("id").eq("loan_id", item.loan_id),
+    ])
+    if (loanRes.error || itemsRes.error || !loanRes.data) return "unavailable"
+    // Moratorium interest is added with the first EMI paid: is it already on this loan?
+    const capRes = await supabase
+      .from("due_payments")
+      .select("id")
+      .in("due_item_id", itemsRes.data.map((d) => d.id))
+      .is("voided_at", null)
+      .gt("capitalised_minor", 0)
+      .limit(1)
+    if (capRes.error) return "unavailable"
+    const loan = loanRes.data
+    const pendingCapMinor =
+      item.kind === "loan_emi" && loan.moratorium_interest === "capitalise" && loan.capitalised_minor > 0 && capRes.data.length === 0 ? loan.capitalised_minor : 0
+    return { liabilityAccountId: loan.account_id, trackingStartedOn: loan.tracking_started_on, pendingCapMinor }
+  }
+  if (item.card_statement_id) {
+    const statement = await supabase.from("card_statements").select("card_id").eq("id", item.card_statement_id).maybeSingle()
+    if (statement.error) return "unavailable"
+    if (!statement.data) return null
+    const card = await supabase.from("credit_cards").select("account_id, tracking_started_on").eq("id", statement.data.card_id).maybeSingle()
+    if (card.error) return "unavailable"
+    return card.data ? { liabilityAccountId: card.data.account_id, trackingStartedOn: card.data.tracking_started_on, pendingCapMinor: 0 } : null
+  }
+  if (item.borrowing_id) {
+    const borrowing = await supabase.from("borrowings").select("account_id").eq("id", item.borrowing_id).maybeSingle()
+    if (borrowing.error) return "unavailable"
+    if (!borrowing.data) return null
+    const account = await supabase.from("accounts").select("opening_balance_date").eq("id", borrowing.data.account_id).maybeSingle()
+    if (account.error || !account.data) return "unavailable"
+    return { liabilityAccountId: borrowing.data.account_id, trackingStartedOn: account.data.opening_balance_date, pendingCapMinor: 0 }
+  }
+  return null
+}
+
 /**
  * "Paid": posts the EMI from the chosen account once per request key. When the account is
  * short the result carries `shortfallMinor`; sending the same input again with
@@ -212,7 +250,9 @@ export async function loadPaymentContext(supabase: UserClient, dueItemId: string
 export async function payDueItem(supabase: UserClient, input: FormInput): Promise<PaymentWriteResult> {
   const ctx = await loadPaymentContext(supabase, input.dueItemId ?? "")
   if (!ctx.ok) return { status: "error", message: ctx.message }
-  const parsed = payDueFormSchema(ctx.data).safeParse(input)
+  if (ctx.data.kind === "borrowing_due") return { status: "error", message: "Record a repayment on the borrowing instead." }
+  // A card bill is one amount (principal: a transfer to the card).
+  const parsed = payDueFormSchema(ctx.data).safeParse(ctx.data.kind === "card_bill" ? { ...input, interest: "", fees: "" } : input)
   if (!parsed.success) return formError(parsed.error)
   const p = parsed.data
   const { data, error } = await supabase
@@ -227,7 +267,7 @@ export async function payDueItem(supabase: UserClient, input: FormInput): Promis
       p_allow_shortfall: p.allowShortfall,
     })
   if (error || !data) return dbError(error ?? {}, { currency: ctx.data.currency, accountName: ctx.data.accounts.find((a) => a.id === p.accountId)?.name })
-  return { status: "success", message: "EMI paid.", paymentId: data.id }
+  return { status: "success", message: ctx.data.kind === "card_bill" ? "Bill paid." : "EMI paid.", paymentId: data.id }
 }
 
 /** Changes a payment's account, date or split: every part is voided and posted again, together. */
@@ -250,7 +290,7 @@ export async function editDuePayment(supabase: UserClient, input: FormInput): Pr
     outstandingMinor: ctx.data.outstandingMinor + payment.principal_minor,
     accounts: ctx.data.accounts.map((a) => (a.id === payment.account_id ? { ...a, balanceMinor: a.balanceMinor + oldTotal } : a)),
   }
-  const parsed = payDueFormSchema(data).safeParse({ ...input, dueItemId: payment.due_item_id })
+  const parsed = payDueFormSchema(data).safeParse({ ...input, dueItemId: payment.due_item_id, ...(ctx.data.kind === "card_bill" ? { interest: "", fees: "" } : {}) })
   if (!parsed.success) return formError(parsed.error)
   const p = parsed.data
   const { data: saved, error } = await supabase

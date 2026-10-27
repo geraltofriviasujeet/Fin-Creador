@@ -10,3 +10,4 @@ export * from "./goal-forms";
 export * from "./investment-forms";
 export * from "./fixed-deposit-forms";
 export * from "./loan-forms";
+export * from "./card-forms";

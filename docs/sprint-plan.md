@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-28 (Sprint 8a done on draft PR #35; prod push of the loans migration pending, owner, `docs/deployment.md` 4c. Next: 8b, then 8c and 8d).
+Last updated: 2026-10-28 (Sprint 8a done on draft PR #35, not merged. Sprint 8 goes to prod once, at the end. Order: 8b, 8d, net worth, 8c. 8b in progress).
 
 ## Sprint status
 
@@ -30,10 +30,11 @@ Last updated: 2026-10-28 (Sprint 8a done on draft PR #35; prod push of the loans
 | **5** | Dashboard & analytics | Done | Completed 2026-10-26 (PRs #25–#28 merged into `main`). Web Overview dashboard with chart types; first production deploy on Vercel Hobby and Supabase Free works, including Google sign-in. Migration 20261026120000 applied to dev and prod. Mobile Overview in the backlog. See Sprint 5 steps. |
 | **6** | Budgets & savings goals | Done | Completed 2026-10-26 (PR #30 merged into `main`, merge commit 672ab75). One Goals page (`/goals`): Planned expenses (Trip, Wheeler, House, Furniture, Electronics, Mobile, Other; exact maths, EMI, archive, restore, permanent delete of archived goals) and Monthly budgets (80% / 100% warnings, page and Overview); web density pass; `scripts/backup-prod.sh`. Migrations 20261026180000, 20261026200000, 20261026210000 applied to dev and prod (prod from `main` after a backup); live site checked. Web only (mobile Goals in the backlog). See Sprint 6 steps. |
 | **7** | Investment portfolio | Done | Completed 2026-10-27 (PR #32 merged into `main`). Holdings tracker (not trading), web only: shares, mutual funds and ETFs at the previous close (BSE, AMFI), fixed deposits, tabs per kind, Overview card. Migrations 20261027120000, 20261027180000 and 20261027200000 applied to dev and prod (prod from `main` after a backup); `refresh-prices` deployed on prod, first run ok (AMFI 14,172 and BSE 4,643 loaded, as on dev); live site checked. Mobile Investments in the backlog. See Sprint 7 steps. |
-| **8a** | Loans and EMIs | Done | Completed 2026-10-28 (web). Backend PR #34 merged; web page PR #35 (draft, CI green, QA passed). Migration `20261028120000_loans.sql` on dev; prod push pending (owner, before merging PR #35: `docs/deployment.md` 4c). Mobile loans in the backlog. See Sprint 8a steps. |
-| **8b** | Credit cards, informal borrowing and net worth | Not started | Own PR and prod push after 8a. Fills the "Short-term & operational liabilities" box. |
-| **8c** | Cash-flow history and CSV export | Not started | Own PR and prod push after 8b. |
-| **8d** | Statutory dues | Not started | Own PR and prod push after 8c. Fills the "Statutory & legal liabilities" box. |
+| **8a** | Loans and EMIs | Done | Completed 2026-10-28 (web). Backend PR #34 merged; web page PR #35 (draft, CI green, QA passed). Migration `20261028120000_loans.sql` on dev; prod with the rest of Sprint 8 at the end (PR #35 stays draft until then). Mobile loans in the backlog. See Sprint 8a steps. |
+| **8b** | Credit cards and informal borrowing | In progress | Step 1 of 4 after 8a. Backend (migration `20261028180000_cards_borrowing.sql`, domain, schemas, writers, pgTAP, date parity) on branch `sprint-8b`, draft PR stacked on `sprint-8a-ui`; migration not yet on dev (owner `db push` after CI). Next: the web box. |
+| **8d** | Statutory dues | Not started | Step 2. Branch from 8b's branch, stacked draft PR. Fills the "Statutory & legal liabilities" box. |
+| **8e** | Net worth | Not started | Step 3. Branch from 8d's branch, stacked draft PR. All three liability boxes. |
+| **8c** | Cash-flow history and CSV export | Not started | Step 4 (last). Branch from 8e's branch, stacked draft PR. Then the Sprint 8 prod rollout (owner, `docs/deployment.md` 4c): merge the stacked PRs into `main` in order, backup, dry run listing exactly the Sprint 8 migrations, push prod, live check. |
 | **9** | AI financial insights | Not started | |
 | **10** | Notifications & reminders | Not started | |
 | **11** | Mobile polish, offline & PWA | Not started | |
@@ -220,6 +221,8 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-27** | Sprint 8 due items (owner): one generic model for anything due on a date and paid from an account (`due_items` + `due_payments`): due date, amount due, optional minimum due, status (pending, paid, before tracking), planned pay date and account, paying account, the atomic idempotent posting, the shortfall refusal, the in-app reminders and the Due soon card. Loan EMIs and moratorium interest in 8a; card bills in 8b add only the card-specific parts (see Sprint 8b). | 8a must not block 8b. |
 | **2026-10-27** | Liability boxes (owner): the Loans & Liabilities page (capital L) has three boxes: Long-term (loans, 8a), Short-term & operational (credit card dues and EMIs, informal borrowing: 8b), Statutory & legal (income tax payable, fines, unpaid e-challans: 8d). 8b adds informal borrowing (liability account, optional due date, part payments as transfers, interest as an expense); new 8d statutory dues (type, amount, due date, paid / unpaid, reminders; payment is an expense, not a transfer). Net worth counts all three boxes. Never store card numbers or any digits of cards or accounts. | Same due-item model throughout. |
 | **2026-10-27** | Sprint 8a web page (8a.4): loan badge Paid / Due / Overdue, plus "Not due yet" before anything has fallen due (a loan that starts later) and "Closed" once nothing is owed; EMIs left after a loan is cleared show as "Not needed" and never remind. The EMI card warns ahead of time against the planned account, otherwise only when no account can cover the EMI (named after the one with the most money). Loan screens show account names only (no last four digits). Pending schedule rows are estimates from what is owed now. The bell's list streams from the app layout. | Built on the shared view `packages/api/src/loans/view.ts`, so mobile shows the same. |
+| **2026-10-28** | Sprint 8 order and rollout (owner): 8b credit cards and informal borrowing, then 8d statutory dues, then 8e net worth (all three boxes), then 8c cash-flow history and CSV export. Each step branches from the previous one's branch (8b from `sprint-8a-ui`); draft PRs stay stacked and unmerged; the owner runs `db push` on dev per approved migration. Prod once at the end (`docs/deployment.md` 4c): merge the stacked PRs into `main` in order, then backup, dry run listing exactly the Sprint 8 migrations, push prod, live check. | Replaces "own PR and prod push" per step and the 8a prod rollout before merging PR #35. |
+| **2026-10-28** | Sprint 8b SQL review (owner, approved with changes): liability kinds only in `is_liability_kind` / `LIABILITY_ACCOUNT_KINDS`; card purchases are expenses on the card (recurring too, starting on or after the day the card was added), refunds by void; a statement once per card and date, on or before today, owed measured on its date, the difference posted as an expense only when positive and a category is picked; bill = total − card EMIs ("Card EMIs are paid from the loan row"); one active payment per bill (a part-paid bill closes), plus `pay_card` for any amount up to what is owed (FC047 "record the missing purchase first"); `card_sync_due` marks a bill paid once transfers dated on or after its statement cover it (pending again after a void), `card_bill_paid` / `card_bill_progress` drive "Minimum paid" / "Part-paid" and stop reminders once the minimum is covered; borrowing received into an account (posted) or earlier (owed only), repayments as transfers plus interest as an expense, the due item closes when nothing is owed; archive only at a zero balance (credit included); delete only without history; the difference expense and the money-received entry change only with their statement or borrowing; no digits in issuer, nickname or who you owe. | Error codes FC045–FC051. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -634,9 +637,11 @@ portfolio composition and performance estimates.
 **Weeks 15–16 \| Usable outcome:** A user can see broader financial
 position and export records.
 
-Split into four releases (owner, 2026-10-27), each its own PR and prod
-push: 8a loans, 8b credit cards, informal borrowing and net worth, 8c
-cash-flow history and CSV export, 8d statutory dues. The Loans &
+Split into five steps (owner, 2026-10-27; reordered 2026-10-28), in this
+order: 8a loans, 8b credit cards and informal borrowing, 8d statutory
+dues, 8e net worth, 8c cash-flow history and CSV export. Each step is a
+stacked draft PR from the previous step's branch; Sprint 8 goes to prod
+once, at the end. The Loans &
 Liabilities page has three boxes: Long-term (8a), Short-term &
 operational (8b), Statutory & legal (8d). Rules for 8a are in the Decisions log above.
 
@@ -655,7 +660,7 @@ operational (8b), Statutory & legal (8d). Rules for 8a are in the Decisions log 
 
 - Credit card EMIs are loans of type "Credit card EMI".
 
-### Sprint 8b — Credit cards, informal borrowing and net worth
+### Sprint 8b — Credit cards and informal borrowing
 
 Built on 8a's due items (`due_items`, `due_payments`): due date, amount
 due, minimum due, status, planned pay date and account, the posting,
@@ -691,10 +696,12 @@ the shortfall refusal, reminders and Due soon need no new mechanism.
   an expense. Shown in the "Short-term & operational liabilities" box
   with credit card dues and card EMIs.
 
+### Sprint 8e — Net worth (after 8d)
+
 - Net worth: included assets minus included liabilities, with valuation
   dates; liabilities from all three boxes (long-term loans, short-term
   and operational: cards and informal borrowing, statutory and legal:
-  unpaid statutory dues from 8d once built); decide whether investments
+  unpaid statutory dues from 8d); decide whether investments
   and fixed deposits count. Liabilities must include capitalised moratorium
   interest not yet posted (it is posted with the first EMI paid).
 

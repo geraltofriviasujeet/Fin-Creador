@@ -415,9 +415,9 @@ export function payDueFormSchema({
     });
 }
 
-/** The warning on the pay form and, ahead of time, on the EMI card. */
-export function shortfallMessage(shortMinor: number, accountName: string, currency: string): string {
-  return `You need ${formatMoney(shortMinor, { currency })} more in ${accountName} to pay this EMI`;
+/** The warning on the pay form and, ahead of time, on the EMI card (or a card bill, a repayment). */
+export function shortfallMessage(shortMinor: number, accountName: string, currency: string, what = "this EMI"): string {
+  return `You need ${formatMoney(shortMinor, { currency })} more in ${accountName} to pay ${what}`;
 }
 
 export type PayDueFormOutput = z.output<ReturnType<typeof payDueFormSchema>>;
