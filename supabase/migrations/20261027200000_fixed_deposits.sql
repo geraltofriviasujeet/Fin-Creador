@@ -78,7 +78,7 @@ begin
   -- Runs after the archived check above: an archived row's stored values are already normalised.
   new.bank := pg_catalog.btrim(pg_catalog.regexp_replace(new.bank, '\s+', ' ', 'g'));
   -- A blank label is no label.
-  new.label := pg_catalog.nullif(pg_catalog.btrim(pg_catalog.regexp_replace(new.label, '\s+', ' ', 'g')), '');
+  new.label := nullif(pg_catalog.btrim(pg_catalog.regexp_replace(new.label, '\s+', ' ', 'g')), '');
   return new;
 end;
 $$;
