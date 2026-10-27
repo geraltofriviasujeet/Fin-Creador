@@ -9,9 +9,9 @@ export const CARD_ISSUER_MAX = 80;
 export const CARD_NICKNAME_MAX = 40;
 export const BORROWING_LENDER_MAX = 80;
 
-/** Names never hold a digit, so no card or account number (or any part of one) is stored. */
+/** Names never hold a digit (in any script), so no card or account number (or any part of one) is stored. */
 export const NO_DIGITS = "Leave out numbers: no card or account digits in names";
-const HAS_DIGIT = /\d/;
+const HAS_DIGIT = /\p{Nd}/u;
 
 /** The dialog line next to "EMIs included" on a statement. */
 export const CARD_EMI_NOTE = "Card EMIs are paid from the loan row";
