@@ -215,7 +215,29 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "due_items_loan_owned"
+            columns: ["loan_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_items_planned_account_owned"
+            columns: ["planned_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_items_planned_account_owned"
+            columns: ["planned_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       due_payments: {
         Row: {
@@ -269,7 +291,36 @@ export type Database = {
           void_reason?: string | null
           voided_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "due_payments_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_payments_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_payments_item_owned"
+            columns: ["due_item_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "due_items"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_payments_replaces_owned"
+            columns: ["replaces_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "due_payments"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       fixed_deposits: {
         Row: {
@@ -547,7 +598,22 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "loans_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "loans_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       price_refresh_runs: {
         Row: {
@@ -875,6 +941,13 @@ export type Database = {
             referencedColumns: ["id", "user_id"]
           },
           {
+            foreignKeyName: "transactions_due_payment_owned"
+            columns: ["due_payment_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "due_payments"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
             foreignKeyName: "transactions_recurring_rule_owned"
             columns: ["recurring_rule_id", "user_id"]
             isOneToOne: false
@@ -954,6 +1027,7 @@ export type Database = {
           counter_account_id: string | null
           created_at: string
           currency: string
+          due_payment_id: string | null
           id: string
           idempotency_key: string
           note: string | null
@@ -1087,12 +1161,7 @@ export type Database = {
           kind: string
         }[]
       }
-      delete_loan: {
-        Args: {
-          p_loan_id: string
-        }
-        Returns: undefined
-      }
+      delete_loan: { Args: { p_loan_id: string }; Returns: undefined }
       edit_due_payment: {
         Args: {
           p_account_id: string
@@ -1147,6 +1216,7 @@ export type Database = {
           counter_account_id: string | null
           created_at: string
           currency: string
+          due_payment_id: string | null
           id: string
           idempotency_key: string
           note: string | null
@@ -1200,6 +1270,7 @@ export type Database = {
           counter_account_id: string | null
           created_at: string
           currency: string
+          due_payment_id: string | null
           id: string
           idempotency_key: string
           note: string | null
@@ -1221,17 +1292,9 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      loan_category_id: {
-        Args: {
-          p_key: string
-        }
-        Returns: string
-      }
+      loan_category_id: { Args: { p_key: string }; Returns: string }
       loan_due_date: {
-        Args: {
-          p_first_due: string
-          p_seq: number
-        }
+        Args: { p_first_due: string; p_seq: number }
         Returns: string
       }
       pay_due_item: {
@@ -1287,6 +1350,7 @@ export type Database = {
           counter_account_id: string | null
           created_at: string
           currency: string
+          due_payment_id: string | null
           id: string
           idempotency_key: string
           note: string | null
@@ -1327,6 +1391,7 @@ export type Database = {
           counter_account_id: string | null
           created_at: string
           currency: string
+          due_payment_id: string | null
           id: string
           idempotency_key: string
           note: string | null
@@ -1431,10 +1496,7 @@ export type Database = {
         }
       }
       set_loan_archived: {
-        Args: {
-          p_archived: boolean
-          p_loan_id: string
-        }
+        Args: { p_archived: boolean; p_loan_id: string }
         Returns: {
           account_id: string
           archived_at: string | null
@@ -1557,6 +1619,7 @@ export type Database = {
           counter_account_id: string | null
           created_at: string
           currency: string
+          due_payment_id: string | null
           id: string
           idempotency_key: string
           note: string | null
@@ -1726,6 +1789,7 @@ export type Database = {
           counter_account_id: string | null
           created_at: string
           currency: string
+          due_payment_id: string | null
           id: string
           idempotency_key: string
           note: string | null

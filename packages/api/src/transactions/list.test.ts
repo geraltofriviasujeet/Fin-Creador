@@ -7,7 +7,7 @@ function row(id: string, createdAt: string, occurredOn = "2026-10-20"): LedgerRo
     id, created_at: createdAt, occurred_on: occurredOn, account_id: "acc", amount_minor: 100, category_id: "cat",
     counter_account_id: null, currency: "INR", idempotency_key: id, note: null, payment_mode: null,
     replaces_id: null, type: "expense", user_id: "u", void_idempotency_key: null, void_reason: null, voided_at: null,
-    recurring_rule_id: null, occurrence_date: null,
+    recurring_rule_id: null, occurrence_date: null, due_payment_id: null,
   }
 }
 

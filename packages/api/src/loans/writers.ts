@@ -133,7 +133,7 @@ export async function deleteLoan(supabase: UserClient, input: { loanId: string }
 // ---------------------------------------------------------------------------
 
 /** Balance per account (opening + posted inflows − posted outflows), or null when unavailable. */
-async function accountBalances(supabase: UserClient, ids: string[]): Promise<Map<string, number> | null> {
+export async function accountBalances(supabase: UserClient, ids: string[]): Promise<Map<string, number> | null> {
   const [accounts, sums] = await Promise.all([
     supabase.from("accounts").select("id, opening_balance_minor").in("id", ids),
     supabase.from("account_balances").select("account_id, inflow_minor, outflow_minor").in("account_id", ids),
@@ -164,7 +164,7 @@ export async function loadPaymentContext(supabase: UserClient, dueItemId: string
     supabase.from("loans").select("account_id, tracking_started_on, moratorium_interest, capitalised_minor").eq("id", item.loan_id).maybeSingle(),
     supabase
       .from("accounts")
-      .select("id, name, last4, currency, opening_balance_date")
+      .select("id, name, currency, opening_balance_date")
       .in("kind", [...MONEY_ACCOUNT_KINDS])
       .is("archived_at", null)
       .order("created_at"),
@@ -194,7 +194,8 @@ export async function loadPaymentContext(supabase: UserClient, dueItemId: string
       outstandingMinor: outstandingFromBalance(balances.get(loan.account_id) ?? 0) + pendingCap,
       accounts: accountsRes.data.map((a) => ({
         id: a.id,
-        name: a.last4 ? `${a.name} ··${a.last4}` : a.name,
+        // Names only: no card or account digits on loan screens.
+        name: a.name,
         currency: a.currency,
         balanceMinor: balances.get(a.id) ?? 0,
         openingBalanceDate: a.opening_balance_date,

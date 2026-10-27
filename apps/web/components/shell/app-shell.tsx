@@ -1,6 +1,7 @@
 import type * as React from "react"
 import { Sidebar } from "@/components/shell/sidebar"
 import { TabBar } from "@/components/shell/tab-bar"
+import type { BellReminders } from "@/components/shell/bell"
 import { Topbar } from "@/components/shell/topbar"
 
 export type ShellUser = { name: string | null; email: string }
@@ -11,9 +12,12 @@ export type ShellUser = { name: string | null; email: string }
  */
 export function AppShell({
   user,
+  reminders,
   children,
 }: {
   user: ShellUser | null
+  /** The bell's reminders, streamed (not awaited) so pages don't wait for them. */
+  reminders?: BellReminders
   children: React.ReactNode
 }) {
   return (
@@ -25,7 +29,7 @@ export function AppShell({
         Skip to content
       </a>
       <Sidebar user={user} />
-      <Topbar />
+      <Topbar reminders={reminders} />
       <main
         id="main"
         tabIndex={-1}

@@ -6,6 +6,7 @@ import {
   type DashboardBreakdown,
   type GoalsView,
   type InvestmentsView,
+  type LoansView,
   CHART_OPTIONS,
   DEFAULT_CHARTS,
   type LedgerItem,
@@ -40,6 +41,7 @@ import { TextField } from "@/components/ui/field"
 import { EntryIcon, dayHeading, entryKindLabel, entryTitle, fullDate, money, rangeText, signedAmount } from "@/components/transactions/display"
 import { BudgetOverviewCard, GoalsOverviewCard } from "@/components/goals/overview-cards"
 import { InvestmentsOverviewCard } from "@/components/investments/overview-card"
+import { DueSoonOverviewCard } from "@/components/loans/due-soon"
 import { CategoryPie } from "./category-pie"
 import { TimeChart } from "./time-chart"
 
@@ -69,6 +71,8 @@ export type OverviewViewProps = {
   goals: GoalsView | null
   /** Holdings tracker (null when it couldn't load; the card says so). Not in Total available. */
   investments: InvestmentsView | null
+  /** Loans for the "Due soon" card (null when they couldn't load; the card is then left out). */
+  loans: LoansView | null
 }
 
 function greeting(name: string | null, timeZone: string): string {
@@ -83,7 +87,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, goals, investments }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, goals, investments, loans }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
@@ -212,6 +216,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <RecentCard recent={recent} lookup={lookup} today={today} />
         <div className="grid content-start gap-4">
+          <DueSoonOverviewCard view={loans} />
           {upcoming}
           <GoalsOverviewCard view={goals} />
           <InvestmentsOverviewCard view={investments} />
