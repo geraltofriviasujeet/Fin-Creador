@@ -115,6 +115,66 @@ Backups contain personal financial data: keep them in `~/FinCreador-backups` or 
 encrypted place, **never inside the repository**, and keep at least the last four. Check now
 and then that a backup restores into a scratch database (`pg_restore`).
 
+## 4a. Daily price refresh (Sprint 7)
+
+The `refresh-prices` Edge Function loads AMFI NAVs and BSE closes into `instruments`; a
+`pg_cron` job (migration `20261027180000`) calls it at 07:00 IST. Per project, dev first:
+
+1. **Make a secret** in a private file, not on the command line:
+   `umask 077; printf 'REFRESH_PRICES_SECRET=%s\n' "$(openssl rand -hex 32)" > ~/refresh.env`
+2. **Function secret:** `supabase secrets set --project-ref <project-ref> --env-file ~/refresh.env`
+   (or Dashboard → Edge Functions → Secrets).
+3. **Deploy** (no Docker): `supabase functions deploy refresh-prices --use-api --project-ref <project-ref>`
+   (`verify_jwt = false` comes from `supabase/config.toml`; the function checks the secret).
+4. **Vault** (Dashboard → Project Settings → Vault → Add new secret, so the value is not kept
+   in SQL editor history): `refresh_prices_secret` = the same value, and
+   `refresh_prices_url` = `https://<project-ref>.supabase.co/functions/v1/refresh-prices`.
+5. Delete `~/refresh.env`. **Migration:** `supabase db push` (as for any migration).
+6. **Check** (SQL editor):
+
+   ```sql
+   -- Last 7 days: one row per source per day, with how long each took.
+   select started_at at time zone 'Asia/Kolkata' as started_ist, source, status, price_date,
+          rows_seen, rows_loaded, rows_skipped, skip_reasons, error,
+          finished_at - started_at as duration
+   from public.price_refresh_runs
+   where started_at > now() - interval '7 days'
+   order by started_at desc;
+
+   -- Did the job fire? (pg_cron's own log)
+   select start_time, status, return_message from cron.job_run_details
+   where jobid = (select jobid from cron.job where jobname = 'refresh-prices-daily')
+   order by start_time desc limit 7;
+   ```
+
+   **Rule:** every day needs two rows (amfi and bse). A day with no row, or with one, means
+   the run died (the function crashed or hit its time limit before logging); check the
+   function logs (Dashboard → Edge Functions → refresh-prices → Logs) and
+   `cron.job_run_details`. `no_file` for BSE on weekends and exchange holidays is normal.
+
+## 4b. Price refresh on production (Sprint 7 rollout)
+
+After PR #32 is merged and the prod migrations are in (section 1.2, after a backup), from a
+clean `main` checkout:
+
+1. **New secret for prod** (never reuse the dev one), in a private file outside the repo:
+   `umask 077; printf 'REFRESH_PRICES_SECRET=%s\n' "$(openssl rand -hex 32)" > ~/refresh-prod.env`
+2. `supabase secrets set --project-ref <prod-project-ref> --env-file ~/refresh-prod.env`
+3. Deploy: `supabase functions deploy refresh-prices --use-api --project-ref <prod-project-ref>`
+4. **Vault** on the prod project (Dashboard → Project Settings → Vault): `refresh_prices_secret`
+   (the same value) and `refresh_prices_url` = `https://<prod-project-ref>.supabase.co/functions/v1/refresh-prices`.
+5. **First manual run:**
+   `curl -sS -X POST -H @<(printf 'x-refresh-secret: %s\n' "$(cut -d= -f2 ~/refresh-prod.env)") https://<prod-project-ref>.supabase.co/functions/v1/refresh-prices`
+   answers `{"status":"accepted"}`; then delete `~/refresh-prod.env`.
+6. After about 2 minutes, run the last-7-days query of section 4a in the prod SQL editor: one
+   `amfi` and one `bse` row, both with `finished_at`.
+7. Relink the CLI to dev: `supabase link --project-ref <dev-project-ref>`.
+
+**A paused project stops the daily job.** Supabase Free pauses a project after a week without
+activity; a paused project runs no `pg_cron` jobs, so prices stop updating (holdings then show
+"Old price" and later "Stale, over 30 days"). After restoring the project, check
+`cron.job_run_details` and make one manual run (step 5).
+
 ## 5. Upgrade before any commercial launch
 
 Do all of these before payments, paying customers or a public launch, and only once the
@@ -127,3 +187,6 @@ product is complete and QA has passed:
       dev scripts, fixed `fincreador://` scheme, Site URL, custom SMTP).
 - [ ] Re-check the auth redirects (section 3) on the production domain.
 - [ ] Point the mobile release builds at the production project (Sprint 12).
+- [ ] Review the licence and redistribution terms of the market data (AMFI NAV file, BSE
+      bhavcopy, and NSE files if added) for commercial use; move to a licensed data vendor
+      if they don't allow it (Sprint 7).

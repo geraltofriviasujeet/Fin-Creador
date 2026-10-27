@@ -4,8 +4,10 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import {
   buildGoalsView,
+  buildInvestmentsView,
   buildRecurringView,
   loadGoalsData,
+  loadInvestmentsData,
   loadDashboardBreakdown,
   loadRecurringData,
   loadTransactionPage,
@@ -51,7 +53,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   const { period, range, charts } = readDashboardParams(params, today)
   const comparison = comparisonFor(period, range, today)
 
-  const [totals, prevTotals, breakdown, recent, recurring, profile, goals] = await Promise.all([
+  const [totals, prevTotals, breakdown, recent, recurring, profile, goals, investments] = await Promise.all([
     loadTransactionTotals(supabase, { from: range.start, to: range.end }, currency),
     comparison ? loadTransactionTotals(supabase, { from: comparison.previous.start, to: comparison.previous.end }, currency) : null,
     loadDashboardBreakdown(supabase, range, currency),
@@ -59,6 +61,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
     loadRecurringData(supabase),
     supabase.from("profiles").select("display_name").maybeSingle(),
     loadGoalsData(supabase),
+    loadInvestmentsData(supabase),
   ])
   if (!totals.ok || (prevTotals && !prevTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
 
@@ -87,6 +90,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
       charts={charts}
       upcoming={upcoming}
       goals={goals.ok ? buildGoalsView(goals.data) : null}
+      investments={investments.ok ? buildInvestmentsView(investments.data) : null}
     />
   )
 }

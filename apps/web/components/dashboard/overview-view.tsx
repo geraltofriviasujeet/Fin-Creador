@@ -5,6 +5,7 @@ import {
   type ChartChoices,
   type DashboardBreakdown,
   type GoalsView,
+  type InvestmentsView,
   CHART_OPTIONS,
   DEFAULT_CHARTS,
   type LedgerItem,
@@ -37,6 +38,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { TextField } from "@/components/ui/field"
 import { EntryIcon, dayHeading, entryKindLabel, entryTitle, fullDate, money, rangeText, signedAmount } from "@/components/transactions/display"
 import { BudgetOverviewCard, GoalsOverviewCard } from "@/components/goals/overview-cards"
+import { InvestmentsOverviewCard } from "@/components/investments/overview-card"
 import { CategoryPie } from "./category-pie"
 import { TimeChart } from "./time-chart"
 
@@ -64,6 +66,8 @@ export type OverviewViewProps = {
   upcoming: React.ReactNode
   /** Budgets and goals (null when they couldn't load; the cards say so). */
   goals: GoalsView | null
+  /** Holdings tracker (null when it couldn't load; the card says so). Not in Total available. */
+  investments: InvestmentsView | null
 }
 
 function greeting(name: string | null, timeZone: string): string {
@@ -78,7 +82,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, goals }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, goals, investments }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = {
     accounts: new Map(context.accounts.map((a) => [a.id, a])),
@@ -212,6 +216,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         <div className="grid content-start gap-4">
           {upcoming}
           <GoalsOverviewCard view={goals} />
+          <InvestmentsOverviewCard view={investments} />
         </div>
       </div>
     </>

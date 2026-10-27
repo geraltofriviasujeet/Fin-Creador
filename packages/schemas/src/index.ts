@@ -7,3 +7,5 @@ export * from "./regions";
 export * from "./transaction-forms";
 export * from "./goal-data";
 export * from "./goal-forms";
+export * from "./investment-forms";
+export * from "./fixed-deposit-forms";

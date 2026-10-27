@@ -6,6 +6,11 @@ cities. Countries come from `packages/schemas/src/region-data.ts` (generated). T
 names only, never prices. The forms accept any typed make, model or city, so a stale list
 never blocks anyone, but it should stay current.
 
+The fixed-deposit form (Sprint 7) suggests banks from `FD_BANKS` in
+`packages/schemas/src/fixed-deposit-forms.ts`: the account bank list (`INDIAN_BANKS` in
+`money-forms.ts`) without payments banks, which can't take deposits, plus small finance banks
+that do. Any bank name can be typed.
+
 ## When
 
 In January, April, July and October. Normally only vehicle makes and models change. Touch
@@ -19,9 +24,12 @@ territory or a renamed city).
    `.in` or India pages). Add only models currently on sale in India; remove models that are
    discontinued in India. Keep names exactly as the manufacturer writes them. No prices, no
    specifications.
-3. Places: change states, union territories or cities only on an official change, with the
+3. Banks: check the RBI lists of scheduled commercial banks and small finance banks. Add
+   banks that take fixed deposits, remove merged or closed ones (keep names as the bank writes
+   them). Update `FD_BANKS_REVIEWED_ON` in `fixed-deposit-forms.ts`, even when nothing changed.
+4. Places: change states, union territories or cities only on an official change, with the
    official source.
-4. Record every change in a diff table in the PR description, one row per change, with the
+5. Record every change in a diff table in the PR description, one row per change, with the
    source URL:
 
    | List | Change | Make / place | Model / name | Source URL |
@@ -29,7 +37,7 @@ territory or a renamed city).
    | car  | add    | Example make | Example model | https://… |
    | bike | remove | Example make | Old model     | https://… |
 
-5. Update `LISTS_REVIEWED_ON` in `goal-data.ts` (`vehicles`, and `places` if checked) to the
+6. Update `LISTS_REVIEWED_ON` in `goal-data.ts` (`vehicles`, and `places` if checked) to the
    review date, even when nothing changed.
-6. Run `npm run typecheck`, `npm run lint` and `npm test`.
-7. Open one draft PR. The owner reviews and merges it.
+7. Run `npm run typecheck`, `npm run lint` and `npm test`.
+8. Open one draft PR. The owner reviews and merges it.

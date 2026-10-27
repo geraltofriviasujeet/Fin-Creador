@@ -1,5 +1,5 @@
 // Maps database errors from accounts, categories, entries and recurring items (supabase/
-// migrations 20261022150000, 20261023120000, 20261024120000, 20261026180000) to messages for web and mobile. Raw database messages are never shown.
+// migrations 20261022150000, 20261023120000, 20261024120000, 20261026180000, 20261027120000) to messages for web and mobile. Raw database messages are never shown.
 
 export type LedgerErrorLike = { code?: string | undefined; message?: string | undefined } | null | undefined
 
@@ -37,6 +37,11 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC024: { message: "This goal is archived. Restore it first." },
   FC025: { message: "Budgets can start this month or later. Past months keep their budget.", field: "month" },
   FC026: { message: "That category can't have a budget. Choose another.", field: "categoryId" },
+  FC027: { message: "This holding is archived. Restore it first." },
+  FC028: { message: "The buy date can't be in the future.", field: "buyDate" },
+  FC029: { message: "We couldn't find that fund or share. Search again.", field: "instrumentId" },
+  FC030: { message: "This fixed deposit is archived. Restore it first." },
+  FC031: { message: "The start date can't be in the future.", field: "startDate" },
 }
 
 /** `dateField` names the date input on the current form (occurredOn or openingBalanceDate). */

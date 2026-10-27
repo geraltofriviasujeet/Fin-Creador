@@ -163,6 +163,54 @@ export type Database = {
           },
         ]
       }
+      fixed_deposits: {
+        Row: {
+          archived_at: string | null
+          bank: string
+          compounding: string
+          created_at: string
+          id: string
+          idempotency_key: string
+          label: string | null
+          maturity_date: string
+          principal_minor: number
+          rate_bps: number
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          bank: string
+          compounding?: string
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          label?: string | null
+          maturity_date: string
+          principal_minor: number
+          rate_bps: number
+          start_date: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          bank?: string
+          compounding?: string
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          label?: string | null
+          maturity_date?: string
+          principal_minor?: number
+          rate_bps?: number
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       goals: {
         Row: {
           archived_at: string | null
@@ -208,6 +256,140 @@ export type Database = {
           type?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      instruments: {
+        Row: {
+          created_at: string
+          id: string
+          isin: string | null
+          kind: string
+          last_price_scaled: number
+          name: string
+          price_date: string
+          source: string
+          source_code: string
+          symbol: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          isin?: string | null
+          kind: string
+          last_price_scaled: number
+          name: string
+          price_date: string
+          source: string
+          source_code: string
+          symbol?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          isin?: string | null
+          kind?: string
+          last_price_scaled?: number
+          name?: string
+          price_date?: string
+          source?: string
+          source_code?: string
+          symbol?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      investments: {
+        Row: {
+          archived_at: string | null
+          buy_date: string
+          buy_price_scaled: number
+          created_at: string
+          id: string
+          idempotency_key: string
+          instrument_id: string
+          isin_at_entry: string | null
+          units_scaled: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          buy_date: string
+          buy_price_scaled: number
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          instrument_id: string
+          isin_at_entry?: string | null
+          units_scaled: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          buy_date?: string
+          buy_price_scaled?: number
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          instrument_id?: string
+          isin_at_entry?: string | null
+          units_scaled?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investments_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      price_refresh_runs: {
+        Row: {
+          error: string | null
+          finished_at: string
+          id: string
+          price_date: string | null
+          rows_loaded: number
+          rows_seen: number
+          rows_skipped: number
+          skip_reasons: Json
+          source: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          error?: string | null
+          finished_at: string
+          id?: string
+          price_date?: string | null
+          rows_loaded?: number
+          rows_seen?: number
+          rows_skipped?: number
+          skip_reasons?: Json
+          source: string
+          started_at: string
+          status: string
+        }
+        Update: {
+          error?: string | null
+          finished_at?: string
+          id?: string
+          price_date?: string | null
+          rows_loaded?: number
+          rows_seen?: number
+          rows_skipped?: number
+          skip_reasons?: Json
+          source?: string
+          started_at?: string
+          status?: string
         }
         Relationships: []
       }
@@ -827,6 +1009,28 @@ export type Database = {
       recurring_month_match: {
         Args: { p_date: string; p_start: string; p_step: number }
         Returns: boolean
+      }
+      search_instruments: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          created_at: string
+          id: string
+          isin: string | null
+          kind: string
+          last_price_scaled: number
+          name: string
+          price_date: string
+          source: string
+          source_code: string
+          symbol: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "instruments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       set_cash_on_hand: {
         Args: { p_account_id: string; p_amount_minor: number }
