@@ -19,7 +19,8 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const starts = (text: string) => new RegExp(`^${escape(text)}`)
 const holdings = (page: Page) => page.getByRole("region", { name: "Holdings" })
 const groupToggle = (page: Page, name: string) => holdings(page).getByRole("button", { name: starts(name) })
-const group = (page: Page, name: string) => holdings(page).getByRole("listitem").filter({ has: groupToggle(page, name) }).first()
+// `has` is matched inside each list item, so its locator must not be scoped to the region.
+const group = (page: Page, name: string) => holdings(page).getByRole("listitem").filter({ has: page.getByRole("button", { name: starts(name) }) }).first()
 const summary = (page: Page) => page.getByRole("region", { name: "Summary" })
 
 /** Opens a group's records (a no-op when they are already open). */
