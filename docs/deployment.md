@@ -127,3 +127,6 @@ product is complete and QA has passed:
       dev scripts, fixed `fincreador://` scheme, Site URL, custom SMTP).
 - [ ] Re-check the auth redirects (section 3) on the production domain.
 - [ ] Point the mobile release builds at the production project (Sprint 12).
+- [ ] Review the licence and redistribution terms of the market data (AMFI NAV file, BSE
+      bhavcopy, and NSE files if added) for commercial use; move to a licensed data vendor
+      if they don't allow it (Sprint 7).

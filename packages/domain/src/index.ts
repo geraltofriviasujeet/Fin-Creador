@@ -4,6 +4,8 @@ export * from "./format";
 export * from "./goals";
 export * from "./holdings";
 export * from "./income";
+export * from "./investments";
+export * from "./market-files";
 export * from "./money";
 export * from "./ledger";
 export * from "./recurrence";
