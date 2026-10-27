@@ -30,16 +30,20 @@ describe("cardCycleDate", () => {
 });
 
 describe("cardDueDate", () => {
-  it("is in the statement's month when the due day is later, else the next month", () => {
-    expect(cardDueDate("2026-10-05", 5, 25)).toBe("2026-10-25");
-    expect(cardDueDate("2026-10-20", 20, 8)).toBe("2026-11-08");
-    expect(cardDueDate("2026-10-20", 20, 20)).toBe("2026-11-20");
+  it("is the first due-day date after the statement", () => {
+    expect(cardDueDate("2026-10-05", 25)).toBe("2026-10-25");
+    expect(cardDueDate("2026-10-20", 8)).toBe("2026-11-08");
+    expect(cardDueDate("2026-10-20", 20)).toBe("2026-11-20");
+    // A statement entered after the card's due day of that month.
+    expect(cardDueDate("2026-10-28", 25)).toBe("2026-11-25");
   });
 
   it("clamps the due day in the due month", () => {
-    expect(cardDueDate("2027-01-31", 31, 30)).toBe("2027-02-28");
-    expect(cardDueDate("2028-01-31", 31, 30)).toBe("2028-02-29");
-    expect(cardDueDate("2026-02-28", 31, 30)).toBe("2026-03-30");
+    expect(cardDueDate("2027-01-31", 30)).toBe("2027-02-28");
+    expect(cardDueDate("2028-01-31", 30)).toBe("2028-02-29");
+    expect(cardDueDate("2026-02-28", 30)).toBe("2026-03-30");
+    // Statement day 29 clamped to 28 February; a due day of 30 is not that same day.
+    expect(cardDueDate("2027-02-28", 30)).toBe("2027-03-30");
   });
 });
 

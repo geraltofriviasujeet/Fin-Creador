@@ -1,7 +1,7 @@
 // Credit cards and informal borrowing (Sprint 8b). Figures the database also checks:
 //   * Cycle dates: the statement day and due day of a month, clamped to the month end; the due
-//     date is in the statement's month when the due day is later than the statement day, else
-//     in the next month. Same as public.card_cycle_date / card_due_date (parity test:
+//     date is the first due-day date after the statement date (so a due day earlier than the
+//     statement day falls in the next month). Same as public.card_cycle_date / card_due_date (parity test:
 //     supabase/tests/database/card_dates_parity.test.sql).
 //   * Bill = statement total − card EMIs on it (paid from the loan row, never from the bill).
 //   * Difference: bill − owed on the statement date, when positive (offered as an expense).
@@ -33,10 +33,10 @@ export function cardCycleDate(day: number, date: IsoDate, monthsAhead = 0): IsoD
   return `${pad(y, 4)}-${pad(m)}-${pad(Math.min(day, daysInMonth(y, m)))}`;
 }
 
-/** The due date of a statement dated `statementDate`. */
-export function cardDueDate(statementDate: IsoDate, statementDay: number, dueDay: number): IsoDate {
-  checkDay(statementDay);
-  return dueDay > statementDay ? cardCycleDate(dueDay, statementDate) : cardCycleDate(dueDay, statementDate, 1);
+/** The due date of a statement dated `statementDate`: the first date after it on the due day. */
+export function cardDueDate(statementDate: IsoDate, dueDay: number): IsoDate {
+  const sameMonth = cardCycleDate(dueDay, statementDate);
+  return sameMonth > statementDate ? sameMonth : cardCycleDate(dueDay, statementDate, 1);
 }
 
 /**

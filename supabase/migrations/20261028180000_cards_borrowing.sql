@@ -126,16 +126,17 @@ as $$
           + (least(p_day, extract(day from (pg_catalog.date_trunc('month', p_month::timestamp) + interval '1 month - 1 day'))::integer) - 1));
 $$;
 
--- The due date for a statement: due day in the statement's month when it is later than the
--- statement day, else in the next month; clamped to the month end.
-create function public.card_due_date(p_statement_date date, p_statement_day integer, p_due_day integer)
+-- The due date for a statement: the first date after it on the due day (clamped to the month
+-- end): in the statement's month when that is later, else in the next month. So a due day
+-- earlier than the statement day falls in the next month.
+create function public.card_due_date(p_statement_date date, p_due_day integer)
 returns date
 language sql
 immutable
 set search_path = ''
 as $$
   select case
-    when p_due_day > p_statement_day then public.card_cycle_date(p_due_day, p_statement_date)
+    when public.card_cycle_date(p_due_day, p_statement_date) > p_statement_date then public.card_cycle_date(p_due_day, p_statement_date)
     else public.card_cycle_date(p_due_day, (p_statement_date + interval '1 month')::date)
   end;
 $$;
@@ -983,7 +984,7 @@ begin
   if p_statement_date is null or p_statement_date > public.user_local_today(v_uid) then
     raise exception 'Date cannot be in the future' using errcode = 'FC003';
   end if;
-  v_due := coalesce(p_due_date, public.card_due_date(p_statement_date, v_card.statement_day, v_card.due_day));
+  v_due := coalesce(p_due_date, public.card_due_date(p_statement_date, v_card.due_day));
   if v_due < p_statement_date then
     raise exception 'The due date is before the statement date' using errcode = 'FC051';
   end if;
@@ -1896,7 +1897,7 @@ revoke execute on function public.liability_payments_guard() from public, anon, 
 
 revoke execute on function public.liability_owed(uuid, date) from public, anon;
 revoke execute on function public.card_cycle_date(integer, date) from public, anon;
-revoke execute on function public.card_due_date(date, integer, integer) from public, anon;
+revoke execute on function public.card_due_date(date, integer) from public, anon;
 revoke execute on function public.create_card(uuid, text, bigint, integer, integer, bigint, text) from public, anon;
 revoke execute on function public.update_card(uuid, text, bigint, integer, integer, text) from public, anon;
 revoke execute on function public.set_card_archived(uuid, boolean) from public, anon;
@@ -1925,7 +1926,7 @@ revoke execute on function public.edit_liability_payment(uuid, uuid, uuid, date,
 -- (due_items_guard), and post_liability_payment refuses loan accounts.
 grant execute on function public.liability_owed(uuid, date) to authenticated;
 grant execute on function public.card_cycle_date(integer, date) to authenticated;
-grant execute on function public.card_due_date(date, integer, integer) to authenticated;
+grant execute on function public.card_due_date(date, integer) to authenticated;
 grant execute on function public.borrowing_sync_due(uuid) to authenticated;
 grant execute on function public.card_bill_paid(uuid) to authenticated;
 grant execute on function public.card_sync_due(uuid) to authenticated;

@@ -181,7 +181,7 @@ select results_eq(
   $$ values (800000::bigint, 100000::bigint, 100000::bigint, 'expense'::text, true, true, true) $$,
   'owed is measured on the statement date; the difference is an expense on the card, dated the statement');
 select results_eq(
-  $$ select d.kind, d.amount_due_minor, d.minimum_due_minor, d.status, d.due_date = public.card_due_date(public.t_today(), 20, 8)
+  $$ select d.kind, d.amount_due_minor, d.minimum_due_minor, d.status, d.due_date = public.card_due_date(public.t_today(), 8)
      from public.due_items as d where d.id = public.t_bill('c3000000-0000-4000-8000-000000000001') $$,
   $$ values ('card_bill'::text, 900000::bigint, 50000::bigint, 'pending'::text, true) $$,
   'the bill (total less card EMIs) is a pending due item at the card''s due day');

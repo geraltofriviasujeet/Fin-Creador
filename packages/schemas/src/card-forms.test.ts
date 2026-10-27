@@ -53,7 +53,7 @@ describe("cardFormSchema", () => {
 });
 
 describe("statementFormSchema", () => {
-  const schema = statementFormSchema({ today: TODAY, currency: "INR", card: { statementDay: 20, dueDay: 8 } });
+  const schema = statementFormSchema({ today: TODAY, currency: "INR", card: { dueDay: 8 } });
   const statement = { cardId: CARD, statementDate: "2026-10-20", dueDate: "", total: "25,000", minimum: "1,250", emiIncluded: "5,000", idempotencyKey: KEY };
 
   it("defaults the due date from the card's due day", () => {

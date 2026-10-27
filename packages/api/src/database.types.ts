@@ -1247,7 +1247,6 @@ export type Database = {
         Args: {
           p_due_day: number
           p_statement_date: string
-          p_statement_day: number
         }
         Returns: string
       }

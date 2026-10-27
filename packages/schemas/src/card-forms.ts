@@ -121,7 +121,7 @@ export type CardEditFormOutput = z.output<ReturnType<typeof cardEditFormSchema>>
  * `differenceCategoryId` is set and the bill is more than what is logged as owed, the
  * difference is recorded as an expense in that category.
  */
-export function statementFormSchema({ today, currency, card }: { today: string; currency: string; card: { statementDay: number; dueDay: number } }) {
+export function statementFormSchema({ today, currency, card }: { today: string; currency: string; card: { dueDay: number } }) {
   return z
     .object({
       cardId: text.pipe(z.uuid({ message: "Card not found" })),
@@ -137,7 +137,7 @@ export function statementFormSchema({ today, currency, card }: { today: string; 
       if (!v.idempotencyKey) return fail(ctx, "idempotencyKey", REOPEN);
       if (!isIsoDate(v.statementDate)) return fail(ctx, "statementDate", "Enter the statement date");
       if (v.statementDate > today) return fail(ctx, "statementDate", "The statement date can't be in the future");
-      const dueDate = v.dueDate || cardDueDate(v.statementDate, card.statementDay, card.dueDay);
+      const dueDate = v.dueDate || cardDueDate(v.statementDate, card.dueDay);
       if (!isIsoDate(dueDate)) return fail(ctx, "dueDate", "Enter a valid date");
       if (dueDate < v.statementDate) return fail(ctx, "dueDate", "The due date can't be before the statement date");
       if (dueDate > addMonthsClamped(v.statementDate, 2)) return fail(ctx, "dueDate", "The due date should be within two months of the statement");
