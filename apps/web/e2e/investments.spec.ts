@@ -224,8 +224,8 @@ test("gain, loss, old price and a holding without a current price; summary and O
   await expect(overviewCard(page)).toContainText("Not included in Total available")
   await expect(overviewCard(page)).toContainText("Prices as of")
   await expect(overviewCard(page)).toContainText("1 without a current price")
-  await overviewCard(page).scrollIntoViewIfNeeded()
-  await shot(page, "overview-investments")
+  // The card on its own (a full-page shot of the Overview repeats the fixed sidebar).
+  await overviewCard(page).screenshot({ path: `${SHOTS}/overview-investments.png` })
 
   // Archived view: the loss record moves out of the totals.
   await page.goto("/investments")
@@ -246,8 +246,9 @@ test("another user sees none of my holdings and can't change them; phone layout"
   await newUser(first, "inv-owner")
   await addHolding(first, { query: "lotus", name: LOTUS, units: "10", price: "1,000" })
   await addHolding(first, { query: "bees", name: "Test Nifty Bees ETF", units: "40", price: "250" })
+  await first.reload() // no toasts over the list
   await expect(group(first, LOTUS)).toBeVisible()
-  await shot(first, "investments-phone")
+  await first.screenshot({ path: `${SHOTS}/investments-phone.png` }) // the viewport, with the tab bar at the bottom
   await first.close()
 
   const second = await newPage()
