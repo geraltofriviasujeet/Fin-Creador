@@ -257,7 +257,9 @@ describe("helpers", () => {
   });
 
   it("removes key-like text from errors", () => {
-    expect(safeError(new Error("bad key eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZSJ9.abcdefghijklmnop"))).toBe("bad key [removed]");
+    // A JWT-shaped value built at run time, so no token-like literal sits in the repository.
+    const jwtShaped = ["eyJ" + "a".repeat(12), "b".repeat(12), "c".repeat(12)].join(".");
+    expect(safeError(new Error(`bad key ${jwtShaped}`))).toBe("bad key [removed]");
     expect(safeError(new Error("bad sb_secret_abc123"))).toBe("bad [removed]");
     expect(safeError("text")).toBe("Unknown error");
     expect(safeError(new Error("ab ".repeat(300)))).toHaveLength(500);
