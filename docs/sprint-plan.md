@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-27 (Sprint 7 complete: on `main` and prod).
+Last updated: 2026-10-27 (Sprint 8a: SQL approved with changes; pgTAP, writers and draft PR in step 8a.2).
 
 ## Sprint status
 
@@ -30,7 +30,9 @@ Last updated: 2026-10-27 (Sprint 7 complete: on `main` and prod).
 | **5** | Dashboard & analytics | Done | Completed 2026-10-26 (PRs #25–#28 merged into `main`). Web Overview dashboard with chart types; first production deploy on Vercel Hobby and Supabase Free works, including Google sign-in. Migration 20261026120000 applied to dev and prod. Mobile Overview in the backlog. See Sprint 5 steps. |
 | **6** | Budgets & savings goals | Done | Completed 2026-10-26 (PR #30 merged into `main`, merge commit 672ab75). One Goals page (`/goals`): Planned expenses (Trip, Wheeler, House, Furniture, Electronics, Mobile, Other; exact maths, EMI, archive, restore, permanent delete of archived goals) and Monthly budgets (80% / 100% warnings, page and Overview); web density pass; `scripts/backup-prod.sh`. Migrations 20261026180000, 20261026200000, 20261026210000 applied to dev and prod (prod from `main` after a backup); live site checked. Web only (mobile Goals in the backlog). See Sprint 6 steps. |
 | **7** | Investment portfolio | Done | Completed 2026-10-27 (PR #32 merged into `main`). Holdings tracker (not trading), web only: shares, mutual funds and ETFs at the previous close (BSE, AMFI), fixed deposits, tabs per kind, Overview card. Migrations 20261027120000, 20261027180000 and 20261027200000 applied to dev and prod (prod from `main` after a backup); `refresh-prices` deployed on prod, first run ok (AMFI 14,172 and BSE 4,643 loaded, as on dev); live site checked. Mobile Investments in the backlog. See Sprint 7 steps. |
-| **8** | Loans, liabilities & reports | Not started | |
+| **8a** | Loans and EMIs | In progress | SQL approved with changes (2026-10-27); migration `20261028120000_loans.sql` not applied yet. Step 8a.2 (pgTAP, writers, draft PR) in CI. See Sprint 8a steps. |
+| **8b** | Credit cards and net worth | Not started | Own PR and prod push after 8a. |
+| **8c** | Cash-flow history and CSV export | Not started | Own PR and prod push after 8b. |
 | **9** | AI financial insights | Not started | |
 | **10** | Notifications & reminders | Not started | |
 | **11** | Mobile polish, offline & PWA | Not started | |
@@ -76,6 +78,18 @@ Sprint 3 runs in two phases (owner, 2026-10-23). Phase 1 is a UI prototype on de
 | **Phase 2.5b Expense categories (web)** | Done | Settings → Categories: add, rename (and icon), archive, restore; defaults archivable, never deleted; no duplicate active names; archived categories keep their history. Shared writers in `packages/api`; E2E `e2e/categories.spec.ts` with one screenshot. |
 | **Phase 2.6 Mobile** | Done | PR #22: Recurring screen (cost tiles, panels, groups, archived with Restore, Undo skip), rule and skip sheets, Confirm in the Add / Edit sheet, Overview Recurring card and an Activity link. Tested in Expo Go 2026-10-24. |
 | **Phase 2.7 Status and PR** | Done | PR #22 merged into `sprint-4-recurring`, then PR #21 into `main` (2026-10-24). |
+
+## Sprint 8a steps
+
+Loans only (owner, 2026-10-27): see Decisions. Web first; mobile in a separate PR.
+
+| **Step** | **Status** | **Notes** |
+|----|----|----|
+| **8a.1 Domain, schemas and SQL review** | Done | `packages/domain/src/loans.ts` (EMI estimate reusing `emi` from goals.ts, schedule that follows the EMI in use, moratorium interest, default split, progress) and `due-items.ts` (generic reminders, shortfall); `packages/schemas/src/loan-forms.ts` (add / edit loan, pay, will pay later, `LENDERS`); migration `20261028120000_loans.sql`. Approved 2026-10-27 with changes (see Decisions). |
+| **8a.2 pgTAP and draft PR** | In progress | `supabase/tests/database/loans.test.sql` (posting from bank, cash and other; idempotency; shortfall with and without "Pay anyway"; before tracking; capitalisation once and again after a void; edit / void together; FC034–FC044; direct-write refusals; archive and delete; RLS and anon; user and planned-account deletion) and the generated `loan_dates_parity.test.sql` (`npm run fixtures:loans`); writers `addLoan`, `editLoan`, `setLoanArchived`, `deleteLoan`, `payDueItem`, `editDuePayment`, `voidDuePayment`, `planDueItem`, `clearDuePlan`, `loadPaymentContext` and `loanErrorMessage` in `packages/api/src/loans`; loan accounts filtered from every account loader (`MONEY_ACCOUNT_KINDS`). Draft PR. |
+| **8a.3 Dev db push** | Not started | The owner runs `db push` on dev; then `npm run db:types`. |
+| **8a.4 Web Loans page** | Not started | Add loan flow, EMI cards with schedule, pay / will pay later, the shortfall warning with "Pay anyway" (also ahead of time on the EMI card), bell and Overview "Due soon". Helper text for an ongoing loan whose interest was added to the balance: enter the current outstanding as the amount taken. For a capitalised moratorium: "Interest added when EMIs start (estimate X)". Navigation (owner, 2026-10-27): a new tab "Loans & liabilities" after Investments, route `/loans-liabilities`, the same page title and heading; on narrow screens the nav may show the short label "Liabilities" (nav only), kept compact and reachable (More menu if needed). Page: "Due soon" card and "Add loan" at the top; loan list (lender, type, outstanding, next EMI date and amount, badge Paid / Due / Overdue); archived loans in a collapsed section; empty state "No loans yet" with Add loan. 8b adds credit cards and net worth to this page (no new tab). Nav test updated. At most 8 screenshots from CI. |
+| **8a.5 Wrap-up and prod** | Not started | Docs, QA agent, prod from `main` after a backup. |
 
 ## Sprint 7 steps
 
@@ -197,6 +211,12 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-27** | Sprint 7 step 7.4 (owner, replaces the 30-day "no current price" rule): every holding is valued at its last known price whatever its age; the price date is always shown, with "Old price" after 7 days and "Stale, over 30 days" after 30 (`priceAge` in `packages/domain`). /investments has tabs All, Shares, Mutual funds, ETFs, Fixed deposits (`?tab=`), each with its own summary; All adds a by-category table; the Overview card shows the four category lines. Fixed deposits: see the next row. | No unpriced banner or not-counted branch. |
 | **2026-10-27** | Sprint 7 fixed deposits (owner approved the SQL and formulas): per-user `fixed_deposits` (migration `20261027200000`) in the goals style: bank 1–80, optional label 1–40 (blank is none), principal in paise up to 10^13, rate 0–2500 bp, compounding monthly / quarterly / half-yearly / yearly (quarterly default), start not in the future (FC031), maturity after start and at most 10 years later, edit in place, archived locked except restore (FC030), delete only when archived. Values only in `packages/domain/src/fixed-deposits.ts`: whole periods of calendar months from the start (month-end clamped) compound by (1 + r/(10000·n)); the partial last period earns simple interest B·r·d/(365·10000); exact rationals rounded once to paise, half away from zero; capped at maturity. On the Investments page: invested = principal, value = worth today, profit = interest so far. | Not linked to accounts or Total available; INR only. |
 | **2026-10-27** | Sprint 7 wrap-up (summary of the rows above): (1) a tracker, not trading: records and fixed deposits only, no ledger, not in Total available, INR only; (2) sources: AMFI `NAVAll.txt` for mutual funds and the BSE bhavcopy for shares and ETFs (NSE files only after a licence check); (3) prices are the previous close, refreshed once a day at 07:00 IST by `refresh-prices` and labelled "BSE close" / "NAV" with their date, never live; (4) fixed deposits: whole calendar-month periods from the start (month-end clamped), simple interest for the partial last period on a 365-day year, one rounding, at most 10 years; (5) last-known-price rule: every holding is valued at its last price whatever its age, with "Old price" after 7 days and "Stale, over 30 days" after 30; (6) per-kind tabs: All (holdings and deposits, by-category table), Shares, Mutual funds and ETFs (each adds and searches only its own kind), Fixed deposits. | One place to read Sprint 7's rules before Sprint 8 (net worth will need to decide whether investments count). |
+| **2026-10-27** | Sprint 8 split (owner): 8a = loans only (add loan, schedule, EMI payments that move money, insufficient-funds warning, in-app reminders); 8b = credit cards and net worth; 8c = cash-flow history and CSV export. Each is its own PR and prod push. | Smaller releases; 8a's due-item model is generic so 8b reuses it. |
+| **2026-10-27** | Sprint 8a add loan (owner): "Add loan" → type (Home, Vehicle, Personal, Education, Gold, Business, Consumer / EMI, Loan against property or securities, Credit card EMI, Other with a description) → lender type-ahead (`LENDERS`: banks, small finance banks, housing finance companies, NBFCs, card issuers; any name allowed; quarterly refresh) → details: optional nickname, sanctioned amount, amount taken (not above sanctioned), yearly rate typed as text and stored in basis points without floats, fixed or floating (information only), tenure in months, Ongoing or Starts later. Ongoing: outstanding today (not above the amount taken), EMIs left, next EMI date, and "this month's EMI": already paid (recorded as before tracking, never posted; the next EMI is after today) or still due (the next EMI date is this month's, possibly past). Starts later: first EMI date (after today), moratorium months, and interest during it added to the loan (simple interest, posted with the first EMI paid) or paid monthly (an interest-only instalment each month; months already past are before tracking). The EMI is calculated (goals.ts maths, exact, rounded once) and shown as an estimate; the bank's EMI overwrites it and the schedule follows it (a higher EMI finishes early; the last instalment clears what is left). No card or account digits: four digits in a row are refused in the lender and nickname. | Loan amounts, dates and tenure are fixed once added; names, rate, sanctioned amount and EMI can be edited. Archive, restore, delete only when archived and never paid. |
+| **2026-10-27** | Sprint 8a payments (owner): each due EMI is paid from any active bank, cash or other account (balances shown): "Paid" (date defaults to today) or "Will pay later" (planned date and account; the EMI stays pending). Paid posts atomically and once per request key: principal as a transfer to the loan's liability account, interest and fees as expenses (system categories "Loan interest" and "Loan fees & charges"), all from the chosen account; the split defaults from the schedule (one month's interest on what is owed) and every part can be edited. A payment may not take the paying account below zero: "You need X more in <account> to pay this EMI", and the person can pick another account; the EMI card shows the same warning in advance. Edits and voids move all parts together. EMIs dated before the loan was added are before tracking and never post. Credit card EMI is a loan type with the same flow; issuer from the same list, optional nickname, rate 0 allowed (EMI = amount / months), a one-time processing fee and GST go in the fees of the first payment. | No double counting: principal is never an expense; a loan account is never in Total available. |
+| **2026-10-27** | Sprint 8a reminders (owner): in-app only. The bell and an Overview "Due soon" card show EMIs due tomorrow (within 24 hours; entries have no time of day), due today, overdue, and the day before and on a planned pay date, derived from stored dates (`packages/domain/src/due-items.ts`), no scheduled job. Email, web push and phone push are a later notifications step (backlog). | |
+| **2026-10-27** | Sprint 8a SQL review (owner, changes): (1) a shortfall is a warning, not a block: `pay_due_item` and `edit_due_payment` take `p_allow_shortfall` (default false); without it FC035 (detail = shortfall) is raised, and "Pay anyway" sends the same request key again with it; this replaces "may not take the paying account below zero" above. (2) Deleting a planned account clears the whole plan (date and account). (3) Account names need not be unique; a loan account is named after the nickname or lender and shown as "<name> (loan)" in lists. (4) `loan_category_id` adopts an archived same-name category (restored) and never returns null. (5) SQL due dates come from one function, `loan_due_date`, checked against the domain by a generated parity test. (6) Loan accounts are never in Total available, account pickers, the Accounts page or balances. Optional parameters of `create_loan` and `update_loan` come last, with defaults. | Approved 2026-10-27. |
+| **2026-10-27** | Sprint 8 due items (owner): one generic model for anything due on a date and paid from an account (`due_items` + `due_payments`): due date, amount due, optional minimum due, status (pending, paid, before tracking), planned pay date and account, paying account, the atomic idempotent posting, the shortfall refusal, the in-app reminders and the Due soon card. Loan EMIs and moratorium interest in 8a; card bills in 8b add only the card-specific parts (see Sprint 8b). | 8a must not block 8b. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -232,6 +252,8 @@ Pending tests:
 - **Fuller instrument names:** BSE names are short and upper-case in the file; use a fuller official name where a free source allows it.
 - **Quarterly list refresh (recurring, Jan / Apr / Jul / Oct):** refresh the Goals suggestion lists (mainly vehicle makes and models; states, countries and cities only on a real change) following `docs/quarterly-list-refresh.md`: official India manufacturer sites, models on sale in India only, no prices, a diff table with a source URL per change, `LISTS_REVIEWED_ON` updated, one draft PR. Next: January 2027.
 
+- **Notifications step (email, web push, phone push):** EMI and card-bill reminders outside the app (Sprint 8a has in-app reminders only). Needs custom SMTP or a Resend domain, Expo push tokens and web push; reuse the `pg_cron` + Edge Function pattern from `refresh-prices`; never send amounts or account names on a lock screen by default.
+- **Ongoing loans with capitalised interest:** Sprint 8a caps an ongoing loan's outstanding at the amount taken; an education loan already in repayment whose moratorium interest was added may owe more. Add an optional "interest added to the loan" field if testers need it.
 - **Financial year setting:** optional April–March financial year for "this year" figures (Sprint 2 uses the calendar year).
 - **Repeated sign-up email:** see Sprint 10.
 - **Mobile category management:** add, rename, archive and restore expense categories in the mobile app (web has it on Settings since Sprint 3; owner, 2026-10-23).
@@ -609,15 +631,64 @@ portfolio composition and performance estimates.
 **Weeks 15–16 \| Usable outcome:** A user can see broader financial
 position and export records.
 
-### Scope and deliverables
+Split into three releases (owner, 2026-10-27), each its own PR and prod
+push: 8a loans, 8b credit cards and net worth, 8c cash-flow history and
+CSV export. Rules for 8a are in the Decisions log above.
 
-- Track loans, credit-card liabilities, repayments, and EMI schedules.
+### Sprint 8a — Loans and EMIs
 
-- Separate principal, interest, and fees where supported.
+- Add a loan (type, lender, amounts, rate, tenure, Ongoing or Starts
+  later with a moratorium), with a calculated EMI the person can
+  overwrite, and its schedule.
 
-- Add net worth and cash-flow history.
+- Pay each EMI from an account or cash, or plan it ("Will pay later");
+  principal is a transfer to the loan's liability account, interest and
+  fees are expenses; refused with "You need X more in <account>" when the
+  balance is too low.
 
-- Provide CSV exports; PDF export is optional if time permits.
+- In-app reminders: the bell and the Overview "Due soon" card.
+
+- Credit card EMIs are loans of type "Credit card EMI".
+
+### Sprint 8b — Credit cards and net worth
+
+Built on 8a's due items (`due_items`, `due_payments`): due date, amount
+due, minimum due, status, planned pay date and account, the posting,
+the shortfall refusal, reminders and Due soon need no new mechanism.
+8b adds only the card-specific parts:
+
+- Add a card: issuer (the `LENDERS` list), optional nickname, never any
+  card digits, credit limit, statement day, due day, and the opening
+  amount owed (not posted to any account). A card is a liability
+  account (a new account kind, like a loan's).
+
+- Card purchases are expenses from the card account and raise the
+  amount owed. Paying the bill is a transfer to the card's liability
+  account, never an expense.
+
+- Enter a statement (total due, minimum due, due date) as a due item of
+  kind `card_bill`. Pay in full, the minimum or a custom amount; the
+  unpaid rest stays owed.
+
+- If the statement total is higher than what is logged as owed, offer to
+  record the difference as an expense (the person picks the category)
+  before paying.
+
+- Card EMIs are tracked as loans (8a), so bill payments exclude amounts
+  already tracked as card EMIs, to avoid deducting them twice.
+
+- Utilisation warnings at 80% and 100% of the limit.
+
+- Net worth: included assets minus included liabilities (loan and card
+  accounts), with valuation dates; decide whether investments and fixed
+  deposits count. Liabilities must include capitalised moratorium
+  interest not yet posted (it is posted with the first EMI paid).
+
+### Sprint 8c — Cash-flow history and CSV export
+
+- Cash-flow history over months; browse past months of income.
+
+- CSV export with date filters; PDF only if time permits.
 
 ### Acceptance criteria
 

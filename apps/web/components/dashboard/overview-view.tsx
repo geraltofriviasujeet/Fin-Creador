@@ -10,6 +10,7 @@ import {
   DEFAULT_CHARTS,
   type LedgerItem,
   type Lookup,
+  ledgerLookup,
   type TransactionTotals,
   type TransactionsContext,
   dashboardQuery,
@@ -84,10 +85,7 @@ function longDate(date: string): string {
 
 export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, goals, investments }: OverviewViewProps) {
   const { today, currency, timeZone } = context
-  const lookup: Lookup = {
-    accounts: new Map(context.accounts.map((a) => [a.id, a])),
-    categories: new Map(context.categories.map((c) => [c.id, c])),
-  }
+  const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
   const otherAccounts = holdings.rows.filter((r) => !r.inTotal).length
   const savingsRate = savingsRateBasisPoints(totals)

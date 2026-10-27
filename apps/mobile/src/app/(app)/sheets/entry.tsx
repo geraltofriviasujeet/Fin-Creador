@@ -1,6 +1,7 @@
 import {
   type LedgerItem,
   type Lookup,
+  ledgerLookup,
   TYPE_NOUN,
   accountChipText,
   entryKindLabel,
@@ -51,10 +52,7 @@ export default function EntrySheet() {
     <Sheet eyebrow="Transaction" title={entry.status === "ready" ? `${capitalise(TYPE_NOUN[entry.value.type])}` : "Transaction"}>
       <TransactionsGate>
         {(data) => {
-          const lookup: Lookup = {
-            accounts: new Map(data.accounts.map((a) => [a.id, a])),
-            categories: new Map(data.categories.map((c) => [c.id, c])),
-          };
+          const lookup: Lookup = ledgerLookup(data);
           if (entry.status === "loading") return <ActivityIndicator color={colors.ink} />;
           if (entry.status === "error") {
             return (

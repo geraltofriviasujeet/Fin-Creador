@@ -17,6 +17,9 @@ export type LedgerAccount = {
   archived: boolean
 }
 
+/** Just enough to name an account in a list (loan accounts on loan-payment entries). */
+export type AccountLabel = { id: string; label: string; archived: boolean }
+
 /** An expense category or an income source. `icon` is the expense icon or the source type. */
 export type LedgerCategory = {
   id: string
@@ -45,7 +48,10 @@ export type TransactionsContext = {
   today: IsoDate
   currency: string
   timeZone: string
+  /** Money accounts (bank, cash, other): pickers, balances, Total available. */
   accounts: LedgerAccount[]
+  /** Loan (liability) accounts, only to label the entries of loan payments. */
+  loanAccounts: AccountLabel[]
   categories: LedgerCategory[]
   /** For fast entry: a new expense starts from the account of the latest expense. */
   lastExpenseAccountId: string | null
