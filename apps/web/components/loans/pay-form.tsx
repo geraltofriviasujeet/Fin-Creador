@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { type DueItem, type PaymentRecord, type WriteResult, newRequestKey } from "@fin-creador/api"
-import { addMinor, minorToInputString, parseAmount, shortfallMinor } from "@fin-creador/domain"
+import { addMinor, minorToGroupedInputString, parseAmount, regroupAmountInput, shortfallMinor } from "@fin-creador/domain"
 import { type PayingAccount, shortfallMessage } from "@fin-creador/schemas"
 import { clearDuePlanAction, editDuePaymentAction, payDueItemAction, planDueItemAction } from "@/app/(app)/loans-liabilities/actions"
 import { currencySymbol } from "@/components/income/format"
@@ -62,9 +62,9 @@ export function PayForm({
     accountId: payment?.accountId ?? item.plannedAccountId ?? eligible[0]?.id ?? "",
     paidOn: payment?.paidOn ?? today,
     plannedOn: item.plannedOn ?? today,
-    principal: split ? minorToInputString(split.principalMinor, currency) : "",
-    interest: split ? minorToInputString(split.interestMinor, currency) : "",
-    fees: split && split.feesMinor > 0 ? minorToInputString(split.feesMinor, currency) : "",
+    principal: split ? minorToGroupedInputString(split.principalMinor, currency) : "",
+    interest: split ? minorToGroupedInputString(split.interestMinor, currency) : "",
+    fees: split && split.feesMinor > 0 ? minorToGroupedInputString(split.feesMinor, currency) : "",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -75,6 +75,8 @@ export function PayForm({
     setValues((v) => ({ ...v, [name]: e.target.value }))
   }
   const sym = currencySymbol(currency)
+  // Typed amounts are shown with digit grouping once the field is left (the value parsed is the same).
+  const regroup = (name: "principal" | "interest" | "fees") => () => setValues((v) => ({ ...v, [name]: regroupAmountInput(v[name], currency) }))
 
   // Live total and warning (the server checks again).
   const parts = [values.principal, values.interest, values.fees].map((v) => parseAmount(v || "0", currency, { allowZero: true }))
@@ -177,9 +179,9 @@ export function PayForm({
         <>
           {field("paidOn", "Paid on", { type: "date", max: today, hint: inWords(values.paidOn) })}
           <div className="grid items-start gap-3 grid-cols-3">
-            {field("principal", `Principal (${sym})`, { inputMode: "decimal" })}
-            {field("interest", `Interest (${sym})`, { inputMode: "decimal" })}
-            {field("fees", `Fees (${sym})`, { inputMode: "decimal", placeholder: "0" })}
+            {field("principal", `Principal (${sym})`, { inputMode: "decimal", onBlur: regroup("principal") })}
+            {field("interest", `Interest (${sym})`, { inputMode: "decimal", onBlur: regroup("interest") })}
+            {field("fees", `Fees (${sym})`, { inputMode: "decimal", placeholder: "0", onBlur: regroup("fees") })}
           </div>
           <p className="text-xs text-muted-foreground">Principal moves to the loan; interest and fees are expenses. Change the split to match your statement.</p>
         </>

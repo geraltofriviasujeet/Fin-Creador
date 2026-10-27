@@ -50,11 +50,13 @@ async function addPersonalLoan(page: Page, { emi, shots = false }: { emi?: strin
   await d.getByRole("radio", { name: "Still due" }).check()
   await d.getByLabel("This month's EMI date").fill(firstOfMonth())
   // The estimate fills the EMI field until the person types their bank's EMI.
-  await expect(d.getByLabel("EMI (₹)")).toHaveValue("26654.64")
+  await expect(d.getByLabel("EMI (₹)")).toHaveValue("26,654.64")
   await expect(d).toContainText("Interest ₹19,855.63")
   if (emi) {
     await d.getByLabel("EMI (₹)").fill(emi)
     await expect(d).toContainText("Our estimate is ₹26,654.64")
+    await d.getByLabel("Tenure (months)").focus() // leaving the field groups the digits
+    await expect(d.getByLabel("EMI (₹)")).toHaveValue("27,000")
   }
   if (shots) await shot(page, "loans-add-details")
   // Twice, quickly: the request key adds the loan once.
@@ -133,8 +135,8 @@ test("add a loan (estimate, double submit once), pay an EMI, edit and void the p
   await expect(from.locator("option")).toHaveText(["HDFC Bank · ₹10,000", "Cash in hand · ₹1,00,000"])
   await expect(pay).not.toContainText("4821")
   await from.selectOption({ label: "Cash in hand · ₹1,00,000" })
-  await expect(pay.getByLabel("Principal (₹)")).toHaveValue("23654.64")
-  await expect(pay.getByLabel("Interest (₹)")).toHaveValue("3000")
+  await expect(pay.getByLabel("Principal (₹)")).toHaveValue("23,654.64")
+  await expect(pay.getByLabel("Interest (₹)")).toHaveValue("3,000")
   await expect(pay).toContainText("Total ₹26,654.64")
   await shot(page, "loans-pay")
   await pay.getByRole("button", { name: "Mark as paid" }).click()
@@ -156,7 +158,7 @@ test("add a loan (estimate, double submit once), pay an EMI, edit and void the p
   await shot(page, "loans-detail")
   await schedule.getByRole("button", { name: "Edit payment for EMI 1" }).click()
   const edit = dialog(page, "Edit payment for EMI 1")
-  await expect(edit.getByLabel("Principal (₹)")).toHaveValue("23654.64")
+  await expect(edit.getByLabel("Principal (₹)")).toHaveValue("23,654.64")
   await edit.getByLabel("Fees (₹)").fill("100")
   await expect(edit).toContainText("Total ₹26,754.64")
   await edit.getByRole("button", { name: "Save payment" }).click()
@@ -231,7 +233,7 @@ test("starts later with a moratorium, then archive, restore and delete", async (
   await d.getByRole("radio", { name: "Added to the loan when EMIs start" }).check()
   // Simple interest for 6 months: 5,00,000 × 10% × 6 / 12.
   await expect(d).toContainText("Interest added when EMIs start (estimate ₹25,000)")
-  await expect(d.getByLabel("EMI (₹)")).toHaveValue("11154.70")
+  await expect(d.getByLabel("EMI (₹)")).toHaveValue("11,154.70")
   // No card or account numbers in names.
   await d.getByLabel("Nickname (optional)").fill("Card 1234")
   await d.getByRole("button", { name: "Add loan" }).click()

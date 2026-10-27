@@ -175,6 +175,35 @@ activity; a paused project runs no `pg_cron` jobs, so prices stop updating (hold
 "Old price" and later "Stale, over 30 days"). After restoring the project, check
 `cron.job_run_details` and make one manual run (step 5).
 
+## 4c. Loans migration on production (Sprint 8a)
+
+The migration `20261028120000_loans.sql` is on `main` (PR #34) and on dev. The web page that
+uses it (PR #35) reads the new tables, and Vercel deploys `main` on every merge, so **push prod
+before PR #35 is merged**. Until then nothing on prod needs the migration. The owner runs every
+step:
+
+1. **Backup first:** `./scripts/backup-prod.sh` (section 4); check that it prints the path, size
+   and number of tables.
+2. **Clean `main`:** `git checkout main && git pull && git status` (nothing to commit).
+3. **Link prod:** `supabase link --project-ref <prod-project-ref>`.
+4. **Dry run:** `supabase db push --dry-run` must list **only** `20261028120000_loans.sql`. If it
+   lists anything else, stop.
+5. **Push:** `supabase db push`, then `supabase migration list --linked`: `20261028120000`
+   appears in both the Local and Remote columns.
+6. **Check** in the prod SQL editor (expect four rows, all `true`):
+   ```sql
+   select to_regclass('public.loans') is not null as loans,
+          to_regclass('public.due_items') is not null as due_items,
+          to_regclass('public.due_payments') is not null as due_payments,
+          exists (select 1 from pg_proc where proname = 'pay_due_item') as pay_due_item;
+   ```
+7. **Relink dev:** `supabase link --project-ref <dev-project-ref>`.
+8. Merge PR #35 (owner); after Vercel deploys it, open Loans & Liabilities on the live site,
+   add a test loan, pay one EMI from cash, void it, archive and delete the loan.
+
+If the push fails, the migration is rolled back (it runs in one transaction) and prod is
+unchanged; restore from the backup only if prod data is damaged.
+
 ## 5. Upgrade before any commercial launch
 
 Do all of these before payments, paying customers or a public launch, and only once the

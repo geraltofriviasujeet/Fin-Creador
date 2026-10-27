@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addMinor, currencyMinorDigits, MAX_AMOUNT_MINOR, minorToInputString, parseAmount } from "./money";
+import { addMinor, currencyMinorDigits, MAX_AMOUNT_MINOR, minorToGroupedInputString, minorToInputString, parseAmount, regroupAmountInput } from "./money";
 
 describe("parseAmount (no floating point)", () => {
   it.each([
@@ -56,3 +56,22 @@ describe("money helpers", () => {
     expect(minorToInputString(-250_000, "INR")).toBe("-2500");
   });
 });
+
+describe("grouped amount inputs", () => {
+  it("groups Indian style, keeps the stored value exact", () => {
+    expect(minorToGroupedInputString(2_665_464, "INR")).toBe("26,654.64")
+    expect(minorToGroupedInputString(30_000_000, "INR")).toBe("3,00,000")
+    expect(minorToGroupedInputString(1_234_567_890_12, "INR")).toBe("1,23,45,67,890.12")
+    expect(minorToGroupedInputString(99_900, "INR")).toBe("999")
+    expect(minorToGroupedInputString(1_115_470, "INR")).toBe("11,154.70")
+    expect(minorToGroupedInputString(123_456_789, "USD", "en-US")).toBe("1,234,567.89")
+    expect(minorToGroupedInputString(-150_000, "INR")).toBe("-1,500")
+    expect(parseAmount(minorToGroupedInputString(2_665_464, "INR"), "INR")).toEqual({ ok: true, minor: 2_665_464 })
+  })
+  it("re-groups a valid typed amount and leaves anything else alone", () => {
+    expect(regroupAmountInput("300000", "INR")).toBe("3,00,000")
+    expect(regroupAmountInput("26654.6", "INR")).toBe("26,654.60")
+    expect(regroupAmountInput("abc", "INR")).toBe("abc")
+    expect(regroupAmountInput("", "INR")).toBe("")
+  })
+})

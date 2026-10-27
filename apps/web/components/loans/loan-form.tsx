@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { type LoanItem, type LoanWriteResult, newRequestKey } from "@fin-creador/api"
-import { type LoanType, loanSchedule, minorToInputString, scheduleTotals } from "@fin-creador/domain"
+import { type LoanType, loanSchedule, minorToGroupedInputString, regroupAmountInput, scheduleTotals } from "@fin-creador/domain"
 import { LENDERS, LOAN_RATE_KIND_OPTIONS, LOAN_TYPE_OPTIONS, MORATORIUM_INTEREST_OPTIONS, loanFormSchema } from "@fin-creador/schemas"
 import { addLoanAction, editLoanAction } from "@/app/(app)/loans-liabilities/actions"
 import { currencySymbol } from "@/components/income/format"
@@ -250,12 +250,13 @@ export function AddLoanForm({ today, currency, onDone }: { today: string; curren
               inputMode="decimal"
               autoComplete="off"
               placeholder="Fill in the details to estimate"
-              value={emiTouched ? values.emi : estimate ? minorToInputString(estimate.emiMinor, currency) : ""}
+              value={emiTouched ? values.emi : estimate ? minorToGroupedInputString(estimate.emiMinor, currency) : ""}
               error={errors.emi}
               onChange={(e) => {
                 setEmiTouched(true)
                 put("emi", e.target.value)
               }}
+              onBlur={() => emiTouched && put("emi", regroupAmountInput(values.emi, currency))}
               hint={
                 estimate
                   ? emiTouched
@@ -320,10 +321,10 @@ export function EditLoanForm({ item, onDone }: { item: LoanItem; onDone: () => v
     typeOther: l.typeOther ?? "",
     lender: l.lender,
     nickname: l.nickname ?? "",
-    sanctioned: minorToInputString(l.sanctionedMinor, l.currency),
+    sanctioned: minorToGroupedInputString(l.sanctionedMinor, l.currency),
     rate: bpsToInput(l.rateBps),
     rateKind: l.rateKind as string,
-    emi: minorToInputString(l.emiMinor, l.currency),
+    emi: minorToGroupedInputString(l.emiMinor, l.currency),
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -369,7 +370,7 @@ export function EditLoanForm({ item, onDone }: { item: LoanItem; onDone: () => v
         {field("rate", "Interest rate (% a year)", { inputMode: "decimal" })}
         <Choice name="rateKind" legend="Rate" value={values.rateKind} options={LOAN_RATE_KIND_OPTIONS} error={errors.rateKind} onChange={(v) => setValues((s) => ({ ...s, rateKind: v }))} />
       </div>
-      {field("emi", `EMI (${sym})`, { inputMode: "decimal", hint: `Applies to EMIs not yet paid. Our estimate was ${money(l.emiEstimateMinor, l.currency)}.` })}
+      {field("emi", `EMI (${sym})`, { inputMode: "decimal", onBlur: () => setValues((v) => ({ ...v, emi: regroupAmountInput(v.emi, l.currency) })), hint: `Applies to EMIs not yet paid. Our estimate was ${money(l.emiEstimateMinor, l.currency)}.` })}
       <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3">
         <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>

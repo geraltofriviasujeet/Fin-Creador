@@ -1,13 +1,16 @@
-# Next session: Sprint 8 (Loans, liabilities and reports)
+# Next session: Sprint 8b (credit cards, informal borrowing and net worth)
 
-**State (2026-10-27).** Sprints 1–7 are on `main` and deployed (Vercel Hobby, Supabase Free). Sprint 7 (Investments, web only: shares, mutual funds and ETFs at the previous close from BSE and AMFI, fixed deposits, per-kind tabs, Overview card, daily `refresh-prices` job) merged with PR #32; prod migrations, the prod function and its first run are done and the live site is checked. Mobile Overview, Goals and Investments are in the backlog.
+**State (2026-10-27).** Sprints 1–7 are on `main` and deployed (Vercel Hobby, Supabase Free). Sprint 8a (loans and EMIs, web) is done: backend in PR #34 (merged), web page "Loans & Liabilities" (`/loans-liabilities`: Due soon, three boxes, bell, Overview Due soon card) in PR #35 (draft, CI green). Mobile Overview, Goals, Investments and Loans are in the backlog.
+
+**Prod rollout of 8a (owner, before merging PR #35).** The loans migration is on dev only. Follow `docs/deployment.md` section 4c: backup, clean `main`, dry run lists only `20261028120000_loans.sql`, push, check, relink dev, then merge PR #35 and check the live page.
 
 **Migrations.** All in `supabase/migrations/`.
 On **dev and prod**: `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals · `20261027120000` instruments and investments · `20261027180000` price refresh run log and `pg_cron` job · `20261027200000` fixed deposits.
+On **dev only** (prod pending, section 4c): `20261028120000` loans, due items and payments.
 
-Check `supabase migration list --linked` against each project before any database work. Status, steps and decisions: `docs/sprint-plan.md`; deploy steps: `docs/deployment.md` (4a dev refresh, 4b prod refresh).
+Check `supabase migration list --linked` against each project before any database work. Status, steps and decisions: `docs/sprint-plan.md`; deploy steps: `docs/deployment.md` (4a dev refresh, 4b prod refresh, 4c loans on prod).
 
-**First check (owner).** After 07:00 IST on 28 Oct 2026, check `price_refresh_runs` on dev and on prod (the last-7-days query in `docs/deployment.md` 4a): the first scheduled run should add one `amfi` and one `bse` row on each project, both with `finished_at`. A missing row means the run died (function logs and `cron.job_run_details`).
+**First check (owner).** After 07:00 IST on 28 Oct 2026, check `price_refresh_runs` on dev and on prod (the last-7-days query in `docs/deployment.md` 4a): one `amfi` and one `bse` row on each project, both with `finished_at`.
 
 **Every new migration goes to dev AND prod.** Dev first, after the owner's SQL review and green CI. Prod only from a clean `main` checkout after the PR is merged, and only after a manual backup of prod (`docs/deployment.md` section 4). Push prod before deploying code that needs the migration; link back to dev afterwards. Never edit an applied migration or reset a database.
 
@@ -28,12 +31,13 @@ Check `supabase migration list --linked` against each project before any databas
 - Reports: at most 15 lines. No recaps of unchanged work.
 - Mobile goes in a separate PR after web.
 
-**Sprint 8 notes.** Scope in the Sprint 8 section of the plan: loans, credit-card liabilities, repayments and EMI schedules (principal, interest and fees kept apart where supported); net worth and cash-flow history; CSV export (PDF optional). Acceptance: net worth = included assets − included liabilities; repayments don't double-count principal as ordinary expenses; exports respect permissions and date filters and never leak another user's data. Decide early whether investments and fixed deposits count in net worth (they are "Not included in Total available" today) and at which valuation date. Reuse the EMI maths in `packages/domain/src/goals.ts` and the goals pattern (archive, restore, delete when archived). Credit cards were deferred from Sprint 3 to here. Recurring: the quarterly list refresh (`docs/quarterly-list-refresh.md`, now including `FD_BANKS`), next in January 2027.
+**Sprint 8b notes.** Scope in "Sprint 8b" of the plan; it fills the "Short-term & operational liabilities" box on Loans & Liabilities (no new tab). Credit cards: issuer from `LENDERS`, optional nickname, never any card digits, limit, statement and due day; purchases are expenses from the card's liability account; bills are `card_bill` due items paid as transfers (full, minimum or custom); card EMIs stay loans (8a) and are not counted twice. Informal borrowing (friends, family, third parties): a liability account named after the lender, optional due date (a due item), part payments as transfers, interest as an expense. Net worth counts all three boxes (long-term, short-term & operational, statutory & legal once 8d exists), including capitalised moratorium interest not yet posted; decide whether investments and fixed deposits count. Reuse 8a: `due_items` / `due_payments`, the shortfall warning with "Pay anyway", Due soon and the bell, `packages/api/src/loans/view.ts` patterns. 8c is cash-flow history and CSV export; 8d statutory dues (income tax payable, fines, unpaid e-challans: payment is an expense, not a transfer). Recurring: the quarterly list refresh (`docs/quarterly-list-refresh.md`, including `FD_BANKS` and `LENDERS`), next in January 2027.
 
 **Start prompt (paste into a fresh session):**
 
 ```text
-Start Sprint 8 (Loans, liabilities and reports). Read CLAUDE.md, docs/sprint-plan.md and docs/next-session.md first.
+Start Sprint 8b (credit cards, informal borrowing and net worth). Read CLAUDE.md, docs/sprint-plan.md and docs/next-session.md first.
+Check that the 8a prod rollout (docs/deployment.md 4c) is done and PR #35 is merged; if not, stop and tell me.
 Then give me a plan of at most 25 lines: scope from the sprint plan, what already exists, the first step, and only the questions that block the work, each with your recommendation.
 Wait for my one reply. After it, work through everything that stays green without pausing.
 Stop only at: the SQL review (show migration SQL before any test or push), the db push (I run it, dev then prod from main), a rule the sprint plan doesn't cover, CI still red after two fix attempts, or before a PR is made ready.
