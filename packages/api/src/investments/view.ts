@@ -1,8 +1,13 @@
 import {
+  type FdCompounding,
+  type FdFigures,
   type HoldingFigures,
   type IsoDate,
   type PortfolioTotals,
   type PriceAge,
+  addPortfolioTotals,
+  fdFigures,
+  fdPortfolioTotals,
   groupHoldings,
   holdingFigures,
   identifierChanged,
@@ -39,9 +44,25 @@ export type HoldingRow = {
   createdAt: string
 }
 
+export type DepositRow = {
+  id: string
+  bank: string
+  label: string | null
+  principalMinor: number
+  rateBps: number
+  compounding: FdCompounding
+  startDate: IsoDate
+  maturityDate: IsoDate
+  archivedAt: string | null
+  createdAt: string
+}
+
+export type DepositItem = DepositRow & { figures: FdFigures }
+
 export type InvestmentsData = {
   today: IsoDate
   holdings: HoldingRow[]
+  deposits: DepositRow[]
   /** The instruments the holdings refer to, by id. */
   instruments: ReadonlyMap<string, Instrument>
 }
@@ -64,7 +85,7 @@ export type HoldingGroup = {
   identifierChanged: boolean
 }
 
-/** The tabs and the by-category lines. Fixed deposits come in a later step (no rows yet). */
+/** The tabs and the by-category lines. */
 export const INVESTMENT_CATEGORIES = ["shares", "funds", "etfs", "fds"] as const
 export type InvestmentCategory = (typeof INVESTMENT_CATEGORIES)[number]
 
@@ -72,7 +93,7 @@ export const CATEGORY_OF_KIND: Record<InstrumentKind, InvestmentCategory> = { sh
 
 export type CategoryTotals = {
   category: InvestmentCategory
-  /** Instruments held (groups) in this category. */
+  /** Instruments held (groups), or deposits, in this category. */
   count: number
   totals: PortfolioTotals
 }
@@ -81,10 +102,13 @@ export type InvestmentsView = {
   today: IsoDate
   groups: HoldingGroup[]
   archived: HoldingItem[]
+  /** Active fixed deposits, soonest maturity first. */
+  deposits: DepositItem[]
+  archivedDeposits: DepositItem[]
   totals: PortfolioTotals
-  /** Shares, mutual funds, ETFs and fixed deposits, always in that order. */
+  /** Holdings and deposits together. Shares, mutual funds, ETFs and fixed deposits below, always in that order. */
   categories: CategoryTotals[]
-  /** The newest price date among the active holdings; null when there are none. */
+  /** The newest price date among the active holdings; null when there are none (deposits have no price). */
   pricesAsOf: IsoDate | null
 }
 
@@ -124,7 +148,15 @@ export function buildInvestmentsView(data: InvestmentsData): InvestmentsView {
   })
   groups.sort((a, b) => a.instrument.name.localeCompare(b.instrument.name))
 
+  // Deposits: valued today (capped at maturity) with the domain's exact maths.
+  const depositItems = data.deposits
+    .map((d) => ({ ...d, figures: fdFigures(d, today) }))
+    .sort((a, b) => (a.maturityDate === b.maturityDate ? a.createdAt.localeCompare(b.createdAt) : a.maturityDate < b.maturityDate ? -1 : 1))
+  const deposits = depositItems.filter((d) => !d.archivedAt)
+  const depositTotals = fdPortfolioTotals(deposits)
+
   const categories = INVESTMENT_CATEGORIES.map((category) => {
+    if (category === "fds") return { category, count: deposits.length, totals: depositTotals }
     const inCategory = groups.filter((g) => CATEGORY_OF_KIND[g.instrument.kind] === category)
     return { category, count: inCategory.length, totals: portfolioTotals(inCategory.flatMap((g) => g.records), priceOf) }
   })
@@ -133,7 +165,9 @@ export function buildInvestmentsView(data: InvestmentsData): InvestmentsView {
     today,
     groups,
     archived,
-    totals: portfolioTotals(active, priceOf),
+    deposits,
+    archivedDeposits: depositItems.filter((d) => d.archivedAt),
+    totals: addPortfolioTotals(portfolioTotals(active, priceOf), depositTotals),
     categories,
     pricesAsOf: dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : null,
   }

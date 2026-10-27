@@ -1,5 +1,6 @@
 import { type UserClient, userToday } from "../income/client"
 import type { Database } from "../database.types"
+import type { FdCompounding } from "@fin-creador/domain"
 import type { Instrument, InstrumentKind, InvestmentsData } from "./view"
 
 // Loads what the Investments page and the Overview card need, as the signed-in user (RLS:
@@ -31,10 +32,15 @@ export function toInstrument(row: InstrumentRow): Instrument {
 export async function loadInvestmentsData(supabase: UserClient): Promise<InvestmentsDataLoad> {
   const day = await userToday(supabase)
   if (!day.ok) return day
-  const { data, error } = await supabase
-    .from("investments")
-    .select(`id, instrument_id, units_scaled, buy_price_scaled, buy_date, isin_at_entry, archived_at, created_at, instruments (${INSTRUMENT_COLUMNS})`)
-  if (error || !data) return { ok: false, reason: "unavailable" }
+  const [{ data, error }, deposits] = await Promise.all([
+    supabase
+      .from("investments")
+      .select(`id, instrument_id, units_scaled, buy_price_scaled, buy_date, isin_at_entry, archived_at, created_at, instruments (${INSTRUMENT_COLUMNS})`),
+    supabase
+      .from("fixed_deposits")
+      .select("id, bank, label, principal_minor, rate_bps, compounding, start_date, maturity_date, archived_at, created_at"),
+  ])
+  if (error || !data || deposits.error || !deposits.data) return { ok: false, reason: "unavailable" }
   const instruments = new Map<string, Instrument>()
   for (const row of data) if (row.instruments) instruments.set(row.instrument_id, toInstrument(row.instruments))
   return {
@@ -42,6 +48,18 @@ export async function loadInvestmentsData(supabase: UserClient): Promise<Investm
     data: {
       today: day.today,
       instruments,
+      deposits: deposits.data.map((d) => ({
+        id: d.id,
+        bank: d.bank,
+        label: d.label,
+        principalMinor: d.principal_minor,
+        rateBps: d.rate_bps,
+        compounding: d.compounding as FdCompounding,
+        startDate: d.start_date,
+        maturityDate: d.maturity_date,
+        archivedAt: d.archived_at,
+        createdAt: d.created_at,
+      })),
       holdings: data.map((h) => ({
         id: h.id,
         instrumentId: h.instrument_id,

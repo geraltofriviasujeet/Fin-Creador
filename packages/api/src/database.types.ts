@@ -163,6 +163,54 @@ export type Database = {
           },
         ]
       }
+      fixed_deposits: {
+        Row: {
+          archived_at: string | null
+          bank: string
+          compounding: string
+          created_at: string
+          id: string
+          idempotency_key: string
+          label: string | null
+          maturity_date: string
+          principal_minor: number
+          rate_bps: number
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          bank: string
+          compounding?: string
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          label?: string | null
+          maturity_date: string
+          principal_minor: number
+          rate_bps: number
+          start_date: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          bank?: string
+          compounding?: string
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          label?: string | null
+          maturity_date?: string
+          principal_minor?: number
+          rate_bps?: number
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       goals: {
         Row: {
           archived_at: string | null

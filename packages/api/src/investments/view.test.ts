@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { type HoldingRow, type Instrument, buildInvestmentsView } from "./view"
+import { type DepositRow, type HoldingRow, type Instrument, buildInvestmentsView } from "./view"
 
 // Expected figures are worked out by hand from the scaled values (4 decimals) and checked
 // against the domain's own tests (packages/domain/src/investments.test.ts).
@@ -32,8 +32,22 @@ const row = (instrumentId: string, unitsScaled: number, buyPriceScaled: number, 
   ...over,
 })
 
-const view = (holdings: HoldingRow[], list: Instrument[]) =>
-  buildInvestmentsView({ today: TODAY, holdings, instruments: new Map(list.map((i) => [i.id, i])) })
+const view = (holdings: HoldingRow[], list: Instrument[], deposits: DepositRow[] = []) =>
+  buildInvestmentsView({ today: TODAY, holdings, deposits, instruments: new Map(list.map((i) => [i.id, i])) })
+
+const deposit = (over: Partial<DepositRow>): DepositRow => ({
+  id: `d${++n}`,
+  bank: "State Bank of India",
+  label: null,
+  principalMinor: 10_000_000,
+  rateBps: 725,
+  compounding: "quarterly",
+  startDate: "2025-01-15",
+  maturityDate: "2026-01-15",
+  archivedAt: null,
+  createdAt: "2026-10-01T00:00:00Z",
+  ...over,
+})
 
 describe("buildInvestmentsView", () => {
   it("groups records per instrument with total units, average buy price and profit", () => {
@@ -109,6 +123,28 @@ describe("buildInvestmentsView", () => {
     expect(v.groups[0]!.records).toHaveLength(1)
     expect(v.archived).toHaveLength(1)
     expect(v.totals.pricedCount + v.totals.unpricedCount).toBe(1)
+  })
+
+  it("values deposits today and adds them as the fixed deposits category", () => {
+    const v = view(
+      [row("Alpha", 100_000, 8_000_000)], // 10 × ₹800 → ₹1,000
+      [instrument("Alpha")],
+      [
+        deposit({ maturityDate: "2027-01-15", startDate: "2026-01-15" }), // 285 days in: 3 quarters + 12 days
+        deposit({}), // matured on 15 Jan 2026: ₹1,07,449.50
+        deposit({ archivedAt: "2026-10-20T00:00:00Z" }),
+      ],
+    )
+    expect(v.deposits.map((d) => d.maturityDate)).toEqual(["2026-01-15", "2027-01-15"]) // soonest first
+    expect(v.deposits[0]!.figures).toMatchObject({ accruedValueMinor: 10_744_950, matured: true, daysLeft: 0 })
+    expect(v.deposits[1]!.figures).toMatchObject({ matured: false, daysLeft: 80 })
+    expect(v.archivedDeposits).toHaveLength(1)
+    const fds = v.categories.find((c) => c.category === "fds")!
+    expect(fds.count).toBe(2)
+    expect(fds.totals.investedMinor).toBe(20_000_000)
+    expect(fds.totals.valueMinor).toBe(10_744_950 + v.deposits[1]!.figures.accruedValueMinor)
+    expect(v.totals.investedMinor).toBe(800_000 + 20_000_000)
+    expect(v.totals.valueMinor).toBe(1_000_000 + fds.totals.valueMinor)
   })
 
   it("is empty without records", () => {

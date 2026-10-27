@@ -235,7 +235,7 @@ test("gain, loss, old price and a holding without a current price; summary and O
   await page.goto("/investments?tab=etfs")
   await expect(page.getByText("No ETFs yet")).toBeVisible()
   await page.goto("/investments?tab=fds")
-  await expect(page.getByText("Tracking fixed deposits is coming in a later update.")).toBeVisible()
+  await expect(page.getByText("No fixed deposits yet")).toBeVisible()
   await page.goto("/investments?tab=nonsense") // anything else is All
   await expect(tabs.getByRole("link", { name: "All" })).toHaveAttribute("aria-current", "page")
 

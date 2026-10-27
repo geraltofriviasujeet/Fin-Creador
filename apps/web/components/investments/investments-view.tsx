@@ -1,12 +1,14 @@
 "use client"
 
+import type * as React from "react"
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { ChevronDown, Plus } from "lucide-react"
-import { type HoldingGroup, type HoldingItem, type InvestmentsView, type WriteResult, CATEGORY_OF_KIND } from "@fin-creador/api"
-import { type PortfolioTotals, formatPriceScaled, formatUnits } from "@fin-creador/domain"
+import { type DepositItem, type HoldingGroup, type HoldingItem, type InvestmentsView, type WriteResult, CATEGORY_OF_KIND } from "@fin-creador/api"
+import { type PortfolioTotals, formatPercentFromBasisPoints, formatPriceScaled, formatUnits } from "@fin-creador/domain"
+import { FD_COMPOUNDING_OPTIONS } from "@fin-creador/schemas"
 import { cn } from "cn"
-import { deleteHoldingAction, setHoldingArchivedAction } from "@/app/(app)/investments/actions"
+import { deleteFixedDepositAction, deleteHoldingAction, setFixedDepositArchivedAction, setHoldingArchivedAction } from "@/app/(app)/investments/actions"
 import { PageHeader } from "@/components/shell/app-shell"
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
@@ -28,9 +30,25 @@ import {
   priceLabel,
   pricesAsOfText,
 } from "./display"
+import { DepositForm } from "./deposit-form"
 import { HoldingForm } from "./holding-form"
 
-type Open = { kind: "add" } | { kind: "edit" | "archive" | "delete"; item: HoldingItem } | null
+type Open =
+  | { kind: "add" }
+  | { kind: "addDeposit" }
+  | { kind: "edit" | "archive" | "delete"; item: HoldingItem }
+  | { kind: "editDeposit" | "archiveDeposit" | "deleteDeposit"; deposit: DepositItem }
+  | null
+
+const COMPOUNDING_LABEL = Object.fromEntries(FD_COMPOUNDING_OPTIONS.map((o) => [o.value, o.label])) as Record<string, string>
+const FD_NOTE = "Fixed deposits are valued as of today, before tax and TDS."
+
+/** "Emergency fund, ₹1,00,000 from 15 Jan 2026": names a deposit in button labels and dialog text. */
+const depositName = (d: DepositItem) => `${d.label ?? d.bank}, ${money(d.principalMinor, "INR")} from ${fullDate(d.startDate)}`
+
+/** Desktop columns: bank, principal, rate, start, maturity, maturity value, accrued today, days left, actions. */
+const DEPOSIT_COLUMNS =
+  "md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(0,1.05fr)_minmax(0,0.85fr)_auto]"
 
 const NETWORK = "We couldn't reach the server. Try again."
 async function run(save: () => Promise<WriteResult>): Promise<WriteResult> {
@@ -63,51 +81,104 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
   const [busy, startBusy] = useTransition()
   const close = () => setOpen(null)
   const add = () => setOpen({ kind: "add" })
+  const addDeposit = () => setOpen({ kind: "addDeposit" })
+  const hasAny = view.groups.length > 0 || view.deposits.length > 0
+  const archivedCount = view.archived.length + view.archivedDeposits.length
   const groups = tab === "all" ? view.groups : view.groups.filter((g) => CATEGORY_OF_KIND[g.instrument.kind] === tab)
   const totals = tab === "all" ? view.totals : view.categories.find((c) => c.category === tab)!.totals
   const labels = tab === "funds" ? NAV_LABELS : PRICE_LABELS
 
-  const restore = (item: HoldingItem) =>
+  const restoreWith = (action: () => Promise<WriteResult>) =>
     startBusy(async () => {
-      const result = await run(() => setHoldingArchivedAction({ holdingId: item.id, archived: false }))
+      const result = await run(action)
       if (result.status === "success") toast.success(result.message)
       else toast.error(result.message)
     })
+  const restore = (item: HoldingItem) => restoreWith(() => setHoldingArchivedAction({ holdingId: item.id, archived: false }))
+  const restoreDeposit = (d: DepositItem) => restoreWith(() => setFixedDepositArchivedAction({ depositId: d.id, archived: false }))
+
+  const addHoldingButton = (
+    <Button size="lg" variant={tab === "fds" ? "secondary" : "primary"} onClick={add}>
+      <Plus aria-hidden="true" />
+      Add holding
+    </Button>
+  )
+  const addDepositButton = (
+    <Button size="lg" variant={tab === "fds" ? "primary" : "secondary"} onClick={addDeposit}>
+      <Plus aria-hidden="true" />
+      Add fixed deposit
+    </Button>
+  )
 
   return (
     <>
       <PageHeader
         {...INVESTMENTS_HEADER}
         actions={
-          <Button size="lg" onClick={add}>
-            <Plus aria-hidden="true" />
-            Add holding
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {tab === "all" ? (
+              <>
+                {addHoldingButton}
+                {addDepositButton}
+              </>
+            ) : tab === "fds" ? (
+              addDepositButton
+            ) : (
+              addHoldingButton
+            )}
+          </div>
         }
       />
 
       <TabBar current={tab} />
 
       {tab === "fds" ? (
-        <Card className="grid justify-items-start gap-2">
-          <p className="font-semibold">Fixed deposits</p>
-          <p className="text-sm text-muted-foreground">Tracking fixed deposits is coming in a later update.</p>
-        </Card>
-      ) : view.groups.length === 0 ? (
+        view.deposits.length === 0 ? (
+          <Card className="grid justify-items-start gap-3">
+            <p className="font-semibold">No fixed deposits yet</p>
+            <p className="text-sm text-muted-foreground">Enter the bank, principal, rate and dates to see the maturity value and what it is worth today.</p>
+            <Button variant="secondary" onClick={addDeposit}>
+              <Plus aria-hidden="true" />
+              Add fixed deposit
+            </Button>
+          </Card>
+        ) : (
+          <>
+            <Summary
+              totals={view.categories.find((c) => c.category === "fds")!.totals}
+              valueLabel="Worth today"
+              profitLabel="Interest so far"
+              note={
+                <>
+                  <span className="font-semibold text-ink">Values as of {fullDate(view.today)}</span> · Interest is added to the deposit (cumulative). Estimates before
+                  tax and TDS; your bank&apos;s figures can differ slightly. {NOT_IN_TOTAL}.
+                </>
+              }
+            />
+            <DepositList deposits={view.deposits} onOpen={(kind, deposit) => setOpen({ kind, deposit })} />
+          </>
+        )
+      ) : !hasAny ? (
         <Card className="grid justify-items-start gap-3">
           <p className="font-semibold">Track your first investment</p>
           <p className="text-sm text-muted-foreground">
             Search a share, ETF or mutual fund, enter your units and buy price, and see its value and profit at the last closing price.
           </p>
-          <Button variant="secondary" onClick={add}>
-            <Plus aria-hidden="true" />
-            Add holding
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={add}>
+              <Plus aria-hidden="true" />
+              Add holding
+            </Button>
+            <Button variant="secondary" onClick={addDeposit}>
+              <Plus aria-hidden="true" />
+              Add fixed deposit
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
             {PRICES_NOTE} {NOT_IN_TOTAL}.
           </p>
         </Card>
-      ) : groups.length === 0 ? (
+      ) : groups.length === 0 && tab !== "all" ? (
         <Card className="grid justify-items-start gap-3">
           <p className="font-semibold">No {EMPTY_NOUN[tab]} yet</p>
           <Button variant="secondary" onClick={add}>
@@ -117,40 +188,50 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
         </Card>
       ) : (
         <>
-          <Summary totals={totals} pricesAsOf={newest(groups.map((g) => g.instrument.priceDate))} />
+          <Summary
+            totals={totals}
+            note={
+              <>
+                <span className="font-semibold text-ink">{pricesAsOfText(newest(groups.map((g) => g.instrument.priceDate)))}</span> · {PRICES_NOTE}
+                {tab === "all" && view.deposits.length > 0 && ` ${FD_NOTE}`} {NOT_IN_TOTAL}.
+              </>
+            }
+          />
           {tab === "all" && <CategoryTable view={view} />}
-          <section aria-labelledby="holdings-title" className="mt-5 grid gap-2">
-            <h2 id="holdings-title" className="font-heading text-xl font-bold">
-              Holdings
-            </h2>
-            <Card className="px-0 py-1 md:px-0 md:py-1">
-              <div aria-hidden="true" className={cn("hidden gap-3 border-b border-line px-5 py-2 text-xs font-semibold text-muted-foreground md:grid", COLUMNS)}>
-                <span>Name</span>
-                <span className="text-right">Units</span>
-                <span className="text-right">{labels.average}</span>
-                <span className="text-right">{labels.last}</span>
-                <span className="text-right">Value</span>
-                <span className="text-right">Profit or loss</span>
-              </div>
-              <ul>
-                {groups.map((group) => (
-                  <GroupRow
-                    key={group.instrument.id}
-                    group={group}
-                    labels={tab === "all" && group.instrument.kind === "fund" ? NAV_LABELS : labels}
-                    onOpen={(kind, item) => setOpen({ kind, item })}
-                  />
-                ))}
-              </ul>
-            </Card>
-          </section>
+          {groups.length > 0 && (
+            <section aria-labelledby="holdings-title" className="mt-5 grid gap-2">
+              <h2 id="holdings-title" className="font-heading text-xl font-bold">
+                Holdings
+              </h2>
+              <Card className="px-0 py-1 md:px-0 md:py-1">
+                <div aria-hidden="true" className={cn("hidden gap-3 border-b border-line px-5 py-2 text-xs font-semibold text-muted-foreground md:grid", COLUMNS)}>
+                  <span>Name</span>
+                  <span className="text-right">Units</span>
+                  <span className="text-right">{labels.average}</span>
+                  <span className="text-right">{labels.last}</span>
+                  <span className="text-right">Value</span>
+                  <span className="text-right">Profit or loss</span>
+                </div>
+                <ul>
+                  {groups.map((group) => (
+                    <GroupRow
+                      key={group.instrument.id}
+                      group={group}
+                      labels={tab === "all" && group.instrument.kind === "fund" ? NAV_LABELS : labels}
+                      onOpen={(kind, item) => setOpen({ kind, item })}
+                    />
+                  ))}
+                </ul>
+              </Card>
+            </section>
+          )}
         </>
       )}
 
-      {view.archived.length > 0 && (
+      {archivedCount > 0 && (
         <div className="mt-3">
           <Button variant="link" aria-expanded={showArchived} onClick={() => setShowArchived((s) => !s)}>
-            {showArchived ? "Hide" : "Show"} archived ({view.archived.length})
+            {showArchived ? "Hide" : "Show"} archived ({archivedCount})
           </Button>
           {showArchived && (
             <Card className="mt-2 py-1 md:py-1">
@@ -171,6 +252,34 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
                         Restore
                       </Button>
                       <Button variant="ghost" size="sm" className="text-danger" aria-label={`Delete ${recordName(item)} permanently`} onClick={() => setOpen({ kind: "delete", item })}>
+                        Delete permanently
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+                {view.archivedDeposits.map((d) => (
+                  <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-2.5 last:border-b-0">
+                    <div className="grid min-w-0 flex-1 basis-60 gap-0.5">
+                      <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
+                        <span className="truncate">{d.label ?? d.bank}</span>
+                        <Badge tone="neutral">Fixed deposit</Badge>
+                      </p>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {d.label ? `${d.bank} · ` : ""}
+                        {money(d.principalMinor, "INR")} at {formatPercentFromBasisPoints(d.rateBps, { maximumFractionDigits: 2 })} · {fullDate(d.startDate)} to {fullDate(d.maturityDate)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-0.5">
+                      <Button variant="ghost" size="sm" disabled={busy} aria-label={`Restore fixed deposit ${depositName(d)}`} onClick={() => restoreDeposit(d)}>
+                        Restore
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-danger"
+                        aria-label={`Delete fixed deposit ${depositName(d)} permanently`}
+                        onClick={() => setOpen({ kind: "deleteDeposit", deposit: d })}
+                      >
                         Delete permanently
                       </Button>
                     </div>
@@ -212,6 +321,35 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
             <ConfirmAction label="Delete permanently" pendingLabel="Deleting…" destructive action={() => deleteHoldingAction({ holdingId: open.item.id })} onDone={close} />
           </DialogContent>
         )}
+        {(open?.kind === "addDeposit" || open?.kind === "editDeposit") && (
+          <DialogContent
+            eyebrow="Investments"
+            title={open.kind === "addDeposit" ? "Add fixed deposit" : `Edit ${open.deposit.label ?? open.deposit.bank}`}
+            description="Use the figures on your deposit receipt."
+            className="flex max-h-dvh flex-col md:max-h-[calc(100dvh-2rem)] md:max-w-[640px]"
+          >
+            <DepositForm today={view.today} item={open.kind === "editDeposit" ? open.deposit : undefined} onDone={close} />
+          </DialogContent>
+        )}
+        {open?.kind === "archiveDeposit" && (
+          <DialogContent eyebrow="Investments" title="Archive this fixed deposit?" description={`${depositName(open.deposit)}. It moves to Archived and leaves the totals. You can restore it later.`}>
+            <ConfirmAction
+              label="Archive"
+              pendingLabel="Archiving…"
+              action={() => setFixedDepositArchivedAction({ depositId: open.deposit.id, archived: true })}
+              onDone={close}
+            />
+          </DialogContent>
+        )}
+        {open?.kind === "deleteDeposit" && (
+          <DialogContent
+            eyebrow="Investments"
+            title="Delete this fixed deposit permanently?"
+            description={`${depositName(open.deposit)}. The record is removed for good. This can't be undone. Your accounts and transactions don't change.`}
+          >
+            <ConfirmAction label="Delete permanently" pendingLabel="Deleting…" destructive action={() => deleteFixedDepositAction({ depositId: open.deposit.id })} onDone={close} />
+          </DialogContent>
+        )}
       </Dialog>
     </>
   )
@@ -241,7 +379,17 @@ function TabBar({ current }: { current: InvestmentTab }) {
   )
 }
 
-function Summary({ totals, pricesAsOf }: { totals: PortfolioTotals; pricesAsOf: string | null }) {
+function Summary({
+  totals,
+  note,
+  valueLabel = "Current value",
+  profitLabel = "Profit or loss",
+}: {
+  totals: PortfolioTotals
+  note: React.ReactNode
+  valueLabel?: string
+  profitLabel?: string
+}) {
   const stat = "grid content-start gap-0.5"
   const label = "text-xs font-semibold text-muted-foreground"
   return (
@@ -252,20 +400,91 @@ function Summary({ totals, pricesAsOf }: { totals: PortfolioTotals; pricesAsOf: 
           <dd className="font-heading text-lg font-bold tabular-nums md:text-xl">{money(totals.investedMinor, "INR")}</dd>
         </div>
         <div className={stat}>
-          <dt className={label}>Current value</dt>
+          <dt className={label}>{valueLabel}</dt>
           <dd className="font-heading text-lg font-bold tabular-nums md:text-xl">{money(totals.valueMinor, "INR")}</dd>
         </div>
         <div className={cn(stat, "col-span-2")}>
-          <dt className={label}>Profit or loss</dt>
+          <dt className={label}>{profitLabel}</dt>
           <dd>
             <ProfitText minor={totals.profitMinor} bps={totals.profitBps} size="lg" />
           </dd>
         </div>
       </dl>
-      <p className="border-t border-line pt-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-ink">{pricesAsOfText(pricesAsOf)}</span> · {PRICES_NOTE} {NOT_IN_TOTAL}.
-      </p>
+      <p className="border-t border-line pt-2 text-xs text-muted-foreground">{note}</p>
     </Card>
+  )
+}
+
+function DepositList({ deposits, onOpen }: { deposits: DepositItem[]; onOpen: (kind: "editDeposit" | "archiveDeposit", deposit: DepositItem) => void }) {
+  const cell = "grid gap-0.5 md:block md:text-right"
+  const cellLabel = "text-xs text-muted-foreground md:sr-only"
+  return (
+    <section aria-labelledby="deposits-title" className="mt-5 grid gap-2">
+      <h2 id="deposits-title" className="font-heading text-xl font-bold">
+        Fixed deposits
+      </h2>
+      <Card className="px-0 py-1 md:px-0 md:py-1">
+        <div aria-hidden="true" className={cn("hidden gap-3 border-b border-line px-5 py-2 text-xs font-semibold text-muted-foreground md:grid", DEPOSIT_COLUMNS)}>
+          <span>Bank</span>
+          <span className="text-right">Principal</span>
+          <span className="text-right">Rate</span>
+          <span className="text-right">Start</span>
+          <span className="text-right">Maturity</span>
+          <span className="text-right">Maturity value</span>
+          <span className="text-right">Worth today</span>
+          <span className="text-right">Days left</span>
+          <span className="sr-only">Actions</span>
+        </div>
+        <ul>
+          {deposits.map((d) => (
+            <li key={d.id} className={cn("grid grid-cols-2 items-start gap-x-3 gap-y-2 border-b border-line px-4 py-2.5 last:border-b-0 md:items-center md:px-5", DEPOSIT_COLUMNS)}>
+              <div className="col-span-2 min-w-0 md:col-span-1">
+                <p className="text-sm font-semibold">{d.label ?? d.bank}</p>
+                {d.label && <p className="text-xs text-muted-foreground">{d.bank}</p>}
+              </div>
+              <div className={cell}>
+                <span className={cellLabel}>Principal</span>
+                <span className="text-sm tabular-nums">{money(d.principalMinor, "INR")}</span>
+              </div>
+              <div className={cell}>
+                <span className={cellLabel}>Rate</span>
+                <span className="text-sm tabular-nums">{formatPercentFromBasisPoints(d.rateBps, { maximumFractionDigits: 2 })}</span>
+                <span className="block text-xs text-muted-foreground">{COMPOUNDING_LABEL[d.compounding]}</span>
+              </div>
+              <div className={cell}>
+                <span className={cellLabel}>Start</span>
+                <span className="text-sm tabular-nums">{fullDate(d.startDate)}</span>
+              </div>
+              <div className={cell}>
+                <span className={cellLabel}>Maturity</span>
+                <span className="text-sm tabular-nums">{fullDate(d.maturityDate)}</span>
+              </div>
+              <div className={cell}>
+                <span className={cellLabel}>Maturity value</span>
+                <span className="text-sm font-semibold tabular-nums">{money(d.figures.maturityValueMinor, "INR")}</span>
+                <span className="block text-xs text-muted-foreground tabular-nums">+{money(d.figures.interestMinor, "INR")} interest</span>
+              </div>
+              <div className={cell}>
+                <span className={cellLabel}>Worth today</span>
+                <span className="text-sm tabular-nums">{money(d.figures.accruedValueMinor, "INR")}</span>
+              </div>
+              <div className={cell}>
+                <span className={cellLabel}>Days left</span>
+                {d.figures.matured ? <Badge tone="positive">Matured</Badge> : <span className="text-sm tabular-nums">{d.figures.daysLeft} days</span>}
+              </div>
+              <div className="col-span-2 -mr-2 flex justify-end gap-0.5 md:col-span-1">
+                <Button variant="ghost" size="sm" aria-label={`Edit fixed deposit ${depositName(d)}`} onClick={() => onOpen("editDeposit", d)}>
+                  Edit
+                </Button>
+                <Button variant="ghost" size="sm" aria-label={`Archive fixed deposit ${depositName(d)}`} onClick={() => onOpen("archiveDeposit", d)}>
+                  Archive
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </section>
   )
 }
 

@@ -2,12 +2,24 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { type FormInput, type InstrumentSearch, type WriteResult, deleteHolding, saveHolding, searchInstruments, setHoldingArchived } from "@fin-creador/api"
+import {
+  type FormInput,
+  type InstrumentSearch,
+  type WriteResult,
+  deleteFixedDeposit,
+  deleteHolding,
+  saveFixedDeposit,
+  saveHolding,
+  searchInstruments,
+  setFixedDepositArchived,
+  setHoldingArchived,
+} from "@fin-creador/api"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 
-// Thin wrappers around the shared holding writers in packages/api. They run as the signed-in
-// user (RLS); the shared code validates every input and the database checks it again.
+// Thin wrappers around the shared holding and fixed-deposit writers in packages/api. They run
+// as the signed-in user (RLS); the shared code validates every input and the database checks
+// it again.
 
 async function client() {
   const supabase = await createClient()
@@ -56,4 +68,27 @@ export async function deleteHoldingAction(input: unknown): Promise<WriteResult> 
 /** Instrument search for the Add holding dialog (read-only; shared instruments). */
 export async function searchInstrumentsAction(query: unknown): Promise<InstrumentSearch> {
   return searchInstruments(await client(), typeof query === "string" ? query : "")
+}
+
+const DEPOSIT_FIELDS = ["depositId", "bank", "label", "principal", "rate", "compounding", "startDate", "maturityDate", "idempotencyKey"] as const
+
+export async function saveFixedDepositAction(input: unknown): Promise<WriteResult> {
+  return refreshed(await saveFixedDeposit(await client(), fields(input, DEPOSIT_FIELDS)))
+}
+
+const depositRef = z.object({ depositId: z.uuid(), archived: z.boolean() })
+
+export async function setFixedDepositArchivedAction(input: unknown): Promise<WriteResult> {
+  const r = depositRef.safeParse(input)
+  if (!r.success) return { status: "error", message: "We couldn't find that fixed deposit." }
+  return refreshed(await setFixedDepositArchived(await client(), r.data))
+}
+
+const depositId = z.object({ depositId: z.uuid() })
+
+/** Permanent delete of an archived deposit (the database refuses any other). */
+export async function deleteFixedDepositAction(input: unknown): Promise<WriteResult> {
+  const r = depositId.safeParse(input)
+  if (!r.success) return { status: "error", message: "We couldn't find that fixed deposit." }
+  return refreshed(await deleteFixedDeposit(await client(), r.data))
 }

@@ -6,8 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardTitle } from "@/components/ui/card"
 import { CATEGORY_LABEL, NOT_IN_TOTAL, ProfitText, pricesAsOfText } from "./display"
 
-// The Overview's Investments card (Sprint 7): value and profit at the last closing prices.
-// A tracker only: it never adds to Total available.
+// The Overview's Investments card (Sprint 7): value and profit at the last closing prices, and
+// fixed deposits valued today. A tracker only: it never adds to Total available.
 
 function OpenInvestments({ children }: { children: React.ReactNode }) {
   return (
@@ -30,7 +30,7 @@ export function InvestmentsOverviewCard({ view }: { view: InvestmentsView | null
     )
   }
   const { totals } = view
-  const empty = view.groups.length === 0
+  const empty = view.groups.length === 0 && view.deposits.length === 0
   return (
     <Card aria-labelledby="investments-title" className="grid content-start gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -38,7 +38,7 @@ export function InvestmentsOverviewCard({ view }: { view: InvestmentsView | null
         <Badge tone="neutral">{NOT_IN_TOTAL}</Badge>
       </div>
       {empty ? (
-        <p className="text-sm text-muted-foreground">Track shares, ETFs and mutual funds at the last closing price.</p>
+        <p className="text-sm text-muted-foreground">Track shares, ETFs and mutual funds at the last closing price, and fixed deposits.</p>
       ) : (
         <>
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -49,7 +49,9 @@ export function InvestmentsOverviewCard({ view }: { view: InvestmentsView | null
             <ProfitText minor={totals.profitMinor} bps={totals.profitBps} />
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
-            Invested {money(totals.investedMinor, "INR")} · {pricesAsOfText(view.pricesAsOf)}
+            Invested {money(totals.investedMinor, "INR")}
+            {view.pricesAsOf && ` · ${pricesAsOfText(view.pricesAsOf)}`}
+            {view.deposits.length > 0 && " · Deposits valued today"}
           </p>
           <ul aria-label="By category" className="grid border-t border-line pt-1.5 text-sm">
             {view.categories.map((c) => (
@@ -68,7 +70,7 @@ export function InvestmentsOverviewCard({ view }: { view: InvestmentsView | null
           </ul>
         </>
       )}
-      <OpenInvestments>{empty ? "Add a holding" : `View all (${view.groups.length})`}</OpenInvestments>
+      <OpenInvestments>{empty ? "Add a holding" : `View all (${view.groups.length + view.deposits.length})`}</OpenInvestments>
     </Card>
   )
 }

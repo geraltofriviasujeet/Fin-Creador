@@ -40,6 +40,8 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC027: { message: "This holding is archived. Restore it first." },
   FC028: { message: "The buy date can't be in the future.", field: "buyDate" },
   FC029: { message: "We couldn't find that fund or share. Search again.", field: "instrumentId" },
+  FC030: { message: "This fixed deposit is archived. Restore it first." },
+  FC031: { message: "The start date can't be in the future.", field: "startDate" },
 }
 
 /** `dateField` names the date input on the current form (occurredOn or openingBalanceDate). */
