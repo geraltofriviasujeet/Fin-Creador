@@ -137,7 +137,7 @@ test("add (double submit adds once), edit, archive, restore and delete a holding
   await page.getByRole("button", { name: starts(`Edit ${LOTUS}`) }).click()
   const edit = dialog(page, `Edit ${LOTUS}`)
   await expect(edit.getByLabel("Units")).toHaveValue("10")
-  await expect(edit.getByRole("button", { name: "Change" })).toHaveCount(0) // the instrument stays
+  await expect(edit.getByRole("button", { name: "Change", exact: true })).toHaveCount(0) // the instrument stays
   await edit.getByLabel("Units").fill("12")
   await edit.getByRole("button", { name: "Save changes" }).click()
   await expect(toast(page, "Holding saved.")).toBeVisible()
