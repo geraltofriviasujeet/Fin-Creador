@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-28 (Sprints 8a and 8b done on stacked draft PRs #35, #36 and the 8b web PR, none merged. Sprint 8 goes to prod once, at the end. Next: 8d, then 8e net worth, then 8c).
+Last updated: 2026-10-28 (Sprints 8a and 8b done on stacked draft PRs #35, #36, #37, none merged. Next: 8b follow-up (borrowing details, card product list, F1), then 8d, 8e net worth, 8c; prod once at the end).
 
 ## Sprint status
 
@@ -31,7 +31,7 @@ Last updated: 2026-10-28 (Sprints 8a and 8b done on stacked draft PRs #35, #36 a
 | **6** | Budgets & savings goals | Done | Completed 2026-10-26 (PR #30 merged into `main`, merge commit 672ab75). One Goals page (`/goals`): Planned expenses (Trip, Wheeler, House, Furniture, Electronics, Mobile, Other; exact maths, EMI, archive, restore, permanent delete of archived goals) and Monthly budgets (80% / 100% warnings, page and Overview); web density pass; `scripts/backup-prod.sh`. Migrations 20261026180000, 20261026200000, 20261026210000 applied to dev and prod (prod from `main` after a backup); live site checked. Web only (mobile Goals in the backlog). See Sprint 6 steps. |
 | **7** | Investment portfolio | Done | Completed 2026-10-27 (PR #32 merged into `main`). Holdings tracker (not trading), web only: shares, mutual funds and ETFs at the previous close (BSE, AMFI), fixed deposits, tabs per kind, Overview card. Migrations 20261027120000, 20261027180000 and 20261027200000 applied to dev and prod (prod from `main` after a backup); `refresh-prices` deployed on prod, first run ok (AMFI 14,172 and BSE 4,643 loaded, as on dev); live site checked. Mobile Investments in the backlog. See Sprint 7 steps. |
 | **8a** | Loans and EMIs | Done | Completed 2026-10-28 (web). Backend PR #34 merged; web page PR #35 (draft, CI green, QA passed). Migration `20261028120000_loans.sql` on dev; prod with the rest of Sprint 8 at the end (PR #35 stays draft until then). Mobile loans in the backlog. See Sprint 8a steps. |
-| **8b** | Credit cards and informal borrowing | Done | Completed 2026-10-28 (web). Backend draft PR #36 (`sprint-8b`, migration `20261028180000_cards_borrowing.sql` on dev); web box draft PR (`sprint-8b-ui`, stacked on `sprint-8b`). Prod with the rest of Sprint 8 at the end. Mobile cards and borrowing in the backlog. Next: 8d. |
+| **8b** | Credit cards and informal borrowing | Done | Completed 2026-10-28 (web). Backend draft PR #36 (`sprint-8b`, migration `20261028180000_cards_borrowing.sql` on dev); web box draft PR #37 (`sprint-8b-ui`, stacked on `sprint-8b`). Prod with the rest of Sprint 8 at the end. Mobile cards and borrowing in the backlog. Follow-up next (see Sprint 8b follow-up), then 8d. |
 | **8d** | Statutory dues | Not started | Step 2. Branch from 8b's branch, stacked draft PR. Fills the "Statutory & legal liabilities" box. |
 | **8e** | Net worth | Not started | Step 3. Branch from 8d's branch, stacked draft PR. All three liability boxes. |
 | **8c** | Cash-flow history and CSV export | Not started | Step 4 (last). Branch from 8e's branch, stacked draft PR. Then the Sprint 8 prod rollout (owner, `docs/deployment.md` 4c): merge the stacked PRs into `main` in order, backup, dry run listing exactly the Sprint 8 migrations, push prod, live check. |
@@ -224,6 +224,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-28** | Sprint 8 order and rollout (owner): 8b credit cards and informal borrowing, then 8d statutory dues, then 8e net worth (all three boxes), then 8c cash-flow history and CSV export. Each step branches from the previous one's branch (8b from `sprint-8a-ui`); draft PRs stay stacked and unmerged; the owner runs `db push` on dev per approved migration. Prod once at the end (`docs/deployment.md` 4c): merge the stacked PRs into `main` in order, then backup, dry run listing exactly the Sprint 8 migrations, push prod, live check. | Replaces "own PR and prod push" per step and the 8a prod rollout before merging PR #35. |
 | **2026-10-28** | Sprint 8b SQL review (owner, approved with changes): liability kinds only in `is_liability_kind` / `LIABILITY_ACCOUNT_KINDS`; card purchases are expenses on the card (recurring too, starting on or after the day the card was added), refunds by void; a statement once per card and date, on or before today, owed measured on its date, the difference posted as an expense only when positive and a category is picked; bill = total − card EMIs ("Card EMIs are paid from the loan row"); one active payment per bill (a part-paid bill closes), plus `pay_card` for any amount up to what is owed (FC047 "record the missing purchase first"); `card_sync_due` marks a bill paid once transfers dated on or after its statement cover it (pending again after a void), `card_bill_paid` / `card_bill_progress` drive "Minimum paid" / "Part-paid" and stop reminders once the minimum is covered; borrowing received into an account (posted) or earlier (owed only), repayments as transfers plus interest as an expense, the due item closes when nothing is owed; archive only at a zero balance (credit included); delete only without history; the difference expense and the money-received entry change only with their statement or borrowing; no digits in issuer, nickname or who you owe. | Error codes FC045–FC051. |
 | **2026-10-28** | Sprint 8b web (owner): the "Short-term & operational liabilities" box lists credit cards (owed, limit used with 80% / 100% warnings, latest bill and due date, badges Due, Overdue, Paid, Minimum paid, "Part-paid, X left"), card EMIs (moved from Long-term, with Link to card) and money borrowed from people (what is still owed). Pay card defaults to the pending bill (full, minimum, custom: closes it) with "Other amount" (does not close it until covered). A card is offered only as "<name> (card)" for expenses and recurring expenses, with the limit warning; never in income, transfer or payment pickers, the Accounts page or Total available (`cardAccounts` in the ledger context). Due soon, the bell and the Overview list card bills (until the minimum is covered), borrowing due dates and "Add your <card> statement" (from the day after the statement day). | Shared view `packages/api/src/cards/view.ts`, so mobile can show the same. |
+| **2026-10-28** | Order after 8b (owner): (1) 8b follow-up (borrowing details, card product list, F1), (2) 8d, (3) 8e net worth, (4) 8c, (5) prod rollout once at the end: backup, merge PRs #35, #36, #37 and the next ones in order, dry run listing exactly the Sprint 8 migrations, push prod, live check. | Scope in "Sprint 8b follow-up" below. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -696,6 +697,35 @@ the shortfall refusal, reminders and Due soon need no new mechanism.
   payments as transfers to the liability account, interest (if any) as
   an expense. Shown in the "Short-term & operational liabilities" box
   with credit card dues and card EMIs.
+
+### Sprint 8b follow-up (owner, 2026-10-28; before 8d)
+
+New migration only (never edit an applied one); SQL shown to the owner before applying.
+
+- Borrowing: "Borrowed from" name plus a relationship (Family, Friends,
+  Others); "Borrowed for" short reason (no run of 4 or more digits);
+  received into any account (Cash in hand offered explicitly) or already
+  received earlier; "How much to return" with "Same as borrowed" (the
+  extra is interest or a charge, planned from the start, posted as an
+  expense when repaid); optional return date, and only then "How will you
+  return it?" (one payment on that date, or instalments: open question,
+  ask the owner first); reminders use the return date. Columns
+  relationship, reason, amount_to_return_minor and the return plan, with
+  checks, RLS, grants and guards like the other borrowing columns.
+
+- Credit cards: Add card asks issuer, then card product (e.g. HDFC
+  Regalia), with "Other" typed; the nickname stays optional, shown only as
+  "Label if you hold two of the same card" (no digits). List of cards in
+  India in `packages/schemas/src/card-data.ts` with `LISTS_REVIEWED_ON`,
+  from issuers' own pages only (sources cited in the docs, not the app),
+  refreshed every quarter (January, April, July, October) through
+  `docs/quarterly-list-refresh.md`.
+
+- F1 (QA): the database refuses digits from other scripts too
+  (full-width, Devanagari, Arabic-Indic) in card issuer, nickname and who
+  you owe; pgTAP for each; the QA TODO becomes a normal test.
+
+- Unchanged: card statements and bills, and Pay card.
 
 ### Sprint 8e — Net worth (after 8d)
 
