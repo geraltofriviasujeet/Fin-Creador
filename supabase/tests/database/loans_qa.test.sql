@@ -72,7 +72,10 @@ create function public.t_create(
   p_first date, p_before date, p_moratorium integer default 0, p_mor_interest text default null,
   p_capitalised bigint default 0, p_mor_monthly bigint default 0, p_emi bigint default 44424, p_type text default 'home'
 ) returns public.loans language sql set search_path = ''
-  as $$ select * from public.create_loan(p_key, p_type, p_lender, 2000000, 1000000, 1200, 'floating', 24,
+  -- Starts later: the amount taken is what is owed and the tenure is the number of EMIs (loans_opening_outstanding, loans_instalment_months).
+  as $$ select * from public.create_loan(p_key, p_type, p_lender, 2000000,
+        case when p_start_mode = 'starts_later' then p_outstanding else 1000000 end, 1200, 'floating',
+        case when p_start_mode = 'starts_later' then p_months else 24 end,
         p_start_mode, p_outstanding, p_months, p_first, p_emi, p_emi,
         p_nickname => p_nickname, p_before_tracking_on => p_before, p_moratorium_months => p_moratorium,
         p_moratorium_interest => p_mor_interest, p_capitalised_minor => p_capitalised, p_moratorium_interest_minor => p_mor_monthly) $$;
