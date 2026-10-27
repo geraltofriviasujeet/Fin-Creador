@@ -1,16 +1,14 @@
 # Next session: Sprint 7 (Investment portfolio)
 
-**State (2026-10-26).** Sprints 1–5 are on `main`. Sprint 6 (Goals: planned expenses and monthly budgets, web only) is complete on draft PR #30, CI green, waiting for the owner's merge. The first production deploy (Vercel Hobby, Supabase Free) works, including Google sign-in. Mobile Overview and mobile Goals are in the backlog.
+**State (2026-10-26).** Sprints 1–6 are on `main` and deployed (Vercel Hobby, Supabase Free), including Google sign-in; Sprint 6 (Goals: planned expenses and monthly budgets, web only) merged with PR #30 and checked on the live site. Mobile Overview and mobile Goals are in the backlog.
 
 **Migrations.** All in `supabase/migrations/`. On **both** dev and prod:
-`20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown.
-On **dev only** (Sprint 6): `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals.
+`20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals.
 Check `supabase migration list --linked` against each project before any database work. Status, steps and decisions: `docs/sprint-plan.md`; deploy steps: `docs/deployment.md`.
 
 **Every new migration goes to dev AND prod.** Dev first, after the owner's SQL review and green CI. Prod only from a clean `main` checkout after the PR is merged, and only after a manual backup of prod (`./scripts/backup-prod.sh`, `docs/deployment.md` section 4). Push prod before deploying code that needs the migration; link back to dev afterwards. Never edit an applied migration or reset a database.
 
 **Before production.**
-- Sprint 6 on prod: after PR #30 is merged, back up prod, then push `20261026180000`, `20261026200000` and `20261026210000` from `main`, then deploy.
 - Remove `exp://**` and `localhost` entries from the development project's redirect list once mobile release builds exist (prod has only `https://<your-app>.vercel.app/auth/callback**`); drop `npm run dev:mobile:google`; fixed `fincreador://` scheme in release builds.
 - Custom SMTP before inviting testers; weekly manual prod backups; Vercel Pro and Supabase Pro before any commercial use.
 - Pending: Google sign-in on iPhone.
