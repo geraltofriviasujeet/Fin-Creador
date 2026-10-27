@@ -923,17 +923,17 @@ export type Database = {
       search_instruments: {
         Args: { p_limit?: number; p_query: string }
         Returns: {
-            created_at: string
-            id: string
-            isin: string | null
-            kind: string
-            last_price_scaled: number
-            name: string
-            price_date: string
-            source: string
-            source_code: string
-            symbol: string | null
-            updated_at: string
+          created_at: string
+          id: string
+          isin: string | null
+          kind: string
+          last_price_scaled: number
+          name: string
+          price_date: string
+          source: string
+          source_code: string
+          symbol: string | null
+          updated_at: string
         }[]
         SetofOptions: {
           from: "*"

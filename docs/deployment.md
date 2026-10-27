@@ -115,6 +115,43 @@ Backups contain personal financial data: keep them in `~/FinCreador-backups` or 
 encrypted place, **never inside the repository**, and keep at least the last four. Check now
 and then that a backup restores into a scratch database (`pg_restore`).
 
+## 4a. Daily price refresh (Sprint 7)
+
+The `refresh-prices` Edge Function loads AMFI NAVs and BSE closes into `instruments`; a
+`pg_cron` job (migration `20261027180000`) calls it at 07:00 IST. Per project, dev first:
+
+1. **Make a secret** in a private file, not on the command line:
+   `umask 077; printf 'REFRESH_PRICES_SECRET=%s\n' "$(openssl rand -hex 32)" > ~/refresh.env`
+2. **Function secret:** `supabase secrets set --project-ref <project-ref> --env-file ~/refresh.env`
+   (or Dashboard → Edge Functions → Secrets).
+3. **Deploy** (no Docker): `supabase functions deploy refresh-prices --use-api --project-ref <project-ref>`
+   (`verify_jwt = false` comes from `supabase/config.toml`; the function checks the secret).
+4. **Vault** (Dashboard → Project Settings → Vault → Add new secret, so the value is not kept
+   in SQL editor history): `refresh_prices_secret` = the same value, and
+   `refresh_prices_url` = `https://<project-ref>.supabase.co/functions/v1/refresh-prices`.
+5. Delete `~/refresh.env`. **Migration:** `supabase db push` (as for any migration).
+6. **Check** (SQL editor):
+
+   ```sql
+   -- Last 7 days: one row per source per day, with how long each took.
+   select started_at at time zone 'Asia/Kolkata' as started_ist, source, status, price_date,
+          rows_seen, rows_loaded, rows_skipped, skip_reasons, error,
+          finished_at - started_at as duration
+   from public.price_refresh_runs
+   where started_at > now() - interval '7 days'
+   order by started_at desc;
+
+   -- Did the job fire? (pg_cron's own log)
+   select start_time, status, return_message from cron.job_run_details
+   where jobid = (select jobid from cron.job where jobname = 'refresh-prices-daily')
+   order by start_time desc limit 7;
+   ```
+
+   **Rule:** every day needs two rows (amfi and bse). A day with no row, or with one, means
+   the run died (the function crashed or hit its time limit before logging); check the
+   function logs (Dashboard → Edge Functions → refresh-prices → Logs) and
+   `cron.job_run_details`. `no_file` for BSE on weekends and exchange holidays is normal.
+
 ## 5. Upgrade before any commercial launch
 
 Do all of these before payments, paying customers or a public launch, and only once the
