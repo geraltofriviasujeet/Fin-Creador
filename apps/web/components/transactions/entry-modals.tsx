@@ -48,7 +48,7 @@ async function run(save: () => Promise<WriteResult>): Promise<WriteResult> {
   }
 }
 
-type FormProps = { accounts: LedgerAccount[]; categories: LedgerCategory[]; today: IsoDate }
+type FormProps = { accounts: LedgerAccount[]; cardAccounts?: LedgerAccount[]; categories: LedgerCategory[]; today: IsoDate }
 
 export function AddEntryDialog({
   type,
@@ -67,7 +67,7 @@ export function AddEntryDialog({
             lastExpenseAccountId={lastExpenseAccountId}
             onTypeChange={onTypeChange}
             onSave={async (draft, key) => {
-              const result = await run(() => saveTransactionAction(draftInput(draft, data.accounts, key)))
+              const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key)))
               if (result.status === "success") {
                 onClose()
                 toast.success(result.message)
@@ -90,7 +90,7 @@ export function EditEntryDialog({ entry, onClose, ...data }: FormProps & { entry
             mode={{ kind: "edit", entry }}
             {...data}
             onSave={async (draft, key) => {
-              const result = await run(() => saveTransactionAction(draftInput(draft, data.accounts, key, entry.id)))
+              const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key, entry.id)))
               if (result.status === "success") {
                 onClose()
                 toast.success(result.message, "The earlier version is kept in History.")

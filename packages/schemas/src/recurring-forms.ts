@@ -8,7 +8,7 @@ import { ENTRY_TYPES, PAYMENT_MODES, type PaymentModeValue } from "./transaction
 
 export const FREQUENCY_VALUES = ["weekly", "monthly", "quarterly", "yearly"] as const;
 
-type AccountKind = "bank" | "cash" | "other" | null;
+type AccountKind = "bank" | "cash" | "other" | "card" | null;
 
 const text = z
   .string()
@@ -35,6 +35,7 @@ function sides(
 ) {
   let categoryId: string | null = null;
   let counterAccountId: string | null = null;
+  if (accountKind === "card" && v.type !== "expense") return fail(ctx, "accountId", "A card can only pay for expenses. Choose a bank, cash or other account");
   if (v.type === "transfer") {
     if (!z.uuid().safeParse(v.counterAccountId).success) return fail(ctx, "counterAccountId", "Choose an account");
     if (v.counterAccountId === v.accountId) return fail(ctx, "counterAccountId", "Choose a different account");

@@ -9,9 +9,10 @@ import { cn } from "cn"
 import { fullDate, money } from "@/components/transactions/display"
 import { buttonVariants } from "@/components/ui/button"
 
-// The bell (Sprint 8a): in-app reminders only, the same list as the "Due soon" card (EMIs
-// overdue, due today or tomorrow, or planned for today or tomorrow). Email and push are a
-// later notifications step. The dot shows only when something is due.
+// The bell (Sprint 8a, 8b): in-app reminders only, the same list as the "Due soon" card (EMIs,
+// card bills and borrowing due dates overdue, due today or tomorrow, or planned for today or
+// tomorrow, and card statements to add). Email and push are a later notifications step. The
+// dot shows only when something needs attention.
 
 export type BellReminders = Promise<BellReminder[] | null>
 
@@ -51,11 +52,12 @@ function BellButton({ count, items }: { count: number; items: BellReminder[] | n
                 {items.map((r) => (
                   <li key={r.id} className="grid gap-0.5 border-b border-line py-2 last:border-b-0">
                     <p className="flex items-baseline justify-between gap-3 text-sm">
-                      <span className="truncate font-semibold">{r.loanName}</span>
-                      <span className="font-semibold tabular-nums">{money(r.amountMinor, r.currency)}</span>
+                      <span className="truncate font-semibold">{r.name}</span>
+                      {r.amountMinor !== null && <span className="font-semibold tabular-nums">{money(r.amountMinor, r.currency)}</span>}
                     </p>
                     <p className={cn("text-xs", r.reason === "overdue" ? "font-semibold text-danger" : "text-muted-foreground")}>
-                      {r.label} · {reminderText(r)} · {fullDate(r.dueDate)}
+                      {r.label} · {reminderText(r)}
+                      {r.dueDate && ` · ${fullDate(r.dueDate)}`}
                     </p>
                   </li>
                 ))}

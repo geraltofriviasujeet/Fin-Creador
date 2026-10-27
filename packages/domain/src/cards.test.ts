@@ -6,6 +6,7 @@ import {
   cardCycleDate,
   cardDueDate,
   cardUtilisation,
+  emisInCycle,
   latestStatementCycle,
   payBillDefaultMinor,
   statementDifferenceMinor,
@@ -145,5 +146,18 @@ describe("liability kinds", () => {
     const summary = summarizeHoldings([account("b", "bank", 1_000), account("c", "card", -5_000), account("d", "borrowing", -7_000)], "INR");
     expect(summary.totalAvailableMinor).toBe(1_000);
     expect(summary.rows.map((r) => r.account.id)).toEqual(["b"]);
+  });
+});
+
+describe("emisInCycle", () => {
+  it("adds card EMIs due after the previous statement date, up to this one", () => {
+    const emis = [
+      { dueDate: "2026-09-20", amountMinor: 1_000_00 },
+      { dueDate: "2026-09-21", amountMinor: 2_000_00 },
+      { dueDate: "2026-10-20", amountMinor: 3_000_00 },
+      { dueDate: "2026-10-21", amountMinor: 4_000_00 },
+    ];
+    expect(emisInCycle(emis, "2026-10-20", 20)).toBe(5_000_00);
+    expect(emisInCycle([], "2026-10-20", 20)).toBe(0);
   });
 });

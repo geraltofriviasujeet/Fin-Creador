@@ -1,9 +1,11 @@
-import type { AccountWithActivity, IncomeEntry, IncomeSource, IsoDate } from "@fin-creador/domain"
+import type { AccountKind, AccountWithActivity, IncomeEntry, IncomeSource, IsoDate } from "@fin-creador/domain"
 
 // Data for the Income screen, shared by web and mobile. Calculations happen in
 // packages/domain; these are the inputs plus display labels.
 
-export type IncomeAccount = AccountWithActivity & {
+/** A money account (bank, cash, other): liability accounts are never on the Income page. */
+export type IncomeAccount = Omit<AccountWithActivity, "kind"> & {
+  kind: AccountKind
   name: string
   institution: string | null
   last4: string | null

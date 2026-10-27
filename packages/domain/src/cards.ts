@@ -115,3 +115,12 @@ export function cardUtilisation(owedMinor: number, limitMinor: number): { bps: n
 export function borrowingDueStatus(owedMinor: number): "paid" | "pending" {
   return owedMinor > 0 ? "pending" : "paid";
 }
+
+/**
+ * "EMIs included" on a statement: card EMIs (of loans linked to the card) due in its cycle,
+ * after the previous statement date and up to this one.
+ */
+export function emisInCycle(emis: readonly { dueDate: IsoDate; amountMinor: number }[], statementDate: IsoDate, statementDay: number): number {
+  const previous = cardCycleDate(statementDay, statementDate, -1);
+  return addMinor(...emis.filter((e) => e.dueDate > previous && e.dueDate <= statementDate).map((e) => e.amountMinor));
+}

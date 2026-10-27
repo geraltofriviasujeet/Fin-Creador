@@ -3,7 +3,7 @@
 import type * as React from "react"
 import { useState, useTransition } from "react"
 import { ChevronDown, Plus } from "lucide-react"
-import { type DueItem, type LoanItem, type LoansView, type PaymentRecord, type WriteResult, newRequestKey } from "@fin-creador/api"
+import { type DueItem, type LoanItem, type LoansView, type PaymentRecord, type ReminderEntry, newRequestKey } from "@fin-creador/api"
 import { LOAN_TYPE_LABELS } from "@fin-creador/domain"
 import { cn } from "cn"
 import { deleteLoanAction, setLoanArchivedAction, voidDuePaymentAction } from "@/app/(app)/loans-liabilities/actions"
@@ -12,17 +12,20 @@ import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
-import { FormMessage, TextField } from "@/components/ui/field"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { LOANS_HEADER, LoanBadgeChip, NOT_IN_TOTAL, ratePercent } from "./display"
-import { DueSoonList } from "./due-soon"
+import { ConfirmAction, run } from "./confirm"
+import { type ShortTermOpen, ShortTermBox, ShortTermDialogs } from "@/components/cards/short-term"
+import { DueSoonList, hasLiabilities } from "./due-soon"
 import { AddLoanForm, EditLoanForm } from "./loan-form"
 import { PayForm } from "./pay-form"
 
-// The Loans & Liabilities page (Sprint 8a, web). Due soon at the top, then three boxes:
-// Long-term liabilities (loans, each with its detail and schedule; archived collapsed), and
-// Short-term & operational (8b) and Statutory & legal (8d), shown as coming next.
+// The Loans & Liabilities page (Sprint 8a, 8b, web). Due soon at the top, then three boxes:
+// Long-term liabilities (loans other than card EMIs, each with its detail and schedule;
+// archived collapsed), Short-term & operational (cards, card EMIs, borrowing:
+// components/cards) and Statutory & legal (8d), shown as coming next.
 
 type Open =
   | { kind: "add" }
@@ -31,25 +34,38 @@ type Open =
   | { kind: "editPayment" | "void"; item: DueItem; payment: PaymentRecord }
   | null
 
-const NETWORK = "We couldn't reach the server. Try again."
-async function run(save: () => Promise<WriteResult>): Promise<WriteResult> {
-  try {
-    return await save()
-  } catch {
-    return { status: "error", message: NETWORK }
-  }
-}
-
 /** Desktop columns: loan, outstanding, next EMI, status, expand. */
 const COLUMNS = "md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,0.8fr)_auto]"
 
 const STATUS_TEXT: Record<DueItem["status"], string> = { pending: "Pending", paid: "Paid", before_tracking: "Before tracking" }
 
 export function LoansPageView({ view }: { view: LoansView }) {
-  const [open, setOpen] = useState<Open>(null)
+  const [open, setOpenLoan] = useState<Open>(null)
+  const [shortOpen, setShortOpenState] = useState<ShortTermOpen | null>(null)
+  // One dialog at a time, from either box.
+  const setOpen = (o: Open) => {
+    setShortOpenState(null)
+    setOpenLoan(o)
+  }
+  const setShortOpen = (o: ShortTermOpen | null) => {
+    setOpenLoan(null)
+    setShortOpenState(o)
+  }
+  const longTerm = view.loans.filter((l) => l.loan.loanType !== "credit_card_emi")
+  const shortTerm = view.shortTerm
+  const onReminder = (r: ReminderEntry) => {
+    if (r.loanItem) return setOpen({ kind: "pay", item: r.loanItem })
+    const card = shortTerm?.cards.find((c) => c.card.id === r.cardId)
+    if (card) return setShortOpen({ kind: r.reason === "statement" ? "statement" : "payCard", card })
+    const borrowing = shortTerm?.borrowings.find((b) => b.borrowing.id === r.borrowingId)
+    if (borrowing) setShortOpen({ kind: "repay", borrowing })
+  }
   const [showArchived, setShowArchived] = useState(false)
   const [busy, startBusy] = useTransition()
-  const close = () => setOpen(null)
+  const close = () => {
+    setOpenLoan(null)
+    setShortOpenState(null)
+  }
   const add = () => setOpen({ kind: "add" })
   const loanOf = (item: DueItem) => [...view.loans, ...view.archived].find((l) => l.loan.id === item.loanId)
   const currencyOf = (item: DueItem) => loanOf(item)?.loan.currency ?? view.currency
@@ -65,13 +81,13 @@ export function LoansPageView({ view }: { view: LoansView }) {
     <>
       <PageHeader {...LOANS_HEADER} />
 
-      {view.loans.length > 0 && (
+      {hasLiabilities(view) && (
         <Card aria-labelledby="due-soon-title" className="mb-4 grid gap-1 py-3 md:py-3.5">
           <CardTitle id="due-soon-title">Due soon</CardTitle>
-          {view.dueSoon.length === 0 ? (
+          {view.reminders.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing due today or tomorrow.</p>
           ) : (
-            <DueSoonList reminders={view.dueSoon} currency={view.currency} onPay={(item) => setOpen({ kind: "pay", item })} />
+            <DueSoonList reminders={view.reminders} onAction={onReminder} />
           )}
         </Card>
       )}
@@ -84,9 +100,9 @@ export function LoansPageView({ view }: { view: LoansView }) {
                 Long-term liabilities
               </h2>
               <p className="text-xs text-muted-foreground tabular-nums">
-                {view.loans.length > 0 && (
+                {longTerm.length > 0 && (
                   <>
-                    Outstanding <span className="font-semibold text-ink">{money(view.totalOutstandingMinor, view.currency)}</span> ·{" "}
+                    Outstanding <span className="font-semibold text-ink">{money(view.longTermOutstandingMinor, view.currency)}</span> ·{" "}
                   </>
                 )}
                 {NOT_IN_TOTAL}
@@ -98,7 +114,7 @@ export function LoansPageView({ view }: { view: LoansView }) {
             </Button>
           </div>
 
-          {view.loans.length === 0 ? (
+          {longTerm.length === 0 ? (
             <div className="grid justify-items-start gap-1.5 border-t border-line px-4 py-3 md:px-5">
               <p className="text-sm font-semibold">No loans yet</p>
               <p className="text-sm text-muted-foreground">
@@ -115,7 +131,7 @@ export function LoansPageView({ view }: { view: LoansView }) {
                 <span className="sr-only">Details</span>
               </div>
               <ul aria-label="Loans" className="border-t border-line md:border-t-0">
-                {view.loans.map((l) => (
+                {longTerm.map((l) => (
                   <LoanRow key={l.loan.id} item={l} today={view.today} onOpen={setOpen} />
                 ))}
               </ul>
@@ -156,15 +172,36 @@ export function LoansPageView({ view }: { view: LoansView }) {
           )}
         </Card>
 
-        <ComingNext id="short-term" title="Short-term & operational liabilities">
-          Credit card dues and EMIs, and informal borrowing from friends, family or others.
-        </ComingNext>
+        {shortTerm ? (
+          <ShortTermBox
+            view={shortTerm}
+            currency={view.currency}
+            onOpen={setShortOpen}
+            renderLoan={(l) => (
+              <LoanRow
+                item={l}
+                today={view.today}
+                onOpen={setOpen}
+                extra={
+                  <Button variant="ghost" size="sm" aria-label={`Link ${l.name} to a card`} onClick={() => setShortOpen({ kind: "linkEmi", loan: l })}>
+                    {l.loan.cardId ? "Change card" : "Link to card"}
+                  </Button>
+                }
+              />
+            )}
+          />
+        ) : (
+          <ComingNext id="short-term" title="Short-term & operational liabilities">
+            Credit card dues and EMIs, and informal borrowing from friends, family or others.
+          </ComingNext>
+        )}
         <ComingNext id="statutory" title="Statutory & legal liabilities">
           Income tax payable, fines and unpaid e-challans.
         </ComingNext>
       </div>
 
-      <Dialog open={open !== null} onOpenChange={(o) => !o && close()}>
+      <Dialog open={open !== null || shortOpen !== null} onOpenChange={(o) => !o && close()}>
+        {shortOpen && shortTerm && <ShortTermDialogs open={shortOpen} view={shortTerm} accounts={view.accounts} today={view.today} currency={view.currency} onClose={close} />}
         {open?.kind === "add" && (
           <DialogContent
             eyebrow="Loans & Liabilities"
@@ -241,7 +278,7 @@ function ComingNext({ id, title, children }: { id: string; title: string; childr
   )
 }
 
-function LoanRow({ item, today, onOpen }: { item: LoanItem; today: string; onOpen: (open: Open) => void }) {
+function LoanRow({ item, today, onOpen, extra }: { item: LoanItem; today: string; onOpen: (open: Open) => void; extra?: React.ReactNode }) {
   const [expanded, setExpanded] = useState(false)
   const { loan, next } = item
   const id = `loan-${loan.id}`
@@ -289,6 +326,7 @@ function LoanRow({ item, today, onOpen }: { item: LoanItem; today: string; onOpe
           <LoanBadgeChip badge={item.badge} />
         </div>
         <div className="col-span-2 -mr-2 flex flex-wrap justify-end gap-0.5 md:col-span-1">
+          {extra}
           {next && (
             <Button variant="secondary" size="sm" aria-label={`Pay ${next.label} of ${item.name}`} onClick={() => onOpen({ kind: "pay", item: next })}>
               Pay EMI
@@ -494,44 +532,6 @@ function VoidPayment({ payment, onDone }: { payment: PaymentRecord; onDone: () =
         action={() => voidDuePaymentAction({ paymentId: payment.id, idempotencyKey: requestKey, reason: reason || undefined })}
         onDone={onDone}
       />
-    </div>
-  )
-}
-
-function ConfirmAction({
-  label,
-  pendingLabel,
-  destructive = false,
-  action,
-  onDone,
-}: {
-  label: string
-  pendingLabel: string
-  destructive?: boolean
-  action: () => Promise<WriteResult>
-  onDone: () => void
-}) {
-  const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-  async function go() {
-    if (pending) return
-    setPending(true)
-    const result = await run(action)
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-    } else setError(result.message)
-  }
-  return (
-    <div className="grid gap-4">
-      {error && <FormMessage tone="error">{error}</FormMessage>}
-      <div className="flex flex-wrap justify-end gap-2">
-        <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
-        <Button type="button" variant={destructive ? "destructive" : "primary"} size="lg" disabled={pending} aria-busy={pending} onClick={go}>
-          {pending ? pendingLabel : label}
-        </Button>
-      </div>
     </div>
   )
 }

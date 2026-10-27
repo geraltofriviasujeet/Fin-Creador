@@ -105,7 +105,29 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "borrowings_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "borrowings_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "borrowings_receipt_owned"
+            columns: ["receipt_transaction_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       budgets: {
         Row: {
@@ -194,7 +216,22 @@ export type Database = {
           total_minor?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "card_statements_card_owned"
+            columns: ["card_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "credit_cards"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "card_statements_difference_owned"
+            columns: ["difference_transaction_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       categories: {
         Row: {
@@ -311,7 +348,22 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "credit_cards_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "credit_cards_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       due_items: {
         Row: {
@@ -369,6 +421,20 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "due_items_borrowing_owned"
+            columns: ["borrowing_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "borrowings"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_items_card_statement_owned"
+            columns: ["card_statement_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "card_statements"
+            referencedColumns: ["id", "user_id"]
+          },
           {
             foreignKeyName: "due_items_loan_owned"
             columns: ["loan_id", "user_id"]
@@ -458,6 +524,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_payments_item_owned"
+            columns: ["due_item_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "card_bill_progress"
+            referencedColumns: ["due_item_id", "user_id"]
           },
           {
             foreignKeyName: "due_payments_item_owned"
@@ -709,7 +782,43 @@ export type Database = {
           void_reason?: string | null
           voided_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "liability_payments_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "liability_payments_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "liability_payments_liability_owned"
+            columns: ["liability_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "liability_payments_liability_owned"
+            columns: ["liability_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "liability_payments_replaces_owned"
+            columns: ["replaces_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "liability_payments"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       loans: {
         Row: {
@@ -815,6 +924,13 @@ export type Database = {
             columns: ["account_id", "user_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "loans_card_owned"
+            columns: ["card_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "credit_cards"
             referencedColumns: ["id", "user_id"]
           },
         ]
@@ -1155,6 +1271,13 @@ export type Database = {
             referencedColumns: ["id", "user_id"]
           },
           {
+            foreignKeyName: "transactions_liability_payment_owned"
+            columns: ["liability_payment_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "liability_payments"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
             foreignKeyName: "transactions_recurring_rule_owned"
             columns: ["recurring_rule_id", "user_id"]
             isOneToOne: false
@@ -1225,37 +1348,19 @@ export type Database = {
       backfill_default_income_sources: { Args: never; Returns: number }
       backfill_missing_profiles: { Args: never; Returns: number }
       borrowing_sync_due: {
-        Args: {
-          p_borrowing_id: string
-        }
+        Args: { p_borrowing_id: string }
         Returns: undefined
       }
-      card_bill_paid: {
-        Args: {
-          p_due_item_id: string
-        }
-        Returns: number
-      }
+      card_bill_paid: { Args: { p_due_item_id: string }; Returns: number }
       card_cycle_date: {
-        Args: {
-          p_day: number
-          p_month: string
-        }
+        Args: { p_day: number; p_month: string }
         Returns: string
       }
       card_due_date: {
-        Args: {
-          p_due_day: number
-          p_statement_date: string
-        }
+        Args: { p_due_day: number; p_statement_date: string }
         Returns: string
       }
-      card_sync_due: {
-        Args: {
-          p_card_id: string
-        }
-        Returns: undefined
-      }
+      card_sync_due: { Args: { p_card_id: string }; Returns: undefined }
       confirm_recurring_occurrence: {
         Args: {
           p_account_id: string
@@ -1278,6 +1383,7 @@ export type Database = {
           due_payment_id: string | null
           id: string
           idempotency_key: string
+          liability_payment_id: string | null
           note: string | null
           occurred_on: string
           occurrence_date: string | null
@@ -1389,6 +1495,7 @@ export type Database = {
           account_id: string
           archived_at: string | null
           capitalised_minor: number
+          card_id: string | null
           created_at: string
           currency: string
           disbursed_minor: number
@@ -1473,22 +1580,10 @@ export type Database = {
           kind: string
         }[]
       }
-      delete_borrowing: {
-        Args: {
-          p_borrowing_id: string
-        }
-        Returns: undefined
-      }
-      delete_card: {
-        Args: {
-          p_card_id: string
-        }
-        Returns: undefined
-      }
+      delete_borrowing: { Args: { p_borrowing_id: string }; Returns: undefined }
+      delete_card: { Args: { p_card_id: string }; Returns: undefined }
       delete_card_statement: {
-        Args: {
-          p_statement_id: string
-        }
+        Args: { p_statement_id: string }
         Returns: undefined
       }
       delete_loan: { Args: { p_loan_id: string }; Returns: undefined }
@@ -1581,6 +1676,7 @@ export type Database = {
           due_payment_id: string | null
           id: string
           idempotency_key: string
+          liability_payment_id: string | null
           note: string | null
           occurred_on: string
           occurrence_date: string | null
@@ -1643,24 +1739,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      is_liability_kind: {
-        Args: {
-          p_kind: string
-        }
-        Returns: boolean
-      }
+      is_liability_kind: { Args: { p_kind: string }; Returns: boolean }
       liability_owed: {
-        Args: {
-          p_account_id: string
-          p_as_of?: string
-        }
+        Args: { p_account_id: string; p_as_of?: string }
         Returns: number
       }
       link_card_emi: {
-        Args: {
-          p_card_id?: string
-          p_loan_id: string
-        }
+        Args: { p_card_id?: string; p_loan_id: string }
         Returns: {
           account_id: string
           archived_at: string | null
@@ -1723,6 +1808,7 @@ export type Database = {
           due_payment_id: string | null
           id: string
           idempotency_key: string
+          liability_payment_id: string | null
           note: string | null
           occurred_on: string
           occurrence_date: string | null
@@ -1867,6 +1953,7 @@ export type Database = {
           due_payment_id: string | null
           id: string
           idempotency_key: string
+          liability_payment_id: string | null
           note: string | null
           occurred_on: string
           occurrence_date: string | null
@@ -1908,6 +1995,7 @@ export type Database = {
           due_payment_id: string | null
           id: string
           idempotency_key: string
+          liability_payment_id: string | null
           note: string | null
           occurred_on: string
           occurrence_date: string | null
@@ -1995,10 +2083,7 @@ export type Database = {
         }
       }
       set_borrowing_archived: {
-        Args: {
-          p_archived: boolean
-          p_borrowing_id: string
-        }
+        Args: { p_archived: boolean; p_borrowing_id: string }
         Returns: {
           account_id: string
           archived_at: string | null
@@ -2021,17 +2106,11 @@ export type Database = {
         }
       }
       set_borrowing_due_date: {
-        Args: {
-          p_borrowing_id: string
-          p_due_date?: string
-        }
+        Args: { p_borrowing_id: string; p_due_date?: string }
         Returns: undefined
       }
       set_card_archived: {
-        Args: {
-          p_archived: boolean
-          p_card_id: string
-        }
+        Args: { p_archived: boolean; p_card_id: string }
         Returns: {
           account_id: string
           archived_at: string | null
@@ -2109,6 +2188,7 @@ export type Database = {
           account_id: string
           archived_at: string | null
           capitalised_minor: number
+          card_id: string | null
           created_at: string
           currency: string
           disbursed_minor: number
@@ -2230,6 +2310,7 @@ export type Database = {
           due_payment_id: string | null
           id: string
           idempotency_key: string
+          liability_payment_id: string | null
           note: string | null
           occurred_on: string
           occurrence_date: string | null
@@ -2269,10 +2350,7 @@ export type Database = {
         }
       }
       update_borrowing: {
-        Args: {
-          p_borrowing_id: string
-          p_lender: string
-        }
+        Args: { p_borrowing_id: string; p_lender: string }
         Returns: {
           account_id: string
           archived_at: string | null
@@ -2343,6 +2421,7 @@ export type Database = {
           account_id: string
           archived_at: string | null
           capitalised_minor: number
+          card_id: string | null
           created_at: string
           currency: string
           disbursed_minor: number
@@ -2487,6 +2566,7 @@ export type Database = {
           due_payment_id: string | null
           id: string
           idempotency_key: string
+          liability_payment_id: string | null
           note: string | null
           occurred_on: string
           occurrence_date: string | null

@@ -27,7 +27,8 @@ export type BankType = "savings" | "current";
 
 export interface AccountWithActivity {
   id: string;
-  kind: AccountKind;
+  /** A liability kind is accepted and never counted (summarizeHoldings filters it out). */
+  kind: AccountKind | LiabilityKind;
   bankType: BankType | null;
   currency: string;
   openingBalanceMinor: number;
@@ -78,7 +79,7 @@ export function summarizeHoldings<A extends AccountWithActivity>(
   const active = accounts.filter((a) => !a.archived && isMoneyAccountKind(a.kind));
   const rows = active
     .map((account) => ({ account, balanceMinor: accountBalance(account), inTotal: account.currency === profileCurrency }))
-    .sort((x, y) => KIND_ORDER[x.account.kind] - KIND_ORDER[y.account.kind]);
+    .sort((x, y) => KIND_ORDER[x.account.kind as AccountKind] - KIND_ORDER[y.account.kind as AccountKind]);
   const sum = (filter: (row: HoldingRow<A>) => boolean) =>
     addMinor(...rows.filter((r) => r.inTotal && filter(r)).map((r) => r.balanceMinor));
   const banks = active.filter((a) => a.kind === "bank");

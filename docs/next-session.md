@@ -1,4 +1,4 @@
-# Next session: Sprint 8b (credit cards and informal borrowing)
+# Next session: Sprint 8d (statutory and legal dues)
 
 **State (2026-10-28).** Sprints 1–7 are on `main` and deployed (Vercel Hobby, Supabase Free). Sprint 8a (loans and EMIs, web) is done: backend in PR #34 (merged), web page "Loans & Liabilities" (`/loans-liabilities`: Due soon, three boxes, bell, Overview Due soon card) in PR #35 (draft, CI green). Mobile Overview, Goals, Investments and Loans are in the backlog.
 
@@ -6,7 +6,7 @@
 
 **Migrations.** All in `supabase/migrations/`.
 On **dev and prod**: `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals · `20261027120000` instruments and investments · `20261027180000` price refresh run log and `pg_cron` job · `20261027200000` fixed deposits.
-On **dev only** (prod at the end of Sprint 8): `20261028120000` loans, due items and payments.
+On **dev only** (prod at the end of Sprint 8): `20261028120000` loans, due items and payments · `20261028180000` cards, statements, borrowing.
 
 Check `supabase migration list --linked` against each project before any database work. Status, steps and decisions: `docs/sprint-plan.md`; deploy steps: `docs/deployment.md` (4a dev refresh, 4b prod refresh, 4c Sprint 8 on prod).
 
@@ -31,7 +31,7 @@ Check `supabase migration list --linked` against each project before any databas
 - Reports: at most 15 lines. No recaps of unchanged work.
 - Mobile goes in a separate PR after web.
 
-**Sprint 8b notes.** Scope in "Sprint 8b" of the plan; it fills the "Short-term & operational liabilities" box on Loans & Liabilities (no new tab). Credit cards: issuer from `LENDERS`, optional nickname, never any card digits, limit, statement and due day; purchases are expenses from the card's liability account; bills are `card_bill` due items paid as transfers (full, minimum or custom); card EMIs stay loans (8a) and are not counted twice. Informal borrowing (friends, family, third parties): a liability account named after the lender, optional due date (a due item), part payments as transfers, interest as an expense. Net worth is its own step after 8d: all three boxes, including capitalised moratorium interest not yet posted; decide whether investments and fixed deposits count. Reuse 8a: `due_items` / `due_payments`, the shortfall warning with "Pay anyway", Due soon and the bell, `packages/api/src/loans/view.ts` patterns. 8c is cash-flow history and CSV export; 8d statutory dues (income tax payable, fines, unpaid e-challans: payment is an expense, not a transfer). Recurring: the quarterly list refresh (`docs/quarterly-list-refresh.md`, including `FD_BANKS` and `LENDERS`), next in January 2027.
+**Sprint 8d notes.** Scope in "Sprint 8d" of the plan; it fills the "Statutory & legal liabilities" box (no new tab). Each due: type (income tax payable, fine, unpaid e-challan, other), amount, due date, paid or unpaid, reminders through a due item (Due soon, the bell and the Overview need only a new kind in `buildReminders`, `packages/api/src/cards/view.ts`). Paying a statutory due is an expense from the chosen account (a category per type), not a transfer: no liability account. No challan, vehicle, PAN or card numbers: names and amounts only. Branch `sprint-8d` from `sprint-8b-ui`, draft PR stacked on it. Reuse 8a/8b: `due_items` / `due_payments`, the shortfall warning with "Pay anyway", `is_liability_kind` (statutory dues add no account kind). Then 8e net worth (all three boxes, including capitalised moratorium interest not yet posted; decide whether investments and fixed deposits count), then 8c cash-flow history and CSV export. Recurring: the quarterly list refresh (`docs/quarterly-list-refresh.md`, including `FD_BANKS` and `LENDERS`), next in January 2027.
 
 **Start prompt (paste into a fresh session):**
 

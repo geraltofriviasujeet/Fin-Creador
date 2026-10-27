@@ -12,7 +12,7 @@ export const LOANS_PATH = "/loans-liabilities"
 export const LOANS_HEADER = {
   eyebrow: "Owe",
   title: "Loans & Liabilities",
-  description: "Your loans, EMIs and what is due next. Principal you repay moves to the loan; interest and fees are expenses.",
+  description: "Your loans, cards, money borrowed and what is due next. What you repay moves to the loan, card or person; interest and fees are expenses.",
 }
 
 export const NOT_IN_TOTAL = "Loans are not in Total available"

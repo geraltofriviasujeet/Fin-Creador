@@ -6,7 +6,8 @@ export type { EntryType }
 /** An account as the Transactions screens need it (balance from account_balances). */
 export type LedgerAccount = {
   id: string
-  kind: "bank" | "cash" | "other"
+  /** "card": a credit card (8b), offered only as the account an expense is paid from. */
+  kind: "bank" | "cash" | "other" | "card"
   bankType: BankType | null
   label: string
   currency: string
@@ -15,6 +16,8 @@ export type LedgerAccount = {
   inflowMinor: number
   outflowMinor: number
   archived: boolean
+  /** Cards only: the credit limit, for the 80% / 100% warnings. */
+  limitMinor?: number
 }
 
 /** Just enough to name an account in a list (loan accounts on loan-payment entries). */
@@ -50,8 +53,10 @@ export type TransactionsContext = {
   timeZone: string
   /** Money accounts (bank, cash, other): pickers, balances, Total available. */
   accounts: LedgerAccount[]
-  /** Loan (liability) accounts, only to label the entries of loan payments. */
+  /** Liability accounts (loans, cards, borrowing), only to label the entries posted to them. */
   loanAccounts: AccountLabel[]
+  /** Credit cards, offered only as "Paid from" for expenses (never in Total available or other pickers). */
+  cardAccounts: LedgerAccount[]
   categories: LedgerCategory[]
   /** For fast entry: a new expense starts from the account of the latest expense. */
   lastExpenseAccountId: string | null

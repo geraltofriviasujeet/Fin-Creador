@@ -10,6 +10,7 @@ import {
 import { TODAY_UNAVAILABLE, type UserClient, userToday } from "../income/client"
 import type { WriteResult } from "../income/types"
 import type { FormInput } from "../income/writers"
+import { cardErrorMessage } from "../cards/errors"
 import { type LoanErrorContext, loanErrorMessage } from "./errors"
 
 // Writes for loans and their due items, shared by web and mobile. They run as the signed-in
@@ -30,8 +31,9 @@ export type LoanWriteError = WriteResult & {
 export type LoanWriteResult = LoanWriteError | { status: "success"; message: string; loanId: string }
 export type PaymentWriteResult = LoanWriteError | { status: "success"; message: string; paymentId: string }
 
-function dbError(error: { code?: string; message?: string; details?: string | null }, ctx: LoanErrorContext = {}): LoanWriteError {
-  const m = loanErrorMessage(error, ctx)
+function dbError(error: { code?: string; message?: string; details?: string | null }, ctx: LoanErrorContext & { cardBill?: boolean } = {}): LoanWriteError {
+  // A card bill's errors (FC047, FC048, the shortfall "to pay this card") read as the card's.
+  const m = ctx.cardBill ? cardErrorMessage(error, { subject: "card", currency: ctx.currency, accountName: ctx.accountName, amountField: "principal" }) : loanErrorMessage(error, ctx)
   const base: LoanWriteError = m.field ? { status: "error", message: FIX_FIELDS, fieldErrors: { [m.field]: m.message } } : { status: "error", message: m.message }
   return m.shortfallMinor ? { ...base, shortfallMinor: m.shortfallMinor } : base
 }
@@ -266,7 +268,9 @@ export async function payDueItem(supabase: UserClient, input: FormInput): Promis
       p_fees_minor: p.feesMinor,
       p_allow_shortfall: p.allowShortfall,
     })
-  if (error || !data) return dbError(error ?? {}, { currency: ctx.data.currency, accountName: ctx.data.accounts.find((a) => a.id === p.accountId)?.name })
+  if (error || !data) {
+    return dbError(error ?? {}, { currency: ctx.data.currency, accountName: ctx.data.accounts.find((a) => a.id === p.accountId)?.name, cardBill: ctx.data.kind === "card_bill" })
+  }
   return { status: "success", message: ctx.data.kind === "card_bill" ? "Bill paid." : "EMI paid.", paymentId: data.id }
 }
 
@@ -304,7 +308,9 @@ export async function editDuePayment(supabase: UserClient, input: FormInput): Pr
       p_fees_minor: p.feesMinor,
       p_allow_shortfall: p.allowShortfall,
     })
-  if (error || !saved) return dbError(error ?? {}, { currency: data.currency, accountName: data.accounts.find((a) => a.id === p.accountId)?.name })
+  if (error || !saved) {
+    return dbError(error ?? {}, { currency: data.currency, accountName: data.accounts.find((a) => a.id === p.accountId)?.name, cardBill: ctx.data.kind === "card_bill" })
+  }
   return { status: "success", message: "Payment saved.", paymentId: saved.id }
 }
 

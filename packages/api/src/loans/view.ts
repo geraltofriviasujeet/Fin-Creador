@@ -20,6 +20,7 @@ import {
   shortfallMinor,
 } from "@fin-creador/domain"
 import { type PayingAccount, shortfallMessage } from "@fin-creador/schemas"
+import { type ReminderEntry, type ShortTermData, type ShortTermHistory, type ShortTermView, buildReminders, buildShortTermView } from "../cards/view"
 
 // The Loans & Liabilities page, the bell and the Overview "Due soon" card (Sprint 8a), built
 // from the loaded rows with the shared domain rules. Pure, so web and mobile show the same
@@ -52,6 +53,8 @@ export type LoanRecord = {
   createdAt: string
   /** The liability account's balance (0 or negative). */
   balanceMinor: number
+  /** Credit card EMI: the card it is linked to (8b), for "EMIs included" on its statements. */
+  cardId?: string | null
 }
 
 export type DueRecord = {
@@ -86,6 +89,9 @@ export type LoansData = {
   payments: PaymentRecord[]
   /** Active bank, cash and other accounts with balances (names only, never digits). */
   accounts: PayingAccount[]
+  /** Cards, statements and borrowings (8b); left out where only loans are needed. */
+  shortTerm?: ShortTermData
+  shortTermHistory?: ShortTermHistory
 }
 
 export type DueItem = DueRecord & {
@@ -136,6 +142,12 @@ export type LoansView = {
   dueSoon: Reminder<DueItem>[]
   accounts: PayingAccount[]
   totalOutstandingMinor: number
+  /** Loans other than card EMIs (those are in the short-term box). */
+  longTermOutstandingMinor: number
+  /** Cards, card EMIs and borrowing (8b), or null when not loaded. */
+  shortTerm: ShortTermView | null
+  /** Due soon and the bell: loans, card bills, borrowing due dates and statements to add. */
+  reminders: ReminderEntry[]
 }
 
 export const LOAN_BADGE_LABEL: Record<LoanBadge, string> = {
@@ -271,6 +283,18 @@ export function buildLoansView(data: LoansData): LoansView {
     loans.flatMap((l) => l.items.filter((d) => !d.notNeeded)),
     data.today,
   )
+  const inCurrency = loans.filter((l) => l.loan.currency === data.currency)
+  const shortTerm = data.shortTerm
+    ? buildShortTermView(data.shortTerm, {
+        today: data.today,
+        currency: data.currency,
+        accounts: data.accounts,
+        loans: all,
+        payments: data.payments,
+        history: data.shortTermHistory ?? { everPaidBillIds: [], everPaidLiabilityAccounts: [] },
+      })
+    : null
+  const currencyOf = new Map(all.map((l) => [l.loan.id, l.loan.currency]))
   return {
     today: data.today,
     currency: data.currency,
@@ -278,13 +302,18 @@ export function buildLoansView(data: LoansData): LoansView {
     archived,
     dueSoon: reminders,
     accounts: data.accounts,
-    totalOutstandingMinor: addMinor(...loans.filter((l) => l.loan.currency === data.currency).map((l) => l.outstandingMinor)),
+    totalOutstandingMinor: addMinor(...inCurrency.map((l) => l.outstandingMinor)),
+    longTermOutstandingMinor: addMinor(...inCurrency.filter((l) => l.loan.loanType !== "credit_card_emi").map((l) => l.outstandingMinor)),
+    shortTerm,
+    reminders: buildReminders(reminders, (item) => currencyOf.get(item.loanId) ?? data.currency, shortTerm, data.today),
   }
 }
 
-/** "Overdue by 3 days", "Due today", "Planned for tomorrow". */
-export function reminderText(r: Pick<Reminder, "reason" | "daysOverdue">): string {
+/** "Overdue by 3 days", "Due today", "Planned for tomorrow", "Statement ready to add". */
+export function reminderText(r: { reason: Reminder["reason"] | "statement"; daysOverdue: number }): string {
   switch (r.reason) {
+    case "statement":
+      return "Statement ready to add"
     case "overdue":
       return r.daysOverdue === 1 ? "Overdue by 1 day" : `Overdue by ${r.daysOverdue} days`
     case "due_today":

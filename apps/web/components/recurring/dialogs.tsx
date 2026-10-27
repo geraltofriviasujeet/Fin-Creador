@@ -28,7 +28,7 @@ export type RecurringDialog =
   | { kind: "edit" | "confirm" | "skip" | "archive"; item: RecurringItem }
   | null
 
-type Data = { accounts: LedgerAccount[]; categories: LedgerCategory[]; today: IsoDate; currency: string }
+type Data = { accounts: LedgerAccount[]; cardAccounts?: LedgerAccount[]; categories: LedgerCategory[]; today: IsoDate; currency: string }
 
 const NETWORK = "We couldn't reach the server. Your details are kept; try again."
 async function run(save: () => Promise<WriteResult>): Promise<WriteResult> {
@@ -61,10 +61,11 @@ export function RecurringDialogs({ open, onClose, titleOf, ...data }: Data & { o
           <TransactionForm
             mode={{ kind: "add", type: open.item.rule.type, locked: true, prefill: open.item.entry }}
             accounts={data.accounts}
+            cardAccounts={data.cardAccounts}
             categories={data.categories}
             today={data.today}
             onSave={async (draft, requestKey) => {
-              const currency = data.accounts.find((a) => a.id === draft.accountId)?.currency ?? data.currency
+              const currency = [...data.accounts, ...(data.cardAccounts ?? [])].find((a) => a.id === draft.accountId)?.currency ?? data.currency
               const result = await run(() =>
                 confirmOccurrenceAction({
                   ruleId: open.item.rule.id,
@@ -109,7 +110,7 @@ const TYPES: { value: EntryType; label: string }[] = [
   { value: "transfer", label: "Transfer" },
 ]
 
-function RuleForm({ accounts, categories, today, currency, item, onDone }: Data & { item?: RecurringItem; onDone: () => void }) {
+function RuleForm({ accounts, cardAccounts = [], categories, today, currency, item, onDone }: Data & { item?: RecurringItem; onDone: () => void }) {
   const rule = item?.rule
   // One key per opened form; a retry after a failure reuses it, so the rule is added once.
   const [requestKey] = useState(newRequestKey)
@@ -128,9 +129,12 @@ function RuleForm({ accounts, categories, today, currency, item, onDone }: Data 
   const [pending, setPending] = useState(false)
 
   // New choices can't be archived; an edit may keep the archived one it has (it then still needs attention).
-  const usableAccounts = accounts.filter((a) => !a.archived || a.id === rule?.accountId || a.id === rule?.counterAccountId)
+  const usable = (a: LedgerAccount) => !a.archived || a.id === rule?.accountId || a.id === rule?.counterAccountId
+  const usableAccounts = accounts.filter(usable)
+  // A card is offered only as the account a recurring expense is paid from.
+  const paidFromAccounts = type === "expense" ? [...usableAccounts, ...cardAccounts.filter(usable)] : usableAccounts
   const kindCategories = categories.filter((c) => c.kind === type && (!c.archived || c.id === rule?.categoryId))
-  const account = accounts.find((a) => a.id === accountId)
+  const account = [...accounts, ...cardAccounts].find((a) => a.id === accountId)
   const editing = Boolean(rule)
 
   async function submit(event: React.FormEvent) {
@@ -217,7 +221,7 @@ function RuleForm({ accounts, categories, today, currency, item, onDone }: Data 
         ) : (
           <SelectField name="accountId" label={type === "income" ? "Received into" : "Paid from"} value={accountId} error={errors.accountId} onChange={(e) => setAccountId(e.target.value)}>
             <option value="">Choose an account</option>
-            {usableAccounts.map(option)}
+            {paidFromAccounts.map(option)}
           </SelectField>
         )}
       </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { type LedgerAccount, type LedgerCategory, type LedgerItem, balancesWithout, previewDraft } from "@fin-creador/api"
+import { type LedgerAccount, type LedgerCategory, type LedgerItem, balancesWithout, cardLimitWarning, previewDraft } from "@fin-creador/api"
 import { AMOUNT_ERROR_MESSAGES, type IsoDate, minorToInputString, parseAmount } from "@fin-creador/domain"
 import { PAYMENT_MODES, type PaymentModeValue } from "@fin-creador/schemas"
 import { cn } from "cn"
@@ -48,6 +48,8 @@ type Props = {
       }
     | { kind: "edit"; entry: LedgerItem }
   accounts: LedgerAccount[]
+  /** Credit cards: offered only as "Paid from" for an expense. */
+  cardAccounts?: LedgerAccount[]
   categories: LedgerCategory[]
   /** Fast entry: a new expense starts from the account of the latest expense. */
   lastExpenseAccountId?: string | null
@@ -56,8 +58,10 @@ type Props = {
   onSave: (draft: Draft, requestKey: string) => Promise<SaveResult>
 }
 
-export function TransactionForm({ mode, accounts, categories, lastExpenseAccountId, today, onTypeChange, onSave }: Props) {
+export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = [], categories, lastExpenseAccountId, today, onTypeChange, onSave }: Props) {
   const editing = mode.kind === "edit" ? mode.entry : null
+  // Every account the form may meet; pickers below choose which ones each field offers.
+  const accounts = [...moneyAccounts, ...cardAccounts]
   const locked = mode.kind === "add" && Boolean(mode.locked)
   const start: Prefill | null = editing ?? (mode.kind === "add" ? (mode.prefill ?? null) : null)
   const [type, setType] = useState<EntryType>(editing?.type ?? (mode.kind === "add" ? mode.type : "expense"))
@@ -81,7 +85,10 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
 
   // Archived accounts and categories can't be chosen for new entries; an edit may keep the
   // one it already has.
-  const usableAccounts = accounts.filter((a) => !a.archived || a.id === editing?.accountId || a.id === editing?.counterAccountId)
+  const usable = (a: LedgerAccount) => !a.archived || a.id === editing?.accountId || a.id === editing?.counterAccountId
+  const usableAccounts = moneyAccounts.filter(usable)
+  // A card is offered only as the account an expense is paid from.
+  const paidFromAccounts = type === "expense" ? [...usableAccounts, ...cardAccounts.filter(usable)] : usableAccounts
   const kindCategories = categories.filter((c) => c.kind === type && (!c.archived || c.id === editing?.categoryId))
   const account = accounts.find((a) => a.id === accountId)
   const counter = accounts.find((a) => a.id === counterAccountId)
@@ -97,6 +104,8 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
     balances: balancesWithout(accounts, editing),
   })
 
+  const limitWarning = cardLimitWarning(moves.find((m) => m.account.kind === "card"))
+
   const noun = type === "income" ? "income" : type
   const accountLabel = type === "income" ? "Received into" : type === "transfer" ? "From" : "Paid from"
 
@@ -108,6 +117,7 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
     else if (occurredOn > today) next.occurredOn = "The date can't be in the future"
     else if (occurredOn < "1970-01-01") next.occurredOn = "Choose a later date"
     if (!accountId) next.accountId = type === "income" ? "Choose where it was received" : "Choose an account"
+    else if (account?.kind === "card" && type !== "expense") next.accountId = "A card can only pay for expenses"
     if (type === "transfer") {
       if (!counterAccountId) next.counterAccountId = "Choose an account"
       else if (counterAccountId === accountId) next.counterAccountId = "Choose a different account"
@@ -261,7 +271,7 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
           <AccountSelect
             name="accountId"
             label={accountLabel}
-            accounts={usableAccounts}
+            accounts={paidFromAccounts}
             value={accountId}
             onChange={setAccountId}
             error={errors.accountId}
@@ -295,15 +305,24 @@ export function TransactionForm({ mode, accounts, categories, lastExpenseAccount
 
       {moves.length > 0 && (
         <div className="grid gap-1 rounded-xl bg-canvas px-3 py-2.5 text-xs text-muted-foreground" aria-live="polite">
-          {moves.map((m) => (
-            <p key={m.account.id} className="tabular-nums">
-              <span className="font-semibold text-ink">{m.account.label}</span>: {money(m.before, m.account.currency)} →{" "}
-              <span className={cn("font-semibold", m.after < 0 ? "text-danger" : "text-ink")}>{money(m.after, m.account.currency)}</span>
-            </p>
-          ))}
+          {moves.map((m) =>
+            m.account.kind === "card" ? (
+              <p key={m.account.id} className="tabular-nums">
+                <span className="font-semibold text-ink">{m.account.label}</span>: owed {money(Math.max(-m.before, 0), m.account.currency)} →{" "}
+                <span className="font-semibold text-ink">{money(Math.max(-m.after, 0), m.account.currency)}</span>
+              </p>
+            ) : (
+              <p key={m.account.id} className="tabular-nums">
+                <span className="font-semibold text-ink">{m.account.label}</span>: {money(m.before, m.account.currency)} →{" "}
+                <span className={cn("font-semibold", m.after < 0 ? "text-danger" : "text-ink")}>{money(m.after, m.account.currency)}</span>
+              </p>
+            ),
+          )}
           {type === "transfer" && <p>A transfer moves money between your accounts. It isn&apos;t income or an expense.</p>}
         </div>
       )}
+
+      {limitWarning && <FormMessage tone="info">{limitWarning} You can still save it.</FormMessage>}
 
       {goesNegative && (
         <FormMessage tone="info">

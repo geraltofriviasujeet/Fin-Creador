@@ -23,7 +23,7 @@ function dbError(error: { code?: string; message?: string }): WriteResult {
 async function accountOf(supabase: UserClient, id: string | undefined) {
   if (!id) return null
   const { data } = await supabase.from("accounts").select("currency, kind").eq("id", id).maybeSingle()
-  return data ? { currency: data.currency, kind: data.kind as "bank" | "cash" | "other" } : null
+  return data ? { currency: data.currency, kind: data.kind as "bank" | "cash" | "other" | "card" } : null
 }
 
 /** Adds a rule (no `ruleId`, needs a request key) or saves an edit of one (with `ruleId`). */

@@ -77,12 +77,12 @@ test("navigation, empty state, and the Liabilities tab on a phone", async ({ bro
   await expect(page).toHaveURL(new RegExp(`${PATH}$`))
   await expect(page.getByRole("heading", { level: 1, name: "Loans & Liabilities" })).toBeVisible()
   await expect(page).toHaveTitle(/Loans & Liabilities/)
-  // Three boxes: loans now (empty state inside), the other two coming next.
+  // Three boxes: loans and short-term (cards, borrowing: 8b) with their empty states, statutory coming next.
   await expect(loansList(page).getByText("No loans yet")).toBeVisible()
   await expect(loansList(page).getByRole("button", { name: "Add loan" })).toBeVisible()
   const shortTerm = page.getByRole("region", { name: "Short-term & operational liabilities" })
-  await expect(shortTerm).toContainText("Coming next")
-  await expect(shortTerm).toContainText("Credit card dues and EMIs, and informal borrowing")
+  await expect(shortTerm.getByText("No cards or borrowing yet")).toBeVisible()
+  await expect(shortTerm.getByRole("button", { name: "Add card" })).toBeVisible()
   const statutory = page.getByRole("region", { name: "Statutory & legal liabilities" })
   await expect(statutory).toContainText("Coming next")
   await expect(statutory).toContainText("Income tax payable, fines and unpaid e-challans")
