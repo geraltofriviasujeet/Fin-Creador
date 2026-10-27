@@ -1,4 +1,4 @@
-import { type BankType, type SourceType, minDate, previousMonthRange, yearRange } from "@fin-creador/domain"
+import { type BankType, MONEY_ACCOUNT_KINDS, type SourceType, minDate, previousMonthRange, yearRange } from "@fin-creador/domain"
 import { type UserClient, userToday } from "./client"
 import type { IncomeAccount, IncomeEntryItem, IncomePageData, IncomeSourceItem } from "./types"
 
@@ -38,6 +38,8 @@ export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> 
     supabase
       .from("accounts")
       .select("id, kind, bank_type, name, institution, last4, currency, opening_balance_minor, opening_balance_date, archived_at, updated_at")
+      // Loan (liability) accounts are never on the Income page or in Total available.
+      .in("kind", [...MONEY_ACCOUNT_KINDS])
       .order("created_at"),
     supabase.from("account_balances").select("account_id, inflow_minor, outflow_minor, last_activity_at"),
     loadSources(),

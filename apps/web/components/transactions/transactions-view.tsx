@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
 import { Ellipsis, Plus, Search, X } from "lucide-react"
 import { type LedgerItem, type PageCursor,
-  type RecurringView, type TransactionTotals, type TransactionsContext, type Filters, type Lookup, PERIODS, TYPE_TABS, filtersToQuery, groupByDay, hasActiveFilters, periodLabel, readFilters, toApiFilters } from "@fin-creador/api"
+  type RecurringView, type TransactionTotals, type TransactionsContext, type Filters, type Lookup, ledgerLookup, PERIODS, TYPE_TABS, filtersToQuery, groupByDay, hasActiveFilters, periodLabel, readFilters, toApiFilters } from "@fin-creador/api"
 import {
   type DateRange,
   formatPercentFromBasisPoints,
@@ -81,13 +81,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
   // Deep links (?edit= / ?history=) are dropped from the URL once their dialog closes.
   const closeDeepLink = () => (params.get("edit") || params.get("history")) && replaceUrl(href({}))
 
-  const lookup: Lookup = useMemo(
-    () => ({
-      accounts: new Map(context.accounts.map((a) => [a.id, a])),
-      categories: new Map(context.categories.map((c) => [c.id, c])),
-    }),
-    [context.accounts, context.categories]
-  )
+  const lookup: Lookup = useMemo(() => ledgerLookup(context), [context])
 
   async function loadMore() {
     if (!pages.nextCursor || loadingMore) return

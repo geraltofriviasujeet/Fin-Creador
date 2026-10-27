@@ -11,6 +11,10 @@ The fixed-deposit form (Sprint 7) suggests banks from `FD_BANKS` in
 `money-forms.ts`) without payments banks, which can't take deposits, plus small finance banks
 that do. Any bank name can be typed.
 
+The loan form (Sprint 8a) suggests lenders from `LENDERS` in
+`packages/schemas/src/loan-forms.ts`: `FD_BANKS`, card issuers that are not banks, housing
+finance companies, NBFCs and education lenders. Any lender name can be typed.
+
 ## When
 
 In January, April, July and October. Normally only vehicle makes and models change. Touch
@@ -27,6 +31,10 @@ territory or a renamed city).
 3. Banks: check the RBI lists of scheduled commercial banks and small finance banks. Add
    banks that take fixed deposits, remove merged or closed ones (keep names as the bank writes
    them). Update `FD_BANKS_REVIEWED_ON` in `fixed-deposit-forms.ts`, even when nothing changed.
+   Lenders: check the RBI lists of housing finance companies and NBFCs (upper and middle
+   layer) and the card issuers; add active lenders, remove merged or closed ones, and use the
+   name the lender uses. Update `LENDERS_REVIEWED_ON` in `loan-forms.ts`, even when nothing
+   changed.
 4. Places: change states, union territories or cities only on an official change, with the
    official source.
 5. Record every change in a diff table in the PR description, one row per change, with the

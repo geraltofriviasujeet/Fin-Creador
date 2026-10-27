@@ -2,7 +2,7 @@
 // button and the topbar search work) and mobile. The filtering runs in the database
 // (list_transactions, transaction_summary).
 import type { TransactionFilters } from "./list"
-import type { LedgerAccount, LedgerCategory } from "./types"
+import type { LedgerAccount, LedgerCategory, TransactionsContext } from "./types"
 import { type DateRange, type IsoDate, isIsoDate, monthRange, previousMonthRange, yearRange } from "@fin-creador/domain"
 
 export const TYPE_TABS = [
@@ -100,7 +100,18 @@ export function previousPeriod(f: Pick<Filters, "period">, today: IsoDate): Date
   return null
 }
 
-export type Lookup = { accounts: Map<string, LedgerAccount>; categories: Map<string, LedgerCategory> }
+export type Lookup = { accounts: Map<string, Pick<LedgerAccount, "label" | "archived">>; categories: Map<string, LedgerCategory> }
+
+/** Names for entries: money accounts and the loan accounts of loan payments. */
+export function ledgerLookup(context: Pick<TransactionsContext, "accounts" | "loanAccounts" | "categories">): Lookup {
+  return {
+    accounts: new Map<string, Pick<LedgerAccount, "label" | "archived">>([
+      ...context.accounts.map((a) => [a.id, a] as const),
+      ...(context.loanAccounts ?? []).map((a) => [a.id, a] as const),
+    ]),
+    categories: new Map(context.categories.map((c) => [c.id, c])),
+  }
+}
 
 /** The URL filters as the database functions take them. */
 export function toApiFilters(f: Filters, range: DateRange): TransactionFilters {

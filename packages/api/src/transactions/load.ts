@@ -1,7 +1,7 @@
-import type { BankType } from "@fin-creador/domain"
+import { type BankType, isMoneyAccountKind } from "@fin-creador/domain"
 import { type UserClient, userToday } from "../income/client"
 import { accountLabel } from "../income/load"
-import type { LedgerAccount, LedgerCategory, TransactionsContext } from "./types"
+import type { AccountLabel, LedgerAccount, LedgerCategory, TransactionsContext } from "./types"
 
 export type TransactionsContextLoad =
   | { ok: true; data: TransactionsContext }
@@ -55,7 +55,12 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
   }
 
   const balances = new Map(balancesRes.data.map((b) => [b.account_id, b]))
-  const accounts: LedgerAccount[] = accountsRes.data.map((a) => {
+  // Loan (liability) accounts only label the entries of loan payments; they are never in
+  // pickers, balances or Total available.
+  const loanAccounts: AccountLabel[] = accountsRes.data
+    .filter((a) => !isMoneyAccountKind(a.kind))
+    .map((a) => ({ id: a.id, label: `${accountLabel(a)} (loan)`, archived: a.archived_at !== null }))
+  const accounts: LedgerAccount[] = accountsRes.data.filter((a) => isMoneyAccountKind(a.kind)).map((a) => {
     const b = balances.get(a.id)
     return {
       id: a.id,
@@ -88,8 +93,10 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
       currency: profileRes.data.currency,
       timeZone: profileRes.data.time_zone,
       accounts,
+      loanAccounts,
       categories,
-      lastExpenseAccountId: lastExpenseRes.data?.account_id ?? null,
+      // Capitalised loan interest is an expense on a loan account: never offered as a default.
+      lastExpenseAccountId: accounts.some((a) => a.id === lastExpenseRes.data?.account_id) ? (lastExpenseRes.data?.account_id ?? null) : null,
       hasEntries: anyEntryRes.data !== null,
     },
   }

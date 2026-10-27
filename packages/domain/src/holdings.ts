@@ -8,6 +8,12 @@ import type { IsoDate } from "./dates";
 import { addMinor } from "./money";
 
 export type AccountKind = "bank" | "cash" | "other";
+/**
+ * Accounts that hold money: the only ones in Total available, account pickers and the
+ * Accounts page. A loan's liability account (kind "loan", Sprint 8a) is never one of them.
+ */
+export const MONEY_ACCOUNT_KINDS: readonly AccountKind[] = ["bank", "cash", "other"];
+export const isMoneyAccountKind = (kind: string): kind is AccountKind => (MONEY_ACCOUNT_KINDS as readonly string[]).includes(kind);
 export type BankType = "savings" | "current";
 
 export interface AccountWithActivity {
@@ -59,7 +65,8 @@ export function summarizeHoldings<A extends AccountWithActivity>(
   accounts: readonly A[],
   profileCurrency: string,
 ): HoldingsSummary<A> {
-  const active = accounts.filter((a) => !a.archived);
+  // Defensive: a liability account read with a loose kind is never counted.
+  const active = accounts.filter((a) => !a.archived && isMoneyAccountKind(a.kind));
   const rows = active
     .map((account) => ({ account, balanceMinor: accountBalance(account), inTotal: account.currency === profileCurrency }))
     .sort((x, y) => KIND_ORDER[x.account.kind] - KIND_ORDER[y.account.kind]);
@@ -76,6 +83,6 @@ export function summarizeHoldings<A extends AccountWithActivity>(
     savingsCount: banks.filter((a) => a.bankType === "savings").length,
     currentCount: banks.filter((a) => a.bankType === "current").length,
     rows,
-    archived: accounts.filter((a) => a.archived),
+    archived: accounts.filter((a) => a.archived && isMoneyAccountKind(a.kind)),
   };
 }

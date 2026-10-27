@@ -2,6 +2,7 @@ import {
   type Filters,
   type LedgerItem,
   type Lookup,
+  ledgerLookup,
   PERIODS,
   type PageCursor,
   TYPE_TABS,
@@ -94,8 +95,8 @@ function Activity({ data }: { data: TransactionsContext }) {
   const key = JSON.stringify(f);
 
   const lookup: Lookup = useMemo(
-    () => ({ accounts: new Map(data.accounts.map((a) => [a.id, a])), categories: new Map(data.categories.map((c) => [c.id, c])) }),
-    [data.accounts, data.categories]
+    () => ledgerLookup(data),
+    [data]
   );
 
   useEffect(() => {

@@ -71,3 +71,15 @@ describe("summarizeHoldings", () => {
     expect(summarizeHoldings([], "INR")).toMatchObject({ totalAvailableMinor: 0, bankCount: 0, rows: [] });
   });
 });
+
+describe("summarizeHoldings and loan accounts", () => {
+  it("never counts a loan (liability) account, active or archived", () => {
+    const loan = { ...account({ id: "loan", bankType: null, openingBalanceMinor: -25_00_000_00 }), kind: "loan" } as unknown as AccountWithActivity;
+    const archivedLoan = { ...loan, id: "old", archived: true };
+    const s = summarizeHoldings([account({ id: "hdfc", openingBalanceMinor: 1_000 }), loan, archivedLoan], "INR");
+    expect(s.totalAvailableMinor).toBe(1_000);
+    expect(s.rows.map((r) => r.account.id)).toEqual(["hdfc"]);
+    expect(s.archived).toEqual([]);
+  });
+});
+
