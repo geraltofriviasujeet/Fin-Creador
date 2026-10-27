@@ -97,6 +97,7 @@ test("navigation, empty state, and the Liabilities tab on a phone", async ({ bro
   await tabs.getByRole("link", { name: "Liabilities" }).click()
   await expect(phone.getByRole("heading", { level: 1, name: "Loans & Liabilities" })).toBeVisible()
   await expect(tabs.getByRole("link", { name: "Liabilities" })).toHaveAttribute("aria-current", "page")
+  await expect(loansList(phone).getByText("No loans yet")).toBeVisible() // loaded, not the skeleton
   await phone.screenshot({ path: `${SHOTS}/loans-phone.png` }) // the viewport, with the tab bar at the bottom
   await phone.close()
 })
