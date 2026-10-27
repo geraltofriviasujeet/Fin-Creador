@@ -108,8 +108,8 @@ as $$
   group by a.id, a.opening_balance_minor;
 $$;
 
--- So the difference expense and the receipt can reference their entry with its owner.
-alter table public.transactions add constraint transactions_id_user_unique unique (id, user_id);
+-- The difference expense and the receipt reference their entry with its owner through
+-- transactions_id_user_unique (Sprint 3).
 
 -- ---------------------------------------------------------------------------
 -- Card cycle dates (parity with packages/domain: supabase/tests/database/card_dates_parity.test.sql)
