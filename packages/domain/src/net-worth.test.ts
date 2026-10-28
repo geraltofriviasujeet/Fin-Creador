@@ -158,6 +158,24 @@ describe("netWorth", () => {
     expect(r.empty).toBe(false);
   });
 
+  it("no double counting: a card EMI is a loan, the card owes only its other purchases, bills and EMIs are never separate", () => {
+    // Card purchases 8,000 owed; a card EMI of 12,000 on its own loan account. No due items exist in the input.
+    const r = netWorth(input({ accounts: { accounts: [acct("card", "card", -8_000_00), acct("emi", "loan", -12_000_00)], pendingCapitalised: [] } }));
+    expect(r.liabilitiesMinor).toBe(20_000_00);
+    expect(r.totalMinor).toBe(-20_000_00);
+  });
+
+  it("a matured deposit is valued at the maturity amount and flagged Matured, not Estimate", () => {
+    const r = netWorth(input({ investments: { holdings: [], deposits: [{ name: "FD", currency: "INR", valueMinor: 1_07_186_00, matured: true }] } }));
+    expect(r.totalMinor).toBe(1_07_186_00);
+    expect(line(r, "deposits")?.flags).toEqual([{ flag: "matured", count: 1 }]);
+  });
+
+  it("an empty profile has no lines and a zero total", () => {
+    const r = netWorth(input());
+    expect([r.empty, r.totalMinor, r.assetsMinor, r.liabilitiesMinor]).toEqual([true, 0, 0, 0]);
+  });
+
   it("a part that failed: no total, the other parts still shown", () => {
     const r = netWorth(input({ investments: null, accounts: { accounts: [acct("bank", "bank", 100)], pendingCapitalised: [] } }));
     expect([r.totalMinor, r.assetsMinor, r.liabilitiesMinor, r.failed, r.empty]).toEqual([null, null, null, ["investments"], false]);

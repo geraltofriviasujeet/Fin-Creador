@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-28 (Sprints 8a, 8b, the 8b follow-up and 8d done on stacked draft PRs #35–#41, none merged. Next: 8e net worth, then 8c; prod once at the end).
+Last updated: 2026-10-28 (Sprints 8a, 8b, the 8b follow-up and 8d done on stacked draft PRs #35–#41, none merged. 8e done on draft PR #42. Next: 8c cash-flow history and CSV export; prod once at the end).
 
 ## Sprint status
 
@@ -33,7 +33,7 @@ Last updated: 2026-10-28 (Sprints 8a, 8b, the 8b follow-up and 8d done on stacke
 | **8a** | Loans and EMIs | Done | Completed 2026-10-28 (web). Backend PR #34 merged; web page PR #35 (draft, CI green, QA passed). Migration `20261028120000_loans.sql` on dev; prod with the rest of Sprint 8 at the end (PR #35 stays draft until then). Mobile loans in the backlog. See Sprint 8a steps. |
 | **8b** | Credit cards and informal borrowing | Done | Completed 2026-10-28 (web). Backend draft PR #36 (`sprint-8b`, migration `20261028180000_cards_borrowing.sql` on dev); web box draft PR #37 (`sprint-8b-ui`, stacked on `sprint-8b`). Prod with the rest of Sprint 8 at the end. Mobile cards and borrowing in the backlog. Follow-up done 2026-10-28 (web): backend draft PR #38 (`sprint-8b-followup`, migration `20261028210000_borrowing_details_card_products.sql` on dev), web draft PR #39 (`sprint-8b-followup-ui`, stacked on #38), CI green, QA passed. Prod with the rest of Sprint 8. Next: 8d from `sprint-8b-followup-ui`. |
 | **8d** | Statutory dues | Done | Completed 2026-10-28 (web). Backend draft PR #40 (`sprint-8d`, migration `20261028230000_statutory_dues.sql` on dev), web draft PR #41 (`sprint-8d-ui`, stacked on #40), CI green, QA passed. Prod with the rest of Sprint 8. Mobile in the backlog. |
-| **8e** | Net worth | Not started | Next. Branch from `sprint-8d-ui`, stacked draft PR. All three liability boxes (statutory: what is still due). |
+| **8e** | Net worth | Done | Completed 2026-10-28 (web). Draft PR #42 (`sprint-8e`, stacked on #41), no migration. Overview "Net worth" card (own Suspense) from `netWorth` in `packages/domain/src/net-worth.ts`, loaded by `loadNetWorthData` (one `account_balances` read). Prod with the rest of Sprint 8. Mobile in the backlog. Next: 8c from `sprint-8e`. |
 | **8c** | Cash-flow history and CSV export | Not started | Step 4 (last). Branch from 8e's branch, stacked draft PR. Then the Sprint 8 prod rollout (owner, `docs/deployment.md` 4c): merge the stacked PRs into `main` in order, backup, dry run listing exactly the Sprint 8 migrations, push prod, live check. |
 | **9** | Statement import | Not started | After the Sprint 8 prod rollout. Credit card PDFs, then bank CSV / Excel, then bank PDFs (Backlog item). |
 | **10** | AI financial insights | Not started | |
@@ -231,6 +231,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-28** | Sprint 8d web (owner): the "Statutory & legal liabilities" box lists dues with what is left and badges (Due, Overdue, Part-paid X left, Paid), archived collapsed; Add / edit due (fines: vehicle, state, city from the shared lists; no challan, RTO or vehicle numbers); Pay prefilled from the due's account and what is left, interest or penalty on tax dues only, Pay anyway, edit / void, Will pay later; archive once paid, delete without history. Reminder links from the bell and the Overview open the pay dialog (`/loans-liabilities?pay=<id>`). | PR #41; QA tests in `statutory_dues_qa.test.sql`. |
 | **2026-10-28** | Order after 8b (owner): (1) 8b follow-up (borrowing details, card product list, F1), (2) 8d, (3) 8e net worth, (4) 8c, (5) prod rollout once at the end: backup, merge PRs #35, #36, #37 and the next ones in order, dry run listing exactly the Sprint 8 migrations, push prod, live check. | Scope in "Sprint 8b follow-up" below. |
 | **2026-10-28** | Statement import (owner): planned as Sprint 9 (web; credit card PDFs, then bank CSV / Excel, then bank PDFs, on one shared reader), after the Sprint 8 prod rollout; order 8d web, 8e, 8c, prod, then statement import. Client-side PDF parsing, password never leaves the browser, confirmed lines only, re-import is a no-op. | Full decisions in the Backlog item; roadmap renumbered: AI insights is Sprint 10, notifications 11, mobile polish 12, release 13. |
+| **2026-10-28** | Sprint 8e net worth (owner): net worth = Total available (unchanged) + shares / funds / ETFs at the last known price + fixed deposits at today's value (the maturity amount once matured) + a liability account in credit as its own asset line "Card credit (overpaid)" − loans (owed + moratorium interest not yet added; card EMIs are loans) − cards owed (the card account) − borrowings (principal only) − statutory dues left. Due items are never subtracted (the account balance holds what is owed). Profile currency only; other currencies and holdings without a price listed as "Not included"; archived items out; no new rounding (sums of existing minor-unit figures). Each line shows its as-of date (prices: oldest to newest price date), the card the date and time zone, every flag its reason (Old price, Stale, Estimate, Matured). A part that fails to load: no total, the loaded parts shown with "Couldn't load X" and Try again. An Overview card in its own Suspense boundary, no nav tab; the trend is 8c. No migration. | One pure function for web and mobile; a property test checks the sum against every account balance. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -749,6 +750,8 @@ New migration only (never edit an applied one); SQL shown to the owner before ap
 - Unchanged: card statements and bills, and Pay card.
 
 ### Sprint 8e — Net worth (after 8d)
+
+Done 2026-10-28: rules in the Decisions row of that date ("Sprint 8e net worth").
 
 - Net worth: included assets minus included liabilities, with valuation
   dates; liabilities from all three boxes (long-term loans, short-term

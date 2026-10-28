@@ -103,6 +103,49 @@ describe("loadNetWorthData", () => {
     expect(netWorth(load.data).totalMinor).toBeNull()
   })
 
+  it("empty state: a new user with nothing loads to an empty net worth", async () => {
+    const empty = { ...ROWS, accounts: [], account_balances: [], loans: [], due_items: [] }
+    const load = await loadNetWorthData(fakeClient(empty).client)
+    if (!load.ok) throw new Error("load failed")
+    const r = netWorth(load.data)
+    expect([r.empty, r.totalMinor, r.lines, r.failed]).toEqual([true, 0, [], []])
+  })
+
+  it("an account in another currency is listed as not included and never converted", async () => {
+    const rows = { ...ROWS, accounts: [...ROWS.accounts, account("wise", "bank", 100_00, { currency: "USD" }), account("us card", "card", -50_00, { currency: "USD" })] }
+    const load = await loadNetWorthData(fakeClient(rows).client)
+    if (!load.ok) throw new Error("load failed")
+    const r = netWorth(load.data)
+    expect(r.totalMinor).toBe(90_000_00 - 5_32_000_00 - 8_000_00)
+    expect(r.notIncluded).toEqual([
+      { name: "wise", reason: "currency", currency: "USD" },
+      { name: "us card", reason: "currency", currency: "USD" },
+    ])
+  })
+
+  it("Total available equals the independent sum of active money accounts (card, loan and archived excluded)", async () => {
+    const load = await loadNetWorthData(fakeClient(ROWS).client)
+    if (!load.ok) throw new Error("load failed")
+    // Independent figure: bank 1,00,000 opening - 10,000 posted outflow; nothing else is a money account.
+    expect(netWorth(load.data).lines.find((l) => l.key === "available")?.amountMinor).toBe(1_00_000_00 - 10_000_00)
+  })
+
+  it("a card EMI linked to a card is counted once, as a loan; the card keeps only its other purchases", async () => {
+    // Card owes 8,000 in purchases; the EMI (12,000 on the loan account) is a separate loan account.
+    const load = await loadNetWorthData(fakeClient(ROWS).client)
+    if (!load.ok) throw new Error("load failed")
+    const r = netWorth(load.data)
+    expect(r.lines.find((l) => l.key === "loans")?.count).toBe(2)
+    expect(r.lines.find((l) => l.key === "cards")?.amountMinor).toBe(8_000_00)
+  })
+
+  it("capitalised interest of an archived loan is not counted", async () => {
+    const rows = { ...ROWS, loans: ROWS.loans.map((l) => (l.id === "L1" ? { ...l, archived_at: "2026-10-01T00:00:00Z" } : l)) }
+    const load = await loadNetWorthData(fakeClient(rows).client)
+    if (!load.ok) throw new Error("load failed")
+    expect(load.data.accounts?.pendingCapitalised).toEqual([])
+  })
+
   it("signed out", async () => {
     const { client } = fakeClient(ROWS)
     ;(client as unknown as { auth: { getUser: () => Promise<unknown> } }).auth.getUser = async () => ({ data: { user: null } })
