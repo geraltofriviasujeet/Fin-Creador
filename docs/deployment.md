@@ -177,6 +177,12 @@ activity; a paused project runs no `pg_cron` jobs, so prices stop updating (hold
 
 ## 4c. Sprint 8 on production (once, at the end of Sprint 8)
 
+**Done 2026-10-29** (owner): PRs #35–#44 merged, prod backed up, all five Sprint 8 migrations
+applied (`20261028120000` loans, `20261028180000` cards and borrowing, `20261028210000`
+borrowing details and card products, `20261028230000` statutory dues, `20261029120000`
+account balances at a date), verification query all `true`, live check passed. Kept as a
+record; later migrations follow sections 4 and 4b.
+
 Sprint 8 goes to prod once, after its last step (owner, 2026-10-28). Until then every Sprint 8
 migration is on dev only and every Sprint 8 PR stays a stacked draft: PR #35 (8a web), then
 8b, 8d, 8e and 8c, each branched from the one before. The owner runs every step:
