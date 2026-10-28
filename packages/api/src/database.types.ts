@@ -1555,7 +1555,11 @@ export type Database = {
     Functions: {
       account_balances_at: {
         Args: { p_dates: string[] }
-        Returns: { account_id: string; as_of: string; balance_minor: number }[]
+        Returns: {
+          account_id: string
+          as_of: string
+          balance_minor: number
+        }[]
       }
       backfill_default_expense_categories: { Args: never; Returns: number }
       backfill_default_income_sources: { Args: never; Returns: number }

@@ -65,7 +65,7 @@ async function addPersonalLoan(page: Page, { emi, shots = false }: { emi?: strin
   await expect(d).toBeHidden()
 }
 
-test("navigation, empty state, and the Liabilities tab on a phone", async ({ browser, baseURL }) => {
+test("navigation, empty state, and Loans & Liabilities under More on a phone", async ({ browser, baseURL }) => {
   const page = await (await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } })).newPage()
   await newUser(page, "loans-nav")
   const nav = page.getByRole("navigation", { name: "Main" }).first()
@@ -94,11 +94,15 @@ test("navigation, empty state, and the Liabilities tab on a phone", async ({ bro
 
   const phone = await (await browser.newContext({ baseURL, viewport: { width: 390, height: 844 } })).newPage()
   await newUser(phone, "loans-phone")
+  // Under the tab bar's "More" menu since Sprint 8c (a phone fits five tabs).
   const tabs = phone.getByRole("navigation", { name: "Main" }).last()
-  await expect(tabs.getByRole("link", { name: "Liabilities" })).toHaveAttribute("href", PATH)
-  await tabs.getByRole("link", { name: "Liabilities" }).click()
+  await tabs.getByRole("button", { name: "More" }).click()
+  await expect(tabs.getByRole("link", { name: "Loans & Liabilities" })).toHaveAttribute("href", PATH)
+  await tabs.getByRole("link", { name: "Loans & Liabilities" }).click()
   await expect(phone.getByRole("heading", { level: 1, name: "Loans & Liabilities" })).toBeVisible()
-  await expect(tabs.getByRole("link", { name: "Liabilities" })).toHaveAttribute("aria-current", "page")
+  await tabs.getByRole("button", { name: "More" }).click()
+  await expect(tabs.getByRole("link", { name: "Loans & Liabilities" })).toHaveAttribute("aria-current", "page")
+  await tabs.getByRole("button", { name: "More" }).click()
   await expect(loansList(phone).getByText("No loans yet")).toBeVisible() // loaded, not the skeleton
   await phone.screenshot({ path: `${SHOTS}/loans-phone.png` }) // the viewport, with the tab bar at the bottom
   await phone.close()

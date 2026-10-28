@@ -21,6 +21,8 @@ export async function GET(request: Request) {
       ...NO_STORE,
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${result.filename}"`,
+      // For the Reports form's "nothing in this range" state; a count only, no content.
+      "X-Row-Count": String(result.rowCount),
     },
   })
 }

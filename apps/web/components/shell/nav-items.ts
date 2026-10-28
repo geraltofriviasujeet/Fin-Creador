@@ -1,6 +1,7 @@
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  ChartColumn,
   Goal,
   Landmark,
   LayoutGrid,
@@ -18,11 +19,12 @@ export type NavItem = {
   icon: LucideIcon
   /** False until the sprint that builds the page; rendered as "coming soon". */
   available: boolean
-  /** Show in the mobile bottom tab bar (design-spec §5). */
+  /** Show in the mobile bottom tab bar (design-spec §5); the others are under its "More" menu. */
   inTabBar: boolean
 }
 
-// Order follows design-spec §4 (Goals holds planned expenses and monthly budgets, Sprint 6; Loans & Liabilities after Investments, Sprint 8a). Flip `available` when a page ships.
+// Order follows design-spec §4 (Goals holds planned expenses and monthly budgets, Sprint 6; Loans & Liabilities after Investments, Sprint 8a; Reports after it, Sprint 8c). Flip `available` when a page ships.
+// A phone fits five tabs: four here and "More" (Income, Recurring, Liabilities, Reports).
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "overview", label: "Overview", href: "/", icon: LayoutGrid, available: true, inTabBar: true },
   { key: "income", label: "Income", href: "/income", icon: ArrowDownToLine, available: true, inTabBar: false },
@@ -46,8 +48,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: "/loans-liabilities",
     icon: Landmark,
     available: true,
-    inTabBar: true,
+    inTabBar: false,
   },
+  { key: "reports", label: "Reports", href: "/reports", icon: ChartColumn, available: true, inTabBar: false },
 ]
 
 

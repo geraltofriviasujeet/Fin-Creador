@@ -183,8 +183,12 @@ jobs:
         run: npm run build
 
       # Uses the Google Chrome preinstalled on the runner (Playwright channel "chrome").
+      # E2E_DB_URL (the runner's local database, never a hosted one) is only for this step: the
+      # CSV export measurement seeds 10,000 rows there (e2e/reports-export-scale.spec.ts).
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: |
+          eval "$(supabase status -o env | grep -E '^DB_URL=')"
+          E2E_DB_URL="$DB_URL" npm run test:e2e
 
       # Diagnostics only: the local Auth server's log (throwaway test users, no real data).
       - name: Show local Auth log

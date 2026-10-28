@@ -1,4 +1,4 @@
-import { type BucketTotals, type DateRange, type IsoDate, bucketSizeFor, formatMoney, partialBucket } from "@fin-creador/domain"
+import { type BucketSize, type BucketTotals, type DateRange, type IsoDate, bucketSizeFor, formatMoney, partialBucket } from "@fin-creador/domain"
 import { fullDate } from "@/components/transactions/display"
 import { cn } from "cn"
 
@@ -28,9 +28,9 @@ function niceCeil(n: number): number {
   return ([1, 2, 5, 10].find((m) => m * p >= n) ?? 10) * p
 }
 
-function bucketLabel(start: IsoDate, range: DateRange, short: boolean): string {
+function bucketLabel(start: IsoDate, range: DateRange, short: boolean, size: BucketSize): string {
   const [y, m, d] = start.split("-").map(Number) as [number, number, number]
-  if (bucketSizeFor(range) === "day") {
+  if (size === "day") {
     return short ? `${d} ${MONTHS[m - 1]}` : fullDate(start)
   }
   const multiYear = range.start.slice(0, 4) !== range.end.slice(0, 4)
@@ -55,6 +55,7 @@ export function TimeChart({
   series,
   currency,
   summary,
+  size: sizeOverride,
 }: {
   kind: TimeChartKind
   buckets: BucketTotals[]
@@ -63,16 +64,19 @@ export function TimeChart({
   currency: string
   /** One sentence for screen readers, e.g. the highest day. */
   summary: string
+  /** Bucket size when the buckets are not the range's own (Reports: always months). */
+  size?: BucketSize
 }) {
   const n = buckets.length
   const top = niceCeil(Math.max(...buckets.flatMap((b) => series.map((s) => value(b, s)))))
   const money = (minor: number) => formatMoney(minor, { currency })
-  const byDay = bucketSizeFor(range) === "day"
+  const size = sizeOverride ?? bucketSizeFor(range)
+  const byDay = size === "day"
   const isWeek = byDay && n === 7
   const every = n <= 7 ? 1 : Math.ceil(n / 6)
   const everyOnPhone = n <= 4 ? every : every * 2
   const partials = buckets.flatMap((b) => {
-    const part = partialBucket(b.start, range)
+    const part = partialBucket(b.start, range, size)
     return part ? [{ start: b.start, part }] : []
   })
   const isPartial = (start: IsoDate) => partials.some((p) => p.start === start)
@@ -143,7 +147,7 @@ export function TimeChart({
                     const h = Math.max((v / top) * 100, 0.8)
                     return (
                       <rect key={`${b.start}-${s}`} x={i * 10 + 1.5 + j * barWidth} y={100 - h} width={barWidth * 0.92} height={h} rx={0.6} className={SERIES[s].bar}>
-                        <title>{`${bucketLabel(b.start, range, false)}: ${SERIES[s].label.toLowerCase()} ${money(v)}`}</title>
+                        <title>{`${bucketLabel(b.start, range, false, size)}: ${SERIES[s].label.toLowerCase()} ${money(v)}`}</title>
                       </rect>
                     )
                   })
@@ -152,7 +156,7 @@ export function TimeChart({
               buckets.map((b, i) => (
                 // Invisible hover targets, one per bucket, for the values under the pointer.
                 <rect key={`hover-${b.start}`} x={i * 10} y={0} width={10} height={100} fill="transparent">
-                  <title>{`${bucketLabel(b.start, range, false)}: ${series.map((s) => `${SERIES[s].label.toLowerCase()} ${money(value(b, s))}`).join(", ")}`}</title>
+                  <title>{`${bucketLabel(b.start, range, false, size)}: ${series.map((s) => `${SERIES[s].label.toLowerCase()} ${money(value(b, s))}`).join(", ")}`}</title>
                 </rect>
               ))}
           </svg>
@@ -167,7 +171,7 @@ export function TimeChart({
                 className={cn("absolute -translate-x-1/2 whitespace-nowrap", i % everyOnPhone !== 0 && "hidden md:inline")}
                 style={{ left: `${((i + 0.5) / n) * 100}%` }}
               >
-                {isWeek ? weekdayLabel(b.start) : bucketLabel(b.start, range, true)}
+                {isWeek ? weekdayLabel(b.start) : bucketLabel(b.start, range, true, size)}
                 {isPartial(b.start) && "*"}
               </span>
             ) : null
@@ -177,7 +181,7 @@ export function TimeChart({
       {partials.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
           * Partial month:{" "}
-          {partials.map((p) => `${bucketLabel(p.start, range, false)} (${partialText(p.part)})`).join("; ")}.
+          {partials.map((p) => `${bucketLabel(p.start, range, false, size)} (${partialText(p.part)})`).join("; ")}.
         </p>
       )}
       <details className="mt-3 text-sm">
@@ -202,11 +206,11 @@ export function TimeChart({
             {buckets
               .filter((b) => series.some((s) => value(b, s) > 0))
               .map((b) => {
-                const part = partialBucket(b.start, range)
+                const part = partialBucket(b.start, range, size)
                 return (
                   <tr key={b.start} className="border-b border-line last:border-b-0">
                     <th scope="row" className="py-1.5 font-normal">
-                      {bucketLabel(b.start, range, false)}
+                      {bucketLabel(b.start, range, false, size)}
                       {part && ` (partial: ${partialText(part)})`}
                     </th>
                     {series.map((s) => (
