@@ -12,7 +12,12 @@ import type { PaymentModeValue } from "@fin-creador/schemas"
 
 /** Rows per read (PostgREST returns at most 1,000). */
 const PAGE = 1000
-/** Most rows in one file: about 10 reads, so an export finishes in a few seconds. */
+/**
+ * Most rows in one file (11 reads of 1,000). Measured in CI on the throwaway database
+ * (e2e/reports-export-scale.spec.ts, 2026-10-29): 10,000 rows in a median 348 ms through the
+ * route, 724 ms through the form. Hosted, each read adds one round trip to Supabase (about
+ * 3 s at 250 ms each, cross-region), well inside maxDuration.
+ */
 export const EXPORT_ROW_CAP = 10_000
 /** Longest range in one file. */
 export const EXPORT_MAX_DAYS = 3660

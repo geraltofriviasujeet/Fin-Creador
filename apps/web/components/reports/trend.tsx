@@ -68,12 +68,20 @@ function TrendChart({ points, currency }: { points: SeriesPoint[]; currency: str
               className="stroke-brand-deep"
             />
           )}
-          {points.map((p, i) => (
-            <circle key={p.date} cx={x(i)} cy={y(total(p))} r={p.isToday ? 1.6 : 0.9} className={p.isToday ? "fill-brand-deep" : "fill-surface stroke-brand-deep"} strokeWidth={0.5} vectorEffect="non-scaling-stroke">
-              <title>{`${pointLabel(p, false)}: ${fmt(total(p))}`}</title>
-            </circle>
-          ))}
         </svg>
+        {/* Dots in HTML so they stay round (the SVG stretches to the card). */}
+        {points.map((p, i) => (
+          <span
+            key={p.date}
+            aria-hidden="true"
+            title={`${pointLabel(p, false)}: ${fmt(total(p))}`}
+            className={cn(
+              "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand-deep",
+              p.isToday ? "size-3 bg-brand-deep" : "size-2 bg-surface"
+            )}
+            style={{ left: `${x(i)}%`, top: `${y(total(p))}%` }}
+          />
+        ))}
       </div>
       <div aria-hidden="true" />
       <div aria-hidden="true" className="relative mt-2 h-5 text-xs text-muted-foreground">

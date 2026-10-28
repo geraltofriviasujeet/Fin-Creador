@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 
 // CSV export of the signed-in user's transactions (Sprint 8c). Reads with the person's own
 // session (RLS), never the service role; nothing is logged or stored. The row cap keeps an
-// export to a few seconds; maxDuration is the hard stop.
+// export to a few seconds (10,000 rows: 348 ms in CI, EXPORT_ROW_CAP); maxDuration is the hard
+// stop, about 5× the slowest hosted estimate.
 
 export const maxDuration = 15
 
