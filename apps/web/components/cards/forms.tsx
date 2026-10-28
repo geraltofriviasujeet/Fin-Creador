@@ -60,7 +60,7 @@ import { toast } from "@/components/ui/toast"
 type Result = WriteResult & { shortfallMinor?: number }
 
 /** Form state, field errors, a form message and a server-side shortfall ("Pay anyway"). */
-function useSubmit(onDone: () => void) {
+export function useSubmit(onDone: () => void) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [serverShort, setServerShort] = useState<string | null>(null)
@@ -89,7 +89,7 @@ function useSubmit(onDone: () => void) {
   return { errors, formError, serverShort, setServerShort, pending, submit }
 }
 
-function Footer({ pending, label, children }: { pending: boolean; label: string; children?: React.ReactNode }) {
+export function Footer({ pending, label, children }: { pending: boolean; label: string; children?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-3">
       <div aria-live="polite" className="text-sm tabular-nums">
@@ -105,7 +105,7 @@ function Footer({ pending, label, children }: { pending: boolean; label: string;
   )
 }
 
-function ShortfallWarning({ warning, pending, onPayAnyway }: { warning: string; pending: boolean; onPayAnyway: () => void }) {
+export function ShortfallWarning({ warning, pending, onPayAnyway }: { warning: string; pending: boolean; onPayAnyway: () => void }) {
   return (
     <div role="alert" className="grid gap-2 rounded-xl bg-chip-peach px-3 py-2.5 text-sm text-danger">
       <p className="font-semibold">{warning}.</p>
@@ -121,7 +121,7 @@ function ShortfallWarning({ warning, pending, onPayAnyway }: { warning: string; 
 
 const accountLabel = (a: PayingAccount) => `${a.name} · ${money(a.balanceMinor, a.currency)}`
 
-function AccountPicker({
+export function AccountPicker({
   label,
   accounts,
   value,
@@ -152,7 +152,7 @@ function AccountPicker({
 
 const NO_ACCOUNTS = "Add a bank, cash or other account on the Income page first."
 
-function NoAccounts() {
+export function NoAccounts() {
   return (
     <div className="grid gap-3">
       <FormMessage tone="info">{NO_ACCOUNTS}</FormMessage>
@@ -166,11 +166,11 @@ function NoAccounts() {
 /** Dialogs with many fields: the body scrolls, the footer stays (fits a 720px-high window). */
 export const TALL_DIALOG = "flex max-h-dvh flex-col md:max-h-[calc(100dvh-2rem)] md:max-w-[640px]"
 
-function Scroll({ children }: { children: React.ReactNode }) {
+export function Scroll({ children }: { children: React.ReactNode }) {
   return <div className="-mx-1 grid min-h-0 flex-1 content-start gap-3.5 overflow-y-auto px-1 pb-3">{children}</div>
 }
 
-function Check({ checked, onChange, label, hint }: { checked: boolean; onChange: (checked: boolean) => void; label: string; hint?: string }) {
+export function Check({ checked, onChange, label, hint }: { checked: boolean; onChange: (checked: boolean) => void; label: string; hint?: string }) {
   return (
     <label className="flex items-start gap-2 text-sm">
       <input type="checkbox" className="mt-0.5 size-4 accent-(--color-ink)" checked={checked} onChange={(e) => onChange(e.target.checked)} />

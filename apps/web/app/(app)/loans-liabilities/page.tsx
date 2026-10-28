@@ -12,15 +12,16 @@ export const metadata: Metadata = { title: "Loans & Liabilities" }
 
 // Loans & Liabilities (Sprint 8a): loans, their EMI schedules and payments, read as the
 // signed-in user (RLS). Figures come from packages/domain through the shared view.
-export default function LoansPage() {
+export default function LoansPage({ searchParams }: { searchParams: Promise<{ pay?: string | string[] }> }) {
   return (
     <Suspense fallback={<LoansSkeleton />}>
-      <LoansContent />
+      <LoansContent searchParams={searchParams} />
     </Suspense>
   )
 }
 
-async function LoansContent() {
+async function LoansContent({ searchParams }: { searchParams: Promise<{ pay?: string | string[] }> }) {
+  const { pay } = await searchParams
   const supabase = await createClient()
   const data = await loadLoansData(supabase)
   if (!data.ok && data.reason === "unauthenticated") redirect(`/sign-in?next=${encodeURIComponent(LOANS_PATH)}`)
@@ -37,5 +38,5 @@ async function LoansContent() {
       </>
     )
   }
-  return <LoansPageView view={buildLoansView(data.data)} />
+  return <LoansPageView view={buildLoansView(data.data)} payId={typeof pay === "string" ? pay : null} />
 }

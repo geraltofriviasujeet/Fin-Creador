@@ -18,6 +18,7 @@ import { toast } from "@/components/ui/toast"
 import { LOANS_HEADER, LoanBadgeChip, NOT_IN_TOTAL, ratePercent } from "./display"
 import { ConfirmAction, run } from "./confirm"
 import { type ShortTermOpen, ShortTermBox, ShortTermDialogs } from "@/components/cards/short-term"
+import { type StatutoryOpen, StatutoryBox, StatutoryDialogs } from "@/components/statutory/statutory"
 import { DueSoonList, hasLiabilities } from "./due-soon"
 import { AddLoanForm, EditLoanForm } from "./loan-form"
 import { PayForm } from "./pay-form"
@@ -25,7 +26,7 @@ import { PayForm } from "./pay-form"
 // The Loans & Liabilities page (Sprint 8a, 8b, web). Due soon at the top, then three boxes:
 // Long-term liabilities (loans other than card EMIs, each with its detail and schedule;
 // archived collapsed), Short-term & operational (cards, card EMIs, borrowing:
-// components/cards) and Statutory & legal (8d), shown as coming next.
+// components/cards) and Statutory & legal (8d: components/statutory).
 
 type Open =
   | { kind: "add" }
@@ -39,33 +40,38 @@ const COLUMNS = "md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.4fr)_minma
 
 const STATUS_TEXT: Record<DueItem["status"], string> = { pending: "Pending", paid: "Paid", before_tracking: "Before tracking" }
 
-export function LoansPageView({ view }: { view: LoansView }) {
-  const [open, setOpenLoan] = useState<Open>(null)
-  const [shortOpen, setShortOpenState] = useState<ShortTermOpen | null>(null)
-  // One dialog at a time, from either box.
-  const setOpen = (o: Open) => {
-    setShortOpenState(null)
-    setOpenLoan(o)
-  }
-  const setShortOpen = (o: ShortTermOpen | null) => {
-    setOpenLoan(null)
-    setShortOpenState(o)
-  }
+type Opened = { open: Open; shortOpen: ShortTermOpen | null; statOpen: StatutoryOpen | null }
+const NOTHING_OPEN: Opened = { open: null, shortOpen: null, statOpen: null }
+
+/** The dialog a reminder opens: the EMI, the card bill or statement, the borrowing instalment or the statutory due. */
+function dialogFor(r: ReminderEntry, view: LoansView): Opened {
+  if (r.loanItem) return { ...NOTHING_OPEN, open: { kind: "pay", item: r.loanItem } }
+  const shortTerm = view.shortTerm
+  const card = shortTerm?.cards.find((c) => c.card.id === r.cardId)
+  if (card) return { ...NOTHING_OPEN, shortOpen: { kind: r.reason === "statement" ? "statement" : "payCard", card } }
+  const borrowing = shortTerm?.borrowings.find((b) => b.borrowing.id === r.borrowingId)
+  if (borrowing) return { ...NOTHING_OPEN, shortOpen: { kind: "repay", borrowing, due: borrowing.dues.find((d) => d.id === r.id) } }
+  const due = view.statutory?.dues.find((d) => d.due.id === r.statutoryDueId)
+  if (due) return { ...NOTHING_OPEN, statOpen: { kind: "pay", due } }
+  return NOTHING_OPEN
+}
+
+export function LoansPageView({ view, payId = null }: { view: LoansView; /** A reminder to open on arrival (?pay=, from the bell or the Overview). */ payId?: string | null }) {
+  // One dialog at a time, from any box; arriving with ?pay= opens that reminder's dialog.
+  const [opened, setOpened] = useState<Opened>(() => {
+    const r = payId ? view.reminders.find((x) => x.id === payId) : undefined
+    return r ? dialogFor(r, view) : NOTHING_OPEN
+  })
+  const { open, shortOpen, statOpen } = opened
+  const setOpen = (o: Open) => setOpened({ ...NOTHING_OPEN, open: o })
+  const setShortOpen = (o: ShortTermOpen | null) => setOpened({ ...NOTHING_OPEN, shortOpen: o })
+  const setStatOpen = (o: StatutoryOpen | null) => setOpened({ ...NOTHING_OPEN, statOpen: o })
   const longTerm = view.loans.filter((l) => l.loan.loanType !== "credit_card_emi")
   const shortTerm = view.shortTerm
-  const onReminder = (r: ReminderEntry) => {
-    if (r.loanItem) return setOpen({ kind: "pay", item: r.loanItem })
-    const card = shortTerm?.cards.find((c) => c.card.id === r.cardId)
-    if (card) return setShortOpen({ kind: r.reason === "statement" ? "statement" : "payCard", card })
-    const borrowing = shortTerm?.borrowings.find((b) => b.borrowing.id === r.borrowingId)
-    if (borrowing) setShortOpen({ kind: "repay", borrowing, due: borrowing.dues.find((d) => d.id === r.id) })
-  }
+  const onReminder = (r: ReminderEntry) => setOpened(dialogFor(r, view))
   const [showArchived, setShowArchived] = useState(false)
   const [busy, startBusy] = useTransition()
-  const close = () => {
-    setOpenLoan(null)
-    setShortOpenState(null)
-  }
+  const close = () => setOpened(NOTHING_OPEN)
   const add = () => setOpen({ kind: "add" })
   const loanOf = (item: DueItem) => [...view.loans, ...view.archived].find((l) => l.loan.id === item.loanId)
   const currencyOf = (item: DueItem) => loanOf(item)?.loan.currency ?? view.currency
@@ -195,12 +201,17 @@ export function LoansPageView({ view }: { view: LoansView }) {
             Credit card dues and EMIs, and informal borrowing from friends, family or others.
           </ComingNext>
         )}
-        <ComingNext id="statutory" title="Statutory & legal liabilities">
-          Income tax payable, fines and unpaid e-challans.
-        </ComingNext>
+        {view.statutory ? (
+          <StatutoryBox view={view.statutory} currency={view.currency} onOpen={setStatOpen} />
+        ) : (
+          <ComingNext id="statutory" title="Statutory & legal liabilities">
+            Income tax payable, fines and unpaid e-challans.
+          </ComingNext>
+        )}
       </div>
 
-      <Dialog open={open !== null || shortOpen !== null} onOpenChange={(o) => !o && close()}>
+      <Dialog open={open !== null || shortOpen !== null || statOpen !== null} onOpenChange={(o) => !o && close()}>
+        {statOpen && <StatutoryDialogs open={statOpen} accounts={view.accounts} today={view.today} currency={view.currency} onClose={close} />}
         {shortOpen && shortTerm && <ShortTermDialogs open={shortOpen} view={shortTerm} accounts={view.accounts} today={view.today} currency={view.currency} onClose={close} />}
         {open?.kind === "add" && (
           <DialogContent

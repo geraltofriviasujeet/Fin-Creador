@@ -7,6 +7,7 @@ import { Bell as BellIcon } from "lucide-react"
 import { type BellReminder, reminderText } from "@fin-creador/api"
 import { cn } from "cn"
 import { fullDate, money } from "@/components/transactions/display"
+import { payLink } from "@/components/loans/due-soon"
 import { buttonVariants } from "@/components/ui/button"
 
 // The bell (Sprint 8a, 8b): in-app reminders only, the same list as the "Due soon" card (EMIs,
@@ -50,15 +51,22 @@ function BellButton({ count, items }: { count: number; items: BellReminder[] | n
             ) : (
               <ul className="mt-1 grid">
                 {items.map((r) => (
-                  <li key={r.id} className="grid gap-0.5 border-b border-line py-2 last:border-b-0">
-                    <p className="flex items-baseline justify-between gap-3 text-sm">
-                      <span className="truncate font-semibold">{r.name}</span>
-                      {r.amountMinor !== null && <span className="font-semibold tabular-nums">{money(r.amountMinor, r.currency)}</span>}
-                    </p>
-                    <p className={cn("text-xs", r.reason === "overdue" ? "font-semibold text-danger" : "text-muted-foreground")}>
-                      {r.label} · {reminderText(r)}
-                      {r.dueDate && ` · ${fullDate(r.dueDate)}`}
-                    </p>
+                  <li key={r.id} className="border-b border-line last:border-b-0">
+                    {/* Opens its pay dialog on Loans & Liabilities. */}
+                    <Popover.Close
+                      render={
+                        <Link href={payLink(r.id)} className="-mx-1 grid gap-0.5 rounded-md px-1 py-2 outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-ring" />
+                      }
+                    >
+                      <span className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="truncate font-semibold">{r.name}</span>
+                        {r.amountMinor !== null && <span className="font-semibold tabular-nums">{money(r.amountMinor, r.currency)}</span>}
+                      </span>
+                      <span className={cn("text-xs", r.reason === "overdue" ? "font-semibold text-danger" : "text-muted-foreground")}>
+                        {r.label} · {reminderText(r)}
+                        {r.dueDate && ` · ${fullDate(r.dueDate)}`}
+                      </span>
+                    </Popover.Close>
                   </li>
                 ))}
               </ul>

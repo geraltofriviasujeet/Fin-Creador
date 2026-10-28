@@ -7,10 +7,15 @@ import {
   type FormInput,
   type LoanWriteResult,
   type PaymentWriteResult,
+  type StatutoryWriteResult,
   type WriteResult,
   addBorrowing,
   addCard,
   addLoan,
+  addStatutoryDue,
+  deleteStatutoryDue,
+  editStatutoryDue,
+  setStatutoryDueArchived,
   clearDuePlan,
   deleteBorrowing,
   deleteCard,
@@ -235,4 +240,34 @@ export async function deleteBorrowingAction(input: unknown): Promise<WriteResult
   const r = borrowingId.safeParse(input)
   if (!r.success) return { status: "error", message: "We couldn't find that borrowing." }
   return refreshed(await deleteBorrowing(await client(), r.data))
+}
+
+// ---------------------------------------------------------------------------
+// Statutory dues (8d); paying them uses payDueItemAction and the other due-item actions
+// ---------------------------------------------------------------------------
+
+const DUE_FIELDS = ["amount", "dueDate", "description", "vehicleKind", "issuedState", "issuedCity", "payFromAccountId"] as const
+
+export async function addStatutoryDueAction(input: unknown): Promise<StatutoryWriteResult> {
+  return refreshed(await addStatutoryDue(await client(), fields(input, ["dueType", ...DUE_FIELDS, "idempotencyKey"])))
+}
+
+export async function editStatutoryDueAction(input: unknown): Promise<StatutoryWriteResult> {
+  return refreshed(await editStatutoryDue(await client(), fields(input, ["statutoryDueId", ...DUE_FIELDS])))
+}
+
+const statutoryRef = z.object({ statutoryDueId: z.uuid(), archived: z.boolean(), currency: z.string().regex(/^[A-Z]{3}$/).optional() })
+
+export async function setStatutoryDueArchivedAction(input: unknown): Promise<StatutoryWriteResult> {
+  const r = statutoryRef.safeParse(input)
+  if (!r.success) return { status: "error", message: "We couldn't find that due." }
+  return refreshed(await setStatutoryDueArchived(await client(), r.data))
+}
+
+const statutoryId = z.object({ statutoryDueId: z.uuid() })
+
+export async function deleteStatutoryDueAction(input: unknown): Promise<WriteResult> {
+  const r = statutoryId.safeParse(input)
+  if (!r.success) return { status: "error", message: "We couldn't find that due." }
+  return refreshed(await deleteStatutoryDue(await client(), r.data))
 }

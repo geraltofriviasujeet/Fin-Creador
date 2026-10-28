@@ -190,7 +190,7 @@ describe("statutory writers", () => {
     const ctx = await loadPaymentContext(client, ITEM)
     expect(ctx.ok && [ctx.data.kind, ctx.data.outstandingMinor, ctx.data.interestAllowed]).toEqual(["statutory_due", 30_000_00, true])
     const over = await payDueItem(client, { dueItemId: ITEM, accountId: BANK, principal: "30,001", idempotencyKey: KEY })
-    expect(over.status === "error" && over.fieldErrors).toEqual({ principal: "Principal can't be more than you owe (₹30,000)" })
+    expect(over.status === "error" && over.fieldErrors).toEqual({ principal: "That's more than is still due (₹30,000)" })
     const r = await payDueItem(client, { dueItemId: ITEM, accountId: BANK, principal: "30,000", interest: "500", fees: "50", idempotencyKey: KEY })
     expect(r).toMatchObject({ status: "success", message: "Payment saved." })
     expect(rpcs[0]?.args).toMatchObject({ p_principal_minor: 30_000_00, p_interest_minor: 500_00, p_fees_minor: 0 })

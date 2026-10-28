@@ -3,14 +3,17 @@ import { ChevronRight } from "lucide-react"
 import { type LoansView, type ReminderEntry, reminderText } from "@fin-creador/api"
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardTitle } from "@/components/ui/card"
 import { LOANS_PATH } from "./display"
 
-// "Due soon" (Sprint 8a, 8b): loan EMIs, card bills and borrowing due dates overdue, due today
+// "Due soon" (Sprint 8a, 8b, 8d): loan EMIs, card bills, borrowing and statutory due dates overdue, due today
 // or tomorrow, or planned for today or tomorrow, and card statements to add; from stored dates
 // (packages/domain/src/due-items.ts, cards.ts). On the Loans page each row has its action; on
 // the Overview it links to the page.
+
+/** Loans & Liabilities with this reminder's pay dialog open (the bell and the Overview link here). */
+export const payLink = (id: string) => `${LOANS_PATH}?pay=${encodeURIComponent(id)}`
 
 const ACTION: Record<ReminderEntry["source"], string> = { loan: "Pay", card: "Pay", borrowing: "Repay", statutory: "Pay" }
 
@@ -34,10 +37,16 @@ export function DueSoonList({ reminders, onAction }: { reminders: ReminderEntry[
               </p>
             </div>
             {r.amountMinor !== null && <span className="text-sm font-semibold tabular-nums">{money(r.amountMinor, r.currency)}</span>}
-            {onAction && (
+            {onAction ? (
               <Button variant="secondary" size="sm" aria-label={name} onClick={() => onAction(r)}>
                 {action}
               </Button>
+            ) : (
+              r.reason !== "statement" && (
+                <Link href={payLink(r.id)} aria-label={name} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                  {action}
+                </Link>
+              )
             )}
           </li>
         )
@@ -49,7 +58,7 @@ export function DueSoonList({ reminders, onAction }: { reminders: ReminderEntry[
 /** Whether the person has anything on Loans & Liabilities (the Due soon cards show then). */
 export function hasLiabilities(view: LoansView): boolean {
   const s = view.shortTerm
-  return view.loans.length > 0 || (s !== null && (s.cards.length > 0 || s.borrowings.length > 0))
+  return view.loans.length > 0 || (s !== null && (s.cards.length > 0 || s.borrowings.length > 0)) || (view.statutory?.dues.length ?? 0) > 0
 }
 
 /** The Overview card: shown once the person has a loan, card or borrowing. */

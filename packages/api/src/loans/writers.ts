@@ -1,4 +1,4 @@
-import { type DueKind, MONEY_ACCOUNT_KINDS, STATUTORY_TYPES_WITH_INTEREST, type StatutoryType, outstandingFromBalance } from "@fin-creador/domain"
+import { type DueKind, MONEY_ACCOUNT_KINDS, formatMoney, STATUTORY_TYPES_WITH_INTEREST, type StatutoryType, outstandingFromBalance } from "@fin-creador/domain"
 import {
   type PayingAccount,
   firstFieldErrors,
@@ -299,7 +299,7 @@ export async function payDueItem(supabase: UserClient, input: FormInput): Promis
   if (!ctx.ok) return { status: "error", message: ctx.message }
   if (ctx.data.kind === "borrowing_due") return { status: "error", message: "Record a repayment on the borrowing instead." }
   const parsed = payDueFormSchema(ctx.data).safeParse(onlyAllowedParts(input, ctx.data))
-  if (!parsed.success) return formError(parsed.error)
+  if (!parsed.success) return dueWording(formError(parsed.error), ctx.data)
   const p = parsed.data
   const { data, error } = await supabase
     .rpc("pay_due_item", {
@@ -339,7 +339,7 @@ export async function editDuePayment(supabase: UserClient, input: FormInput): Pr
     accounts: ctx.data.accounts.map((a) => (a.id === payment.account_id ? { ...a, balanceMinor: a.balanceMinor + oldTotal } : a)),
   }
   const parsed = payDueFormSchema(data).safeParse(onlyAllowedParts({ ...input, dueItemId: payment.due_item_id }, ctx.data))
-  if (!parsed.success) return formError(parsed.error)
+  if (!parsed.success) return dueWording(formError(parsed.error), { ...data, kind: ctx.data.kind })
   const p = parsed.data
   const { data: saved, error } = await supabase
     .rpc("edit_due_payment", {
@@ -391,6 +391,12 @@ export async function clearDuePlan(supabase: UserClient, input: { dueItemId: str
 }
 
 /** A form error; a shortfall (the account can't cover it) also says how much, for "Pay anyway". */
+/** A statutory due reads "more than is still due", as the database's FC052 does. */
+function dueWording(result: LoanWriteError, ctx: { kind: DueKind; currency: string; outstandingMinor: number }): LoanWriteError {
+  if (ctx.kind !== "statutory_due" || !result.fieldErrors?.principal?.startsWith("Principal can't be more")) return result
+  return { ...result, fieldErrors: { ...result.fieldErrors, principal: `That's more than is still due (${formatMoney(ctx.outstandingMinor, { currency: ctx.currency })})` } }
+}
+
 function formError(error: Parameters<typeof firstFieldErrors>[0]): LoanWriteError {
   const result: LoanWriteError = { status: "error", message: FIX_FIELDS, fieldErrors: firstFieldErrors(error) }
   const issue = error.issues.find((i) => i.path[0] === "accountId")
