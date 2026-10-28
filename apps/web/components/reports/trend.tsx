@@ -27,14 +27,16 @@ const pointLabel = (p: SeriesPoint, short: boolean) => (p.isToday ? "Today" : sh
 
 function TrendChart({ points, currency }: { points: SeriesPoint[]; currency: string }) {
   const values = points.map(total)
-  const hi = niceCeil(Math.max(0, ...values))
-  const lo = -niceCeil(-Math.min(0, ...values))
+  const lo = -niceCeil(-Math.min(0, ...values)) || 0 // never -0
+  // All points at zero still get an axis (₹0 at the bottom, a ₹100 top).
+  const hi = niceCeil(Math.max(0, ...values)) || (lo < 0 ? 0 : 100_00)
   const span = hi - lo || 1
   const n = points.length
   const y = (v: number) => ((hi - v) / span) * 100
   const x = (i: number) => (n === 1 ? 50 : (i / (n - 1)) * 100)
   const every = n <= 7 ? 1 : Math.ceil(n / 6)
-  const ticks = lo < 0 ? [hi, 0, lo] : [hi, hi / 2, 0]
+  // Three distinct ticks, so each is its own key: top, zero or the middle, bottom.
+  const ticks = lo < 0 && hi > 0 ? [hi, 0, lo] : lo < 0 ? [0, lo / 2, lo] : [hi, hi / 2, 0]
   const fmt = (minor: number) => formatMoney(minor, { currency })
   const last = points[n - 1]!
 
