@@ -33,13 +33,16 @@ describe("has_digit parity", () => {
   });
 
   it("hasDigitRun counts exactly the listed characters, and every \\p{Nd} this runtime knows", () => {
+    const wrong: number[] = [];
+    const nd = /\p{Nd}/u;
     for (let c = 0; c <= 0x10ffff; c++) {
       if (c >= 0xd800 && c <= 0xdfff) continue;
       const ch = String.fromCodePoint(c);
-      expect(hasDigitRun(ch)).toBe(inRanges(c));
-      if (/\p{Nd}/u.test(ch)) expect(inRanges(c)).toBe(true);
+      const listed = inRanges(c);
+      if (hasDigitRun(ch) !== listed || (nd.test(ch) && !listed)) wrong.push(c);
     }
-  });
+    expect(wrong).toEqual([]);
+  }, 60_000);
 
   it("runs mix scripts", () => {
     expect(hasDigitRun(`1${String.fromCodePoint(0x967)}${String.fromCodePoint(0xff13)}${String.fromCodePoint(0x664)}`, 4)).toBe(true);

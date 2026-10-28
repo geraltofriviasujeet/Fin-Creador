@@ -114,6 +114,8 @@ test("a card: add, purchase, statement with the difference, minimum, full and a 
   await row.getByRole("button", { name: /^Void the payment of / }).click()
   await dialog(page, "Void this payment?").getByRole("button", { name: "Void payment" }).click()
   await expect(toast(page, "Payment voided.")).toBeVisible()
+  // The page has refreshed once the badge is no longer "Minimum paid" (₹9,000 is also the bill shown).
+  await expect(row.getByText("Minimum paid")).toHaveCount(0)
   await expect(row).toContainText("₹9,000")
   await row.getByRole("button", { name: "Pay Holiday card" }).click()
   pay = dialog(page, "Pay card")
@@ -293,6 +295,7 @@ test("borrowing in instalments: pay one from the planned account, void it, plan 
   const later = dialog(page, "Will pay later")
   await later.getByRole("button", { name: "Save plan" }).click()
   await expect(toast(page, "Planned.")).toBeVisible()
+  await expect(gopal).toContainText("planned") // the page has refreshed
   await gopal.getByRole("button", { name: "Change the return plan of Gopal" }).click()
   const edit = dialog(page, "Edit return plan")
   await expect(edit).toContainText("the “Will pay later” plan on pending instalments will be dropped")
