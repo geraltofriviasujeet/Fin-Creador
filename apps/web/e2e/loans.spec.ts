@@ -84,8 +84,8 @@ test("navigation, empty state, and the Liabilities tab on a phone", async ({ bro
   await expect(shortTerm.getByText("No cards or borrowing yet")).toBeVisible()
   await expect(shortTerm.getByRole("button", { name: "Add card" })).toBeVisible()
   const statutory = page.getByRole("region", { name: "Statutory & legal liabilities" })
-  await expect(statutory).toContainText("Coming next")
-  await expect(statutory).toContainText("Income tax payable, fines and unpaid e-challans")
+  await expect(statutory.getByText("No dues yet")).toBeVisible()
+  await expect(statutory.getByRole("button", { name: "Add due" })).toBeVisible()
   await expect(dueSoon(page)).toHaveCount(0)
   // No loans: no Due soon card on the Overview.
   await page.goto("/")
