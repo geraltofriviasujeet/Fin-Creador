@@ -35,10 +35,11 @@ Last updated: 2026-10-28 (Sprints 8a, 8b, the 8b follow-up and 8d done on stacke
 | **8d** | Statutory dues | Done | Completed 2026-10-28 (web). Backend draft PR #40 (`sprint-8d`, migration `20261028230000_statutory_dues.sql` on dev), web draft PR #41 (`sprint-8d-ui`, stacked on #40), CI green, QA passed. Prod with the rest of Sprint 8. Mobile in the backlog. |
 | **8e** | Net worth | Not started | Next. Branch from `sprint-8d-ui`, stacked draft PR. All three liability boxes (statutory: what is still due). |
 | **8c** | Cash-flow history and CSV export | Not started | Step 4 (last). Branch from 8e's branch, stacked draft PR. Then the Sprint 8 prod rollout (owner, `docs/deployment.md` 4c): merge the stacked PRs into `main` in order, backup, dry run listing exactly the Sprint 8 migrations, push prod, live check. |
-| **9** | AI financial insights | Not started | |
-| **10** | Notifications & reminders | Not started | |
-| **11** | Mobile polish, offline & PWA | Not started | |
-| **12** | Security & production release | Not started | |
+| **9** | Statement import | Not started | After the Sprint 8 prod rollout. Credit card PDFs, then bank CSV / Excel, then bank PDFs (Backlog item). |
+| **10** | AI financial insights | Not started | |
+| **11** | Notifications & reminders | Not started | |
+| **12** | Mobile polish, offline & PWA | Not started | |
+| **13** | Security & production release | Not started | |
 
 ## Sprint 1 steps
 
@@ -159,7 +160,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-22** | Scheduled jobs and reminders use Supabase scheduling (`pg_cron` and Edge Functions), not Vercel Cron. | Vercel Hobby cron runs at most once a day with up to an hour of drift — not enough for a 10 PM reminder in each user's time zone. |
 | **2026-10-22** | Mobile uses Expo Router (`apps/mobile/src/app`), with protected `(auth)` and `(app)` groups and five bottom tabs matching the web tab bar. | Expo's recommended navigation; route guards keep signed-out users out of the app screens. |
 | **2026-10-22** | The mobile session is stored in AsyncStorage, encrypted with AES-256-GCM (`expo-crypto`); the key lives in the Keychain / Android Keystore (`expo-secure-store`, after first unlock, this device only). | The secure store cannot hold a whole session; this keeps tokens encrypted at rest. A session that can't be decrypted is dropped and the user signs in again. |
-| **2026-10-22** | Email links from the mobile app (sign-up confirmation, password reset) open the web app. Google sign-in on mobile uses the system auth browser with PKCE and returns to the app. | Deep-linking email links into the app needs real app builds (Sprint 11). Expo Go needs `exp://**` in the Supabase redirect allow list; builds use `fincreador://auth/callback`. |
+| **2026-10-22** | Email links from the mobile app (sign-up confirmation, password reset) open the web app. Google sign-in on mobile uses the system auth browser with PKCE and returns to the app. | Deep-linking email links into the app needs real app builds (Sprint 12). Expo Go needs `exp://**` in the Supabase redirect allow list; builds use `fincreador://auth/callback`. |
 | **2026-10-22** | Country, currency and time-zone lists (with English names) are generated into `packages/schemas/src/region-data.ts` and used by web and mobile. | Hermes (mobile) lacks `Intl.supportedValuesOf` and `Intl.DisplayNames`; one static list means both clients offer the same choices. |
 | **2026-10-22** | Auth error messages, the publishable-key guard and profile column mapping live in `packages/api`, shared by web and mobile. | One set of messages and rules; the clients cannot drift apart. |
 | **2026-10-22** | Google sign-in in Expo Go is tested with `npm run dev:mobile:google`, which serves Expo under an sslip.io hostname (e.g. `192-168-1-6.sslip.io`). | Supabase refuses OAuth redirects to bare IP addresses even when allow-listed, and the ngrok tunnel was unreliable. App builds use `fincreador://auth/callback`, which Supabase already accepts. |
@@ -174,7 +175,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-22** | Add income has a single "Received into" account (banks, cash, other); no separate payment-method field. | The account already records where the money landed. |
 | **2026-10-22** | A mistaken income entry is voided, never deleted or edited (editing is Sprint 3). Voiding is one-way and enforced in the database. Creating income is idempotent (client key, unique per user). | Auditable history and no double posting. |
 | **2026-10-22** | An account's currency and opening-balance date are locked once it has entries (error codes FC004, FC011); the opening amount can still be corrected. The as-of date is only re-checked against "today" when it is set or changed, so editing and archiving keep working after a time-zone change. | The as-of date decides which entries count toward the balance; moving it later would silently re-classify existing income. |
-| **2026-10-22** | Income entries cascade from their account and source (`ON DELETE CASCADE`), and a source's default account is cleared (`SET NULL`), only so that deleting a whole user works. Accounts and sources must never be deleted directly, only archived; account deletion (Sprint 12) goes through deleting the user. | Keeps the ledger intact: no client can delete an account or source, and deleting a user removes all of their data in any cascade order. |
+| **2026-10-22** | Income entries cascade from their account and source (`ON DELETE CASCADE`), and a source's default account is cleared (`SET NULL`), only so that deleting a whole user works. Accounts and sources must never be deleted directly, only archived; account deletion (Sprint 13) goes through deleting the user. | Keeps the ledger intact: no client can delete an account or source, and deleting a user removes all of their data in any cascade order. |
 | **2026-10-22** | Default income sources (Salary, Freelance, Rental income, Business, Interest & dividends, Other income) are created for every user by a separate function that can never block sign-up, with a backfill and a lazy fallback on first use. The Income sources panel lists only sources with income this year or added by the user. | Ready-to-use categories without showing rows of ₹0. |
 | **2026-10-22** | "This month" and "this year" use the calendar in the user's time zone. The Rental income card sums all rent-type sources. "Linked account" on a source is the account that actually received its income this year ("Multiple accounts" if several), else its default account. | Matches the Figma; financial year is a backlog setting. |
 | **2026-10-22** | ~~Wordmark is lowercase "fincreador" as in the Figma ("fin" white, "creador" lime on dark; both ink on light). Screen readers hear "Fin Creador"; titles, emails and body text keep "Fin Creador".~~ Superseded on 2026-10-26 below. | Owner's decision; reverses the earlier "FinCreador". Lime stays off light backgrounds (contrast). |
@@ -229,7 +230,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-28** | Sprint 8b follow-up web (owner): Add borrowing asks the relationship, reason, how much to return ("Same as borrowed"), and only after a return date "How will you return it?" (one-time settlement or instalments, "First instalment on"), the account it is returned from, a schedule preview and "Nothing is deducted until you confirm Paid". Each instalment has Pay (prefilled from its account and what is left of it, split into principal and interest; asks for another account if that one is archived or gone) and Will pay later; Due soon and the bell list each instalment. Edit return plan warns that Will pay later plans are dropped; borrowings from before show "Add details". Add card: issuer and card dropdowns, Other typed, optional label. | PR #39; QA tests in `borrowing_followup_qa.test.sql`. |
 | **2026-10-28** | Sprint 8d web (owner): the "Statutory & legal liabilities" box lists dues with what is left and badges (Due, Overdue, Part-paid X left, Paid), archived collapsed; Add / edit due (fines: vehicle, state, city from the shared lists; no challan, RTO or vehicle numbers); Pay prefilled from the due's account and what is left, interest or penalty on tax dues only, Pay anyway, edit / void, Will pay later; archive once paid, delete without history. Reminder links from the bell and the Overview open the pay dialog (`/loans-liabilities?pay=<id>`). | PR #41; QA tests in `statutory_dues_qa.test.sql`. |
 | **2026-10-28** | Order after 8b (owner): (1) 8b follow-up (borrowing details, card product list, F1), (2) 8d, (3) 8e net worth, (4) 8c, (5) prod rollout once at the end: backup, merge PRs #35, #36, #37 and the next ones in order, dry run listing exactly the Sprint 8 migrations, push prod, live check. | Scope in "Sprint 8b follow-up" below. |
-| **2026-10-28** | Statement import (owner): planned as Sprint 9 (web; credit card PDFs, then bank CSV / Excel, then bank PDFs, on one shared reader), after the Sprint 8 prod rollout; order 8d web, 8e, 8c, prod, then statement import. Client-side PDF parsing, password never leaves the browser, confirmed lines only, re-import is a no-op. | Full decisions in the Backlog item; AI insights move after it. |
+| **2026-10-28** | Statement import (owner): planned as Sprint 9 (web; credit card PDFs, then bank CSV / Excel, then bank PDFs, on one shared reader), after the Sprint 8 prod rollout; order 8d web, 8e, 8c, prod, then statement import. Client-side PDF parsing, password never leaves the browser, confirmed lines only, re-import is a no-op. | Full decisions in the Backlog item; roadmap renumbered: AI insights is Sprint 10, notifications 11, mobile polish 12, release 13. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -237,7 +238,7 @@ Mutual funds: AMFI's free daily NAV text file (scheme code, ISINs, name, NAV, da
 
 ## Before production (open items)
 
-Development-only settings that must be removed or replaced before any production release (Sprint 12 at the latest):
+Development-only settings that must be removed or replaced before any production release (Sprint 13 at the latest):
 
 - **Supabase redirect allow list:** remove `exp://**` (Expo Go) and the `http://localhost:3000/...` entries; keep only the production web URL and the app's own scheme.
 - **Dev scripts:** drop `npm run dev:mobile:google` (`apps/mobile/scripts/start-lan-hostname.sh`); it exists only so Google sign-in can return to Expo Go during development.
@@ -269,9 +270,9 @@ Pending tests:
 - **Notifications step (email, web push, phone push):** EMI and card-bill reminders outside the app (Sprint 8a has in-app reminders only). Needs custom SMTP or a Resend domain, Expo push tokens and web push; reuse the `pg_cron` + Edge Function pattern from `refresh-prices`; never send amounts or account names on a lock screen by default.
 - **Ongoing loans with capitalised interest:** Sprint 8a caps an ongoing loan's outstanding at the amount taken; an education loan already in repayment whose moratorium interest was added may owe more. Add an optional "interest added to the loan" field if testers need it.
 - **Financial year setting:** optional April–March financial year for "this year" figures (Sprint 2 uses the calendar year).
-- **Repeated sign-up email:** see Sprint 10.
+- **Repeated sign-up email:** see Sprint 11.
 - **Mobile category management:** add, rename, archive and restore expense categories in the mobile app (web has it on Settings since Sprint 3; owner, 2026-10-23).
-- **Recurring reminders:** notify when a recurring item is due (deferred from Sprint 4; belongs with Sprint 10 notifications, using Supabase scheduling).
+- **Recurring reminders:** notify when a recurring item is due (deferred from Sprint 4; belongs with Sprint 11 notifications, using Supabase scheduling).
 - **Overview card heights:** the Monthly budget card's empty state stretches to the height of the chart beside it (layout only).
 - **Mobile Overview dashboard:** the Sprint 5 dashboard on mobile, reusing `dashboard_breakdown`, `transaction_summary` and `packages/domain/src/dashboard.ts` (owner, 2026-10-26: web only in Sprint 5).
 - **Payee / merchant on entries:** a "paid to" field (the Figma shows merchant names). Not in Sprint 3 (owner, 2026-10-23).
@@ -346,10 +347,11 @@ restructuring; do not force a new architecture onto working code.
 | **6** | Weeks 11–12 | Budgets & savings goals | Plan targets and track progress. |
 | **7** | Weeks 13–14 | Investment portfolio | Track holdings and manual valuations. |
 | **8** | Weeks 15–16 | Loans, liabilities & reports | View liabilities, net worth, and export records. |
-| **9** | Weeks 17–18 | AI financial insights | Get explanations grounded in verified data. |
-| **10** | Weeks 19–20 | Notifications & reminders | Configure reminders and upcoming-payment alerts. |
-| **11** | Weeks 21–22 | Mobile polish, offline & PWA | Harden supported offline and cross-platform workflows. |
-| **12** | Weeks 23–24 | Security & production release | Release candidate ready for deployment/store submission. |
+| **9** | Weeks 17–18 | Statement import | Import credit card and bank statements and save only the confirmed lines. |
+| **10** | Weeks 19–20 | AI financial insights | Get explanations grounded in verified data. |
+| **11** | Weeks 21–22 | Notifications & reminders | Configure reminders and upcoming-payment alerts. |
+| **12** | Weeks 23–24 | Mobile polish, offline & PWA | Harden supported offline and cross-platform workflows. |
+| **13** | Weeks 25–26 | Security & production release | Release candidate ready for deployment/store submission. |
 
 # 4. Sprint detail and acceptance criteria
 
@@ -788,9 +790,17 @@ New migration only (never edit an applied one); SQL shown to the owner before ap
 
 **Dependencies:** Sprints 3, 5, and 7.
 
-## Sprint 9 — AI-powered financial insights
+## Sprint 9 — Statement import
 
-**Weeks 17–18 \| Usable outcome:** A user receives explanations grounded
+**Weeks 17–18 \| Usable outcome:** A user imports a credit card or bank
+statement and saves only the lines they confirm. Added on
+2026-10-28 (owner); AI insights and later sprints moved up by one. Scope,
+order and decisions: the "Sprint 9: statement import (web)" item in the
+Backlog.
+
+## Sprint 10 — AI-powered financial insights
+
+**Weeks 19–20 \| Usable outcome:** A user receives explanations grounded
 in verified financial data.
 
 ### Scope and deliverables
@@ -822,9 +832,9 @@ in verified financial data.
 
 **Dependencies:** Stable dashboard, goals, and portfolio data.
 
-## Sprint 10 — Notifications and reminders
+## Sprint 11 — Notifications and reminders
 
-**Weeks 19–20 \| Usable outcome:** A user can receive and control
+**Weeks 21–22 \| Usable outcome:** A user can receive and control
 reminders across supported platforms.
 
 ### Scope and deliverables
@@ -870,9 +880,9 @@ reminders across supported platforms.
 
 **Dependencies:** Sprints 1 and 4; notification infrastructure.
 
-## Sprint 11 — Mobile polish, offline support and PWA
+## Sprint 12 — Mobile polish, offline support and PWA
 
-**Weeks 21–22 \| Usable outcome:** The app is dependable across
+**Weeks 23–24 \| Usable outcome:** The app is dependable across
 supported web and mobile workflows.
 
 ### Scope and deliverables
@@ -904,9 +914,9 @@ supported web and mobile workflows.
 
 **Dependencies:** Stable core flows on web and mobile.
 
-## Sprint 12 — Security, release and production readiness
+## Sprint 13 — Security, release and production readiness
 
-**Weeks 23–24 \| Usable outcome:** A tested release candidate is ready
+**Weeks 25–26 \| Usable outcome:** A tested release candidate is ready
 for deployment and store submission.
 
 ### Scope and deliverables
@@ -1007,7 +1017,7 @@ trusted server-side code, and cover them with tests.
 | **Notification limits** | Test each platform; communicate permissions and delivery limitations. |
 | **Offline conflicts** | Limit offline scope; use idempotency and explicit pending/synced states. |
 | **App-store delays** | Test mobile builds throughout; treat review approval as an external dependency. |
-| **Vercel Hobby is non-commercial only** | Treat Hobby as a testing tier; upgrade to Pro or move hosting before any paid or commercial launch (decision due in Sprint 12, or earlier if monetized). |
+| **Vercel Hobby is non-commercial only** | Treat Hobby as a testing tier; upgrade to Pro or move hosting before any paid or commercial launch (decision due in Sprint 13, or earlier if monetized). |
 | **Design drift between Figma, web and mobile** | Single token source in `packages/design-tokens`; `docs/design-spec.md` as the visual source of truth; dev-only design review page. |
 | **Local disk or tooling limits** | Run database, RLS and build checks in GitHub Actions; check free disk before large downloads; no local Docker/Supabase on the development Mac. |
 
@@ -1019,8 +1029,8 @@ trusted server-side code, and cover them with tests.
 | **End Sprint 3** | Daily transaction ledger | Core expense tracking is usable. |
 | **End Sprint 5** | MVP / controlled web release | Auth, accounts, transactions, income, dashboard. |
 | **End Sprint 8** | Money management release | Goals, portfolio, liabilities, reports. |
-| **End Sprint 10** | Insights and reminders | AI and notifications behind appropriate controls. |
-| **End Sprint 12** | Production release candidate | Security, quality, deployment, and store-submission readiness. |
+| **End Sprint 11** | Insights and reminders | AI and notifications behind appropriate controls. |
+| **End Sprint 13** | Production release candidate | Security, quality, deployment, and store-submission readiness. |
 
 # 9. How to use Claude Code efficiently
 
