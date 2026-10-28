@@ -80,7 +80,7 @@ test("statutory dues: add, pay in parts with interest, void, Pay anyway, archive
 
   // Void the second part: ₹6,000 is due again.
   await tax.getByRole("button", { name: /^Income tax · Advance tax/ }).click()
-  await tax.getByRole("button", { name: /^Void the payment of / }).first().click()
+  await tax.getByRole("listitem").filter({ hasText: "₹6,000 ·" }).getByRole("button", { name: /^Void the payment of / }).click()
   await dialog(page, "Void this payment?").getByRole("button", { name: "Void payment" }).click()
   await expect(toast(page, "Payment voided.")).toBeVisible()
   await expect(tax.locator("[data-slot=badge]")).toHaveText("Part-paid, ₹6,000 left")

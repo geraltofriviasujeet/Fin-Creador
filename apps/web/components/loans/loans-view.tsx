@@ -2,6 +2,7 @@
 
 import type * as React from "react"
 import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { ChevronDown, Plus } from "lucide-react"
 import { type DueItem, type LoanItem, type LoansView, type PaymentRecord, type ReminderEntry, newRequestKey } from "@fin-creador/api"
 import { LOAN_TYPE_LABELS } from "@fin-creador/domain"
@@ -15,7 +16,7 @@ import { Card, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import { LOANS_HEADER, LoanBadgeChip, NOT_IN_TOTAL, ratePercent } from "./display"
+import { LOANS_HEADER, LOANS_PATH, LoanBadgeChip, NOT_IN_TOTAL, ratePercent } from "./display"
 import { ConfirmAction, run } from "./confirm"
 import { type ShortTermOpen, ShortTermBox, ShortTermDialogs } from "@/components/cards/short-term"
 import { type StatutoryOpen, StatutoryBox, StatutoryDialogs } from "@/components/statutory/statutory"
@@ -58,10 +59,19 @@ function dialogFor(r: ReminderEntry, view: LoansView): Opened {
 
 export function LoansPageView({ view, payId = null }: { view: LoansView; /** A reminder to open on arrival (?pay=, from the bell or the Overview). */ payId?: string | null }) {
   // One dialog at a time, from any box; arriving with ?pay= opens that reminder's dialog.
-  const [opened, setOpened] = useState<Opened>(() => {
-    const r = payId ? view.reminders.find((x) => x.id === payId) : undefined
+  const router = useRouter()
+  const forPay = (id: string | null) => {
+    const r = id ? view.reminders.find((x) => x.id === id) : undefined
     return r ? dialogFor(r, view) : NOTHING_OPEN
-  })
+  }
+  const [opened, setOpened] = useState<Opened>(() => forPay(payId))
+  // Already on this page when a reminder link changes ?pay=: open that one (set during render,
+  // React's pattern for state that follows a prop).
+  const [seenPayId, setSeenPayId] = useState(payId)
+  if (payId !== seenPayId) {
+    setSeenPayId(payId)
+    if (payId) setOpened(forPay(payId))
+  }
   const { open, shortOpen, statOpen } = opened
   const setOpen = (o: Open) => setOpened({ ...NOTHING_OPEN, open: o })
   const setShortOpen = (o: ShortTermOpen | null) => setOpened({ ...NOTHING_OPEN, shortOpen: o })
@@ -71,7 +81,11 @@ export function LoansPageView({ view, payId = null }: { view: LoansView; /** A r
   const onReminder = (r: ReminderEntry) => setOpened(dialogFor(r, view))
   const [showArchived, setShowArchived] = useState(false)
   const [busy, startBusy] = useTransition()
-  const close = () => setOpened(NOTHING_OPEN)
+  const close = () => {
+    setOpened(NOTHING_OPEN)
+    // Clear ?pay= so the same reminder link opens it again later.
+    if (payId) router.replace(LOANS_PATH, { scroll: false })
+  }
   const add = () => setOpen({ kind: "add" })
   const loanOf = (item: DueItem) => [...view.loans, ...view.archived].find((l) => l.loan.id === item.loanId)
   const currencyOf = (item: DueItem) => loanOf(item)?.loan.currency ?? view.currency
