@@ -39,23 +39,26 @@ select public.create_loan('c8c00000-0000-4000-8000-000000000003', 'personal', 'A
   pg_catalog.date_trunc('month', pg_temp.today()::timestamp)::date, 20000, 20000);
 
 create function pg_temp.expense_category() returns uuid language sql stable as $$
-  select c.id from public.categories as c where c.kind = 'expense' and c.archived_at is null order by c.name limit 1 $$;
+  select c.id from public.categories as c where c.user_id = '11111111-1111-4111-8111-111111111111' and c.kind = 'expense' and c.archived_at is null order by c.name limit 1 $$;
 create function pg_temp.income_category() returns uuid language sql stable as $$
-  select c.id from public.categories as c where c.kind = 'income' and c.archived_at is null order by c.name limit 1 $$;
-create function pg_temp.card_account() returns uuid language sql stable as $$ select a.id from public.accounts as a where a.kind = 'card' $$;
-create function pg_temp.borrowing_account() returns uuid language sql stable as $$ select a.id from public.accounts as a where a.kind = 'borrowing' $$;
-create function pg_temp.loan_account() returns uuid language sql stable as $$ select a.id from public.accounts as a where a.kind = 'loan' $$;
+  select c.id from public.categories as c where c.user_id = '11111111-1111-4111-8111-111111111111' and c.kind = 'income' and c.archived_at is null order by c.name limit 1 $$;
+create function pg_temp.card_account() returns uuid language sql stable as $$ select a.id from public.accounts as a where a.user_id = '11111111-1111-4111-8111-111111111111' and a.kind = 'card' $$;
+create function pg_temp.borrowing_account() returns uuid language sql stable as $$ select a.id from public.accounts as a where a.user_id = '11111111-1111-4111-8111-111111111111' and a.kind = 'borrowing' $$;
+create function pg_temp.loan_account() returns uuid language sql stable as $$ select a.id from public.accounts as a where a.user_id = '11111111-1111-4111-8111-111111111111' and a.kind = 'loan' $$;
 
-insert into public.transactions (id, type, amount_minor, currency, account_id, counter_account_id, category_id, occurred_on, idempotency_key) values
-  ('e8c00000-0000-4000-8000-000000000001', 'income',   20000, 'INR', 'a8c00000-0000-4000-8000-000000000001', null, pg_temp.income_category(),  pg_temp.today() - 50, gen_random_uuid()),
-  ('e8c00000-0000-4000-8000-000000000002', 'expense',   3000, 'INR', 'a8c00000-0000-4000-8000-000000000001', null, pg_temp.expense_category(), pg_temp.today() - 40, gen_random_uuid()),
-  ('e8c00000-0000-4000-8000-000000000003', 'expense',   1000, 'INR', 'a8c00000-0000-4000-8000-000000000001', null, pg_temp.expense_category(), pg_temp.today() - 120, gen_random_uuid()),
-  ('e8c00000-0000-4000-8000-000000000004', 'transfer',  2500, 'INR', 'a8c00000-0000-4000-8000-000000000001', 'a8c00000-0000-4000-8000-000000000002', null, pg_temp.today() - 30, gen_random_uuid()),
-  ('e8c00000-0000-4000-8000-000000000005', 'expense',    700, 'INR', 'a8c00000-0000-4000-8000-000000000001', null, pg_temp.expense_category(), pg_temp.today() - 20, gen_random_uuid()),
-  ('e8c00000-0000-4000-8000-000000000006', 'expense',   4000, 'INR', pg_temp.card_account(), null, pg_temp.expense_category(), pg_temp.today(), gen_random_uuid()),
-  ('e8c00000-0000-4000-8000-000000000007', 'income',    1000, 'INR', 'a8c00000-0000-4000-8000-000000000003', null, pg_temp.income_category(),  pg_temp.today() - 60, gen_random_uuid()),
-  ('e8c00000-0000-4000-8000-000000000008', 'income',    1000, 'INR', 'a8c00000-0000-4000-8000-000000000004', null, pg_temp.income_category(),  pg_temp.today() - 60, gen_random_uuid());
+-- Entries are inserted as the owner for A (clients write through the database functions).
+reset role;
+insert into public.transactions (user_id, id, type, amount_minor, currency, account_id, counter_account_id, category_id, occurred_on, idempotency_key) values
+  ('11111111-1111-4111-8111-111111111111', 'e8c00000-0000-4000-8000-000000000001', 'income',   20000, 'INR', 'a8c00000-0000-4000-8000-000000000001', null, pg_temp.income_category(),  pg_temp.today() - 50, gen_random_uuid()),
+  ('11111111-1111-4111-8111-111111111111', 'e8c00000-0000-4000-8000-000000000002', 'expense',   3000, 'INR', 'a8c00000-0000-4000-8000-000000000001', null, pg_temp.expense_category(), pg_temp.today() - 40, gen_random_uuid()),
+  ('11111111-1111-4111-8111-111111111111', 'e8c00000-0000-4000-8000-000000000003', 'expense',   1000, 'INR', 'a8c00000-0000-4000-8000-000000000001', null, pg_temp.expense_category(), pg_temp.today() - 120, gen_random_uuid()),
+  ('11111111-1111-4111-8111-111111111111', 'e8c00000-0000-4000-8000-000000000004', 'transfer',  2500, 'INR', 'a8c00000-0000-4000-8000-000000000001', 'a8c00000-0000-4000-8000-000000000002', null, pg_temp.today() - 30, gen_random_uuid()),
+  ('11111111-1111-4111-8111-111111111111', 'e8c00000-0000-4000-8000-000000000005', 'expense',    700, 'INR', 'a8c00000-0000-4000-8000-000000000001', null, pg_temp.expense_category(), pg_temp.today() - 20, gen_random_uuid()),
+  ('11111111-1111-4111-8111-111111111111', 'e8c00000-0000-4000-8000-000000000006', 'expense',   4000, 'INR', pg_temp.card_account(), null, pg_temp.expense_category(), pg_temp.today(), gen_random_uuid()),
+  ('11111111-1111-4111-8111-111111111111', 'e8c00000-0000-4000-8000-000000000007', 'income',    1000, 'INR', 'a8c00000-0000-4000-8000-000000000003', null, pg_temp.income_category(),  pg_temp.today() - 60, gen_random_uuid()),
+  ('11111111-1111-4111-8111-111111111111', 'e8c00000-0000-4000-8000-000000000008', 'income',    1000, 'INR', 'a8c00000-0000-4000-8000-000000000004', null, pg_temp.income_category(),  pg_temp.today() - 60, gen_random_uuid());
 
+set local role authenticated;
 select public.void_transaction('e8c00000-0000-4000-8000-000000000005', gen_random_uuid());
 
 -- As the owner, with row triggers off (they stamp now()): archive a3 / a4 at exact instants.
@@ -130,11 +133,12 @@ select throws_ok($$ select * from public.account_balances_at(array[current_date]
 -- ------------------------------------------------------------ timing (26-27)
 reset role;
 select set_config('request.jwt.claims', '{"sub": "11111111-1111-4111-8111-111111111111", "role": "authenticated"}', true);
-set local role authenticated;
-insert into public.transactions (type, amount_minor, currency, account_id, category_id, occurred_on, idempotency_key)
-select 'income', 100, 'INR', case when g % 2 = 0 then 'a8c00000-0000-4000-8000-000000000001'::uuid else 'a8c00000-0000-4000-8000-000000000002'::uuid end,
+reset role;
+insert into public.transactions (user_id, type, amount_minor, currency, account_id, category_id, occurred_on, idempotency_key)
+select '11111111-1111-4111-8111-111111111111', 'income', 100, 'INR', case when g % 2 = 0 then 'a8c00000-0000-4000-8000-000000000001'::uuid else 'a8c00000-0000-4000-8000-000000000002'::uuid end,
        pg_temp.income_category(), pg_temp.today() - (g % 100), gen_random_uuid()
 from generate_series(1, 3000) as g;
+set local role authenticated;
 select set_config('t.started', pg_catalog.clock_timestamp()::text, true);
 create function pg_temp.month_ends() returns date[] language sql stable as $$
   select array_agg((pg_catalog.date_trunc('month', pg_temp.today()::timestamp) - (g || ' months')::interval - interval '1 day')::date)

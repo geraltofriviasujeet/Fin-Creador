@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/server"
 // session (RLS), never the service role; nothing is logged or stored. The row cap keeps an
 // export to a few seconds; maxDuration is the hard stop.
 
-export const dynamic = "force-dynamic"
 export const maxDuration = 15
 
 const NO_STORE = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }
