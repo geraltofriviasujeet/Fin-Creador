@@ -143,7 +143,7 @@ test("net worth: empty state, then the worked example to the rupee; another user
 
   await page.goto("/")
   const nw = netWorthCard(page)
-  await expect(nw.getByText("₹1,44,105", { exact: true })).toBeVisible()
+  await expect(nw.getByText("Net worth ₹1,44,105", { exact: true })).toBeVisible() // an overdue card EMI (Due soon) is not subtracted again
   await expect(nw).toContainText("Assets ₹1,67,605 · Liabilities ₹23,500")
   await expect(lineOf(page, "Total available")).toContainText("₹55,100")
   await expect(lineOf(page, "Shares, funds and ETFs")).toContainText("₹12,505")
