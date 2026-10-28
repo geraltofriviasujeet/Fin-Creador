@@ -229,6 +229,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-28** | Sprint 8b follow-up web (owner): Add borrowing asks the relationship, reason, how much to return ("Same as borrowed"), and only after a return date "How will you return it?" (one-time settlement or instalments, "First instalment on"), the account it is returned from, a schedule preview and "Nothing is deducted until you confirm Paid". Each instalment has Pay (prefilled from its account and what is left of it, split into principal and interest; asks for another account if that one is archived or gone) and Will pay later; Due soon and the bell list each instalment. Edit return plan warns that Will pay later plans are dropped; borrowings from before show "Add details". Add card: issuer and card dropdowns, Other typed, optional label. | PR #39; QA tests in `borrowing_followup_qa.test.sql`. |
 | **2026-10-28** | Sprint 8d web (owner): the "Statutory & legal liabilities" box lists dues with what is left and badges (Due, Overdue, Part-paid X left, Paid), archived collapsed; Add / edit due (fines: vehicle, state, city from the shared lists; no challan, RTO or vehicle numbers); Pay prefilled from the due's account and what is left, interest or penalty on tax dues only, Pay anyway, edit / void, Will pay later; archive once paid, delete without history. Reminder links from the bell and the Overview open the pay dialog (`/loans-liabilities?pay=<id>`). | PR #41; QA tests in `statutory_dues_qa.test.sql`. |
 | **2026-10-28** | Order after 8b (owner): (1) 8b follow-up (borrowing details, card product list, F1), (2) 8d, (3) 8e net worth, (4) 8c, (5) prod rollout once at the end: backup, merge PRs #35, #36, #37 and the next ones in order, dry run listing exactly the Sprint 8 migrations, push prod, live check. | Scope in "Sprint 8b follow-up" below. |
+| **2026-10-28** | Credit card statement import (owner): planned as Sprint 9 (web), after the Sprint 8 prod rollout; order 8d web, 8e, 8c, prod, then statement import. Client-side PDF parsing, password never leaves the browser, confirmed lines only, re-import is a no-op. | Full decisions in the Backlog item; AI insights move after it. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -273,6 +274,18 @@ Pending tests:
 - **Overview card heights:** the Monthly budget card's empty state stretches to the height of the chart beside it (layout only).
 - **Mobile Overview dashboard:** the Sprint 5 dashboard on mobile, reusing `dashboard_breakdown`, `transaction_summary` and `packages/domain/src/dashboard.ts` (owner, 2026-10-26: web only in Sprint 5).
 - **Payee / merchant on entries:** a "paid to" field (the Figma shows merchant names). Not in Sprint 3 (owner, 2026-10-23).
+- **Sprint 9: credit card statement import (web)** (owner, 2026-10-28; docs only, not built yet). Order: 8d web, 8e net worth, 8c history + CSV, Sprint 8 prod rollout, then this. Decisions:
+  - Parse the PDF in the browser with pdf.js. A statement password is held in memory only: never uploaded, stored or logged. A wrong password shows a plain message.
+  - Text PDFs only (no OCR), with a file-size cap and a page cap.
+  - Review table with a tick per line and an editable category, amount and date. Only ticked (confirmed) lines are saved, as card expenses through the existing writers.
+  - The statement date, total, minimum due and due date prefill Enter statement.
+  - Deterministic request keys per line, so re-importing the same statement is a no-op.
+  - Possible duplicates (an existing card entry with the same date and amount) start unticked.
+  - Runs of 4 or more digits are stripped from notes.
+  - Skipped: payments received, refunds (void the matching purchase instead), EMI conversions, and lines dated before the card was added. Fees, interest and GST are imported as expenses.
+  - First parsers for the issuers in `packages/schemas/src/card-data.ts` (HDFC Bank, SBI Card, ICICI Bank, Axis Bank, Kotak Mahindra Bank) plus a generic line parser. Parsers live in `packages/domain` and work on extracted text, so mobile can reuse them.
+  - Tests use synthetic statements only (including a password-protected one); never real statements in the repo.
+  - No new tables expected.
 - **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
 
 # 1. Executive summary
