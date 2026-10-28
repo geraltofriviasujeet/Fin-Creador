@@ -112,8 +112,14 @@ jobs:
         with:
           version: 2.111.0 # keep in step with the CLI used locally
 
-      - name: Hold back the migration under test
-        run: mkdir -p "$RUNNER_TEMP/held" && mv supabase/migrations/${MIGRATION}_*.sql "$RUNNER_TEMP/held/"
+      # The migration under test and every later one: they are applied together, in order.
+      - name: Hold back the migration under test and later ones
+        run: |
+          mkdir -p "$RUNNER_TEMP/held"
+          for f in supabase/migrations/*.sql; do
+            [ "$(basename "$f" | cut -d_ -f1)" \< "$MIGRATION" ] || mv "$f" "$RUNNER_TEMP/held/"
+          done
+          ls "$RUNNER_TEMP/held"
 
       - name: Start the database at the previous migration
         run: supabase db start
@@ -121,7 +127,7 @@ jobs:
       - name: Seed rows as before
         run: psql "$DB_URL" -f supabase/upgrade-checks/${MIGRATION}_seed.sql
 
-      - name: Apply the migration under test
+      - name: Apply the held-back migrations
         run: mv "$RUNNER_TEMP"/held/*.sql supabase/migrations/ && supabase migration up --local
 
       - name: Assert the upgrade
