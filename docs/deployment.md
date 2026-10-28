@@ -175,6 +175,44 @@ activity; a paused project runs no `pg_cron` jobs, so prices stop updating (hold
 "Old price" and later "Stale, over 30 days"). After restoring the project, check
 `cron.job_run_details` and make one manual run (step 5).
 
+## 4c. Sprint 8 on production (once, at the end of Sprint 8)
+
+Sprint 8 goes to prod once, after its last step (owner, 2026-10-28). Until then every Sprint 8
+migration is on dev only and every Sprint 8 PR stays a stacked draft: PR #35 (8a web), then
+8b, 8d, 8e and 8c, each branched from the one before. The owner runs every step:
+
+1. **Merge in order:** merge the stacked Sprint 8 PRs into `main`, oldest first (PR #35, then
+   8b, 8d, 8e, 8c), retargeting each to `main` after the one below it is merged. Vercel deploys
+   `main` on every merge and the pages need the new tables, so the live Loans & Liabilities
+   page fails until step 6; do this in one sitting (or pause production deploys in Vercel
+   first and redeploy after step 6).
+2. **Backup:** `./scripts/backup-prod.sh` (section 4); check that it prints the path, size and
+   number of tables.
+3. **Clean `main`:** `git checkout main && git pull && git status` (nothing to commit).
+4. **Link prod:** `supabase link --project-ref <prod-project-ref>`.
+5. **Dry run:** `supabase db push --dry-run` must list **exactly** the Sprint 8 migrations,
+   oldest first: `20261028120000_loans.sql`, `20261028180000_cards_borrowing.sql`, then the
+   8d, 8e and 8c migrations (named in `docs/sprint-plan.md` when they are written). If it lists
+   anything else, or misses one, stop.
+6. **Push:** `supabase db push`, then `supabase migration list --linked`: every Sprint 8
+   migration appears in both the Local and Remote columns.
+7. **Check** in the prod SQL editor (all `true`):
+   ```sql
+   select to_regclass('public.loans') is not null as loans,
+          to_regclass('public.due_items') is not null as due_items,
+          to_regclass('public.credit_cards') is not null as credit_cards,
+          to_regclass('public.borrowings') is not null as borrowings,
+          to_regclass('public.liability_payments') is not null as liability_payments,
+          exists (select 1 from pg_proc where proname = 'enter_card_statement') as enter_card_statement;
+   ```
+8. **Relink dev:** `supabase link --project-ref <dev-project-ref>`.
+9. **Live check** (after Vercel has deployed `main`): on Loans & Liabilities add a test loan
+   and pay one EMI from cash, add a test card with a purchase, a statement and a payment, add a
+   test borrowing and repay it; void the payments, then archive and delete the test items.
+
+If the push fails, the migrations are rolled back (each runs in one transaction) and prod is
+unchanged from the last one applied; restore from the backup only if prod data is damaged.
+
 ## 5. Upgrade before any commercial launch
 
 Do all of these before payments, paying customers or a public launch, and only once the
@@ -186,7 +224,7 @@ product is complete and QA has passed:
 - [ ] Clear the "Before production" list in `docs/sprint-plan.md` (redirect allow list,
       dev scripts, fixed `fincreador://` scheme, Site URL, custom SMTP).
 - [ ] Re-check the auth redirects (section 3) on the production domain.
-- [ ] Point the mobile release builds at the production project (Sprint 12).
+- [ ] Point the mobile release builds at the production project (Sprint 13).
 - [ ] Review the licence and redistribution terms of the market data (AMFI NAV file, BSE
       bhavcopy, and NSE files if added) for commercial use; move to a licensed data vendor
       if they don't allow it (Sprint 7).

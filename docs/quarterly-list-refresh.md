@@ -15,6 +15,21 @@ The loan form (Sprint 8a) suggests lenders from `LENDERS` in
 `packages/schemas/src/loan-forms.ts`: `FD_BANKS`, card issuers that are not banks, housing
 finance companies, NBFCs and education lenders. Any lender name can be typed.
 
+The Add card form (Sprint 8b follow-up) offers issuers and their personal credit cards from
+`CARD_ISSUERS` and `CARD_PRODUCTS` in `packages/schemas/src/card-data.ts`: HDFC Bank, SBI Card,
+ICICI Bank, Axis Bank and Kotak Mahindra Bank first. Each product name carries the issuer's name
+(it becomes the card account's name). A product name may not hold 3 or more digits in a row,
+so such cards are left out (Kotak's "811" card). Any card can be typed under "Other". Sources,
+checked on 2026-10-28 (names only, from the issuer's own credit card page):
+
+| Issuer | Source |
+|--------|--------|
+| HDFC Bank | https://www.hdfc.bank.in/credit-cards |
+| SBI Card | https://www.sbicard.com/en/personal/sbi-credit-card.page |
+| ICICI Bank | https://www.icici.bank.in/personal-banking/cards/credit-card |
+| Axis Bank | https://www.axis.bank.in/cards/credit-card |
+| Kotak Mahindra Bank | https://www.kotak.bank.in/en/personal-banking/cards/credit-cards.html |
+
 ## When
 
 In January, April, July and October. Normally only vehicle makes and models change. Touch
@@ -35,6 +50,11 @@ territory or a renamed city).
    layer) and the card issuers; add active lenders, remove merged or closed ones, and use the
    name the lender uses. Update `LENDERS_REVIEWED_ON` in `loan-forms.ts`, even when nothing
    changed.
+   Cards: open each source above (and, when adding an issuer, its own credit card page). Add
+   personal cards on offer, remove withdrawn ones, write each name as the issuer does without
+   the words "Credit Card", with the issuer's name in it (for example "HDFC Regalia Gold").
+   Leave out business and corporate cards. `npm test` checks every name for digit runs and
+   duplicates. Update `CARD_PRODUCTS_REVIEWED_ON` in `card-data.ts`, even when nothing changed.
 4. Places: change states, union territories or cities only on an official change, with the
    official source.
 5. Record every change in a diff table in the PR description, one row per change, with the

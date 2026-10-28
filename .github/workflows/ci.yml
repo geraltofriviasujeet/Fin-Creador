@@ -93,6 +93,50 @@ jobs:
         if: always()
         run: supabase stop --no-backup
 
+  # The newest migration applied to a database that already has rows from the previous one:
+  # migrate up to the step before, seed, apply it, assert the backfill. Update MIGRATION and
+  # the files in supabase/upgrade-checks when a later migration needs the same check.
+  db-upgrade:
+    name: Migration upgrade check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      MIGRATION: "20261028210000"
+      DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.111.0 # keep in step with the CLI used locally
+
+      # The migration under test and every later one: they are applied together, in order.
+      - name: Hold back the migration under test and later ones
+        run: |
+          mkdir -p "$RUNNER_TEMP/held"
+          for f in supabase/migrations/*.sql; do
+            [ "$(basename "$f" | cut -d_ -f1)" \< "$MIGRATION" ] || mv "$f" "$RUNNER_TEMP/held/"
+          done
+          ls "$RUNNER_TEMP/held"
+
+      - name: Start the database at the previous migration
+        run: supabase db start
+
+      - name: Seed rows as before
+        run: psql "$DB_URL" -f supabase/upgrade-checks/${MIGRATION}_seed.sql
+
+      - name: Apply the held-back migrations
+        run: mv "$RUNNER_TEMP"/held/*.sql supabase/migrations/ && supabase migration up --local
+
+      - name: Assert the upgrade
+        run: psql "$DB_URL" -f supabase/upgrade-checks/${MIGRATION}_assert.sql
+
+      - name: Stop database
+        if: always()
+        run: supabase stop --no-backup
+
   e2e:
     name: E2E (web)
     runs-on: ubuntu-24.04
@@ -139,8 +183,12 @@ jobs:
         run: npm run build
 
       # Uses the Google Chrome preinstalled on the runner (Playwright channel "chrome").
+      # E2E_DB_URL (the runner's local database, never a hosted one) is only for this step: the
+      # CSV export measurement seeds 10,000 rows there (e2e/reports-export-scale.spec.ts).
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: |
+          eval "$(supabase status -o env | grep -E '^DB_URL=')"
+          E2E_DB_URL="$DB_URL" npm run test:e2e
 
       # Diagnostics only: the local Auth server's log (throwaway test users, no real data).
       - name: Show local Auth log

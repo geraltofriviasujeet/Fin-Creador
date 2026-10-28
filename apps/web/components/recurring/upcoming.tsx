@@ -142,6 +142,7 @@ export function UpcomingCard({
 export function UpcomingSection({
   view,
   accounts,
+  cardAccounts = [],
   categories,
   today,
   currency,
@@ -149,6 +150,8 @@ export function UpcomingSection({
 }: {
   view: RecurringView
   accounts: LedgerAccount[]
+  /** Credit cards: only as "Paid from" for expenses. */
+  cardAccounts?: LedgerAccount[]
   categories: LedgerCategory[]
   today: IsoDate
   currency: string
@@ -156,8 +159,8 @@ export function UpcomingSection({
 }) {
   const [open, setOpen] = useState<RecurringDialog>(null)
   const lookup: Lookup = useMemo(
-    () => ({ accounts: new Map(accounts.map((a) => [a.id, a])), categories: new Map(categories.map((c) => [c.id, c])) }),
-    [accounts, categories]
+    () => ({ accounts: new Map([...accounts, ...cardAccounts].map((a) => [a.id, a])), categories: new Map(categories.map((c) => [c.id, c])) }),
+    [accounts, cardAccounts, categories]
   )
   return (
     <>
@@ -167,6 +170,7 @@ export function UpcomingSection({
         onClose={() => setOpen(null)}
         titleOf={(item) => entryTitle(item.entry, lookup)}
         accounts={accounts}
+        cardAccounts={cardAccounts}
         categories={categories}
         today={today}
         currency={currency}

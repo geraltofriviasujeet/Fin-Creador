@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-10-27 (Sprint 8a: SQL approved with changes; pgTAP, writers and draft PR in step 8a.2).
+Last updated: 2026-10-29 (Sprints 8a, 8b, the 8b follow-up, 8d, 8e and 8c done on stacked draft PRs #35–#44, none merged. Next: the Sprint 8 prod rollout, once).
 
 ## Sprint status
 
@@ -30,13 +30,16 @@ Last updated: 2026-10-27 (Sprint 8a: SQL approved with changes; pgTAP, writers a
 | **5** | Dashboard & analytics | Done | Completed 2026-10-26 (PRs #25–#28 merged into `main`). Web Overview dashboard with chart types; first production deploy on Vercel Hobby and Supabase Free works, including Google sign-in. Migration 20261026120000 applied to dev and prod. Mobile Overview in the backlog. See Sprint 5 steps. |
 | **6** | Budgets & savings goals | Done | Completed 2026-10-26 (PR #30 merged into `main`, merge commit 672ab75). One Goals page (`/goals`): Planned expenses (Trip, Wheeler, House, Furniture, Electronics, Mobile, Other; exact maths, EMI, archive, restore, permanent delete of archived goals) and Monthly budgets (80% / 100% warnings, page and Overview); web density pass; `scripts/backup-prod.sh`. Migrations 20261026180000, 20261026200000, 20261026210000 applied to dev and prod (prod from `main` after a backup); live site checked. Web only (mobile Goals in the backlog). See Sprint 6 steps. |
 | **7** | Investment portfolio | Done | Completed 2026-10-27 (PR #32 merged into `main`). Holdings tracker (not trading), web only: shares, mutual funds and ETFs at the previous close (BSE, AMFI), fixed deposits, tabs per kind, Overview card. Migrations 20261027120000, 20261027180000 and 20261027200000 applied to dev and prod (prod from `main` after a backup); `refresh-prices` deployed on prod, first run ok (AMFI 14,172 and BSE 4,643 loaded, as on dev); live site checked. Mobile Investments in the backlog. See Sprint 7 steps. |
-| **8a** | Loans and EMIs | In progress | SQL approved with changes (2026-10-27); migration `20261028120000_loans.sql` not applied yet. Step 8a.2 (pgTAP, writers, draft PR) in CI. See Sprint 8a steps. |
-| **8b** | Credit cards and net worth | Not started | Own PR and prod push after 8a. |
-| **8c** | Cash-flow history and CSV export | Not started | Own PR and prod push after 8b. |
-| **9** | AI financial insights | Not started | |
-| **10** | Notifications & reminders | Not started | |
-| **11** | Mobile polish, offline & PWA | Not started | |
-| **12** | Security & production release | Not started | |
+| **8a** | Loans and EMIs | Done | Completed 2026-10-28 (web). Backend PR #34 merged; web page PR #35 (draft, CI green, QA passed). Migration `20261028120000_loans.sql` on dev; prod with the rest of Sprint 8 at the end (PR #35 stays draft until then). Mobile loans in the backlog. See Sprint 8a steps. |
+| **8b** | Credit cards and informal borrowing | Done | Completed 2026-10-28 (web). Backend draft PR #36 (`sprint-8b`, migration `20261028180000_cards_borrowing.sql` on dev); web box draft PR #37 (`sprint-8b-ui`, stacked on `sprint-8b`). Prod with the rest of Sprint 8 at the end. Mobile cards and borrowing in the backlog. Follow-up done 2026-10-28 (web): backend draft PR #38 (`sprint-8b-followup`, migration `20261028210000_borrowing_details_card_products.sql` on dev), web draft PR #39 (`sprint-8b-followup-ui`, stacked on #38), CI green, QA passed. Prod with the rest of Sprint 8. Next: 8d from `sprint-8b-followup-ui`. |
+| **8d** | Statutory dues | Done | Completed 2026-10-28 (web). Backend draft PR #40 (`sprint-8d`, migration `20261028230000_statutory_dues.sql` on dev), web draft PR #41 (`sprint-8d-ui`, stacked on #40), CI green, QA passed. Prod with the rest of Sprint 8. Mobile in the backlog. |
+| **8e** | Net worth | Done | Completed 2026-10-28 (web). Draft PR #42 (`sprint-8e`, stacked on #41), no migration. Overview "Net worth" card (own Suspense) from `netWorth` in `packages/domain/src/net-worth.ts`, loaded by `loadNetWorthData` (one `account_balances` read). Prod with the rest of Sprint 8. Mobile in the backlog. Next: 8c from `sprint-8e`. |
+| **8c** | Cash-flow history and CSV export | Done | Completed 2026-10-29 (web). Backend draft PR #43 (`sprint-8c`, migration `20261029120000_account_balances_at.sql` on dev), web draft PR #44 (`sprint-8c-ui`, stacked on #43), CI green, QA passed. `/reports`: range bar, cash flow per month (chart and table, top 5 categories, links to Transactions), net worth trend (excluding shares, funds & ETFs, today with them beside it), CSV export form. Phone tab bar: four tabs and More (Income, Recurring, Loans & Liabilities, Reports). Export cap 10,000 rows and `maxDuration` 15 s kept: 10,000 rows took a median 348 ms in CI. Prod with the rest of Sprint 8. Mobile in the backlog. Next: the Sprint 8 prod rollout (owner, `docs/deployment.md` 4c): merge the stacked PRs #35–#44 into `main` in order, backup, dry run listing exactly the Sprint 8 migrations, push prod, live check. |
+| **9** | Statement import | Not started | After the Sprint 8 prod rollout. Credit card PDFs, then bank CSV / Excel, then bank PDFs (Backlog item). |
+| **10** | AI financial insights | Not started | |
+| **11** | Notifications & reminders | Not started | |
+| **12** | Mobile polish, offline & PWA | Not started | |
+| **13** | Security & production release | Not started | |
 
 ## Sprint 1 steps
 
@@ -86,10 +89,10 @@ Loans only (owner, 2026-10-27): see Decisions. Web first; mobile in a separate P
 | **Step** | **Status** | **Notes** |
 |----|----|----|
 | **8a.1 Domain, schemas and SQL review** | Done | `packages/domain/src/loans.ts` (EMI estimate reusing `emi` from goals.ts, schedule that follows the EMI in use, moratorium interest, default split, progress) and `due-items.ts` (generic reminders, shortfall); `packages/schemas/src/loan-forms.ts` (add / edit loan, pay, will pay later, `LENDERS`); migration `20261028120000_loans.sql`. Approved 2026-10-27 with changes (see Decisions). |
-| **8a.2 pgTAP and draft PR** | In progress | `supabase/tests/database/loans.test.sql` (posting from bank, cash and other; idempotency; shortfall with and without "Pay anyway"; before tracking; capitalisation once and again after a void; edit / void together; FC034–FC044; direct-write refusals; archive and delete; RLS and anon; user and planned-account deletion) and the generated `loan_dates_parity.test.sql` (`npm run fixtures:loans`); writers `addLoan`, `editLoan`, `setLoanArchived`, `deleteLoan`, `payDueItem`, `editDuePayment`, `voidDuePayment`, `planDueItem`, `clearDuePlan`, `loadPaymentContext` and `loanErrorMessage` in `packages/api/src/loans`; loan accounts filtered from every account loader (`MONEY_ACCOUNT_KINDS`). Draft PR. |
-| **8a.3 Dev db push** | Not started | The owner runs `db push` on dev; then `npm run db:types`. |
-| **8a.4 Web Loans page** | Not started | Add loan flow, EMI cards with schedule, pay / will pay later, the shortfall warning with "Pay anyway" (also ahead of time on the EMI card), bell and Overview "Due soon". Helper text for an ongoing loan whose interest was added to the balance: enter the current outstanding as the amount taken. For a capitalised moratorium: "Interest added when EMIs start (estimate X)". Navigation (owner, 2026-10-27): a new tab "Loans & liabilities" after Investments, route `/loans-liabilities`, the same page title and heading; on narrow screens the nav may show the short label "Liabilities" (nav only), kept compact and reachable (More menu if needed). Page: "Due soon" card and "Add loan" at the top; loan list (lender, type, outstanding, next EMI date and amount, badge Paid / Due / Overdue); archived loans in a collapsed section; empty state "No loans yet" with Add loan. 8b adds credit cards and net worth to this page (no new tab). Nav test updated. At most 8 screenshots from CI. |
-| **8a.5 Wrap-up and prod** | Not started | Docs, QA agent, prod from `main` after a backup. |
+| **8a.2 pgTAP and draft PR** | Done | `supabase/tests/database/loans.test.sql` (posting from bank, cash and other; idempotency; shortfall with and without "Pay anyway"; before tracking; capitalisation once and again after a void; edit / void together; FC034–FC044; direct-write refusals; archive and delete; RLS and anon; user and planned-account deletion) and the generated `loan_dates_parity.test.sql` (`npm run fixtures:loans`); writers `addLoan`, `editLoan`, `setLoanArchived`, `deleteLoan`, `payDueItem`, `editDuePayment`, `voidDuePayment`, `planDueItem`, `clearDuePlan`, `loadPaymentContext` and `loanErrorMessage` in `packages/api/src/loans`; loan accounts filtered from every account loader (`MONEY_ACCOUNT_KINDS`). Draft PR. |
+| **8a.3 Dev db push** | Done | Owner pushed to dev 2026-10-27; `npm run db:types` replaced the hand-written entries (generated relationships and `transactions.due_payment_id`). Prod not pushed. |
+| **8a.4 Web Loans page** | Done | Draft PR: `/loans-liabilities` (`components/loans/*`), loader and view `packages/api/src/loans/{load,view}.ts`, bell (`components/shell/bell.tsx`, streamed from the app layout), Overview Due soon card, nav tab, E2E `e2e/loans.spec.ts`. Plan: Add loan flow, EMI cards with schedule, pay / will pay later, the shortfall warning with "Pay anyway" (also ahead of time on the EMI card), bell and Overview "Due soon". Helper text for an ongoing loan whose interest was added to the balance: enter the current outstanding as the amount taken. For a capitalised moratorium: "Interest added when EMIs start (estimate X)". Navigation (owner, 2026-10-27): a new tab "Loans & Liabilities" after Investments, route `/loans-liabilities`, the same page title and heading; on narrow screens the nav may show the short label "Liabilities" (nav only), kept compact and reachable (More menu if needed). Page: "Due soon" card and "Add loan" at the top; loan list (lender, type, outstanding, next EMI date and amount, badge Paid / Due / Overdue); archived loans in a collapsed section; empty state "No loans yet" with Add loan. Layout (owner, 2026-10-27): Due soon at the top, then three boxes: "Long-term liabilities" (loans, Add loan, "No loans yet" inside), "Short-term & operational liabilities" (8b) and "Statutory & legal liabilities" (8d), the last two as "Coming next" until built (no new tab). Nav test updated. At most 8 screenshots from CI. |
+| **8a.5 Wrap-up and prod** | Done (prod pending, owner) | QA (fincreador-qa role): `supabase/tests/database/loans_qa.test.sql` (84 assertions: posting split, Total available by hand, direct writes, RLS and anon, retries, void / edit together, delete rules, month-end and moratorium dates, capitalised interest once, shortfall boundaries) and `packages/api/src/loans/qa.test.ts`; no application bugs. Amount inputs show digit grouping (`minorToGroupedInputString`, `regroupAmountInput` in packages/domain). Prod steps in `docs/deployment.md` 4c; next is 8b, then 8c and 8d. |
 
 ## Sprint 7 steps
 
@@ -157,7 +160,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-22** | Scheduled jobs and reminders use Supabase scheduling (`pg_cron` and Edge Functions), not Vercel Cron. | Vercel Hobby cron runs at most once a day with up to an hour of drift — not enough for a 10 PM reminder in each user's time zone. |
 | **2026-10-22** | Mobile uses Expo Router (`apps/mobile/src/app`), with protected `(auth)` and `(app)` groups and five bottom tabs matching the web tab bar. | Expo's recommended navigation; route guards keep signed-out users out of the app screens. |
 | **2026-10-22** | The mobile session is stored in AsyncStorage, encrypted with AES-256-GCM (`expo-crypto`); the key lives in the Keychain / Android Keystore (`expo-secure-store`, after first unlock, this device only). | The secure store cannot hold a whole session; this keeps tokens encrypted at rest. A session that can't be decrypted is dropped and the user signs in again. |
-| **2026-10-22** | Email links from the mobile app (sign-up confirmation, password reset) open the web app. Google sign-in on mobile uses the system auth browser with PKCE and returns to the app. | Deep-linking email links into the app needs real app builds (Sprint 11). Expo Go needs `exp://**` in the Supabase redirect allow list; builds use `fincreador://auth/callback`. |
+| **2026-10-22** | Email links from the mobile app (sign-up confirmation, password reset) open the web app. Google sign-in on mobile uses the system auth browser with PKCE and returns to the app. | Deep-linking email links into the app needs real app builds (Sprint 12). Expo Go needs `exp://**` in the Supabase redirect allow list; builds use `fincreador://auth/callback`. |
 | **2026-10-22** | Country, currency and time-zone lists (with English names) are generated into `packages/schemas/src/region-data.ts` and used by web and mobile. | Hermes (mobile) lacks `Intl.supportedValuesOf` and `Intl.DisplayNames`; one static list means both clients offer the same choices. |
 | **2026-10-22** | Auth error messages, the publishable-key guard and profile column mapping live in `packages/api`, shared by web and mobile. | One set of messages and rules; the clients cannot drift apart. |
 | **2026-10-22** | Google sign-in in Expo Go is tested with `npm run dev:mobile:google`, which serves Expo under an sslip.io hostname (e.g. `192-168-1-6.sslip.io`). | Supabase refuses OAuth redirects to bare IP addresses even when allow-listed, and the ngrok tunnel was unreliable. App builds use `fincreador://auth/callback`, which Supabase already accepts. |
@@ -172,7 +175,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-22** | Add income has a single "Received into" account (banks, cash, other); no separate payment-method field. | The account already records where the money landed. |
 | **2026-10-22** | A mistaken income entry is voided, never deleted or edited (editing is Sprint 3). Voiding is one-way and enforced in the database. Creating income is idempotent (client key, unique per user). | Auditable history and no double posting. |
 | **2026-10-22** | An account's currency and opening-balance date are locked once it has entries (error codes FC004, FC011); the opening amount can still be corrected. The as-of date is only re-checked against "today" when it is set or changed, so editing and archiving keep working after a time-zone change. | The as-of date decides which entries count toward the balance; moving it later would silently re-classify existing income. |
-| **2026-10-22** | Income entries cascade from their account and source (`ON DELETE CASCADE`), and a source's default account is cleared (`SET NULL`), only so that deleting a whole user works. Accounts and sources must never be deleted directly, only archived; account deletion (Sprint 12) goes through deleting the user. | Keeps the ledger intact: no client can delete an account or source, and deleting a user removes all of their data in any cascade order. |
+| **2026-10-22** | Income entries cascade from their account and source (`ON DELETE CASCADE`), and a source's default account is cleared (`SET NULL`), only so that deleting a whole user works. Accounts and sources must never be deleted directly, only archived; account deletion (Sprint 13) goes through deleting the user. | Keeps the ledger intact: no client can delete an account or source, and deleting a user removes all of their data in any cascade order. |
 | **2026-10-22** | Default income sources (Salary, Freelance, Rental income, Business, Interest & dividends, Other income) are created for every user by a separate function that can never block sign-up, with a backfill and a lazy fallback on first use. The Income sources panel lists only sources with income this year or added by the user. | Ready-to-use categories without showing rows of ₹0. |
 | **2026-10-22** | "This month" and "this year" use the calendar in the user's time zone. The Rental income card sums all rent-type sources. "Linked account" on a source is the account that actually received its income this year ("Multiple accounts" if several), else its default account. | Matches the Figma; financial year is a backlog setting. |
 | **2026-10-22** | ~~Wordmark is lowercase "fincreador" as in the Figma ("fin" white, "creador" lime on dark; both ink on light). Screen readers hear "Fin Creador"; titles, emails and body text keep "Fin Creador".~~ Superseded on 2026-10-26 below. | Owner's decision; reverses the earlier "FinCreador". Lime stays off light backgrounds (contrast). |
@@ -217,6 +220,20 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-27** | Sprint 8a reminders (owner): in-app only. The bell and an Overview "Due soon" card show EMIs due tomorrow (within 24 hours; entries have no time of day), due today, overdue, and the day before and on a planned pay date, derived from stored dates (`packages/domain/src/due-items.ts`), no scheduled job. Email, web push and phone push are a later notifications step (backlog). | |
 | **2026-10-27** | Sprint 8a SQL review (owner, changes): (1) a shortfall is a warning, not a block: `pay_due_item` and `edit_due_payment` take `p_allow_shortfall` (default false); without it FC035 (detail = shortfall) is raised, and "Pay anyway" sends the same request key again with it; this replaces "may not take the paying account below zero" above. (2) Deleting a planned account clears the whole plan (date and account). (3) Account names need not be unique; a loan account is named after the nickname or lender and shown as "<name> (loan)" in lists. (4) `loan_category_id` adopts an archived same-name category (restored) and never returns null. (5) SQL due dates come from one function, `loan_due_date`, checked against the domain by a generated parity test. (6) Loan accounts are never in Total available, account pickers, the Accounts page or balances. Optional parameters of `create_loan` and `update_loan` come last, with defaults. | Approved 2026-10-27. |
 | **2026-10-27** | Sprint 8 due items (owner): one generic model for anything due on a date and paid from an account (`due_items` + `due_payments`): due date, amount due, optional minimum due, status (pending, paid, before tracking), planned pay date and account, paying account, the atomic idempotent posting, the shortfall refusal, the in-app reminders and the Due soon card. Loan EMIs and moratorium interest in 8a; card bills in 8b add only the card-specific parts (see Sprint 8b). | 8a must not block 8b. |
+| **2026-10-27** | Liability boxes (owner): the Loans & Liabilities page (capital L) has three boxes: Long-term (loans, 8a), Short-term & operational (credit card dues and EMIs, informal borrowing: 8b), Statutory & legal (income tax payable, fines, unpaid e-challans: 8d). 8b adds informal borrowing (liability account, optional due date, part payments as transfers, interest as an expense); new 8d statutory dues (type, amount, due date, paid / unpaid, reminders; payment is an expense, not a transfer). Net worth counts all three boxes. Never store card numbers or any digits of cards or accounts. | Same due-item model throughout. |
+| **2026-10-27** | Sprint 8a web page (8a.4): loan badge Paid / Due / Overdue, plus "Not due yet" before anything has fallen due (a loan that starts later) and "Closed" once nothing is owed; EMIs left after a loan is cleared show as "Not needed" and never remind. The EMI card warns ahead of time against the planned account, otherwise only when no account can cover the EMI (named after the one with the most money). Loan screens show account names only (no last four digits). Pending schedule rows are estimates from what is owed now. The bell's list streams from the app layout. | Built on the shared view `packages/api/src/loans/view.ts`, so mobile shows the same. |
+| **2026-10-28** | Sprint 8 order and rollout (owner): 8b credit cards and informal borrowing, then 8d statutory dues, then 8e net worth (all three boxes), then 8c cash-flow history and CSV export. Each step branches from the previous one's branch (8b from `sprint-8a-ui`); draft PRs stay stacked and unmerged; the owner runs `db push` on dev per approved migration. Prod once at the end (`docs/deployment.md` 4c): merge the stacked PRs into `main` in order, then backup, dry run listing exactly the Sprint 8 migrations, push prod, live check. | Replaces "own PR and prod push" per step and the 8a prod rollout before merging PR #35. |
+| **2026-10-28** | Sprint 8b SQL review (owner, approved with changes): liability kinds only in `is_liability_kind` / `LIABILITY_ACCOUNT_KINDS`; card purchases are expenses on the card (recurring too, starting on or after the day the card was added), refunds by void; a statement once per card and date, on or before today, owed measured on its date, the difference posted as an expense only when positive and a category is picked; bill = total − card EMIs ("Card EMIs are paid from the loan row"); one active payment per bill (a part-paid bill closes), plus `pay_card` for any amount up to what is owed (FC047 "record the missing purchase first"); `card_sync_due` marks a bill paid once transfers dated on or after its statement cover it (pending again after a void), `card_bill_paid` / `card_bill_progress` drive "Minimum paid" / "Part-paid" and stop reminders once the minimum is covered; borrowing received into an account (posted) or earlier (owed only), repayments as transfers plus interest as an expense, the due item closes when nothing is owed; archive only at a zero balance (credit included); delete only without history; the difference expense and the money-received entry change only with their statement or borrowing; no digits in issuer, nickname or who you owe. | Error codes FC045–FC051. |
+| **2026-10-28** | Sprint 8b web (owner): the "Short-term & operational liabilities" box lists credit cards (owed, limit used with 80% / 100% warnings, latest bill and due date, badges Due, Overdue, Paid, Minimum paid, "Part-paid, X left"), card EMIs (moved from Long-term, with Link to card) and money borrowed from people (what is still owed). Pay card defaults to the pending bill (full, minimum, custom: closes it) with "Other amount" (does not close it until covered). A card is offered only as "<name> (card)" for expenses and recurring expenses, with the limit warning; never in income, transfer or payment pickers, the Accounts page or Total available (`cardAccounts` in the ledger context). Due soon, the bell and the Overview list card bills (until the minimum is covered), borrowing due dates and "Add your <card> statement" (from the day after the statement day). | Shared view `packages/api/src/cards/view.ts`, so mobile can show the same. |
+| **2026-10-28** | Sprint 8b follow-up SQL review (owner, approved with changes): `has_digit(text, min_run)` counts every Unicode decimal digit plus superscripts and subscripts, a run may mix scripts (parity with `packages/schemas/src/digits.ts`); card issuer, nickname and who you owe refuse any digit, card product a run of 3, borrowing reason and loan lender / nickname a run of 4 (loans `NOT VALID`: earlier rows untouched). Card product from `CARD_PRODUCTS` (names carry the issuer) or typed under Other; the card account is named nickname, else product ("<issuer> <typed>" for Other), else issuer. Borrowing: relationship (family, friends, others), optional reason, how much to return (≥ borrowed; the extra is interest), and only with a return date: once (seq 0) or 2–60 monthly instalments (seq 1…n, the return day clamped to the end of each month, not chained; floor amounts, the last takes the remainder; interest spread on the cumulative amount, rounded down once per instalment, so it never exceeds an instalment). Each due item names the account it is paid from; nothing moves until the person confirms Paid. Repayments cover items first in, first out (interest first within one); a part-paid item stays pending; all paid once nothing is owed. `set_borrowing_return_plan` (SECURITY DEFINER, own borrowing, locked) rebuilds the items and drops "Will pay later" plans. The paying account is required only by the functions (set null if deleted). Old borrowings backfilled: amount to return = borrowed, a due date becomes a one-time plan. Net worth (8e) counts only principal still owed. | Migration `20261028210000`; CI upgrade check `supabase/upgrade-checks`. The borrowing E2E test is `test.fixme` until the web step. |
+| **2026-10-28** | Sprint 8d SQL review (owner, approved with changes): `statutory_dues` (income tax payable, fine, other statutory due) with one `statutory_due` due item; no liability account, nothing posted until paid. Paying posts an expense in "Taxes" (tax, other) or "Fines & penalties" (fines; and interest or a penalty on a tax due, not part of the amount due); system categories adopted by name, never null. Part payments: `due_payments.allows_parts` (set only by the guard), paid once active payments cover the amount; FC052 more than is still due, FC053 archived, FC054 amount below what is paid. Due date required (past allowed); fine details (vehicle kind, state, city from the shared lists) optional; description without a run of 4 digits; optional paying account on the due item. Archive only once fully paid; delete only without payment history. | Loans and card bills keep one active payment. |
+| **2026-10-28** | Sprint 8b follow-up web (owner): Add borrowing asks the relationship, reason, how much to return ("Same as borrowed"), and only after a return date "How will you return it?" (one-time settlement or instalments, "First instalment on"), the account it is returned from, a schedule preview and "Nothing is deducted until you confirm Paid". Each instalment has Pay (prefilled from its account and what is left of it, split into principal and interest; asks for another account if that one is archived or gone) and Will pay later; Due soon and the bell list each instalment. Edit return plan warns that Will pay later plans are dropped; borrowings from before show "Add details". Add card: issuer and card dropdowns, Other typed, optional label. | PR #39; QA tests in `borrowing_followup_qa.test.sql`. |
+| **2026-10-28** | Sprint 8d web (owner): the "Statutory & legal liabilities" box lists dues with what is left and badges (Due, Overdue, Part-paid X left, Paid), archived collapsed; Add / edit due (fines: vehicle, state, city from the shared lists; no challan, RTO or vehicle numbers); Pay prefilled from the due's account and what is left, interest or penalty on tax dues only, Pay anyway, edit / void, Will pay later; archive once paid, delete without history. Reminder links from the bell and the Overview open the pay dialog (`/loans-liabilities?pay=<id>`). | PR #41; QA tests in `statutory_dues_qa.test.sql`. |
+| **2026-10-28** | Order after 8b (owner): (1) 8b follow-up (borrowing details, card product list, F1), (2) 8d, (3) 8e net worth, (4) 8c, (5) prod rollout once at the end: backup, merge PRs #35, #36, #37 and the next ones in order, dry run listing exactly the Sprint 8 migrations, push prod, live check. | Scope in "Sprint 8b follow-up" below. |
+| **2026-10-28** | Statement import (owner): planned as Sprint 9 (web; credit card PDFs, then bank CSV / Excel, then bank PDFs, on one shared reader), after the Sprint 8 prod rollout; order 8d web, 8e, 8c, prod, then statement import. Client-side PDF parsing, password never leaves the browser, confirmed lines only, re-import is a no-op. | Full decisions in the Backlog item; roadmap renumbered: AI insights is Sprint 10, notifications 11, mobile polish 12, release 13. |
+| **2026-10-28** | Sprint 8e net worth (owner): net worth = Total available (unchanged) + shares / funds / ETFs at the last known price + fixed deposits at today's value (the maturity amount once matured) + a liability account in credit as its own asset line "Card credit (overpaid)" − loans (owed + moratorium interest not yet added; card EMIs are loans) − cards owed (the card account) − borrowings (principal only) − statutory dues left. Due items are never subtracted (the account balance holds what is owed). Profile currency only; other currencies and holdings without a price listed as "Not included"; archived items out; no new rounding (sums of existing minor-unit figures). Each line shows its as-of date (prices: oldest to newest price date), the card the date and time zone, every flag its reason (Old price, Stale, Estimate, Matured). A part that fails to load: no total, the loaded parts shown with "Couldn't load X" and Try again. An Overview card in its own Suspense boundary, no nav tab; the trend is 8c. No migration. | One pure function for web and mobile; a property test checks the sum against every account balance. |
+| **2026-10-29** | Sprint 8c reports (owner): a "Reports" tab (`/reports`, also on the phone tab bar or its More menu). Cash flow per calendar month (default the last 12 months, 3 / 6 / 12 / 24 or custom months, at most 24): income, expenses, net, savings rate ("—" without income, may be negative), the current month "so far", each month's largest category and the top 5 for the range; one `dashboard_breakdown` call per whole month, so a month equals the Overview's. Transfers (including principal paid to loans, cards and borrowing) are never income or expenses. Net worth trend: month-ends in the profile time zone and the last point today, with the 8e rules from `account_balances_at` (migration 20261029120000: own rows, security invoker, signed-in only, at most 120 dates, none in the future; an account counts from its opening-balance date until its archive date as a local date; voided entries never count, "as corrected"); moratorium interest until the day a payment adds it; fixed deposits by formula from the start date until archived; a statutory due from the day it was added, minus payments by then, until archived, at today's amount; shares, funds and ETFs excluded and labelled "Excluding shares, funds & ETFs", with today's net worth including them and the investments figure beside it; the trend starts at the first point with data. CSV export (`/reports/export`): the person's own session only, zod parameters (range up to 10 years, optional account or category, voided off by default), reads of 1,000 rows, at most 10,000 rows (413 above), current versions only; columns Date, Type, Amount, Currency, Account, To account, Category, Payment mode, Note, Voided; only the text columns get the leading-apostrophe guard (= + - @ tab CR); UTF-8 with BOM, CRLF; `Content-Disposition: attachment`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `maxDuration` 15 s; file name has only the dates; nothing logged or stored. | PDF export and a full "Export my data" stay in the backlog. |
+| **2026-10-29** | Sprint 8c web: a phone fits five tabs, so the tab bar is Overview, Activity, Goals, Investments and More; More lists the pages not in the tab bar (Income, Recurring, Loans & Liabilities, Reports). Export cap and `maxDuration` from a CI measurement on the throwaway database (10,000 rows: median 348 ms through the route, 724 ms through the form; 413 in 257 ms): cap 10,000, 15 s unchanged. | Liabilities moved from the tab bar into More; desktop sidebar unchanged. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -224,7 +241,7 @@ Mutual funds: AMFI's free daily NAV text file (scheme code, ISINs, name, NAV, da
 
 ## Before production (open items)
 
-Development-only settings that must be removed or replaced before any production release (Sprint 12 at the latest):
+Development-only settings that must be removed or replaced before any production release (Sprint 13 at the latest):
 
 - **Supabase redirect allow list:** remove `exp://**` (Expo Go) and the `http://localhost:3000/...` entries; keep only the production web URL and the app's own scheme.
 - **Dev scripts:** drop `npm run dev:mobile:google` (`apps/mobile/scripts/start-lan-hostname.sh`); it exists only so Google sign-in can return to Expo Go during development.
@@ -251,16 +268,31 @@ Pending tests:
 - **Custom holdings with manual prices:** assets that aren't in the BSE or AMFI files, valued at a price the person enters and labelled as manual.
 - **Fuller instrument names:** BSE names are short and upper-case in the file; use a fuller official name where a free source allows it.
 - **Quarterly list refresh (recurring, Jan / Apr / Jul / Oct):** refresh the Goals suggestion lists (mainly vehicle makes and models; states, countries and cities only on a real change) following `docs/quarterly-list-refresh.md`: official India manufacturer sites, models on sale in India only, no prices, a diff table with a source URL per change, `LISTS_REVIEWED_ON` updated, one draft PR. Next: January 2027.
+- **Card list: PNB first, then more banks (next quarterly list refresh, January 2027):** add Punjab National Bank (PNB) credit cards to `packages/schemas/src/card-data.ts` from PNB's own pages only (verified sources cited in `docs/quarterly-list-refresh.md`, no guessing), then other public-sector and mid-size banks the same way. PNB comes first because the person holds a PNB card. Until then, "Other" with a typed name works.
 
 - **Notifications step (email, web push, phone push):** EMI and card-bill reminders outside the app (Sprint 8a has in-app reminders only). Needs custom SMTP or a Resend domain, Expo push tokens and web push; reuse the `pg_cron` + Edge Function pattern from `refresh-prices`; never send amounts or account names on a lock screen by default.
 - **Ongoing loans with capitalised interest:** Sprint 8a caps an ongoing loan's outstanding at the amount taken; an education loan already in repayment whose moratorium interest was added may owe more. Add an optional "interest added to the loan" field if testers need it.
 - **Financial year setting:** optional April–March financial year for "this year" figures (Sprint 2 uses the calendar year).
-- **Repeated sign-up email:** see Sprint 10.
+- **Repeated sign-up email:** see Sprint 11.
 - **Mobile category management:** add, rename, archive and restore expense categories in the mobile app (web has it on Settings since Sprint 3; owner, 2026-10-23).
-- **Recurring reminders:** notify when a recurring item is due (deferred from Sprint 4; belongs with Sprint 10 notifications, using Supabase scheduling).
+- **Recurring reminders:** notify when a recurring item is due (deferred from Sprint 4; belongs with Sprint 11 notifications, using Supabase scheduling).
 - **Overview card heights:** the Monthly budget card's empty state stretches to the height of the chart beside it (layout only).
 - **Mobile Overview dashboard:** the Sprint 5 dashboard on mobile, reusing `dashboard_breakdown`, `transaction_summary` and `packages/domain/src/dashboard.ts` (owner, 2026-10-26: web only in Sprint 5).
 - **Payee / merchant on entries:** a "paid to" field (the Figma shows merchant names). Not in Sprint 3 (owner, 2026-10-23).
+- **Sprint 9: statement import (web)** (owner, 2026-10-28; docs only, not built yet). Order of the sprints: 8d web, 8e net worth, 8c history + CSV export, Sprint 8 prod rollout, then this. Order inside Sprint 9: (1) credit card PDFs, (2) bank-account statements as CSV / Excel (exact, preferred), (3) bank PDFs, all on one shared reader in `packages/domain`. Credit card decisions:
+  - Parse the PDF in the browser with pdf.js. A statement password is held in memory only: never uploaded, stored or logged. A wrong password shows a plain message.
+  - Text PDFs only (no OCR), with a file-size cap and a page cap.
+  - Review table with a tick per line and an editable category, amount and date. Only ticked (confirmed) lines are saved, as card expenses through the existing writers.
+  - The statement date, total, minimum due and due date prefill Enter statement.
+  - Deterministic request keys per line, so re-importing the same statement is a no-op.
+  - Possible duplicates (an existing card entry with the same date and amount) start unticked.
+  - Runs of 4 or more digits are stripped from notes.
+  - Skipped: payments received, refunds (void the matching purchase instead), EMI conversions, and lines dated before the card was added. Fees, interest and GST are imported as expenses.
+  - First parsers for the issuers in `packages/schemas/src/card-data.ts` (HDFC Bank, SBI Card, ICICI Bank, Axis Bank, Kotak Mahindra Bank) plus a generic line parser. Parsers live in `packages/domain` and work on extracted text, so mobile can reuse them.
+  - Tests use synthetic statements only (including a password-protected one); never real statements in the repo.
+  - No new tables expected.
+  - Bank statements (steps 2 and 3), extra rules: credits are imported as income and debits as expenses; transfers between the person's own accounts are detected and posted as transfers (neither income nor expense, no double count); the closing balance is reconciled against the account balance and any difference is shown before saving; duplicate detection against manual entries (unticked, like card lines); the same privacy rules (synthetic statements only in the repo, runs of 4 or more digits stripped from notes, a password in memory only, never uploaded, stored or logged).
+- **Export my data (Settings):** a full export of everything the person holds (accounts, transactions, investments and fixed deposits, loans, cards, borrowing, statutory dues) from Settings, with the same rules as the 8c transactions CSV (own session only, formula-safe text cells, nothing stored or logged, no personal details in file names). PDF export also stays in the backlog (owner, 2026-10-29).
 - **Past months of income:** browsing last month and earlier months (Sprint 3: transaction list with date filters; Sprint 5: dashboard periods; Sprint 8: reports). Owner's choice on 2026-10-22: not added to Sprint 2.
 
 # 1. Executive summary
@@ -319,10 +351,11 @@ restructuring; do not force a new architecture onto working code.
 | **6** | Weeks 11–12 | Budgets & savings goals | Plan targets and track progress. |
 | **7** | Weeks 13–14 | Investment portfolio | Track holdings and manual valuations. |
 | **8** | Weeks 15–16 | Loans, liabilities & reports | View liabilities, net worth, and export records. |
-| **9** | Weeks 17–18 | AI financial insights | Get explanations grounded in verified data. |
-| **10** | Weeks 19–20 | Notifications & reminders | Configure reminders and upcoming-payment alerts. |
-| **11** | Weeks 21–22 | Mobile polish, offline & PWA | Harden supported offline and cross-platform workflows. |
-| **12** | Weeks 23–24 | Security & production release | Release candidate ready for deployment/store submission. |
+| **9** | Weeks 17–18 | Statement import | Import credit card and bank statements and save only the confirmed lines. |
+| **10** | Weeks 19–20 | AI financial insights | Get explanations grounded in verified data. |
+| **11** | Weeks 21–22 | Notifications & reminders | Configure reminders and upcoming-payment alerts. |
+| **12** | Weeks 23–24 | Mobile polish, offline & PWA | Harden supported offline and cross-platform workflows. |
+| **13** | Weeks 25–26 | Security & production release | Release candidate ready for deployment/store submission. |
 
 # 4. Sprint detail and acceptance criteria
 
@@ -631,9 +664,13 @@ portfolio composition and performance estimates.
 **Weeks 15–16 \| Usable outcome:** A user can see broader financial
 position and export records.
 
-Split into three releases (owner, 2026-10-27), each its own PR and prod
-push: 8a loans, 8b credit cards and net worth, 8c cash-flow history and
-CSV export. Rules for 8a are in the Decisions log above.
+Split into five steps (owner, 2026-10-27; reordered 2026-10-28), in this
+order: 8a loans, 8b credit cards and informal borrowing, 8d statutory
+dues, 8e net worth, 8c cash-flow history and CSV export. Each step is a
+stacked draft PR from the previous step's branch; Sprint 8 goes to prod
+once, at the end. The Loans &
+Liabilities page has three boxes: Long-term (8a), Short-term &
+operational (8b), Statutory & legal (8d). Rules for 8a are in the Decisions log above.
 
 ### Sprint 8a — Loans and EMIs
 
@@ -650,7 +687,7 @@ CSV export. Rules for 8a are in the Decisions log above.
 
 - Credit card EMIs are loans of type "Credit card EMI".
 
-### Sprint 8b — Credit cards and net worth
+### Sprint 8b — Credit cards and informal borrowing
 
 Built on 8a's due items (`due_items`, `due_payments`): due date, amount
 due, minimum due, status, planned pay date and account, the posting,
@@ -679,9 +716,51 @@ the shortfall refusal, reminders and Due soon need no new mechanism.
 
 - Utilisation warnings at 80% and 100% of the limit.
 
-- Net worth: included assets minus included liabilities (loan and card
-  accounts), with valuation dates; decide whether investments and fixed
-  deposits count. Liabilities must include capitalised moratorium
+- Informal borrowing (friends, family, third parties): a liability
+  account named after the lender (a name only), the amount borrowed, an
+  optional due date (a due item, so Due soon and the bell remind), part
+  payments as transfers to the liability account, interest (if any) as
+  an expense. Shown in the "Short-term & operational liabilities" box
+  with credit card dues and card EMIs.
+
+### Sprint 8b follow-up (owner, 2026-10-28; before 8d)
+
+New migration only (never edit an applied one); SQL shown to the owner before applying.
+
+- Borrowing: "Borrowed from" name plus a relationship (Family, Friends,
+  Others); "Borrowed for" short reason (no run of 4 or more digits);
+  received into any account (Cash in hand offered explicitly) or already
+  received earlier; "How much to return" with "Same as borrowed" (the
+  extra is interest or a charge, planned from the start, posted as an
+  expense when repaid); optional return date, and only then "How will you
+  return it?" (one payment on that date, or instalments: open question,
+  ask the owner first); reminders use the return date. Columns
+  relationship, reason, amount_to_return_minor and the return plan, with
+  checks, RLS, grants and guards like the other borrowing columns.
+
+- Credit cards: Add card asks issuer, then card product (e.g. HDFC
+  Regalia), with "Other" typed; the nickname stays optional, shown only as
+  "Label if you hold two of the same card" (no digits). List of cards in
+  India in `packages/schemas/src/card-data.ts` with `LISTS_REVIEWED_ON`,
+  from issuers' own pages only (sources cited in the docs, not the app),
+  refreshed every quarter (January, April, July, October) through
+  `docs/quarterly-list-refresh.md`.
+
+- F1 (QA): the database refuses digits from other scripts too
+  (full-width, Devanagari, Arabic-Indic) in card issuer, nickname and who
+  you owe; pgTAP for each; the QA TODO becomes a normal test.
+
+- Unchanged: card statements and bills, and Pay card.
+
+### Sprint 8e — Net worth (after 8d)
+
+Done 2026-10-28: rules in the Decisions row of that date ("Sprint 8e net worth").
+
+- Net worth: included assets minus included liabilities, with valuation
+  dates; liabilities from all three boxes (long-term loans, short-term
+  and operational: cards and informal borrowing, statutory and legal:
+  unpaid statutory dues from 8d); decide whether investments
+  and fixed deposits count. Liabilities must include capitalised moratorium
   interest not yet posted (it is posted with the first EMI paid).
 
 ### Sprint 8c — Cash-flow history and CSV export
@@ -689,6 +768,20 @@ the shortfall refusal, reminders and Due soon need no new mechanism.
 - Cash-flow history over months; browse past months of income.
 
 - CSV export with date filters; PDF only if time permits.
+
+### Sprint 8d — Statutory dues
+
+- The "Statutory & legal liabilities" box: income tax payable, fines and
+  unpaid e-challans, and other statutory dues.
+
+- Each due: type, amount, due date, paid or unpaid, and reminders (a due
+  item, so Due soon and the bell need no new mechanism).
+
+- Paying a statutory due is an expense from the chosen account (a
+  category per type), not a transfer: there is no liability account.
+  Unpaid dues count in net worth.
+
+- No challan, vehicle, PAN or card numbers: names and amounts only.
 
 ### Acceptance criteria
 
@@ -703,9 +796,17 @@ the shortfall refusal, reminders and Due soon need no new mechanism.
 
 **Dependencies:** Sprints 3, 5, and 7.
 
-## Sprint 9 — AI-powered financial insights
+## Sprint 9 — Statement import
 
-**Weeks 17–18 \| Usable outcome:** A user receives explanations grounded
+**Weeks 17–18 \| Usable outcome:** A user imports a credit card or bank
+statement and saves only the lines they confirm. Added on
+2026-10-28 (owner); AI insights and later sprints moved up by one. Scope,
+order and decisions: the "Sprint 9: statement import (web)" item in the
+Backlog.
+
+## Sprint 10 — AI-powered financial insights
+
+**Weeks 19–20 \| Usable outcome:** A user receives explanations grounded
 in verified financial data.
 
 ### Scope and deliverables
@@ -737,9 +838,9 @@ in verified financial data.
 
 **Dependencies:** Stable dashboard, goals, and portfolio data.
 
-## Sprint 10 — Notifications and reminders
+## Sprint 11 — Notifications and reminders
 
-**Weeks 19–20 \| Usable outcome:** A user can receive and control
+**Weeks 21–22 \| Usable outcome:** A user can receive and control
 reminders across supported platforms.
 
 ### Scope and deliverables
@@ -785,9 +886,9 @@ reminders across supported platforms.
 
 **Dependencies:** Sprints 1 and 4; notification infrastructure.
 
-## Sprint 11 — Mobile polish, offline support and PWA
+## Sprint 12 — Mobile polish, offline support and PWA
 
-**Weeks 21–22 \| Usable outcome:** The app is dependable across
+**Weeks 23–24 \| Usable outcome:** The app is dependable across
 supported web and mobile workflows.
 
 ### Scope and deliverables
@@ -819,9 +920,9 @@ supported web and mobile workflows.
 
 **Dependencies:** Stable core flows on web and mobile.
 
-## Sprint 12 — Security, release and production readiness
+## Sprint 13 — Security, release and production readiness
 
-**Weeks 23–24 \| Usable outcome:** A tested release candidate is ready
+**Weeks 25–26 \| Usable outcome:** A tested release candidate is ready
 for deployment and store submission.
 
 ### Scope and deliverables
@@ -922,7 +1023,7 @@ trusted server-side code, and cover them with tests.
 | **Notification limits** | Test each platform; communicate permissions and delivery limitations. |
 | **Offline conflicts** | Limit offline scope; use idempotency and explicit pending/synced states. |
 | **App-store delays** | Test mobile builds throughout; treat review approval as an external dependency. |
-| **Vercel Hobby is non-commercial only** | Treat Hobby as a testing tier; upgrade to Pro or move hosting before any paid or commercial launch (decision due in Sprint 12, or earlier if monetized). |
+| **Vercel Hobby is non-commercial only** | Treat Hobby as a testing tier; upgrade to Pro or move hosting before any paid or commercial launch (decision due in Sprint 13, or earlier if monetized). |
 | **Design drift between Figma, web and mobile** | Single token source in `packages/design-tokens`; `docs/design-spec.md` as the visual source of truth; dev-only design review page. |
 | **Local disk or tooling limits** | Run database, RLS and build checks in GitHub Actions; check free disk before large downloads; no local Docker/Supabase on the development Mac. |
 
@@ -934,8 +1035,8 @@ trusted server-side code, and cover them with tests.
 | **End Sprint 3** | Daily transaction ledger | Core expense tracking is usable. |
 | **End Sprint 5** | MVP / controlled web release | Auth, accounts, transactions, income, dashboard. |
 | **End Sprint 8** | Money management release | Goals, portfolio, liabilities, reports. |
-| **End Sprint 10** | Insights and reminders | AI and notifications behind appropriate controls. |
-| **End Sprint 12** | Production release candidate | Security, quality, deployment, and store-submission readiness. |
+| **End Sprint 11** | Insights and reminders | AI and notifications behind appropriate controls. |
+| **End Sprint 13** | Production release candidate | Security, quality, deployment, and store-submission readiness. |
 
 # 9. How to use Claude Code efficiently
 

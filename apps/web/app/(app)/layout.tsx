@@ -1,6 +1,7 @@
 import type * as React from "react"
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
+import { loadBellReminders } from "@fin-creador/api"
 import { AppShell } from "@/components/shell/app-shell"
 import { createClient } from "@/lib/supabase/server"
 
@@ -26,8 +27,11 @@ async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
     .eq("id", data.user.id)
     .maybeSingle()
 
+  // The bell's reminders stream in after the page (in-app only, Sprint 8a).
+  const reminders = loadBellReminders(supabase).catch(() => null)
+
   return (
-    <AppShell user={{ name: profile?.display_name ?? null, email: data.user.email ?? "" }}>
+    <AppShell user={{ name: profile?.display_name ?? null, email: data.user.email ?? "" }} reminders={reminders}>
       {children}
     </AppShell>
   )

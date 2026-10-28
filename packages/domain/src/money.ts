@@ -76,3 +76,32 @@ export function minorToInputString(minor: number, currency: string): string {
   const text = minorUnitsToDecimalString(minor, currencyMinorDigits(currency));
   return text.replace(/\.0+$/, "");
 }
+
+/**
+ * Groups the whole part of a plain number string: Indian style for en-IN (12,34,567), else
+ * thousands (1,234,567). String work only, so web and mobile (Hermes) agree.
+ */
+function groupWhole(whole: string, locale: string): string {
+  if (whole.length <= 3) return whole;
+  const last = whole.slice(-3);
+  const rest = whole.slice(0, -3);
+  const size = locale === "en-IN" ? 2 : 3;
+  const groups: string[] = [];
+  for (let end = rest.length; end > 0; end -= size) groups.unshift(rest.slice(Math.max(0, end - size), end));
+  return `${groups.join(",")},${last}`;
+}
+
+/** Like minorToInputString, with digit grouping for display in an input: 2665464 → "26,654.64". */
+export function minorToGroupedInputString(minor: number, currency: string, locale = "en-IN"): string {
+  const text = minorToInputString(minor, currency);
+  const negative = text.startsWith("-");
+  const [whole = "0", fraction] = (negative ? text.slice(1) : text).split(".");
+  return `${negative ? "-" : ""}${groupWhole(whole, locale)}${fraction === undefined ? "" : `.${fraction}`}`;
+}
+
+/** What a person typed, re-grouped when it is a valid amount (on blur); otherwise unchanged. */
+export function regroupAmountInput(input: string, currency: string, locale = "en-IN"): string {
+  const parsed = parseAmount(input, currency, { allowZero: true });
+  if (!parsed.ok) return input;
+  return minorToGroupedInputString(parsed.minor, currency, locale);
+}

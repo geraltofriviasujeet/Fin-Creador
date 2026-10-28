@@ -1,4 +1,4 @@
-import { type BankType, isMoneyAccountKind } from "@fin-creador/domain"
+import { type BankType, LIABILITY_KIND_LABELS, type LiabilityKind, isLiabilityKind, isMoneyAccountKind } from "@fin-creador/domain"
 import { type UserClient, userToday } from "../income/client"
 import { accountLabel } from "../income/load"
 import type { AccountLabel, LedgerAccount, LedgerCategory, TransactionsContext } from "./types"
@@ -19,7 +19,7 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
   const loadCategories = () =>
     supabase.from("categories").select("id, kind, name, icon, source_type, default_account_id, key, archived_at").order("name")
 
-  const [profileRes, accountsRes, balancesRes, firstCategories, lastExpenseRes, anyEntryRes] = await Promise.all([
+  const [profileRes, accountsRes, balancesRes, firstCategories, lastExpenseRes, anyEntryRes, cardsRes] = await Promise.all([
     supabase.from("profiles").select("currency, time_zone").eq("id", day.userId).maybeSingle(),
     supabase
       .from("accounts")
@@ -36,8 +36,9 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
       .limit(1)
       .maybeSingle(),
     supabase.from("transactions").select("id").limit(1).maybeSingle(),
+    supabase.from("credit_cards").select("account_id, limit_minor"),
   ])
-  if (profileRes.error || !profileRes.data || accountsRes.error || balancesRes.error || firstCategories.error || lastExpenseRes.error || anyEntryRes.error) {
+  if (profileRes.error || !profileRes.data || accountsRes.error || balancesRes.error || firstCategories.error || lastExpenseRes.error || anyEntryRes.error || cardsRes.error) {
     return { ok: false, reason: "unavailable" }
   }
 
@@ -55,18 +56,18 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
   }
 
   const balances = new Map(balancesRes.data.map((b) => [b.account_id, b]))
-  // Loan (liability) accounts only label the entries of loan payments; they are never in
-  // pickers, balances or Total available.
+  // Liability accounts (loans, cards, borrowing) only label the entries posted to them; they
+  // are never in pickers, balances or Total available.
   const loanAccounts: AccountLabel[] = accountsRes.data
-    .filter((a) => !isMoneyAccountKind(a.kind))
-    .map((a) => ({ id: a.id, label: `${accountLabel(a)} (loan)`, archived: a.archived_at !== null }))
-  const accounts: LedgerAccount[] = accountsRes.data.filter((a) => isMoneyAccountKind(a.kind)).map((a) => {
+    .filter((a) => isLiabilityKind(a.kind))
+    .map((a) => ({ id: a.id, label: `${accountLabel(a)} (${LIABILITY_KIND_LABELS[a.kind as LiabilityKind]})`, archived: a.archived_at !== null }))
+  const ledgerAccount = (a: (typeof accountsRes.data)[number], label: string): LedgerAccount => {
     const b = balances.get(a.id)
     return {
       id: a.id,
       kind: a.kind as LedgerAccount["kind"],
       bankType: (a.bank_type as BankType | null) ?? null,
-      label: accountLabel(a),
+      label,
       currency: a.currency,
       openingBalanceMinor: a.opening_balance_minor,
       openingBalanceDate: a.opening_balance_date,
@@ -74,7 +75,12 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
       outflowMinor: b?.outflow_minor ?? 0,
       archived: a.archived_at !== null,
     }
-  })
+  }
+  const accounts: LedgerAccount[] = accountsRes.data.filter((a) => isMoneyAccountKind(a.kind)).map((a) => ledgerAccount(a, accountLabel(a)))
+  const limits = new Map(cardsRes.data.map((c) => [c.account_id, c.limit_minor]))
+  const cardAccounts: LedgerAccount[] = accountsRes.data
+    .filter((a) => a.kind === "card")
+    .map((a) => ({ ...ledgerAccount(a, `${a.name} (card)`), limitMinor: limits.get(a.id) }))
 
   const categories: LedgerCategory[] = categoryRows.map((c) => ({
     id: c.id,
@@ -94,6 +100,7 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
       timeZone: profileRes.data.time_zone,
       accounts,
       loanAccounts,
+      cardAccounts,
       categories,
       // Capitalised loan interest is an expense on a loan account: never offered as a default.
       lastExpenseAccountId: accounts.some((a) => a.id === lastExpenseRes.data?.account_id) ? (lastExpenseRes.data?.account_id ?? null) : null,

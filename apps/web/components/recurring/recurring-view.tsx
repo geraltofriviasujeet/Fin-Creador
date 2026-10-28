@@ -28,8 +28,8 @@ export function RecurringPageView({ context, view }: { context: TransactionsCont
   const [busy, startBusy] = useTransition()
   const { today, currency } = context
   const lookup: Lookup = useMemo(
-    () => ({ accounts: new Map(context.accounts.map((a) => [a.id, a])), categories: new Map(context.categories.map((c) => [c.id, c])) }),
-    [context.accounts, context.categories]
+    () => ({ accounts: new Map([...context.accounts, ...context.cardAccounts].map((a) => [a.id, a])), categories: new Map(context.categories.map((c) => [c.id, c])) }),
+    [context.accounts, context.cardAccounts, context.categories]
   )
   const title = (i: RecurringItem) => entryTitle(i.entry, lookup)
   const hasAccounts = context.accounts.some((a) => !a.archived)
@@ -198,7 +198,7 @@ export function RecurringPageView({ context, view }: { context: TransactionsCont
         )}
       </div>
 
-      <RecurringDialogs open={open} onClose={() => setOpen(null)} titleOf={title} accounts={context.accounts} categories={context.categories} today={today} currency={currency} />
+      <RecurringDialogs open={open} onClose={() => setOpen(null)} titleOf={title} accounts={context.accounts} cardAccounts={context.cardAccounts} categories={context.categories} today={today} currency={currency} />
     </>
   )
 }

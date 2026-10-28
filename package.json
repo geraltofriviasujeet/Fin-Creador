@@ -26,6 +26,8 @@
     "test:watch": "vitest",
     "fixtures:recurrence": "RECURRENCE_FIXTURE=write vitest run scripts/recurrence-parity.test.ts",
     "fixtures:loans": "LOAN_DATES_FIXTURE=write vitest run scripts/loan-dates-parity.test.ts",
+    "fixtures:cards": "CARD_DATES_FIXTURE=write vitest run scripts/card-dates-parity.test.ts",
+    "fixtures:borrowing": "BORROWING_FIXTURE=write vitest run scripts/borrowing-schedule-parity.test.ts",
     "db:types": "supabase gen types typescript --linked --schema public > packages/api/src/database.types.ts"
   },
   "devDependencies": {

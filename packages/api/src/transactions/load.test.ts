@@ -5,8 +5,8 @@ import { ledgerLookup } from "./filters"
 import { accountName } from "./format"
 import { loadTransactionsContext } from "./load"
 
-// Loan (liability) accounts, Sprint 8a: never on the Income page, in Total available, in a
-// picker or in balances; only their name, on the entries of loan payments.
+// Liability accounts (loans 8a, cards and borrowing 8b): never on the Income page, in Total
+// available, in a picker or in balances; only their name, on the entries posted to them.
 
 const account = (id: string, kind: string, name: string, opening: number) => ({
   id,
@@ -24,7 +24,10 @@ const account = (id: string, kind: string, name: string, opening: number) => ({
 
 const ROWS: Record<string, unknown[]> = {
   profiles: [{ currency: "INR", time_zone: "Asia/Kolkata" }],
-  accounts: [account("bank", "bank", "HDFC Bank", 50_000_00), account("cash", "cash", "Cash in hand", 2_000_00), account("loan", "loan", "HDFC Bank", -25_00_000_00)],
+  accounts: [account("bank", "bank", "HDFC Bank", 50_000_00), account("cash", "cash", "Cash in hand", 2_000_00), account("loan", "loan", "HDFC Bank", -25_00_000_00),
+    account("card", "card", "Travel card", -12_000_00),
+    account("ravi", "borrowing", "Ravi", -20_000_00),
+  ],
   account_balances: [
     { account_id: "bank", inflow_minor: 0, outflow_minor: 0, last_activity_at: null },
     { account_id: "loan", inflow_minor: 5_000_00, outflow_minor: 0, last_activity_at: null },
@@ -68,7 +71,7 @@ function fakeClient() {
   } as unknown as UserClient
 }
 
-describe("loan accounts are never money accounts", () => {
+describe("liability accounts are never money accounts", () => {
   it("the Income page (Accounts, Total available) asks only for bank, cash and other accounts", async () => {
     const result = await loadIncomeData(fakeClient())
     expect(result.ok).toBe(true)
@@ -85,7 +88,11 @@ describe("loan accounts are never money accounts", () => {
       ["bank", "bank"],
       ["cash", "cash"],
     ])
-    expect(loanAccounts).toEqual([{ id: "loan", label: "HDFC Bank (loan)", archived: false }])
+    expect(loanAccounts).toEqual([
+      { id: "loan", label: "HDFC Bank (loan)", archived: false },
+      { id: "card", label: "Travel card (card)", archived: false },
+      { id: "ravi", label: "Ravi (borrowed)", archived: false },
+    ])
     // Never the default account of a new expense.
     expect(lastExpenseAccountId).toBeNull()
     // A loan payment's transfer names both sides; a bank and a loan with the same name differ.

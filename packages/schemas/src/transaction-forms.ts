@@ -62,7 +62,8 @@ export function transactionFormSchema({
 }: {
   today: string;
   currency: string;
-  accountKind: "bank" | "cash" | "other" | null;
+  /** "card": a credit card (8b), allowed only for expenses. */
+  accountKind: "bank" | "cash" | "other" | "card" | null;
 }) {
   return z
     .object({
@@ -89,6 +90,7 @@ export function transactionFormSchema({
       };
       const amount = parseAmount(v.amount, currency);
       if (!amount.ok) return fail("amount", AMOUNT_ERROR_MESSAGES[amount.error]);
+      if (accountKind === "card" && v.type !== "expense") return fail("accountId", "A card can only pay for expenses. Choose a bank, cash or other account");
 
       let categoryId: string | null = null;
       let counterAccountId: string | null = null;

@@ -32,6 +32,10 @@ describe("reminderReason", () => {
     expect(nextPending([item("a", "2026-10-01", { sourceArchived: true })])).toBeNull();
   });
 
+  it("ignores a card bill whose minimum is already paid", () => {
+    expect(reminderReason(item("a", "2026-10-01", { covered: true }), today)).toBeNull();
+  });
+
   it("ignores paid and before-tracking items", () => {
     expect(reminderReason(item("a", "2026-10-01", { status: "paid" }), today)).toBeNull();
     expect(reminderReason(item("a", "2026-10-01", { status: "before_tracking" }), today)).toBeNull();

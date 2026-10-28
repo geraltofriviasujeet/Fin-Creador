@@ -109,7 +109,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
   // and count other currencies only overall).
   const typeCount = { all: totals.incomeCount + totals.expenseCount + totals.transferCount + totals.otherCurrencyCount, income: totals.incomeCount, expense: totals.expenseCount, transfer: totals.transferCount }[loaded.type]
   const exactCount = !loaded.showVoided && (loaded.type === "all" || totals.otherCurrencyCount === 0) ? typeCount : null
-  const formProps = { accounts: context.accounts, categories: context.categories, today }
+  const formProps = { accounts: context.accounts, cardAccounts: context.cardAccounts, categories: context.categories, today }
 
   const addLink = (type: EntryType, text: string, variant: "primary" | "secondary" = "primary") => (
     <Link href={href({}, { add: type })} scroll={false} className={cn(buttonVariants({ variant, size: "lg" }))}>
@@ -127,6 +127,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
           <UpcomingSection
             view={upcoming}
             accounts={context.accounts}
+            cardAccounts={context.cardAccounts}
             categories={context.categories}
             today={today}
             currency={currency}

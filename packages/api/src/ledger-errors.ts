@@ -1,5 +1,6 @@
 // Maps database errors from accounts, categories, entries and recurring items (supabase/
-// migrations 20261022150000, 20261023120000, 20261024120000, 20261026180000, 20261027120000) to messages for web and mobile. Raw database messages are never shown.
+// migrations 20261022150000, 20261023120000, 20261024120000, 20261026180000, 20261027120000,
+// 20261028180000) to messages for web and mobile. Raw database messages are never shown.
 
 export type LedgerErrorLike = { code?: string | undefined; message?: string | undefined } | null | undefined
 
@@ -42,6 +43,9 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC029: { message: "We couldn't find that fund or share. Search again.", field: "instrumentId" },
   FC030: { message: "This fixed deposit is archived. Restore it first." },
   FC031: { message: "The start date can't be in the future.", field: "startDate" },
+  // A card purchase (or a recurring item on a card) dated before the card was added (8b).
+  FC036: { message: "That's before you added this card: it's in the amount owed you entered then." },
+  FC049: { message: "Only purchases (expenses) can be recorded on a card.", field: "accountId" },
 }
 
 /** `dateField` names the date input on the current form (occurredOn or openingBalanceDate). */

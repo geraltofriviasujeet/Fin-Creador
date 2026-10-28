@@ -160,8 +160,8 @@ export function fillBuckets(range: DateRange, rows: readonly BucketTotals[]): Bu
  * The part of a month bucket that lies inside the range, when the month is only partly
  * in it (a custom range starting or ending mid-month); null for a whole month or a day.
  */
-export function partialBucket(start: IsoDate, range: DateRange): DateRange | null {
-  if (bucketSizeFor(range) === "day") return null;
+export function partialBucket(start: IsoDate, range: DateRange, size: BucketSize = bucketSizeFor(range)): DateRange | null {
+  if (size === "day") return null;
   const month = monthRange(start);
   if (month.start >= range.start && month.end <= range.end) return null;
   return { start: month.start < range.start ? range.start : month.start, end: minDate(month.end, range.end) };

@@ -155,6 +155,10 @@ describe("partialBucket", () => {
     expect(partialBucket("2026-10-01", { start: "2026-01-01", end: "2026-12-31" })).toBeNull();
     expect(partialBucket("2026-10-05", { start: "2026-10-01", end: "2026-10-31" })).toBeNull();
   });
+  it("treats a short range as months when asked (Reports: one month, so far)", () => {
+    expect(partialBucket("2026-10-01", { start: "2026-10-01", end: "2026-10-28" }, "month")).toEqual({ start: "2026-10-01", end: "2026-10-28" });
+    expect(partialBucket("2026-09-01", { start: "2026-09-01", end: "2026-10-28" }, "month")).toBeNull();
+  });
 });
 
 describe("topCategories", () => {

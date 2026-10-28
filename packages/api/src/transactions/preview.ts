@@ -1,4 +1,4 @@
-import { type IsoDate, accountBalance, addMinor, countsTowardBalance } from "@fin-creador/domain"
+import { type IsoDate, accountBalance, addMinor, cardUtilisation, countsTowardBalance, formatMoney, outstandingFromBalance } from "@fin-creador/domain"
 import type { EntryType, LedgerAccount, LedgerItem } from "./types"
 
 // What a draft entry would do to its account balances, for the Add / Edit forms on web and
@@ -59,5 +59,17 @@ export function previewDraft({
     const before = balances.get(a.id) ?? 0
     moves.push({ account: a, before, after: addMinor(before, delta) })
   }
-  return { moves, goesNegative: moves.find((m) => m.after < 0 && m.account.kind !== "bank") ?? null, beforeOpening }
+  // A card's balance is minus what is owed: never "below zero" (cardLimitWarning instead).
+  return { moves, goesNegative: moves.find((m) => m.after < 0 && m.account.kind !== "bank" && m.account.kind !== "card") ?? null, beforeOpening }
+}
+
+/** A purchase that takes a card to 80% or more of its limit, or over it. */
+export function cardLimitWarning(move: BalanceMove | undefined): string | null {
+  const limit = move?.account.limitMinor
+  if (!move || move.account.kind !== "card" || !limit) return null
+  const { bps, level } = cardUtilisation(outstandingFromBalance(move.after), limit)
+  const name = move.account.label.replace(/ \(card\)$/, "")
+  if (level === "over") return `This takes ${name} over its limit of ${formatMoney(limit, { currency: move.account.currency })}.`
+  if (level === "high") return `This takes ${name} to ${Math.floor(bps / 100)}% of its limit.`
+  return null
 }

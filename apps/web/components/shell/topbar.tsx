@@ -1,22 +1,20 @@
 "use client"
 
 import Link from "next/link"
-import { Bell, Plus, Search, Settings } from "lucide-react"
+import { Plus, Search, Settings } from "lucide-react"
 import { Logo } from "@/components/brand/logo"
 import { cn } from "cn"
-import { Button, buttonVariants } from "@/components/ui/button"
-import { toast } from "@/components/ui/toast"
-import { comingSoonMessage } from "@/components/shell/nav-items"
+import { buttonVariants } from "@/components/ui/button"
+import { Bell, type BellReminders } from "@/components/shell/bell"
 
 /**
  * Sticky topbar (design-spec §4–5). "Add transaction" opens Add expense on the
- * Transactions page and search is a plain GET to it (?q=). Notifications belong to
- * Sprint 10; until then the bell explains that instead of pretending to work. It shows an
- * unread dot only when real unread notifications exist (none yet).
+ * Transactions page and search is a plain GET to it (?q=). The bell lists in-app reminders
+ * (Sprint 8a: EMIs due soon); its dot shows only when something is due.
  */
 const ADD_HREF = "/transactions?add=expense"
 
-export function Topbar() {
+export function Topbar({ reminders }: { reminders?: BellReminders }) {
   return (
     <header className="sticky top-0 z-20 flex h-(--fc-layout-topbar-height) items-center gap-3 border-b border-line bg-surface/82 px-4 backdrop-blur-md md:px-7">
       <Logo tone="onLight" className="md:hidden" />
@@ -43,14 +41,7 @@ export function Topbar() {
       </form>
 
       <div className="ml-auto flex items-center gap-2 md:gap-3">
-        <Button
-          variant="secondary"
-          size="icon"
-          aria-label="Notifications"
-          onClick={() => toast.info(comingSoonMessage("Notifications"))}
-        >
-          <Bell aria-hidden="true" className="size-5" />
-        </Button>
+        <Bell reminders={reminders} />
         {/* Navigation is a real link styled as a button, so it is announced as a link. */}
         <Link href="/settings" aria-label="Settings" className={cn(buttonVariants({ variant: "secondary", size: "icon" }), "md:hidden")}>
           <Settings aria-hidden="true" className="size-5" />

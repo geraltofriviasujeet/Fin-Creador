@@ -38,7 +38,7 @@ export async function saveTransaction(supabase: UserClient, input: FormInput): P
   const parsed = transactionFormSchema({
     today: day.today,
     currency: account?.currency ?? "INR",
-    accountKind: (account?.kind as "bank" | "cash" | "other" | undefined) ?? null,
+    accountKind: (account?.kind as "bank" | "cash" | "other" | "card" | undefined) ?? null,
   }).safeParse(input)
   if (!parsed.success) return { status: "error", message: FIX_FIELDS, fieldErrors: firstFieldErrors(parsed.error) }
   if (!account) return { status: "error", message: FIX_FIELDS, fieldErrors: { accountId: "Choose an account" } }
