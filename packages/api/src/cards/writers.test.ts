@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { UserClient } from "../income/client"
 import { loadPaymentContext, payDueItem } from "../loans/writers"
 import { cardErrorMessage } from "./errors"
-import { addBorrowing, addCard, editLiabilityPayment, enterStatement, payCard, repayBorrowing, setBorrowingDueDate, setBorrowingReturnPlan } from "./writers"
+import { addBorrowing, addCard, editLiabilityPayment, enterStatement, payCard, repayBorrowing, setBorrowingReturnPlan } from "./writers"
 
 const KEY = "e8000000-0000-4000-8000-0000000000c1"
 const CARD = "f8000000-0000-4000-8000-0000000000c1"
@@ -235,10 +235,10 @@ describe("borrowing", () => {
     expect(rpcs[0]?.args).toMatchObject({ p_principal_minor: 5_000_00, p_interest_minor: 200_00 })
   })
 
-  it("removes the due date when it is left empty", async () => {
+  it("removes the return plan when the date is left empty", async () => {
     const { client, rpcs } = fakeClient(ROWS)
-    const r = await setBorrowingDueDate(client, { borrowingId: BORROWING, dueDate: "" })
-    expect(r).toEqual({ status: "success", message: "Due date removed." })
+    const r = await setBorrowingReturnPlan(client, { borrowingId: BORROWING, sameAsBorrowed: "true", returnOn: "" })
+    expect(r).toEqual({ status: "success", message: "Return date removed." })
     expect(rpcs[0]).toEqual({
       fn: "set_borrowing_return_plan",
       args: {
@@ -250,13 +250,6 @@ describe("borrowing", () => {
         p_pay_from_account_id: undefined,
       },
     })
-  })
-
-  it("moves the return date and keeps the plan and its account", async () => {
-    const { client, rpcs } = fakeClient(ROWS)
-    const r = await setBorrowingDueDate(client, { borrowingId: BORROWING, dueDate: "2027-01-15" })
-    expect(r).toEqual({ status: "success", message: "Due date saved." })
-    expect(rpcs[0]?.args).toMatchObject({ p_return_on: "2027-01-15", p_return_plan: "once", p_pay_from_account_id: BANK, p_amount_to_return_minor: 20_000_00 })
   })
 
   it("sets a return plan in instalments", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { type LoansData, buildLoansView } from "../loans/view"
-import { type BorrowingRecord, type CardRecord, type ShortTermData, cardBadgeText } from "./view"
+import { type BorrowingRecord, type CardRecord, type ShortTermData, cardBadgeText, cardName } from "./view"
 
 const TODAY = "2026-10-28"
 const BANK = { id: "bank", name: "HDFC Savings", currency: "INR", balanceMinor: 50_000_00, openingBalanceDate: "2026-01-01" }
@@ -9,6 +9,8 @@ const card = (extra: Partial<CardRecord> = {}): CardRecord => ({
   id: "card",
   accountId: "card-acct",
   issuer: "HDFC Bank",
+  product: null,
+  productOther: false,
   nickname: "Travel",
   currency: "INR",
   limitMinor: 1_00_000_00,
@@ -201,5 +203,14 @@ describe("borrowing", () => {
     )
     expect(view.shortTerm!.borrowings[0]!.badge).toBe("repaid")
     expect(view.reminders).toEqual([])
+  })
+})
+
+describe("cardName", () => {
+  it("is the label, else the product (the issuer in front of a typed one), else the issuer", () => {
+    expect(cardName({ issuer: "HDFC Bank", product: "HDFC Regalia Gold", productOther: false, nickname: "Travel" })).toBe("Travel")
+    expect(cardName({ issuer: "HDFC Bank", product: "HDFC Regalia Gold", productOther: false, nickname: null })).toBe("HDFC Regalia Gold")
+    expect(cardName({ issuer: "Axis Bank", product: "My card", productOther: true, nickname: null })).toBe("Axis Bank My card")
+    expect(cardName({ issuer: "Axis Bank", product: null, productOther: false, nickname: null })).toBe("Axis Bank")
   })
 })

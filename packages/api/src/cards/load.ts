@@ -11,7 +11,7 @@ export async function loadShortTermData(supabase: UserClient): Promise<{ data: S
   const [cards, statements, dues, progress, borrowings, payments, allPayments, billPayments, categories, borrowingProgress] = await Promise.all([
     supabase
       .from("credit_cards")
-      .select("id, account_id, issuer, nickname, currency, limit_minor, statement_day, due_day, opening_owed_minor, tracking_started_on, archived_at, created_at")
+      .select("id, account_id, issuer, product, product_other, nickname, currency, limit_minor, statement_day, due_day, opening_owed_minor, tracking_started_on, archived_at, created_at")
       .order("created_at"),
     supabase
       .from("card_statements")
@@ -85,6 +85,8 @@ export async function loadShortTermData(supabase: UserClient): Promise<{ data: S
         id: c.id,
         accountId: c.account_id,
         issuer: c.issuer,
+        product: c.product,
+        productOther: c.product_other,
         nickname: c.nickname,
         currency: c.currency,
         limitMinor: c.limit_minor,

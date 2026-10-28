@@ -5,6 +5,7 @@ import { Fragment, useState, useTransition } from "react"
 import { ChevronDown, Plus } from "lucide-react"
 import {
   BORROWING_BADGE_LABEL,
+  type BorrowingDue,
   type BorrowingItem,
   type CardItem,
   type LiabilityPaymentLine,
@@ -13,7 +14,7 @@ import {
   cardBadgeText,
   newRequestKey,
 } from "@fin-creador/api"
-import type { PayingAccount } from "@fin-creador/schemas"
+import { BORROWING_RELATIONSHIP_OPTIONS, type PayingAccount } from "@fin-creador/schemas"
 import { cn } from "cn"
 import {
   deleteBorrowingAction,
@@ -33,7 +34,19 @@ import { Card } from "@/components/ui/card"
 import { DialogContent } from "@/components/ui/dialog"
 import { TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import { BorrowingForm, CardForm, CardPayForm, DueDateForm, LinkEmiForm, PlanBillForm, RepayForm, StatementForm } from "./forms"
+import {
+  BorrowingDetailsForm,
+  BorrowingForm,
+  CardForm,
+  CardPayForm,
+  LinkEmiForm,
+  PlanBillForm,
+  PlanBorrowingDueForm,
+  RepayForm,
+  ReturnPlanForm,
+  StatementForm,
+  TALL_DIALOG,
+} from "./forms"
 
 // The "Short-term & operational liabilities" box (Sprint 8b, web): credit cards (owed, limit
 // used, latest bill), card EMIs (loans, with Link to card) and money borrowed from people.
@@ -44,7 +57,10 @@ export type ShortTermOpen =
   | { kind: "editCard" | "archiveCard" | "deleteCard" | "statement" | "payCard" | "planBill"; card: CardItem }
   | { kind: "editCardPayment" | "voidCardPayment"; card: CardItem; payment: LiabilityPaymentLine }
   | { kind: "deleteStatement"; card: CardItem; statementId: string; statementDate: string }
-  | { kind: "repay" | "dueDate" | "archiveBorrowing" | "deleteBorrowing"; borrowing: BorrowingItem }
+  | { kind: "returnPlan" | "details" | "archiveBorrowing" | "deleteBorrowing"; borrowing: BorrowingItem }
+  /** Repay any amount, or one instalment (`due`), prefilled from it. */
+  | { kind: "repay"; borrowing: BorrowingItem; due?: BorrowingDue }
+  | { kind: "planBorrowingDue"; borrowing: BorrowingItem; due: BorrowingDue }
   | { kind: "editRepayment" | "voidRepayment"; borrowing: BorrowingItem; payment: LiabilityPaymentLine }
   | { kind: "linkEmi"; loan: LoanItem }
 
@@ -219,7 +235,7 @@ function CardRow({ item, onOpen }: { item: CardItem; onOpen: (open: ShortTermOpe
             <ChevronDown aria-hidden="true" className={cn("mt-0.5 size-4 shrink-0 transition-transform motion-reduce:transition-none", expanded && "rotate-180")} />
             <span className="min-w-0">
               <span className="block text-sm font-semibold">{item.name}</span>
-              <span className="block text-xs text-muted-foreground">{card.nickname ? `${card.issuer} · credit card` : "Credit card"}</span>
+              <span className="block text-xs text-muted-foreground">{item.name === card.issuer ? "Credit card" : `${card.issuer} · credit card`}</span>
             </span>
           </button>
         </div>
@@ -339,11 +355,25 @@ function CardRow({ item, onOpen }: { item: CardItem; onOpen: (open: ShortTermOpe
   )
 }
 
+const RELATIONSHIP_LABEL = Object.fromEntries(BORROWING_RELATIONSHIP_OPTIONS.map((o) => [o.value, o.label])) as Record<string, string>
+
+const DUE_STATUS: Record<BorrowingDue["status"], string> = { pending: "Due", paid: "Paid", before_tracking: "Before tracking" }
+
+function planText(item: BorrowingItem): string {
+  const b = item.borrowing
+  if (!b.returnOn) return "No return date"
+  if (b.returnPlan === "instalments") return `${b.instalmentCount} monthly instalments from ${fullDate(b.returnOn)}`
+  return `One-time settlement on ${fullDate(b.returnOn)}`
+}
+
 function BorrowingRow({ item, onOpen }: { item: BorrowingItem; onOpen: (open: ShortTermOpen) => void }) {
   const [expanded, setExpanded] = useState(false)
   const { borrowing, due } = item
   const c = borrowing.currency
   const id = `borrowing-${borrowing.id}`
+  const pending = due?.status === "pending" ? due : null
+  const instalments = borrowing.returnPlan === "instalments"
+  const subtitle = [borrowing.relationship ? RELATIONSHIP_LABEL[borrowing.relationship] : "Borrowed", borrowing.reason].filter(Boolean).join(" · ")
   return (
     <li className="border-t border-line first:border-t-0">
       <div className="grid grid-cols-2 items-start gap-x-3 gap-y-2 px-4 py-2.5 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_auto] md:items-center md:px-5">
@@ -358,7 +388,7 @@ function BorrowingRow({ item, onOpen }: { item: BorrowingItem; onOpen: (open: Sh
             <ChevronDown aria-hidden="true" className={cn("mt-0.5 size-4 shrink-0 transition-transform motion-reduce:transition-none", expanded && "rotate-180")} />
             <span className="min-w-0">
               <span className="block text-sm font-semibold">{item.name}</span>
-              <span className="block text-xs text-muted-foreground">Borrowed</span>
+              <span className="block text-xs text-muted-foreground">{subtitle}</span>
             </span>
           </button>
         </div>
@@ -369,30 +399,82 @@ function BorrowingRow({ item, onOpen }: { item: BorrowingItem; onOpen: (open: Sh
         </div>
         <div className="grid gap-0.5 md:text-right">
           <span className={cn(label, "md:sr-only")}>Due</span>
-          <span className="text-xs tabular-nums">{due ? `Due ${fullDate(due.dueDate)}` : "No due date"}</span>
+          <span className="text-xs tabular-nums">
+            {pending
+              ? `${instalments ? `Instalment ${pending.seq} of ${borrowing.instalmentCount}: ` : ""}${money(pending.remainingMinor, c)} due ${fullDate(pending.dueDate)}`
+              : due
+                ? "All instalments paid"
+                : "No return date"}
+          </span>
         </div>
         <div className="md:flex md:justify-end">
           <Badge tone={BORROWING_TONE[item.badge]}>{BORROWING_BADGE_LABEL[item.badge]}</Badge>
         </div>
         <div className="col-span-2 -mr-2 flex flex-wrap justify-end gap-0.5 md:col-span-1">
           {item.owedMinor > 0 && (
-            <Button variant="secondary" size="sm" aria-label={`Repay ${item.name}`} onClick={() => onOpen({ kind: "repay", borrowing: item })}>
+            <Button variant="secondary" size="sm" aria-label={`Repay ${item.name}`} onClick={() => onOpen({ kind: "repay", borrowing: item, due: pending ?? undefined })}>
               Repay
             </Button>
           )}
         </div>
       </div>
+      {!borrowing.relationship && (
+        <p role="note" className="mx-4 mb-2 flex flex-wrap items-center gap-x-2 rounded-lg bg-chip-blue px-3 py-1 text-xs font-semibold md:mx-5">
+          Say who {item.name} is to you and what it was for.
+          <Button variant="link" size="sm" aria-label={`Add details for ${item.name}`} onClick={() => onOpen({ kind: "details", borrowing: item })}>
+            Add details
+          </Button>
+        </p>
+      )}
       {expanded && (
         <div id={id} className="mx-4 mb-3 grid gap-3 rounded-xl bg-canvas px-3 py-3 md:mx-5">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm md:grid-cols-4">
             <Fact term="Borrowed">{money(borrowing.borrowedMinor, c)}</Fact>
+            <Fact term="To return">
+              {money(borrowing.amountToReturnMinor, c)}
+              {borrowing.amountToReturnMinor > borrowing.borrowedMinor && (
+                <span className="block text-xs text-muted-foreground">interest {money(borrowing.amountToReturnMinor - borrowing.borrowedMinor, c)}</span>
+              )}
+            </Fact>
             <Fact term="Repaid">{money(item.repaidMinor, c)}</Fact>
             <Fact term="Received">{borrowing.receivedOn ? `${fullDate(borrowing.receivedOn)}${item.receiptAccountName ? ` into ${item.receiptAccountName}` : ""}` : "Earlier (not recorded)"}</Fact>
-            <Fact term="Due">{due ? fullDate(due.dueDate) : "No due date"}</Fact>
           </dl>
+          <p className="text-xs text-muted-foreground">
+            {planText(item)}
+            {due?.payFromAccountName && ` · from ${due.payFromAccountName}`}. Nothing is deducted until you confirm Paid.
+          </p>
+          {item.dues.length > 0 && (
+            <List title={instalments ? "Instalments" : "Return"}>
+              {item.dues.map((d) => (
+                <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b border-line py-1.5 text-sm last:border-b-0">
+                  <span className="min-w-0 flex-1 basis-48 tabular-nums">
+                    <span className="font-semibold">{fullDate(d.dueDate)}</span> · {money(d.amountDueMinor, c)}
+                    {d.interestMinor > 0 && <span className="text-xs text-muted-foreground"> (interest {money(d.interestMinor, c)})</span>}
+                    {d.status === "pending" && d.remainingMinor < d.amountDueMinor && ` · ${money(d.remainingMinor, c)} left`}
+                    {d.plannedOn && d.status === "pending" && ` · planned ${fullDate(d.plannedOn)}${d.plannedAccountName ? ` from ${d.plannedAccountName}` : ""}`}
+                  </span>
+                  {d.status === "pending" ? (
+                    <span className="flex gap-0.5">
+                      <Button variant="ghost" size="sm" aria-label={`Will pay the ${fullDate(d.dueDate)} payment later`} onClick={() => onOpen({ kind: "planBorrowingDue", borrowing: item, due: d })}>
+                        Will pay later
+                      </Button>
+                      <Button variant="secondary" size="sm" aria-label={`Pay the ${fullDate(d.dueDate)} payment to ${item.name}`} onClick={() => onOpen({ kind: "repay", borrowing: item, due: d })}>
+                        Pay
+                      </Button>
+                    </span>
+                  ) : (
+                    <Badge tone="positive">{DUE_STATUS[d.status]}</Badge>
+                  )}
+                </li>
+              ))}
+            </List>
+          )}
           <div className="-ml-2 flex flex-wrap gap-0.5">
-            <Button variant="ghost" size="sm" aria-label={`Change the due date of ${item.name}`} onClick={() => onOpen({ kind: "dueDate", borrowing: item })}>
-              {due ? "Change due date" : "Add due date"}
+            <Button variant="ghost" size="sm" aria-label={`Change the return plan of ${item.name}`} onClick={() => onOpen({ kind: "returnPlan", borrowing: item })}>
+              {borrowing.returnOn ? "Edit return plan" : "Add return date"}
+            </Button>
+            <Button variant="ghost" size="sm" aria-label={`Edit the details of ${item.name}`} onClick={() => onOpen({ kind: "details", borrowing: item })}>
+              {borrowing.relationship ? "Edit details" : "Add details"}
             </Button>
             {item.owedMinor === 0 ? (
               <Button variant="ghost" size="sm" aria-label={`Archive ${item.name}`} onClick={() => onOpen({ kind: "archiveBorrowing", borrowing: item })}>
@@ -483,7 +565,7 @@ export function ShortTermDialogs({
   switch (open.kind) {
     case "addCard":
       return (
-        <DialogContent eyebrow={eyebrow} title="Add card" description="No card numbers: an issuer and an optional nickname are enough." className="md:max-w-[640px]">
+        <DialogContent eyebrow={eyebrow} title="Add card" description="No card numbers: the issuer and the card's name are enough." className="md:max-w-[640px]">
           <CardForm currency={currency} onDone={onClose} />
         </DialogContent>
       )
@@ -560,19 +642,34 @@ export function ShortTermDialogs({
       )
     case "addBorrowing":
       return (
-        <DialogContent eyebrow={eyebrow} title="Add borrowing" description="Money borrowed from friends, family or others." className="md:max-w-[640px]">
+        <DialogContent eyebrow={eyebrow} title="Add borrowing" description="Money borrowed from friends, family or others." className={TALL_DIALOG}>
           <BorrowingForm accounts={accounts} today={today} currency={currency} onDone={onClose} />
         </DialogContent>
       )
     case "repay":
-    case "editRepayment":
+    case "editRepayment": {
+      const due = open.kind === "repay" ? open.due : undefined
+      const c = open.borrowing.borrowing.currency
       return (
         <DialogContent
           eyebrow={open.borrowing.name}
-          title={open.kind === "repay" ? "Repay" : "Edit repayment"}
-          description={open.kind === "repay" ? `Still owed ${money(open.borrowing.owedMinor, open.borrowing.borrowing.currency)}.` : "Every part of the repayment changes together."}
+          title={open.kind === "editRepayment" ? "Edit repayment" : due ? (due.seq > 0 ? `Pay instalment ${due.seq}` : "Pay") : "Repay"}
+          description={
+            open.kind === "editRepayment"
+              ? "Every part of the repayment changes together."
+              : due
+                ? `${money(due.remainingMinor, c)} due ${fullDate(due.dueDate)}. Change anything before you confirm.`
+                : `Still owed ${money(open.borrowing.owedMinor, c)}.`
+          }
         >
-          <RepayForm item={open.borrowing} accounts={accounts} today={today} payment={open.kind === "editRepayment" ? open.payment : undefined} onDone={onClose} />
+          <RepayForm item={open.borrowing} due={due} accounts={accounts} today={today} payment={open.kind === "editRepayment" ? open.payment : undefined} onDone={onClose} />
+        </DialogContent>
+      )
+    }
+    case "planBorrowingDue":
+      return (
+        <DialogContent eyebrow={open.borrowing.name} title="Will pay later" description={`${money(open.due.remainingMinor, open.borrowing.borrowing.currency)} due ${fullDate(open.due.dueDate)} stays due; we remind you the day before and on the day.`}>
+          <PlanBorrowingDueForm due={open.due} currency={open.borrowing.borrowing.currency} accounts={accounts} today={today} onDone={onClose} />
         </DialogContent>
       )
     case "voidRepayment":
@@ -585,10 +682,21 @@ export function ShortTermDialogs({
           <VoidForm payment={open.payment} subject="borrowing" onDone={onClose} />
         </DialogContent>
       )
-    case "dueDate":
+    case "returnPlan":
       return (
-        <DialogContent eyebrow={open.borrowing.name} title={open.borrowing.due ? "Change due date" : "Add due date"} description="We remind you the day before and on the day.">
-          <DueDateForm item={open.borrowing} today={today} onDone={onClose} />
+        <DialogContent
+          eyebrow={open.borrowing.name}
+          title={open.borrowing.borrowing.returnOn ? "Edit return plan" : "Add return date"}
+          description="Reminders follow each date: the day before and on the day."
+          className={TALL_DIALOG}
+        >
+          <ReturnPlanForm item={open.borrowing} accounts={accounts} today={today} onDone={onClose} />
+        </DialogContent>
+      )
+    case "details":
+      return (
+        <DialogContent eyebrow={open.borrowing.name} title={open.borrowing.borrowing.relationship ? "Edit details" : "Add details"} description="Names only: no account or card numbers.">
+          <BorrowingDetailsForm item={open.borrowing} onDone={onClose} />
         </DialogContent>
       )
     case "archiveBorrowing":

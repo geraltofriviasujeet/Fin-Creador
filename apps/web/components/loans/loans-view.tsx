@@ -58,7 +58,7 @@ export function LoansPageView({ view }: { view: LoansView }) {
     const card = shortTerm?.cards.find((c) => c.card.id === r.cardId)
     if (card) return setShortOpen({ kind: r.reason === "statement" ? "statement" : "payCard", card })
     const borrowing = shortTerm?.borrowings.find((b) => b.borrowing.id === r.borrowingId)
-    if (borrowing) setShortOpen({ kind: "repay", borrowing })
+    if (borrowing) setShortOpen({ kind: "repay", borrowing, due: borrowing.dues.find((d) => d.id === r.id) })
   }
   const [showArchived, setShowArchived] = useState(false)
   const [busy, startBusy] = useTransition()

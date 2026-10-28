@@ -15,6 +15,7 @@ import {
   deleteBorrowing,
   deleteCard,
   deleteStatement,
+  editBorrowing,
   editCard,
   editLiabilityPayment,
   enterStatement,
@@ -22,7 +23,7 @@ import {
   payCard,
   repayBorrowing,
   setBorrowingArchived,
-  setBorrowingDueDate,
+  setBorrowingReturnPlan,
   setCardArchived,
   voidLiabilityPayment,
   deleteLoan,
@@ -130,14 +131,14 @@ export async function clearDuePlanAction(input: unknown): Promise<WriteResult> {
 // Cards, statements and borrowing (8b)
 // ---------------------------------------------------------------------------
 
-const CARD_FIELDS = ["issuer", "nickname", "limit", "statementDay", "dueDay", "openingOwed", "idempotencyKey"] as const
+const CARD_FIELDS = ["issuer", "product", "productOther", "nickname", "limit", "statementDay", "dueDay", "openingOwed", "idempotencyKey"] as const
 
 export async function addCardAction(input: unknown): Promise<CardWriteResult> {
   return refreshed(await addCard(await client(), fields(input, CARD_FIELDS)))
 }
 
 export async function editCardAction(input: unknown): Promise<CardWriteResult> {
-  return refreshed(await editCard(await client(), fields(input, ["cardId", "issuer", "nickname", "limit", "statementDay", "dueDay"])))
+  return refreshed(await editCard(await client(), fields(input, ["cardId", "issuer", "product", "productOther", "nickname", "limit", "statementDay", "dueDay"])))
 }
 
 const cardRef = z.object({ cardId: z.uuid(), archived: z.boolean(), currency: z.string().regex(/^[A-Z]{3}$/).optional() })
@@ -201,7 +202,8 @@ export async function voidLiabilityPaymentAction(input: unknown): Promise<WriteR
   return refreshed(await voidLiabilityPayment(await client(), r.data))
 }
 
-const BORROWING_FIELDS = ["lender", "amount", "received", "accountId", "receivedOn", "dueDate", "idempotencyKey"] as const
+const RETURN_PLAN_FIELDS = ["sameAsBorrowed", "amountToReturn", "returnOn", "returnPlan", "instalments", "payFromAccountId"] as const
+const BORROWING_FIELDS = ["lender", "relationship", "reason", "amount", "received", "accountId", "receivedOn", ...RETURN_PLAN_FIELDS, "idempotencyKey"] as const
 
 export async function addBorrowingAction(input: unknown): Promise<CardWriteResult> {
   return refreshed(await addBorrowing(await client(), fields(input, BORROWING_FIELDS)))
@@ -211,8 +213,12 @@ export async function repayBorrowingAction(input: unknown): Promise<CardWriteRes
   return refreshed(await repayBorrowing(await client(), fields(input, ["borrowingId", "accountId", "paidOn", "principal", "interest", "allowShortfall", "idempotencyKey"])))
 }
 
-export async function setBorrowingDueDateAction(input: unknown): Promise<WriteResult> {
-  return refreshed(await setBorrowingDueDate(await client(), fields(input, ["borrowingId", "dueDate"])))
+export async function editBorrowingAction(input: unknown): Promise<CardWriteResult> {
+  return refreshed(await editBorrowing(await client(), fields(input, ["borrowingId", "lender", "relationship", "reason"])))
+}
+
+export async function setBorrowingReturnPlanAction(input: unknown): Promise<WriteResult> {
+  return refreshed(await setBorrowingReturnPlan(await client(), fields(input, ["borrowingId", ...RETURN_PLAN_FIELDS])))
 }
 
 const borrowingRef = z.object({ borrowingId: z.uuid(), archived: z.boolean(), currency: z.string().regex(/^[A-Z]{3}$/).optional() })

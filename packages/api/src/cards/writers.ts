@@ -1,4 +1,4 @@
-import { MONEY_ACCOUNT_KINDS, isIsoDate, outstandingFromBalance } from "@fin-creador/domain"
+import { MONEY_ACCOUNT_KINDS, outstandingFromBalance } from "@fin-creador/domain"
 import {
   type PayingAccount,
   borrowingEditFormSchema,
@@ -309,41 +309,6 @@ export async function setBorrowingReturnPlan(supabase: UserClient, input: FormIn
   })
   if (rpcError) return dbError(rpcError, { subject: "borrowing", currency: borrowing.currency })
   return { status: "success", message: p.returnOn ? "Return plan saved." : "Return date removed." }
-}
-
-/**
- * Moves the return date (keeping how much, how and from which account) or removes the plan
- * (empty date). The current web's "Change due date"; a borrowing with no plan yet needs
- * setBorrowingReturnPlan.
- */
-export async function setBorrowingDueDate(supabase: UserClient, input: FormInput): Promise<WriteResult> {
-  const day = await userToday(supabase)
-  if (!day.ok) return { status: "error", message: day.reason === "unauthenticated" ? SIGNED_OUT : TODAY_UNAVAILABLE }
-  const { data: b, error } = await supabase
-    .from("borrowings")
-    .select("id, currency, amount_to_return_minor, return_on, return_plan, instalment_count, repay_from_account_id")
-    .eq("id", input.borrowingId ?? "")
-    .maybeSingle()
-  if (error) return { status: "error", message: UNAVAILABLE }
-  if (!b) return { status: "error", message: BORROWING_NOT_FOUND }
-  const dueDate = (input.dueDate ?? "").trim()
-  if (dueDate) {
-    if (!b.return_plan || !b.repay_from_account_id) {
-      return { status: "error", message: FIX_FIELDS, fieldErrors: { dueDate: "Choose how you will return it and from which account first" } }
-    }
-    if (!isIsoDate(dueDate)) return { status: "error", message: FIX_FIELDS, fieldErrors: { dueDate: "Enter a valid date" } }
-    if (dueDate < day.today && dueDate !== b.return_on) return { status: "error", message: FIX_FIELDS, fieldErrors: { dueDate: "Choose today or a later date" } }
-  }
-  const { error: rpcError } = await supabase.rpc("set_borrowing_return_plan", {
-    p_borrowing_id: b.id,
-    p_amount_to_return_minor: b.amount_to_return_minor,
-    p_return_on: dueDate || undefined,
-    p_return_plan: dueDate ? (b.return_plan ?? undefined) : undefined,
-    p_instalment_count: dueDate ? (b.instalment_count ?? undefined) : undefined,
-    p_pay_from_account_id: dueDate ? (b.repay_from_account_id ?? undefined) : undefined,
-  })
-  if (rpcError) return dbError(rpcError, { subject: "borrowing", currency: b.currency })
-  return { status: "success", message: dueDate ? "Due date saved." : "Due date removed." }
 }
 
 export async function setBorrowingArchived(supabase: UserClient, input: { borrowingId: string; archived: boolean; currency?: string }): Promise<CardWriteResult> {

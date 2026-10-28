@@ -2,9 +2,30 @@
 
 import type * as React from "react"
 import { useState } from "react"
-import { type BorrowingItem, type CardItem, type CardWriteResult, type LiabilityPaymentLine, type LoanItem, type WriteResult, newRequestKey } from "@fin-creador/api"
-import { addMinor, cardDueDate, emisInCycle, latestStatementCycle, minorToGroupedInputString, parseAmount, regroupAmountInput, shortfallMinor } from "@fin-creador/domain"
-import { BORROWING_RECEIVED_OPTIONS, CARD_EMI_NOTE, LENDERS, type PayingAccount, shortfallMessage } from "@fin-creador/schemas"
+import { type BorrowingDue, type BorrowingItem, type CardItem, type CardWriteResult, type LiabilityPaymentLine, type LoanItem, type WriteResult, newRequestKey } from "@fin-creador/api"
+import {
+  type BorrowingReturnPlan,
+  addMinor,
+  borrowingSchedule,
+  cardDueDate,
+  emisInCycle,
+  latestStatementCycle,
+  minorToGroupedInputString,
+  parseAmount,
+  regroupAmountInput,
+  shortfallMinor,
+} from "@fin-creador/domain"
+import {
+  BORROWING_RECEIVED_OPTIONS,
+  BORROWING_RELATIONSHIP_OPTIONS,
+  BORROWING_RETURN_PLAN_OPTIONS,
+  CARD_EMI_NOTE,
+  CARD_ISSUERS,
+  CARD_PRODUCTS,
+  type CardIssuer,
+  type PayingAccount,
+  shortfallMessage,
+} from "@fin-creador/schemas"
 import {
   addBorrowingAction,
   addCardAction,
@@ -17,8 +38,9 @@ import {
   payDueItemAction,
   planDueItemAction,
   clearDuePlanAction,
+  editBorrowingAction,
   repayBorrowingAction,
-  setBorrowingDueDateAction,
+  setBorrowingReturnPlanAction,
 } from "@/app/(app)/loans-liabilities/actions"
 import { currencySymbol } from "@/components/income/format"
 import { Choice } from "@/components/loans/choice"
@@ -32,7 +54,7 @@ import { toast } from "@/components/ui/toast"
 
 // Forms of the "Short-term & operational liabilities" box (Sprint 8b): add or edit a card,
 // enter a statement, pay a card or its bill, plan a bill, link a card EMI, add a borrowing,
-// repay it and change its due date. Every check is repeated by the shared schemas on the
+// its details and return plan, and repay it (one instalment at a time when planned). Every check is repeated by the shared schemas on the
 // server and again by the database. Names never hold digits.
 
 type Result = WriteResult & { shortfallMinor?: number }
@@ -99,9 +121,25 @@ function ShortfallWarning({ warning, pending, onPayAnyway }: { warning: string; 
 
 const accountLabel = (a: PayingAccount) => `${a.name} · ${money(a.balanceMinor, a.currency)}`
 
-function AccountPicker({ label, accounts, value, error, onChange }: { label: string; accounts: readonly PayingAccount[]; value: string; error?: string; onChange: (id: string) => void }) {
+function AccountPicker({
+  label,
+  accounts,
+  value,
+  error,
+  onChange,
+  name = "accountId",
+  hint = "Bank, cash and other accounts, with balances",
+}: {
+  label: string
+  accounts: readonly PayingAccount[]
+  value: string
+  error?: string
+  onChange: (id: string) => void
+  name?: string
+  hint?: string
+}) {
   return (
-    <SelectField name="accountId" label={label} value={value} error={error || undefined} onChange={(e) => onChange(e.target.value)} hint="Bank, cash and other accounts, with balances">
+    <SelectField name={name} label={label} value={value} error={error || undefined} onChange={(e) => onChange(e.target.value)} hint={hint}>
       <option value="">Choose an account</option>
       {accounts.map((a) => (
         <option key={a.id} value={a.id}>
@@ -125,15 +163,42 @@ function NoAccounts() {
   )
 }
 
+/** Dialogs with many fields: the body scrolls, the footer stays (fits a 720px-high window). */
+export const TALL_DIALOG = "flex max-h-dvh flex-col md:max-h-[calc(100dvh-2rem)] md:max-w-[640px]"
+
+function Scroll({ children }: { children: React.ReactNode }) {
+  return <div className="-mx-1 grid min-h-0 flex-1 content-start gap-3.5 overflow-y-auto px-1 pb-3">{children}</div>
+}
+
+function Check({ checked, onChange, label, hint }: { checked: boolean; onChange: (checked: boolean) => void; label: string; hint?: string }) {
+  return (
+    <label className="flex items-start gap-2 text-sm">
+      <input type="checkbox" className="mt-0.5 size-4 accent-(--color-ink)" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        <span className="font-semibold">{label}</span>
+        {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
+      </span>
+    </label>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Add or edit a card
 // ---------------------------------------------------------------------------
 
+const OTHER = "__other"
+const isIssuer = (v: string): v is CardIssuer => (CARD_ISSUERS as readonly string[]).includes(v)
+
 export function CardForm({ card, currency, onDone }: { card?: CardItem; currency: string; onDone: () => void }) {
   const [requestKey] = useState(newRequestKey)
   const c = card?.card
+  const listedIssuer = c && isIssuer(c.issuer) ? c.issuer : null
+  const listedProduct = c?.product && !c.productOther && listedIssuer && CARD_PRODUCTS[listedIssuer].includes(c.product) ? c.product : null
+  const [issuerChoice, setIssuerChoice] = useState<string>(c ? (listedIssuer ?? OTHER) : "")
+  const [productChoice, setProductChoice] = useState<string>(c ? (listedProduct ?? (c.product ? OTHER : "")) : "")
   const [values, setValues] = useState({
-    issuer: c?.issuer ?? "",
+    issuer: c && !listedIssuer ? c.issuer : "",
+    product: c?.product && !listedProduct ? c.product : "",
     nickname: c?.nickname ?? "",
     limit: c ? minorToGroupedInputString(c.limitMinor, c.currency) : "",
     statementDay: c ? String(c.statementDay) : "",
@@ -148,25 +213,71 @@ export function CardForm({ card, currency, onDone }: { card?: CardItem; currency
     <TextField name={name} label={label} value={values[name]} error={errors[name]} onChange={set(name)} autoComplete="off" {...props} />
   )
   const day = { inputMode: "numeric" as const, maxLength: 2, placeholder: "1 to 31" }
+  const issuer = issuerChoice === OTHER ? values.issuer : issuerChoice
+  const products = isIssuer(issuerChoice) ? CARD_PRODUCTS[issuerChoice] : []
+  // A typed issuer has no list: its card can only be typed.
+  const productOther = issuerChoice === OTHER || productChoice === OTHER
+  const product = productOther ? values.product : productChoice
+  const typedName = values.product.trim().replace(/\s+/g, " ")
   return (
     <form
       noValidate
       className="grid gap-3.5"
       onSubmit={(e) => {
         e.preventDefault()
-        void submit((): Promise<CardWriteResult> => (c ? editCardAction({ ...values, cardId: c.id }) : addCardAction({ ...values, idempotencyKey: requestKey })))
+        const input = { ...values, issuer, product, productOther: productOther && product ? "true" : "" }
+        void submit((): Promise<CardWriteResult> => (c ? editCardAction({ ...input, cardId: c.id }) : addCardAction({ ...input, idempotencyKey: requestKey })))
       }}
     >
       {formError && <FormMessage tone="error">{formError}</FormMessage>}
       <div className="grid items-start gap-3 md:grid-cols-2">
-        {field("issuer", "Card issuer", { list: "card-issuers", maxLength: 80, hint: "Pick from the list or type any name" })}
-        <datalist id="card-issuers">
-          {LENDERS.map((l) => (
-            <option key={l} value={l} />
+        <SelectField
+          name="issuerChoice"
+          label="Card issuer"
+          value={issuerChoice}
+          error={issuerChoice === OTHER ? undefined : errors.issuer}
+          onChange={(e) => {
+            setIssuerChoice(e.target.value)
+            setProductChoice("")
+          }}
+        >
+          <option value="">Choose the issuer</option>
+          {CARD_ISSUERS.map((i) => (
+            <option key={i} value={i}>
+              {i}
+            </option>
           ))}
-        </datalist>
-        {field("nickname", "Nickname (optional)", { maxLength: 40, placeholder: "e.g. Travel card", hint: "No card numbers or digits" })}
+          <option value={OTHER}>Other</option>
+        </SelectField>
+        {issuerChoice === OTHER
+          ? field("issuer", "Issuer name", { maxLength: 80, placeholder: "e.g. IndusInd Bank", hint: "No digits" })
+          : (
+            <SelectField
+              name="productChoice"
+              label="Card"
+              value={productChoice}
+              disabled={!issuerChoice}
+              error={productChoice === OTHER ? undefined : errors.product}
+              hint={issuerChoice ? undefined : "Choose the issuer first"}
+              onChange={(e) => setProductChoice(e.target.value)}
+            >
+              <option value="">Choose your card</option>
+              {products.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+              <option value={OTHER}>Other</option>
+            </SelectField>
+          )}
       </div>
+      {productOther &&
+        field("product", "Card name", {
+          maxLength: 80,
+          placeholder: "e.g. Platinum",
+          hint: typedName && issuer.trim() ? `Shown as “${issuer.trim()} ${typedName}”` : "As on the card, without numbers",
+        })}
+      {field("nickname", "Label if you hold two of the same card (optional)", { maxLength: 40, placeholder: "e.g. Travel", hint: "No digits" })}
       <div className="grid items-start gap-3 md:grid-cols-3">
         {field("limit", `Credit limit (${sym})`, { inputMode: "decimal", onBlur: regroup("limit") })}
         {field("statementDay", "Statement day", { ...day, hint: "Day of the month" })}
@@ -483,39 +594,216 @@ export function LinkEmiForm({ loan, cards, onDone }: { loan: LoanItem; cards: Ca
 }
 
 // ---------------------------------------------------------------------------
-// Borrowing: add, repay, due date
+// Borrowing: add, details, return plan, repay
 // ---------------------------------------------------------------------------
+
+type PlanValues = { sameAsBorrowed: boolean; amountToReturn: string; returnOn: string; returnPlan: string; instalments: string; payFromAccountId: string }
+
+const planInput = (v: PlanValues) => ({
+  sameAsBorrowed: v.sameAsBorrowed ? "true" : "",
+  amountToReturn: v.sameAsBorrowed ? "" : v.amountToReturn,
+  returnOn: v.returnOn,
+  returnPlan: v.returnOn ? v.returnPlan : "",
+  instalments: v.returnOn && v.returnPlan === "instalments" ? v.instalments : "",
+  payFromAccountId: v.returnOn ? v.payFromAccountId : "",
+})
+
+const NOTHING_DEDUCTED = "Nothing is deducted until you confirm Paid."
+
+/**
+ * How much to return ("Same as borrowed", or more: the extra is interest) and, once a return
+ * date is entered, how (one-time settlement or monthly instalments) and from which account,
+ * with the schedule it makes.
+ */
+function ReturnPlanFields({
+  values,
+  setValues,
+  errors,
+  borrowedMinor,
+  currency,
+  accounts,
+  minDate,
+}: {
+  values: PlanValues
+  setValues: React.Dispatch<React.SetStateAction<PlanValues>>
+  errors: Record<string, string>
+  borrowedMinor: number | null
+  currency: string
+  accounts: readonly PayingAccount[]
+  minDate: string
+}) {
+  const sym = currencySymbol(currency)
+  const total = values.sameAsBorrowed ? borrowedMinor : (() => {
+    const a = parseAmount(values.amountToReturn, currency)
+    return a.ok ? a.minor : null
+  })()
+  const extra = total !== null && borrowedMinor !== null && total > borrowedMinor ? total - borrowedMinor : 0
+  const instalments = values.returnPlan === "instalments"
+  let schedule: ReturnType<typeof borrowingSchedule> = []
+  if (values.returnOn && total !== null && borrowedMinor !== null && (values.returnPlan === "once" || values.returnPlan === "instalments")) {
+    try {
+      schedule = borrowingSchedule({
+        totalMinor: total,
+        borrowedMinor,
+        returnOn: values.returnOn,
+        returnPlan: values.returnPlan as BorrowingReturnPlan,
+        instalmentCount: instalments ? Number(values.instalments) : null,
+      })
+    } catch {
+      schedule = []
+    }
+  }
+  return (
+    <>
+      <Check
+        checked={values.sameAsBorrowed}
+        onChange={(checked) => setValues((v) => ({ ...v, sameAsBorrowed: checked }))}
+        label="Return the same as borrowed"
+        hint="Untick if you agreed to return more (interest or a charge)"
+      />
+      {!values.sameAsBorrowed && (
+        <TextField
+          name="amountToReturn"
+          label={`How much to return (${sym})`}
+          inputMode="decimal"
+          autoComplete="off"
+          value={values.amountToReturn}
+          error={errors.amountToReturn}
+          hint={extra > 0 ? `Interest or charges ${money(extra, currency)}, posted as an expense when you repay` : "At least the amount borrowed"}
+          onChange={(e) => setValues((v) => ({ ...v, amountToReturn: e.target.value }))}
+          onBlur={() => setValues((v) => ({ ...v, amountToReturn: regroupAmountInput(v.amountToReturn, currency) }))}
+        />
+      )}
+      <TextField
+        name="returnOn"
+        type="date"
+        label={instalments && values.returnOn ? "First instalment on" : "Return date (optional)"}
+        min={minDate}
+        value={values.returnOn}
+        error={errors.returnOn}
+        hint={inWords(values.returnOn) ?? "Reminders follow it"}
+        onChange={(e) => setValues((v) => ({ ...v, returnOn: e.target.value }))}
+      />
+      {values.returnOn && (
+        <>
+          <Choice
+            name="returnPlan"
+            legend="How will you return it?"
+            value={values.returnPlan}
+            options={BORROWING_RETURN_PLAN_OPTIONS}
+            error={errors.returnPlan}
+            onChange={(v) => setValues((s) => ({ ...s, returnPlan: v }))}
+          />
+          <div className="grid items-start gap-3 md:grid-cols-2">
+            {instalments && (
+              <TextField
+                name="instalments"
+                label="Number of instalments"
+                inputMode="numeric"
+                maxLength={2}
+                placeholder="2 to 60"
+                autoComplete="off"
+                value={values.instalments}
+                error={errors.instalments}
+                hint="Monthly, from the first instalment date"
+                onChange={(e) => setValues((v) => ({ ...v, instalments: e.target.value }))}
+              />
+            )}
+            <AccountPicker
+              name="payFromAccountId"
+              label="Return from"
+              hint="Bank, cash or other account"
+              accounts={accounts}
+              value={values.payFromAccountId}
+              error={errors.payFromAccountId}
+              onChange={(id) => setValues((v) => ({ ...v, payFromAccountId: id }))}
+            />
+          </div>
+          {schedule.length > 0 && (
+            <div className="grid gap-1">
+              <h4 className="text-xs font-semibold text-muted-foreground">{instalments ? `${schedule.length} instalments` : "One-time settlement"}</h4>
+              <ul aria-label="Return schedule" className="max-h-36 overflow-y-auto rounded-lg border border-line bg-surface px-3">
+                {schedule.map((i) => (
+                  <li key={i.seq} className="flex justify-between gap-3 border-b border-line py-1 text-sm tabular-nums last:border-b-0">
+                    <span>{fullDate(i.dueDate)}</span>
+                    <span>
+                      <span className="font-semibold">{money(i.amountMinor, currency)}</span>
+                      {i.interestMinor > 0 && <span className="text-xs text-muted-foreground"> · interest {money(i.interestMinor, currency)}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">{NOTHING_DEDUCTED}</p>
+        </>
+      )}
+    </>
+  )
+}
+
+function DetailsFields({
+  values,
+  set,
+  errors,
+}: {
+  values: { lender: string; relationship: string; reason: string }
+  set: (name: "lender" | "relationship" | "reason") => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void
+  errors: Record<string, string>
+}) {
+  return (
+    <>
+      <div className="grid items-start gap-3 md:grid-cols-2">
+        <TextField name="lender" label="Borrowed from" placeholder="e.g. Ravi" maxLength={80} value={values.lender} error={errors.lender} onChange={set("lender")} autoComplete="off" hint="A name only, no digits" />
+        <SelectField name="relationship" label="Who they are to you" value={values.relationship} error={errors.relationship} onChange={set("relationship")}>
+          <option value="">Choose</option>
+          {BORROWING_RELATIONSHIP_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </SelectField>
+      </div>
+      <TextField name="reason" label="Borrowed for (optional)" placeholder="e.g. Bike repair" maxLength={80} value={values.reason} error={errors.reason} onChange={set("reason")} autoComplete="off" hint="A few words; no account or card numbers" />
+    </>
+  )
+}
 
 export function BorrowingForm({ accounts, today, currency, onDone }: { accounts: readonly PayingAccount[]; today: string; currency: string; onDone: () => void }) {
   const [requestKey] = useState(newRequestKey)
   const eligible = accounts.filter((a) => a.currency === currency)
   const [values, setValues] = useState({
     lender: "",
+    relationship: "",
+    reason: "",
     amount: "",
     received: eligible.length ? "into_account" : "earlier",
     accountId: eligible[0]?.id ?? "",
     receivedOn: today,
-    dueDate: "",
   })
+  const [plan, setPlan] = useState<PlanValues>({ sameAsBorrowed: true, amountToReturn: "", returnOn: "", returnPlan: "", instalments: "", payFromAccountId: eligible[0]?.id ?? "" })
   const { errors, formError, pending, submit } = useSubmit(onDone)
   const sym = currencySymbol(currency)
-  const set = (name: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [name]: e.target.value }))
+  const set = (name: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setValues((v) => ({ ...v, [name]: e.target.value }))
   const into = values.received === "into_account"
+  const amount = parseAmount(values.amount, currency)
   return (
     <form
       noValidate
-      className="grid gap-3.5"
+      className="flex min-h-0 flex-1 flex-col"
       onSubmit={(e) => {
         e.preventDefault()
-        void submit(() => addBorrowingAction({ ...values, accountId: into ? values.accountId : "", receivedOn: into ? values.receivedOn : "", idempotencyKey: requestKey }))
+        void submit(() =>
+          addBorrowingAction({ ...values, ...planInput(plan), accountId: into ? values.accountId : "", receivedOn: into ? values.receivedOn : "", idempotencyKey: requestKey }),
+        )
       }}
     >
-      {formError && <FormMessage tone="error">{formError}</FormMessage>}
-      <div className="grid items-start gap-3 md:grid-cols-2">
-        <TextField name="lender" label="Borrowed from" placeholder="e.g. Ravi" maxLength={80} value={values.lender} error={errors.lender} onChange={set("lender")} autoComplete="off" hint="A name only, no numbers" />
+      <Scroll>
+        {formError && <FormMessage tone="error">{formError}</FormMessage>}
+        <DetailsFields values={values} set={set} errors={errors} />
         <TextField
           name="amount"
-          label={`Amount (${sym})`}
+          label={`Amount borrowed (${sym})`}
           inputMode="decimal"
           autoComplete="off"
           value={values.amount}
@@ -523,40 +811,113 @@ export function BorrowingForm({ accounts, today, currency, onDone }: { accounts:
           onChange={set("amount")}
           onBlur={() => setValues((v) => ({ ...v, amount: regroupAmountInput(v.amount, currency) }))}
         />
-      </div>
-      <Choice name="received" legend="The money" value={values.received} options={BORROWING_RECEIVED_OPTIONS} error={errors.received} onChange={(v) => setValues((s) => ({ ...s, received: v }))} grid />
-      {into &&
-        (eligible.length === 0 ? (
-          <FormMessage tone="info">{NO_ACCOUNTS}</FormMessage>
-        ) : (
-          <div className="grid items-start gap-3 md:grid-cols-2">
-            <AccountPicker label="Received into" accounts={eligible} value={values.accountId} error={errors.accountId} onChange={(id) => setValues((v) => ({ ...v, accountId: id }))} />
-            <TextField name="receivedOn" type="date" label="Received on" max={today} value={values.receivedOn} error={errors.receivedOn} hint={inWords(values.receivedOn)} onChange={set("receivedOn")} />
-          </div>
-        ))}
-      <TextField
-        name="dueDate"
-        type="date"
-        label="Due date (optional)"
-        min={into ? values.receivedOn : today}
-        value={values.dueDate}
-        error={errors.dueDate}
-        hint={inWords(values.dueDate) ?? "We remind you the day before and on the day"}
-        onChange={set("dueDate")}
-      />
+        <Choice name="received" legend="The money" value={values.received} options={BORROWING_RECEIVED_OPTIONS} error={errors.received} onChange={(v) => setValues((s) => ({ ...s, received: v }))} grid />
+        {into &&
+          (eligible.length === 0 ? (
+            <FormMessage tone="info">{NO_ACCOUNTS}</FormMessage>
+          ) : (
+            <div className="grid items-start gap-3 md:grid-cols-2">
+              <AccountPicker label="Received into" hint="Bank, Cash in hand or other account" accounts={eligible} value={values.accountId} error={errors.accountId} onChange={(id) => setValues((v) => ({ ...v, accountId: id }))} />
+              <TextField name="receivedOn" type="date" label="Received on" max={today} value={values.receivedOn} error={errors.receivedOn} hint={inWords(values.receivedOn)} onChange={set("receivedOn")} />
+            </div>
+          ))}
+        <ReturnPlanFields
+          values={plan}
+          setValues={setPlan}
+          errors={errors}
+          borrowedMinor={amount.ok ? amount.minor : null}
+          currency={currency}
+          accounts={eligible}
+          minDate={into ? values.receivedOn : today}
+        />
+      </Scroll>
       <Footer pending={pending} label="Add borrowing" />
     </form>
   )
 }
 
+/** Who it is from, who they are to you and what it was for. */
+export function BorrowingDetailsForm({ item, onDone }: { item: BorrowingItem; onDone: () => void }) {
+  const b = item.borrowing
+  const [values, setValues] = useState({ lender: b.lender, relationship: b.relationship ?? "", reason: b.reason ?? "" })
+  const { errors, formError, pending, submit } = useSubmit(onDone)
+  const set = (name: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setValues((v) => ({ ...v, [name]: e.target.value }))
+  return (
+    <form
+      noValidate
+      className="grid gap-3.5"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void submit(() => editBorrowingAction({ ...values, borrowingId: b.id }))
+      }}
+    >
+      {formError && <FormMessage tone="error">{formError}</FormMessage>}
+      <DetailsFields values={values} set={set} errors={errors} />
+      <Footer pending={pending} label="Save details" />
+    </form>
+  )
+}
+
+/** How much to return and the return plan; the due items are rebuilt. */
+export function ReturnPlanForm({ item, accounts, today, onDone }: { item: BorrowingItem; accounts: readonly PayingAccount[]; today: string; onDone: () => void }) {
+  const b = item.borrowing
+  const eligible = accounts.filter((a) => a.currency === b.currency)
+  const keptAccount = b.repayFromAccountId && eligible.some((a) => a.id === b.repayFromAccountId) ? b.repayFromAccountId : ""
+  const [plan, setPlan] = useState<PlanValues>({
+    sameAsBorrowed: b.amountToReturnMinor === b.borrowedMinor,
+    amountToReturn: b.amountToReturnMinor === b.borrowedMinor ? "" : minorToGroupedInputString(b.amountToReturnMinor, b.currency),
+    returnOn: b.returnOn ?? "",
+    returnPlan: b.returnPlan ?? "",
+    instalments: b.instalmentCount ? String(b.instalmentCount) : "",
+    payFromAccountId: keptAccount || (eligible[0]?.id ?? ""),
+  })
+  const { errors, formError, pending, submit } = useSubmit(onDone)
+  const planned = item.dues.filter((d) => d.status === "pending" && d.plannedOn).length
+  // The date already set may stay even when it is past; a new one is today or later.
+  const minDate = b.returnOn && b.returnOn < today ? b.returnOn : today
+  return (
+    <form
+      noValidate
+      className="flex min-h-0 flex-1 flex-col"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void submit(() => setBorrowingReturnPlanAction({ ...planInput(plan), borrowingId: b.id }))
+      }}
+    >
+      <Scroll>
+        {formError && <FormMessage tone="error">{formError}</FormMessage>}
+        <p className="text-sm text-muted-foreground">
+          Borrowed {money(b.borrowedMinor, b.currency)}; repaid so far {money(item.repaidMinor, b.currency)}. Repayments already made still count, the earliest instalment first.
+        </p>
+        {item.dues.length > 0 && (
+          <FormMessage tone={planned > 0 ? "error" : "info"}>
+            {planned > 0
+              ? `Saving replaces the schedule: the ${planned === 1 ? "“Will pay later” plan" : `${planned} “Will pay later” plans`} on pending instalments will be dropped.`
+              : "Saving replaces the schedule; any “Will pay later” plan on a pending instalment is dropped."}
+          </FormMessage>
+        )}
+        {!keptAccount && b.repayFromAccountId && <FormMessage tone="info">The account it was to be returned from is archived or gone. Choose another.</FormMessage>}
+        <ReturnPlanFields values={plan} setValues={setPlan} errors={errors} borrowedMinor={b.borrowedMinor} currency={b.currency} accounts={eligible} minDate={minDate} />
+      </Scroll>
+      <Footer pending={pending} label={plan.returnOn ? "Save return plan" : b.returnOn ? "Remove return date" : "Save"} />
+    </form>
+  )
+}
+
+/**
+ * Repay: any amount, or one instalment (`due`), prefilled with its account and what is left of
+ * it split into principal and interest. Everything stays editable.
+ */
 export function RepayForm({
   item,
+  due,
   accounts,
   today,
   payment,
   onDone,
 }: {
   item: BorrowingItem
+  due?: BorrowingDue
   accounts: readonly PayingAccount[]
   today: string
   payment?: LiabilityPaymentLine
@@ -565,11 +926,20 @@ export function RepayForm({
   const [requestKey] = useState(newRequestKey)
   const c = item.borrowing.currency
   const eligible = accounts.filter((a) => a.currency === c)
+  const usable = (id: string | null | undefined) => (id && eligible.some((a) => a.id === id) ? id : null)
+  const wanted = due ? (due.plannedAccountId ?? due.payFromAccountId) : null
+  const gone = !payment && wanted !== null && !usable(wanted)
   const [values, setValues] = useState({
-    accountId: payment?.accountId ?? item.due?.plannedAccountId ?? eligible[0]?.id ?? "",
+    accountId: payment?.accountId ?? (due ? (usable(wanted) ?? "") : (usable(item.due?.plannedAccountId) ?? eligible[0]?.id ?? "")),
     paidOn: payment?.paidOn ?? today,
-    principal: minorToGroupedInputString(payment?.principalMinor ?? item.owedMinor, c),
-    interest: payment && payment.interestMinor > 0 ? minorToGroupedInputString(payment.interestMinor, c) : "",
+    principal: minorToGroupedInputString(payment?.principalMinor ?? (due ? due.remainingPrincipalMinor : item.owedMinor), c),
+    interest: payment
+      ? payment.interestMinor > 0
+        ? minorToGroupedInputString(payment.interestMinor, c)
+        : ""
+      : due && due.remainingInterestMinor > 0
+        ? minorToGroupedInputString(due.remainingInterestMinor, c)
+        : "",
   })
   const { errors, formError, serverShort, setServerShort, pending, submit } = useSubmit(onDone)
   const sym = currencySymbol(c)
@@ -599,6 +969,7 @@ export function RepayForm({
       }}
     >
       {formError && <FormMessage tone="error">{formError}</FormMessage>}
+      {gone && <FormMessage tone="info">{due?.payFromAccountName ? `${due.payFromAccountName} is archived.` : "The planned account is gone."} Choose the account you paid from.</FormMessage>}
       <AccountPicker
         label="Paid from"
         accounts={eligible}
@@ -626,7 +997,7 @@ export function RepayForm({
       </div>
       <p className="text-xs text-muted-foreground">What you repay moves to {item.name}&apos;s balance; interest is an expense.</p>
       {warning && <ShortfallWarning warning={warning} pending={pending} onPayAnyway={() => save(true)} />}
-      <Footer pending={pending} label="Save repayment">
+      <Footer pending={pending} label={payment ? "Save repayment" : "Paid"}>
         {total !== null && (
           <>
             <span className="font-semibold">Total </span>
@@ -638,22 +1009,33 @@ export function RepayForm({
   )
 }
 
-export function DueDateForm({ item, today, onDone }: { item: BorrowingItem; today: string; onDone: () => void }) {
-  const [dueDate, setDueDate] = useState(item.due?.dueDate && item.due.dueDate >= today ? item.due.dueDate : "")
+/** "Will pay later" for one borrowing instalment: a date and account; it stays due. */
+export function PlanBorrowingDueForm({ due, currency, accounts, today, onDone }: { due: BorrowingDue; currency: string; accounts: readonly PayingAccount[]; today: string; onDone: () => void }) {
+  const eligible = accounts.filter((a) => a.currency === currency)
+  const first = [due.plannedAccountId, due.payFromAccountId].find((id) => id && eligible.some((a) => a.id === id)) ?? eligible[0]?.id ?? ""
+  const [values, setValues] = useState({ accountId: first, plannedOn: due.plannedOn ?? today })
   const { errors, formError, pending, submit } = useSubmit(onDone)
+  if (eligible.length === 0) return <NoAccounts />
   return (
     <form
       noValidate
       className="grid gap-3.5"
       onSubmit={(e) => {
         e.preventDefault()
-        void submit(() => setBorrowingDueDateAction({ borrowingId: item.borrowing.id, dueDate }))
+        void submit(() => planDueItemAction({ dueItemId: due.id, ...values }))
       }}
     >
       {formError && <FormMessage tone="error">{formError}</FormMessage>}
-      {item.due && <p className="text-sm text-muted-foreground">Now due {fullDate(item.due.dueDate)}.</p>}
-      <TextField name="dueDate" type="date" label="New due date" min={today} value={dueDate} error={errors.dueDate} hint={inWords(dueDate) ?? "Leave empty to remove the due date"} onChange={(e) => setDueDate(e.target.value)} />
-      <Footer pending={pending} label={dueDate ? "Save due date" : item.due ? "Remove due date" : "Save"} />
+      <AccountPicker label="Will pay from" accounts={eligible} value={values.accountId} error={errors.accountId} onChange={(id) => setValues((v) => ({ ...v, accountId: id }))} />
+      <TextField name="plannedOn" type="date" label="Pay on" min={today} value={values.plannedOn} error={errors.plannedOn} hint={inWords(values.plannedOn)} onChange={(e) => setValues((v) => ({ ...v, plannedOn: e.target.value }))} />
+      {due.plannedOn && (
+        <div>
+          <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => void submit(() => clearDuePlanAction({ dueItemId: due.id }))}>
+            Remove plan
+          </Button>
+        </div>
+      )}
+      <Footer pending={pending} label="Save plan" />
     </form>
   )
 }

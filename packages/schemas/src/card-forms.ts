@@ -291,8 +291,8 @@ export const BORROWING_RELATIONSHIP_OPTIONS: readonly { value: BorrowingRelation
 ];
 
 export const BORROWING_RETURN_PLAN_OPTIONS: readonly { value: BorrowingReturnPlan; label: string }[] = [
-  { value: "once", label: "All at once on that date" },
-  { value: "instalments", label: "In monthly instalments" },
+  { value: "once", label: "One-time settlement" },
+  { value: "instalments", label: "Instalments" },
 ];
 
 type ReturnPlanInput = { amountToReturn: string; sameAsBorrowed: string; returnOn: string; returnPlan: string; instalments: string; payFromAccountId: string };

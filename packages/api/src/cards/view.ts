@@ -28,6 +28,9 @@ export type CardRecord = {
   id: string
   accountId: string
   issuer: string
+  /** From CARD_PRODUCTS, or typed under "Other" (productOther). */
+  product: string | null
+  productOther: boolean
   nickname: string | null
   currency: string
   limitMinor: number
@@ -253,7 +256,9 @@ export function cardBadgeText(item: Pick<CardItem, "badge" | "latestBill" | "car
 export const BORROWING_BADGE_LABEL: Record<BorrowingBadge, string> = { repaid: "Repaid", due: "Due", overdue: "Overdue", owed: "Owed" }
 
 /** Nickname, else the issuer. Never a number. */
-export const cardName = (c: Pick<CardRecord, "nickname" | "issuer">) => c.nickname ?? c.issuer
+/** As public.card_account_name: the label, else the product ("<issuer> <typed>" for Other), else the issuer. Never a number. */
+export const cardName = (c: Pick<CardRecord, "nickname" | "issuer" | "product" | "productOther">) =>
+  c.nickname ?? (c.product ? (c.productOther ? `${c.issuer} ${c.product}` : c.product) : c.issuer)
 
 const nameOf = (names: Record<string, string>, accounts: readonly PayingAccount[], id: string | null) =>
   id ? (accounts.find((a) => a.id === id)?.name ?? names[id] ?? "an archived account") : null
