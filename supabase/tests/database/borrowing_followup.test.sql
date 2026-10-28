@@ -60,10 +60,11 @@ select ok(not public.has_digit('6E Rewards XL', 3) and public.has_digit('Card 12
 select ok(not public.has_digit(chr(8555) || chr(9323)), 'Roman numerals and circled numbers are not decimal digits');
 
 -- ============================================================ loans: new and edited rows only
-select results_eq(
-  $$ select conname::text, convalidated, pg_get_constraintdef(oid) like '%has_digit(lender, 4)%' or pg_get_constraintdef(oid) like '%has_digit(nickname, 4)%'
-     from pg_constraint where conrelid = 'public.loans'::regclass and conname in ('loans_lender', 'loans_nickname') order by conname $$,
-  $$ values ('loans_lender'::text, false, true), ('loans_nickname'::text, false, true) $$,
+select is(
+  (select string_agg(conname::text || ':' || convalidated::text || ':'
+                     || (pg_get_constraintdef(oid) like '%has_digit(' || substr(conname::text, 7) || ', 4)%')::text, ' ' order by conname::text)
+   from pg_constraint where conrelid = 'public.loans'::regclass and conname in ('loans_lender', 'loans_nickname')),
+  'loans_lender:false:true loans_nickname:false:true',
   'loan lender and nickname refuse a run of 4 digits in any script (NOT VALID: earlier rows are not re-checked)');
 
 -- ============================================================ as A: accounts
