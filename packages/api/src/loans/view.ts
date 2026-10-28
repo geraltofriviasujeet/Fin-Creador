@@ -21,6 +21,7 @@ import {
 } from "@fin-creador/domain"
 import { type PayingAccount, shortfallMessage } from "@fin-creador/schemas"
 import { type ReminderEntry, type ShortTermData, type ShortTermHistory, type ShortTermView, buildReminders, buildShortTermView } from "../cards/view"
+import { type StatutoryData, type StatutoryView, buildStatutoryView } from "../statutory/view"
 
 // The Loans & Liabilities page, the bell and the Overview "Due soon" card (Sprint 8a), built
 // from the loaded rows with the shared domain rules. Pure, so web and mobile show the same
@@ -92,6 +93,8 @@ export type LoansData = {
   /** Cards, statements and borrowings (8b); left out where only loans are needed. */
   shortTerm?: ShortTermData
   shortTermHistory?: ShortTermHistory
+  /** Statutory dues (8d); left out where only loans are needed. */
+  statutory?: StatutoryData
 }
 
 export type DueItem = DueRecord & {
@@ -146,7 +149,9 @@ export type LoansView = {
   longTermOutstandingMinor: number
   /** Cards, card EMIs and borrowing (8b), or null when not loaded. */
   shortTerm: ShortTermView | null
-  /** Due soon and the bell: loans, card bills, borrowing due dates and statements to add. */
+  /** Income tax payable, fines and other statutory dues (8d), or null when not loaded. */
+  statutory: StatutoryView | null
+  /** Due soon and the bell: loans, card bills, borrowing due dates, statements to add and statutory dues. */
   reminders: ReminderEntry[]
 }
 
@@ -294,6 +299,7 @@ export function buildLoansView(data: LoansData): LoansView {
         history: data.shortTermHistory ?? { everPaidBillIds: [], everPaidLiabilityAccounts: [] },
       })
     : null
+  const statutory = data.statutory ? buildStatutoryView(data.statutory, { today: data.today, currency: data.currency, accounts: data.accounts }) : null
   const currencyOf = new Map(all.map((l) => [l.loan.id, l.loan.currency]))
   return {
     today: data.today,
@@ -305,7 +311,8 @@ export function buildLoansView(data: LoansData): LoansView {
     totalOutstandingMinor: addMinor(...inCurrency.map((l) => l.outstandingMinor)),
     longTermOutstandingMinor: addMinor(...inCurrency.filter((l) => l.loan.loanType !== "credit_card_emi").map((l) => l.outstandingMinor)),
     shortTerm,
-    reminders: buildReminders(reminders, (item) => currencyOf.get(item.loanId) ?? data.currency, shortTerm, data.today),
+    statutory,
+    reminders: buildReminders(reminders, (item) => currencyOf.get(item.loanId) ?? data.currency, shortTerm, data.today, statutory),
   }
 }
 

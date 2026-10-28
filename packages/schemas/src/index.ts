@@ -13,3 +13,4 @@ export * from "./loan-forms";
 export * from "./card-forms";
 export * from "./card-data";
 export * from "./digits";
+export * from "./statutory-forms";

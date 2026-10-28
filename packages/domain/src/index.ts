@@ -14,3 +14,4 @@ export * from "./loans";
 export * from "./due-items";
 export * from "./cards";
 export * from "./borrowing";
+export * from "./statutory";

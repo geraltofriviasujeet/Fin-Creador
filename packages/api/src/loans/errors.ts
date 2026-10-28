@@ -1,8 +1,9 @@
+import { formatMoney } from "@fin-creador/domain"
 import { shortfallMessage } from "@fin-creador/schemas"
 import { type LedgerErrorLike, type LedgerMessage, ledgerErrorMessage } from "../ledger-errors"
 
-// Database errors from loans, due items and payments (migration 20261028120000) as messages
-// for web and mobile. Raw database messages are never shown.
+// Database errors from loans, due items and payments (migration 20261028120000) and statutory
+// dues (20261028230000) as messages for web and mobile. Raw database messages are never shown.
 
 const BY_CODE: Record<string, LedgerMessage> = {
   FC032: { message: "Loan payments are changed from the loan, not here." },
@@ -17,6 +18,7 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC042: { message: "This category is used for loan payments, so it can't be archived." },
   FC043: { message: "Check the EMI dates and try again.", field: "nextDueDate" },
   FC044: { message: "Archive the loan before deleting it." },
+  FC053: { message: "This due is archived. Restore it first." },
 }
 
 const NO_DIGITS = "Leave out card and account numbers"
@@ -36,6 +38,13 @@ export function loanErrorMessage(error: (LedgerErrorLike & { details?: string | 
       return { message: shortfallMessage(shortfallMinor, ctx.accountName ?? "this account", ctx.currency), field: "accountId", shortfallMinor }
     }
     return { message: "This account doesn't have enough money for this EMI.", field: "accountId" }
+  }
+  if (code === "FC052" || code === "FC054") {
+    const minor = Number(error?.details)
+    const amount = Number.isSafeInteger(minor) && ctx.currency ? formatMoney(minor, { currency: ctx.currency }) : null
+    return code === "FC052"
+      ? { message: amount ? `That's more than is still due (${amount})` : "That's more than is still due", field: "principal" }
+      : { message: amount ? `Enter at least what is already paid (${amount})` : "The amount can't be less than what is already paid", field: "amount" }
   }
   if (code && BY_CODE[code]) return BY_CODE[code]
   if (code === "23514") {

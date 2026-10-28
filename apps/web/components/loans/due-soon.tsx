@@ -12,7 +12,7 @@ import { LOANS_PATH } from "./display"
 // (packages/domain/src/due-items.ts, cards.ts). On the Loans page each row has its action; on
 // the Overview it links to the page.
 
-const ACTION: Record<ReminderEntry["source"], string> = { loan: "Pay", card: "Pay", borrowing: "Repay" }
+const ACTION: Record<ReminderEntry["source"], string> = { loan: "Pay", card: "Pay", borrowing: "Repay", statutory: "Pay" }
 
 export function DueSoonList({ reminders, onAction }: { reminders: ReminderEntry[]; onAction?: (entry: ReminderEntry) => void }) {
   return (

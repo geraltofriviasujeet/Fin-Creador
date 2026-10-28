@@ -1,6 +1,6 @@
 // Due items (Sprint 8a): anything with a due date that is paid from an account. Loan EMIs and
-// moratorium interest (8a), credit-card bills and borrowing due dates (8b) use the same rows,
-// reminders and checks.
+// moratorium interest (8a), credit-card bills and borrowing due dates (8b) and statutory dues
+// (8d) use the same rows, reminders and checks.
 //
 // Reminders are in-app only and derived from stored dates (no scheduled job). Entries carry
 // a date, not a time of day, so "within 24 hours" means due (or planned) tomorrow, in the
@@ -8,7 +8,7 @@
 import { type IsoDate, addDays } from "./dates";
 import { addMinor } from "./money";
 
-export const DUE_KINDS = ["loan_emi", "loan_interest", "card_bill", "borrowing_due"] as const;
+export const DUE_KINDS = ["loan_emi", "loan_interest", "card_bill", "borrowing_due", "statutory_due"] as const;
 export type DueKind = (typeof DUE_KINDS)[number];
 
 /** Pending: to pay. Paid: posted from an account. Before tracking: paid before the loan was added (never posted). */

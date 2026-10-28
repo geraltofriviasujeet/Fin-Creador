@@ -1,6 +1,7 @@
 import { type DueKind, type DueStatus, type LoanRateKind, type LoanStartMode, type LoanType, type MoratoriumInterest, type ReminderReason, MONEY_ACCOUNT_KINDS } from "@fin-creador/domain"
 import { type UserClient, userToday } from "../income/client"
 import { loadShortTermData } from "../cards/load"
+import { loadStatutoryData } from "../statutory/load"
 import { type LoansData, buildLoansView } from "./view"
 import { accountBalances } from "./writers"
 
@@ -25,7 +26,7 @@ async function allPages<T>(page: (from: number, to: number) => PromiseLike<{ dat
 export async function loadLoansData(supabase: UserClient): Promise<LoansDataLoad> {
   const day = await userToday(supabase)
   if (!day.ok) return day
-  const [profile, loans, items, payments, accounts, shortTerm] = await Promise.all([
+  const [profile, loans, items, payments, accounts, shortTerm, statutory] = await Promise.all([
     supabase.from("profiles").select("currency").eq("id", day.userId).maybeSingle(),
     supabase
       .from("loans")
@@ -52,8 +53,9 @@ export async function loadLoansData(supabase: UserClient): Promise<LoansDataLoad
     ),
     supabase.from("accounts").select("id, name, currency, opening_balance_date").in("kind", [...MONEY_ACCOUNT_KINDS]).is("archived_at", null).order("created_at"),
     loadShortTermData(supabase),
+    loadStatutoryData(supabase),
   ])
-  if (profile.error || !profile.data || loans.error || !loans.data || !items || !payments || accounts.error || !accounts.data || !shortTerm) {
+  if (profile.error || !profile.data || loans.error || !loans.data || !items || !payments || accounts.error || !accounts.data || !shortTerm || !statutory) {
     return { ok: false, reason: "unavailable" }
   }
   const balances = await accountBalances(supabase, [...loans.data.map((l) => l.account_id), ...accounts.data.map((a) => a.id)])
@@ -127,6 +129,7 @@ export async function loadLoansData(supabase: UserClient): Promise<LoansDataLoad
       })),
       shortTerm: shortTerm.data,
       shortTermHistory: shortTerm.history,
+      statutory,
     },
   }
 }

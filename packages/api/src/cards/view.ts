@@ -18,6 +18,7 @@ import {
 } from "@fin-creador/domain"
 import type { BorrowingRelationship, PayingAccount } from "@fin-creador/schemas"
 import type { DueItem, LoanItem, PaymentRecord } from "../loans/view"
+import type { StatutoryView } from "../statutory/view"
 
 // The "Short-term & operational liabilities" box (Sprint 8b): credit cards, their bills and
 // statements, card EMIs (loans) and informal borrowing, plus their reminders for Due soon and
@@ -222,7 +223,7 @@ export type ShortTermView = {
 /** One reminder line for Due soon and the bell: a loan EMI, a card bill, a borrowing or a statement to add. */
 export type ReminderEntry = {
   id: string
-  source: "loan" | "card" | "borrowing"
+  source: "loan" | "card" | "borrowing" | "statutory"
   name: string
   label: string
   dueDate: IsoDate | null
@@ -237,6 +238,7 @@ export type ReminderEntry = {
   cardId: string | null
   billId: string | null
   borrowingId: string | null
+  statutoryDueId: string | null
 }
 
 export const CARD_BADGE_LABEL: Record<Exclude<CardBadge, "part_paid">, string> = {
@@ -445,7 +447,13 @@ export function buildShortTermView(
 const RANK: (ReminderReason | "statement")[] = [...REMINDER_ORDER, "statement"]
 
 /** Due soon and the bell: loan EMIs, card bills (until the minimum is covered), borrowing due dates and statements to add. */
-export function buildReminders(loanReminders: Reminder<DueItem>[], loanCurrency: (item: DueItem) => string, view: ShortTermView | null, today: IsoDate): ReminderEntry[] {
+export function buildReminders(
+  loanReminders: Reminder<DueItem>[],
+  loanCurrency: (item: DueItem) => string,
+  view: ShortTermView | null,
+  today: IsoDate,
+  statutory: StatutoryView | null = null,
+): ReminderEntry[] {
   const out: ReminderEntry[] = loanReminders.map(({ item, reason, daysOverdue }) => ({
     id: item.id,
     source: "loan",
@@ -462,6 +470,7 @@ export function buildReminders(loanReminders: Reminder<DueItem>[], loanCurrency:
     cardId: null,
     billId: null,
     borrowingId: null,
+    statutoryDueId: null,
   }))
   if (view) {
     for (const card of view.cards) {
@@ -483,6 +492,7 @@ export function buildReminders(loanReminders: Reminder<DueItem>[], loanCurrency:
           cardId: card.card.id,
           billId: r.item.id,
           borrowingId: null,
+          statutoryDueId: null,
         })
       }
       if (card.statementToAdd) {
@@ -502,6 +512,7 @@ export function buildReminders(loanReminders: Reminder<DueItem>[], loanCurrency:
           cardId: card.card.id,
           billId: null,
           borrowingId: null,
+          statutoryDueId: null,
         })
       }
     }
@@ -523,8 +534,32 @@ export function buildReminders(loanReminders: Reminder<DueItem>[], loanCurrency:
           cardId: null,
           billId: null,
           borrowingId: b.borrowing.id,
+          statutoryDueId: null,
         })
       }
+    }
+  }
+  // Statutory dues: what is still due (a part-paid due reminds with what is left).
+  for (const d of statutory?.dues ?? []) {
+    for (const r of dueReminders([{ ...d.item, amountDueMinor: d.leftMinor }], today)) {
+      out.push({
+        id: r.item.id,
+        source: "statutory",
+        name: d.name,
+        label: d.paidMinor > 0 ? "Pay the rest" : "Pay",
+        dueDate: r.item.dueDate,
+        plannedOn: r.item.plannedOn,
+        plannedAccountName: r.item.plannedAccountName,
+        amountMinor: d.leftMinor,
+        currency: d.due.currency,
+        reason: r.reason,
+        daysOverdue: r.daysOverdue,
+        loanItem: null,
+        cardId: null,
+        billId: null,
+        borrowingId: null,
+        statutoryDueId: d.due.id,
+      })
     }
   }
   return out.sort(

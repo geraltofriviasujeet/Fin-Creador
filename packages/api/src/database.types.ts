@@ -423,6 +423,7 @@ export type Database = {
           planned_account_id: string | null
           planned_on: string | null
           seq: number
+          statutory_due_id: string | null
           status: string
           updated_at: string
           user_id: string
@@ -443,6 +444,7 @@ export type Database = {
           planned_account_id?: string | null
           planned_on?: string | null
           seq: number
+          statutory_due_id?: string | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -463,11 +465,19 @@ export type Database = {
           planned_account_id?: string | null
           planned_on?: string | null
           seq?: number
+          statutory_due_id?: string | null
           status?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "due_items_statutory_owned"
+            columns: ["statutory_due_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "statutory_dues"
+            referencedColumns: ["id", "user_id"]
+          },
           {
             foreignKeyName: "due_items_borrowing_owned"
             columns: ["borrowing_id", "user_id"]
@@ -522,6 +532,7 @@ export type Database = {
       due_payments: {
         Row: {
           account_id: string
+          allows_parts: boolean
           capitalised_minor: number
           created_at: string
           due_item_id: string
@@ -539,6 +550,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          allows_parts?: boolean
           capitalised_minor?: number
           created_at?: string
           due_item_id: string
@@ -556,6 +568,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          allows_parts?: boolean
           capitalised_minor?: number
           created_at?: string
           due_item_id?: string
@@ -1225,6 +1238,60 @@ export type Database = {
           },
         ]
       }
+      statutory_dues: {
+        Row: {
+          amount_minor: number
+          archived_at: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          due_date: string
+          due_type: string
+          id: string
+          idempotency_key: string
+          issued_city: string | null
+          issued_state: string | null
+          pay_from_account_id: string | null
+          updated_at: string
+          user_id: string
+          vehicle_kind: string | null
+        }
+        Insert: {
+          amount_minor: number
+          archived_at?: string | null
+          created_at?: string
+          currency: string
+          description?: string | null
+          due_date: string
+          due_type: string
+          id?: string
+          idempotency_key: string
+          issued_city?: string | null
+          issued_state?: string | null
+          pay_from_account_id?: string | null
+          updated_at?: string
+          user_id?: string
+          vehicle_kind?: string | null
+        }
+        Update: {
+          amount_minor?: number
+          archived_at?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          due_date?: string
+          due_type?: string
+          id?: string
+          idempotency_key?: string
+          issued_city?: string | null
+          issued_state?: string | null
+          pay_from_account_id?: string | null
+          updated_at?: string
+          user_id?: string
+          vehicle_kind?: string | null
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           account_id: string
@@ -1430,8 +1497,119 @@ export type Database = {
         }
         Relationships: []
       }
+      statutory_due_progress: {
+        Row: {
+          due_item_id: string | null
+          left_minor: number | null
+          paid_minor: number | null
+          statutory_due_id: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      create_statutory_due: {
+        Args: {
+          p_amount_minor: number
+          p_description?: string
+          p_due_date: string
+          p_due_type: string
+          p_idempotency_key: string
+          p_issued_city?: string
+          p_issued_state?: string
+          p_pay_from_account_id?: string
+          p_vehicle_kind?: string
+        }
+        Returns: {
+          amount_minor: number
+          archived_at: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          due_date: string
+          due_type: string
+          id: string
+          idempotency_key: string
+          issued_city: string | null
+          issued_state: string | null
+          pay_from_account_id: string | null
+          updated_at: string
+          user_id: string
+          vehicle_kind: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "statutory_dues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      delete_statutory_due: {
+        Args: { p_statutory_due_id: string }
+        Returns: undefined
+      }
+      set_statutory_due_archived: {
+        Args: { p_archived: boolean; p_statutory_due_id: string }
+        Returns: {
+          amount_minor: number
+          archived_at: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          due_date: string
+          due_type: string
+          id: string
+          idempotency_key: string
+          issued_city: string | null
+          issued_state: string | null
+          pay_from_account_id: string | null
+          updated_at: string
+          user_id: string
+          vehicle_kind: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "statutory_dues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_statutory_due: {
+        Args: {
+          p_amount_minor: number
+          p_description?: string
+          p_due_date: string
+          p_issued_city?: string
+          p_issued_state?: string
+          p_pay_from_account_id?: string
+          p_statutory_due_id: string
+          p_vehicle_kind?: string
+        }
+        Returns: {
+          amount_minor: number
+          archived_at: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          due_date: string
+          due_type: string
+          id: string
+          idempotency_key: string
+          issued_city: string | null
+          issued_state: string | null
+          pay_from_account_id: string | null
+          updated_at: string
+          user_id: string
+          vehicle_kind: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "statutory_dues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       backfill_default_expense_categories: { Args: never; Returns: number }
       backfill_default_income_sources: { Args: never; Returns: number }
       backfill_missing_profiles: { Args: never; Returns: number }
