@@ -1,9 +1,9 @@
-import { MONEY_ACCOUNT_KINDS, outstandingFromBalance } from "@fin-creador/domain"
+import { MONEY_ACCOUNT_KINDS, isIsoDate, outstandingFromBalance } from "@fin-creador/domain"
 import {
   type PayingAccount,
-  borrowingDueDateFormSchema,
   borrowingEditFormSchema,
   borrowingFormSchema,
+  borrowingReturnPlanFormSchema,
   cardEditFormSchema,
   cardFormSchema,
   cardPaymentFormSchema,
@@ -18,7 +18,8 @@ import { accountBalances } from "../loans/writers"
 import { type CardErrorContext, cardErrorMessage } from "./errors"
 
 // Writes for credit cards, statements and informal borrowing, shared by web and mobile. They
-// run as the signed-in user through the functions of migration 20261028180000 (RLS and grants
+// run as the signed-in user through the functions of migrations 20261028180000 and
+// 20261028210000 (RLS and grants
 // apply; the database refuses any direct write). Every add and payment carries a request key.
 // Bill payments (pay_due_item) and "Will pay later" go through the loan writers.
 
@@ -91,6 +92,8 @@ export async function addCard(supabase: UserClient, input: FormInput): Promise<C
     p_due_day: c.dueDay,
     p_opening_owed_minor: c.openingOwedMinor,
     p_nickname: c.nickname ?? undefined,
+    p_product: c.product ?? undefined,
+    p_product_other: c.productOther,
   })
   if (error || !data) return dbError(error ?? {}, { currency })
   return { status: "success", message: "Card added.", id: data.id }
@@ -110,6 +113,8 @@ export async function editCard(supabase: UserClient, input: FormInput): Promise<
     p_statement_day: c.statementDay,
     p_due_day: c.dueDay,
     p_nickname: c.nickname ?? undefined,
+    p_product: c.product ?? undefined,
+    p_product_other: c.productOther,
   })
   if (error) return dbError(error)
   return { status: "success", message: "Card saved.", id: c.cardId }
@@ -243,9 +248,15 @@ export async function addBorrowing(supabase: UserClient, input: FormInput): Prom
     p_idempotency_key: b.idempotencyKey,
     p_lender: b.lender,
     p_amount_minor: b.amountMinor,
+    p_relationship: b.relationship,
+    p_reason: b.reason ?? undefined,
+    p_amount_to_return_minor: b.amountToReturnMinor,
     p_received_account_id: b.accountId ?? undefined,
     p_received_on: b.receivedOn ?? undefined,
-    p_due_date: b.dueDate ?? undefined,
+    p_return_on: b.returnOn ?? undefined,
+    p_return_plan: b.returnPlan ?? undefined,
+    p_instalment_count: b.instalmentCount ?? undefined,
+    p_pay_from_account_id: b.payFromAccountId ?? undefined,
   })
   if (error || !data) return dbError(error ?? {}, { subject: "borrowing", currency })
   return { status: "success", message: "Borrowing added.", id: data.id }
@@ -254,20 +265,85 @@ export async function addBorrowing(supabase: UserClient, input: FormInput): Prom
 export async function editBorrowing(supabase: UserClient, input: FormInput): Promise<CardWriteResult> {
   const parsed = borrowingEditFormSchema().safeParse(input)
   if (!parsed.success) return formError(parsed.error)
-  const { error } = await supabase.rpc("update_borrowing", { p_borrowing_id: parsed.data.borrowingId, p_lender: parsed.data.lender })
+  const b = parsed.data
+  const { error } = await supabase.rpc("update_borrowing", {
+    p_borrowing_id: b.borrowingId,
+    p_lender: b.lender,
+    p_relationship: b.relationship,
+    p_reason: b.reason ?? undefined,
+  })
   if (error) return dbError(error, { subject: "borrowing" })
-  return { status: "success", message: "Borrowing saved.", id: parsed.data.borrowingId }
+  return { status: "success", message: "Borrowing saved.", id: b.borrowingId }
 }
 
-/** Adds, changes or (empty date) removes the due date; reminders follow it. */
+/**
+ * Sets how much to return and the return plan (once, or monthly instalments from a chosen
+ * account), or removes it (empty return date). The due items are rebuilt; repayments so far
+ * still count, first in first out. Nothing is paid by itself.
+ */
+export async function setBorrowingReturnPlan(supabase: UserClient, input: FormInput): Promise<WriteResult> {
+  const day = await userToday(supabase)
+  if (!day.ok) return { status: "error", message: day.reason === "unauthenticated" ? SIGNED_OUT : TODAY_UNAVAILABLE }
+  const [{ data: borrowing, error }, paying] = await Promise.all([
+    supabase.from("borrowings").select("id, currency, borrowed_minor, return_on").eq("id", input.borrowingId ?? "").maybeSingle(),
+    payingAccounts(supabase),
+  ])
+  if (error || !paying) return { status: "error", message: UNAVAILABLE }
+  if (!borrowing) return { status: "error", message: BORROWING_NOT_FOUND }
+  const parsed = borrowingReturnPlanFormSchema({
+    today: day.today,
+    currency: borrowing.currency,
+    borrowedMinor: borrowing.borrowed_minor,
+    currentReturnOn: borrowing.return_on,
+    accounts: paying.accounts,
+  }).safeParse(input)
+  if (!parsed.success) return formError(parsed.error)
+  const p = parsed.data
+  const { error: rpcError } = await supabase.rpc("set_borrowing_return_plan", {
+    p_borrowing_id: p.borrowingId,
+    p_amount_to_return_minor: p.amountToReturnMinor,
+    p_return_on: p.returnOn ?? undefined,
+    p_return_plan: p.returnPlan ?? undefined,
+    p_instalment_count: p.instalmentCount ?? undefined,
+    p_pay_from_account_id: p.payFromAccountId ?? undefined,
+  })
+  if (rpcError) return dbError(rpcError, { subject: "borrowing", currency: borrowing.currency })
+  return { status: "success", message: p.returnOn ? "Return plan saved." : "Return date removed." }
+}
+
+/**
+ * Moves the return date (keeping how much, how and from which account) or removes the plan
+ * (empty date). The current web's "Change due date"; a borrowing with no plan yet needs
+ * setBorrowingReturnPlan.
+ */
 export async function setBorrowingDueDate(supabase: UserClient, input: FormInput): Promise<WriteResult> {
   const day = await userToday(supabase)
   if (!day.ok) return { status: "error", message: day.reason === "unauthenticated" ? SIGNED_OUT : TODAY_UNAVAILABLE }
-  const parsed = borrowingDueDateFormSchema({ today: day.today }).safeParse(input)
-  if (!parsed.success) return formError(parsed.error)
-  const { error } = await supabase.rpc("set_borrowing_due_date", { p_borrowing_id: parsed.data.borrowingId, p_due_date: parsed.data.dueDate ?? undefined })
-  if (error) return dbError(error, { subject: "borrowing" })
-  return { status: "success", message: parsed.data.dueDate ? "Due date saved." : "Due date removed." }
+  const { data: b, error } = await supabase
+    .from("borrowings")
+    .select("id, currency, amount_to_return_minor, return_on, return_plan, instalment_count, repay_from_account_id")
+    .eq("id", input.borrowingId ?? "")
+    .maybeSingle()
+  if (error) return { status: "error", message: UNAVAILABLE }
+  if (!b) return { status: "error", message: BORROWING_NOT_FOUND }
+  const dueDate = (input.dueDate ?? "").trim()
+  if (dueDate) {
+    if (!b.return_plan || !b.repay_from_account_id) {
+      return { status: "error", message: FIX_FIELDS, fieldErrors: { dueDate: "Choose how you will return it and from which account first" } }
+    }
+    if (!isIsoDate(dueDate)) return { status: "error", message: FIX_FIELDS, fieldErrors: { dueDate: "Enter a valid date" } }
+    if (dueDate < day.today && dueDate !== b.return_on) return { status: "error", message: FIX_FIELDS, fieldErrors: { dueDate: "Choose today or a later date" } }
+  }
+  const { error: rpcError } = await supabase.rpc("set_borrowing_return_plan", {
+    p_borrowing_id: b.id,
+    p_amount_to_return_minor: b.amount_to_return_minor,
+    p_return_on: dueDate || undefined,
+    p_return_plan: dueDate ? (b.return_plan ?? undefined) : undefined,
+    p_instalment_count: dueDate ? (b.instalment_count ?? undefined) : undefined,
+    p_pay_from_account_id: dueDate ? (b.repay_from_account_id ?? undefined) : undefined,
+  })
+  if (rpcError) return dbError(rpcError, { subject: "borrowing", currency: b.currency })
+  return { status: "success", message: dueDate ? "Due date saved." : "Due date removed." }
 }
 
 export async function setBorrowingArchived(supabase: UserClient, input: { borrowingId: string; archived: boolean; currency?: string }): Promise<CardWriteResult> {

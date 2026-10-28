@@ -1,0 +1,111 @@
+// Credit card issuers and their personal cards in India, for the Add card dropdowns (Sprint 8b
+// follow-up). Names only, taken from each issuer's own credit card pages (sources and steps:
+// docs/quarterly-list-refresh.md). Each product name carries the issuer's name, so it reads
+// on its own as the card account's name; a card typed under "Other" is named
+// "<issuer> <typed name>" instead. A product name never has 3 or more digits in a row
+// (credit_cards_product), so a card such as Kotak's "811" card is left out: pick "Other" with
+// a name without the number, or the issuer alone.
+
+export const CARD_ISSUERS = ["HDFC Bank", "SBI Card", "ICICI Bank", "Axis Bank", "Kotak Mahindra Bank"] as const;
+export type CardIssuer = (typeof CARD_ISSUERS)[number];
+
+export const CARD_PRODUCTS: Readonly<Record<CardIssuer, readonly string[]>> = {
+  "HDFC Bank": [
+    "HDFC Diners Club Black Metal Edition",
+    "HDFC Diners Club Privilege",
+    "HDFC Freedom",
+    "HDFC INFINIA Metal Edition",
+    "HDFC Millennia",
+    "HDFC MoneyBack+",
+    "HDFC PIXEL Go",
+    "HDFC PIXEL Play",
+    "HDFC Regalia Gold",
+    "HDFC Bank UPI RuPay",
+    "Indian Oil HDFC Bank",
+    "IRCTC HDFC Bank",
+    "Marriott Bonvoy HDFC Bank",
+    "PhonePe HDFC Bank Ultimo",
+    "PhonePe HDFC Bank Uno",
+    "Shoppers Stop HDFC Bank",
+    "Swiggy HDFC Bank",
+    "Tata Neu Infinity HDFC Bank",
+    "Tata Neu Plus HDFC Bank",
+  ],
+  "SBI Card": [
+    "Cashback SBI Card",
+    "Flipkart SBI Card",
+    "IndiGo SBI Card",
+    "IndiGo SBI Card ELITE",
+    "PhonePe SBI Card PURPLE",
+    "PhonePe SBI Card SELECT BLACK",
+    "SBI Card ELITE",
+    "SBI Card MILES",
+    "SBI Card MILES ELITE",
+    "SBI Card MILES PRIME",
+    "SBI Card PRIME",
+    "SBI Card PULSE",
+    "SimplyCLICK SBI Card",
+    "SimplySAVE SBI Card",
+    "Tata Neu Infinity SBI Card",
+    "Tata Neu Plus SBI Card",
+  ],
+  "ICICI Bank": [
+    "ICICI Adani One Platinum",
+    "ICICI Adani One Signature",
+    "ICICI Amazon Pay",
+    "ICICI Chennai Super Kings",
+    "ICICI Coral",
+    "ICICI Emeralde",
+    "ICICI Emeralde Private Metal",
+    "ICICI Emirates Skywards Rubyx",
+    "ICICI Expression",
+    "ICICI HPCL Coral",
+    "ICICI HPCL Super Saver",
+    "ICICI MakeMyTrip Platinum",
+    "ICICI MakeMyTrip Signature",
+    "ICICI Parakram",
+    "ICICI Parakram Select",
+    "ICICI Platinum Chip",
+    "ICICI RuPay",
+    "ICICI Rubyx",
+    "ICICI Sapphiro",
+    "ICICI Times Black",
+  ],
+  "Axis Bank": [
+    "Airtel Axis Bank",
+    "Axis Bank ACE",
+    "Axis Bank Atlas",
+    "Axis Bank Horizon",
+    "Axis Bank Magnus",
+    "Axis Bank My Zone",
+    "Axis Bank Neo",
+    "Axis Bank Privilege",
+    "Axis Bank Reserve",
+    "Axis Bank Rewards",
+    "Axis Bank Select",
+    "Flipkart Axis Bank",
+    "IndianOil Axis Bank",
+    "IndiGo Axis Bank",
+    "IndiGo Axis Bank Premium",
+  ],
+  "Kotak Mahindra Bank": [
+    "IndiGo Kotak",
+    "IndiGo Kotak Premium",
+    "IndianOil Kotak",
+    "Kotak Air",
+    "Kotak Air+",
+    "Kotak Air+ Prime",
+    "Kotak Cashback+",
+    "Kotak Cashback+ Prime",
+    "Kotak League Platinum",
+    "Kotak Solitaire",
+    "Kotak UPI RuPay",
+    "Kotak White",
+    "Kotak White Reserve",
+    "Kotak Zen",
+    "PVR INOX Kotak",
+  ],
+};
+
+/** The day the issuer and product lists were last checked against the issuers' pages. */
+export const CARD_PRODUCTS_REVIEWED_ON = "2026-10-28";

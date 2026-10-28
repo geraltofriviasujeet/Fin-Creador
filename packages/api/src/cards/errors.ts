@@ -1,9 +1,9 @@
 import { formatMoney } from "@fin-creador/domain"
-import { NO_DIGITS, missingPurchaseMessage, shortfallMessage } from "@fin-creador/schemas"
+import { NO_DIGITS, PRODUCT_DIGITS, REASON_DIGITS, missingPurchaseMessage, shortfallMessage } from "@fin-creador/schemas"
 import { type LedgerErrorLike, type LedgerMessage, ledgerErrorMessage } from "../ledger-errors"
 
-// Database errors from cards, statements, borrowings and their payments (migration
-// 20261028180000) as messages for web and mobile. Raw database messages are never shown.
+// Database errors from cards, statements, borrowings and their payments (migrations
+// 20261028180000 and 20261028210000) as messages for web and mobile. Raw database messages are never shown.
 
 export type CardErrorContext = {
   /** What the person is working on, for the wording. */
@@ -80,6 +80,9 @@ export function cardErrorMessage(error: (LedgerErrorLike & { details?: string | 
     if (text.includes("credit_cards_issuer")) return { message: NO_DIGITS, field: "issuer" }
     if (text.includes("credit_cards_nickname")) return { message: NO_DIGITS, field: "nickname" }
     if (text.includes("borrowings_lender")) return { message: NO_DIGITS, field: "lender" }
+    if (text.includes("credit_cards_product")) return { message: PRODUCT_DIGITS, field: "product" }
+    if (text.includes("borrowings_reason")) return { message: REASON_DIGITS, field: "reason" }
+    if (text.includes("borrowings_relationship")) return { message: "Choose family, friends or others", field: "relationship" }
   }
   if (code === "FC003") return ledgerErrorMessage(error, { dateField: "paidOn" })
   return ledgerErrorMessage(error)

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { UserClient } from "../income/client"
 import { loadPaymentContext, payDueItem } from "../loans/writers"
 import { cardErrorMessage } from "./errors"
-import { addBorrowing, addCard, editLiabilityPayment, enterStatement, payCard, repayBorrowing, setBorrowingDueDate } from "./writers"
+import { addBorrowing, addCard, editLiabilityPayment, enterStatement, payCard, repayBorrowing, setBorrowingDueDate, setBorrowingReturnPlan } from "./writers"
 
 const KEY = "e8000000-0000-4000-8000-0000000000c1"
 const CARD = "f8000000-0000-4000-8000-0000000000c1"
@@ -51,7 +51,19 @@ const ROWS = {
   profiles: [{ id: "user-1", currency: "INR" }],
   credit_cards: [{ id: CARD, account_id: CARD_ACCOUNT, currency: "INR", tracking_started_on: "2026-10-01", statement_day: 20, due_day: 8 }],
   card_statements: [{ id: STATEMENT, card_id: CARD }],
-  borrowings: [{ id: BORROWING, account_id: BORROWING_ACCOUNT, currency: "INR" }],
+  borrowings: [
+    {
+      id: BORROWING,
+      account_id: BORROWING_ACCOUNT,
+      currency: "INR",
+      borrowed_minor: 20_000_00,
+      amount_to_return_minor: 20_000_00,
+      return_on: "2026-12-31",
+      return_plan: "once",
+      instalment_count: null,
+      repay_from_account_id: BANK,
+    },
+  ],
   due_items: [{ id: BILL, kind: "card_bill", loan_id: null, card_statement_id: STATEMENT, borrowing_id: null, currency: "INR" }],
   accounts: [
     { id: BANK, kind: "bank", name: "HDFC Savings", currency: "INR", opening_balance_date: "2026-01-01", opening_balance_minor: 10_000_00, archived_at: null },
@@ -114,7 +126,7 @@ describe("cards", () => {
     expect(r.status).toBe("success")
     expect(rpcs[0]).toEqual({
       fn: "create_card",
-      args: { p_idempotency_key: KEY, p_issuer: "HDFC Bank", p_limit_minor: 1_00_000_00, p_statement_day: 20, p_due_day: 8, p_opening_owed_minor: 6_000_00, p_nickname: "Travel" },
+      args: { p_idempotency_key: KEY, p_issuer: "HDFC Bank", p_limit_minor: 1_00_000_00, p_statement_day: 20, p_due_day: 8, p_opening_owed_minor: 6_000_00, p_nickname: "Travel", p_product: undefined, p_product_other: false },
     })
   })
 
@@ -166,17 +178,53 @@ describe("cards", () => {
 describe("borrowing", () => {
   it("records only what is owed when the money came earlier", async () => {
     const { client, rpcs } = fakeClient(ROWS)
-    await addBorrowing(client, { lender: "Ravi", amount: "20,000", received: "earlier", idempotencyKey: KEY })
+    await addBorrowing(client, { lender: "Ravi", relationship: "family", amount: "20,000", received: "earlier", sameAsBorrowed: "true", idempotencyKey: KEY })
     expect(rpcs[0]).toEqual({
       fn: "create_borrowing",
-      args: { p_idempotency_key: KEY, p_lender: "Ravi", p_amount_minor: 20_000_00, p_received_account_id: undefined, p_received_on: undefined, p_due_date: undefined },
+      args: {
+        p_idempotency_key: KEY,
+        p_lender: "Ravi",
+        p_amount_minor: 20_000_00,
+        p_relationship: "family",
+        p_reason: undefined,
+        p_amount_to_return_minor: 20_000_00,
+        p_received_account_id: undefined,
+        p_received_on: undefined,
+        p_return_on: undefined,
+        p_return_plan: undefined,
+        p_instalment_count: undefined,
+        p_pay_from_account_id: undefined,
+      },
     })
   })
 
   it("posts the money received into an account on a date", async () => {
     const { client, rpcs } = fakeClient(ROWS)
-    await addBorrowing(client, { lender: "Ravi", amount: "20,000", received: "into_account", accountId: BANK, receivedOn: "2026-10-20", dueDate: "2026-12-31", idempotencyKey: KEY })
-    expect(rpcs[0]?.args).toMatchObject({ p_received_account_id: BANK, p_received_on: "2026-10-20", p_due_date: "2026-12-31" })
+    await addBorrowing(client, {
+      lender: "Ravi",
+      relationship: "friends",
+      reason: "Bike repair",
+      amount: "20,000",
+      received: "into_account",
+      accountId: BANK,
+      receivedOn: "2026-10-20",
+      amountToReturn: "21,000",
+      returnOn: "2026-12-31",
+      returnPlan: "instalments",
+      instalments: "3",
+      payFromAccountId: BANK,
+      idempotencyKey: KEY,
+    })
+    expect(rpcs[0]?.args).toMatchObject({
+      p_received_account_id: BANK,
+      p_received_on: "2026-10-20",
+      p_reason: "Bike repair",
+      p_amount_to_return_minor: 21_000_00,
+      p_return_on: "2026-12-31",
+      p_return_plan: "instalments",
+      p_instalment_count: 3,
+      p_pay_from_account_id: BANK,
+    })
   })
 
   it("repays with interest, at most what is owed", async () => {
@@ -191,6 +239,47 @@ describe("borrowing", () => {
     const { client, rpcs } = fakeClient(ROWS)
     const r = await setBorrowingDueDate(client, { borrowingId: BORROWING, dueDate: "" })
     expect(r).toEqual({ status: "success", message: "Due date removed." })
-    expect(rpcs[0]).toEqual({ fn: "set_borrowing_due_date", args: { p_borrowing_id: BORROWING, p_due_date: undefined } })
+    expect(rpcs[0]).toEqual({
+      fn: "set_borrowing_return_plan",
+      args: {
+        p_borrowing_id: BORROWING,
+        p_amount_to_return_minor: 20_000_00,
+        p_return_on: undefined,
+        p_return_plan: undefined,
+        p_instalment_count: undefined,
+        p_pay_from_account_id: undefined,
+      },
+    })
+  })
+
+  it("moves the return date and keeps the plan and its account", async () => {
+    const { client, rpcs } = fakeClient(ROWS)
+    const r = await setBorrowingDueDate(client, { borrowingId: BORROWING, dueDate: "2027-01-15" })
+    expect(r).toEqual({ status: "success", message: "Due date saved." })
+    expect(rpcs[0]?.args).toMatchObject({ p_return_on: "2027-01-15", p_return_plan: "once", p_pay_from_account_id: BANK, p_amount_to_return_minor: 20_000_00 })
+  })
+
+  it("sets a return plan in instalments", async () => {
+    const { client, rpcs } = fakeClient(ROWS)
+    const r = await setBorrowingReturnPlan(client, {
+      borrowingId: BORROWING,
+      amountToReturn: "21,000",
+      returnOn: "2026-11-30",
+      returnPlan: "instalments",
+      instalments: "6",
+      payFromAccountId: BANK,
+    })
+    expect(r).toEqual({ status: "success", message: "Return plan saved." })
+    expect(rpcs[0]).toEqual({
+      fn: "set_borrowing_return_plan",
+      args: {
+        p_borrowing_id: BORROWING,
+        p_amount_to_return_minor: 21_000_00,
+        p_return_on: "2026-11-30",
+        p_return_plan: "instalments",
+        p_instalment_count: 6,
+        p_pay_from_account_id: BANK,
+      },
+    })
   })
 })

@@ -28,6 +28,7 @@ import {
   splitTotal,
 } from "@fin-creador/domain";
 import { z } from "zod";
+import { hasDigitRun } from "./digits";
 import { FD_BANKS } from "./fixed-deposit-forms";
 import { parsePercentToBps } from "./goal-forms";
 
@@ -101,8 +102,6 @@ export const MORATORIUM_INTEREST_OPTIONS: readonly { value: MoratoriumInterest; 
   { value: "pay_monthly", label: "Paid every month" },
 ];
 
-/** Four or more digits in a row: refused in names so no card or loan account number is stored. */
-const DIGIT_RUN = /\d{4,}/;
 
 const text = z
   .string()
@@ -134,10 +133,10 @@ function names(ctx: Ctx, v: { loanType: string; typeOther: string; lender: strin
   const lender = v.lender.replace(/\s+/g, " ");
   if (!lender) return fail(ctx, "lender", loanType === "credit_card_emi" ? "Enter the card issuer" : "Enter the lender");
   if (lender.length > LOAN_LENDER_MAX) return fail(ctx, "lender", `Keep it under ${LOAN_LENDER_MAX} characters`);
-  if (DIGIT_RUN.test(lender)) return fail(ctx, "lender", NO_DIGITS);
+  if (hasDigitRun(lender, 4)) return fail(ctx, "lender", NO_DIGITS);
   const nickname = v.nickname.replace(/\s+/g, " ");
   if (nickname.length > LOAN_NICKNAME_MAX) return fail(ctx, "nickname", `Keep it under ${LOAN_NICKNAME_MAX} characters`);
-  if (DIGIT_RUN.test(nickname)) return fail(ctx, "nickname", NO_DIGITS);
+  if (hasDigitRun(nickname, 4)) return fail(ctx, "nickname", NO_DIGITS);
   return { loanType, typeOther: loanType === "other" ? typeOther : null, lender, nickname: nickname || null };
 }
 

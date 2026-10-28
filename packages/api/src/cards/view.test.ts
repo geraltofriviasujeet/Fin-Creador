@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { type LoansData, buildLoansView } from "../loans/view"
-import { type CardRecord, type ShortTermData, cardBadgeText } from "./view"
+import { type BorrowingRecord, type CardRecord, type ShortTermData, cardBadgeText } from "./view"
 
 const TODAY = "2026-10-28"
 const BANK = { id: "bank", name: "HDFC Savings", currency: "INR", balanceMinor: 50_000_00, openingBalanceDate: "2026-01-01" }
@@ -95,12 +95,19 @@ describe("cards", () => {
 })
 
 describe("borrowing", () => {
-  const borrowing = {
+  const borrowing: BorrowingRecord = {
     id: "b1",
     accountId: "b1-acct",
     lender: "Ravi",
+    relationship: "friends",
+    reason: null,
     currency: "INR",
     borrowedMinor: 20_000_00,
+    amountToReturnMinor: 20_000_00,
+    returnOn: "2026-10-25",
+    returnPlan: "once",
+    instalmentCount: null,
+    repayFromAccountId: "bank",
     receivedOn: "2026-10-01",
     receiptAccountId: "bank",
     archivedAt: null,
@@ -115,13 +122,57 @@ describe("borrowing", () => {
         statements: [],
         bills: [],
         borrowings: [borrowing],
-        borrowingDues: [{ id: "d1", borrowingId: "b1", dueDate: "2026-10-25", amountDueMinor: 20_000_00, status: "pending", plannedOn: null, plannedAccountId: null }],
+        borrowingDues: [{
+            id: "d1",
+            borrowingId: "b1",
+            seq: 0,
+            dueDate: "2026-10-25",
+            amountDueMinor: 20_000_00,
+            interestMinor: 0,
+            payFromAccountId: "bank",
+            remainingMinor: 14_900_00,
+            remainingInterestMinor: 0,
+            remainingPrincipalMinor: 14_900_00,
+            status: "pending",
+            plannedOn: null,
+            plannedAccountId: null,
+          },],
         liabilityPayments: [{ id: "r1", liabilityAccountId: "b1-acct", accountId: "bank", paidOn: "2026-10-10", principalMinor: 5_000_00, interestMinor: 100_00 }],
       }),
     )
     const b = view.shortTerm!.borrowings[0]!
     expect([b.owedMinor, b.repaidMinor, b.badge, b.receiptAccountName, b.hasRepayments]).toEqual([15_000_00, 5_000_00, "overdue", "HDFC Savings", true])
-    expect(view.reminders.map((r) => [r.name, r.reason, r.daysOverdue, r.amountMinor])).toEqual([["Ravi", "overdue", 3, 15_000_00]])
+    expect(view.reminders.map((r) => [r.name, r.reason, r.daysOverdue, r.amountMinor])).toEqual([["Ravi", "overdue", 3, 14_900_00]])
+  })
+
+  it("instalments: the next pending one is the due; a reminder per pending instalment with what is left of it", () => {
+    const inst = (seq: number, dueDate: string, status: "paid" | "pending", remainingMinor: number) => ({
+      id: `i${seq}`,
+      borrowingId: "b1",
+      seq,
+      dueDate,
+      amountDueMinor: 10_000_00,
+      interestMinor: 0,
+      payFromAccountId: "bank",
+      remainingMinor,
+      remainingInterestMinor: 0,
+      remainingPrincipalMinor: remainingMinor,
+      status,
+      plannedOn: null,
+      plannedAccountId: null,
+    })
+    const view = buildLoansView(
+      data({
+        cards: [],
+        statements: [],
+        bills: [],
+        borrowings: [{ ...borrowing, balanceMinor: -15_000_00, returnPlan: "instalments", instalmentCount: 2 }],
+        borrowingDues: [inst(2, "2026-11-25", "pending", 10_000_00), inst(1, "2026-10-25", "pending", 5_000_00)],
+      }),
+    )
+    const b = view.shortTerm!.borrowings[0]!
+    expect([b.dues.map((d) => d.seq), b.due?.seq, b.badge, b.due?.payFromAccountName]).toEqual([[1, 2], 1, "overdue", "HDFC Savings"])
+    expect(view.reminders.map((r) => [r.id, r.reason, r.amountMinor])).toEqual([["i1", "overdue", 5_000_00]])
   })
 
   it("is repaid once nothing is owed, without reminders", () => {
@@ -131,7 +182,21 @@ describe("borrowing", () => {
         statements: [],
         bills: [],
         borrowings: [{ ...borrowing, balanceMinor: 0 }],
-        borrowingDues: [{ id: "d1", borrowingId: "b1", dueDate: "2026-10-25", amountDueMinor: 20_000_00, status: "paid", plannedOn: null, plannedAccountId: null }],
+        borrowingDues: [{
+            id: "d1",
+            borrowingId: "b1",
+            seq: 0,
+            dueDate: "2026-10-25",
+            amountDueMinor: 20_000_00,
+            interestMinor: 0,
+            payFromAccountId: "bank",
+            remainingMinor: 0,
+            remainingInterestMinor: 0,
+            remainingPrincipalMinor: 0,
+            status: "paid",
+            plannedOn: null,
+            plannedAccountId: null,
+          },],
       }),
     )
     expect(view.shortTerm!.borrowings[0]!.badge).toBe("repaid")

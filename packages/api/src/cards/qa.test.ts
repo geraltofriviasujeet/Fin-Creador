@@ -1,5 +1,5 @@
 import { cardBillMinor, cardBillState, cardCycleDate, cardDueDate, cardUtilisation, borrowingDueStatus, payBillDefaultMinor, statementDifferenceMinor, summarizeHoldings } from "@fin-creador/domain"
-import { NO_DIGITS, borrowingEditFormSchema, borrowingFormSchema, cardEditFormSchema, cardFormSchema } from "@fin-creador/schemas"
+import { NO_DIGITS, PRODUCT_DIGITS, REASON_DIGITS, borrowingEditFormSchema, borrowingFormSchema, cardEditFormSchema, cardFormSchema } from "@fin-creador/schemas"
 import { describe, expect, it } from "vitest"
 import type { UserClient } from "../income/client"
 import { loadIncomeData } from "../income/load"
@@ -183,7 +183,7 @@ describe("no digits in a card issuer, nickname or lender", () => {
   it("accepts the same names without digits (so the refusals above are about the digit)", () => {
     expect(cardFormSchema({ currency: "INR" }).safeParse(card).success).toBe(true)
     expect(cardEditFormSchema({ currency: "INR" }).safeParse(edit).success).toBe(true)
-    expect(borrowingEditFormSchema().safeParse({ borrowingId: BORROWING, lender: "Ravi Kumar" }).success).toBe(true)
+    expect(borrowingEditFormSchema().safeParse({ borrowingId: BORROWING, lender: "Ravi Kumar", relationship: "friends" }).success).toBe(true)
   })
 
   it("a digit sends nothing to the database", async () => {
@@ -199,14 +199,16 @@ describe("no digits in a card issuer, nickname or lender", () => {
     expect(cardErrorMessage({ code: "23514", message: 'violates check constraint "credit_cards_issuer"' })).toEqual({ message: NO_DIGITS, field: "issuer" })
     expect(cardErrorMessage({ code: "23514", message: 'violates check constraint "credit_cards_nickname"' })).toEqual({ message: NO_DIGITS, field: "nickname" })
     expect(cardErrorMessage({ code: "23514", message: 'violates check constraint "borrowings_lender"' })).toEqual({ message: NO_DIGITS, field: "lender" })
+    expect(cardErrorMessage({ code: "23514", message: 'violates check constraint "credit_cards_product"' })).toEqual({ message: PRODUCT_DIGITS, field: "product" })
+    expect(cardErrorMessage({ code: "23514", message: 'violates check constraint "borrowings_reason"' })).toEqual({ message: REASON_DIGITS, field: "reason" })
   })
 
-  // F1 (QA): the shared schema refuses digits in any script (\p{Nd}). The database constraints are
-  // ASCII [0-9] until a follow-up migration (see the pgTAP TODO in cards_borrowing_qa.test.sql).
+  // F1 (QA): the shared schema and the database (has_digit, migration 20261028210000) refuse
+  // digits in any script.
   it("refuses full-width, Arabic-Indic and Devanagari digits in a name", () => {
     for (const digit of ["１", "٣", "४"]) {
       expect(errorAt(cardFormSchema({ currency: "INR" }).safeParse({ ...card, issuer: `Axis ${digit}` }), "issuer")).toBe(NO_DIGITS)
-      expect(errorAt(borrowingEditFormSchema().safeParse({ borrowingId: BORROWING, lender: `Ravi ${digit}` }), "lender")).toBe(NO_DIGITS)
+      expect(errorAt(borrowingEditFormSchema().safeParse({ borrowingId: BORROWING, lender: `Ravi ${digit}`, relationship: "friends" }), "lender")).toBe(NO_DIGITS)
     }
   })
 })
@@ -229,7 +231,7 @@ describe("double submits send one request key and one set of values", () => {
     const add = { issuer: "HDFC Bank", nickname: "Travel", limit: "1,00,000", statementDay: "20", dueDay: "8", openingOwed: "6,000", idempotencyKey: KEY }
     const statement = { cardId: CARD, statementDate: "2026-10-20", total: "9,000", minimum: "450", emiIncluded: "0", idempotencyKey: KEY }
     const pay = { cardId: CARD, accountId: BANK, amount: "3,000", idempotencyKey: KEY }
-    const borrow = { lender: "Ravi", amount: "2,000", received: "earlier", idempotencyKey: KEY }
+    const borrow = { lender: "Ravi", relationship: "family", amount: "2,000", received: "earlier", sameAsBorrowed: "true", idempotencyKey: KEY }
     const repay = { borrowingId: BORROWING, accountId: BANK, principal: "500", interest: "20", idempotencyKey: KEY }
     for (let i = 0; i < 2; i++) {
       expect((await addCard(client, add)).status).toBe("success")

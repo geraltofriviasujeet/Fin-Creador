@@ -173,14 +173,16 @@ select throws_ok($$ select public.pay_card(public.t_card('d0000005-0000-4000-800
   'FC007', null, 'the same key with a different amount is FC007');
 
 -- Borrowing 1,000.00 from Ravi, received into the wallet two days ago, due in 30 days.
-select lives_ok($$ select public.create_borrowing('d0000001-0000-4000-8000-000000000001', 'Ravi Kumar', 100000, public.t_acct('Qa Wallet'), public.t_today() - 2, public.t_today() + 30) $$,
+select lives_ok($$ select public.create_borrowing('d0000001-0000-4000-8000-000000000001', 'Ravi Kumar', 100000, 'friends', p_received_account_id => public.t_acct('Qa Wallet'),
+       p_received_on => public.t_today() - 2, p_return_on => public.t_today() + 30, p_return_plan => 'once', p_pay_from_account_id => public.t_acct('Qa Wallet')) $$,
   'A borrows 1,000.00 into the wallet');
 select results_eq(
   $$ select public.t_bal(public.t_acct('Qa Wallet')), public.t_total(), public.t_bal(public.t_borrow_acct('d0000001-0000-4000-8000-000000000001')),
             public.liability_owed(public.t_borrow_acct('d0000001-0000-4000-8000-000000000001')), public.t_borrow_due('d0000001-0000-4000-8000-000000000001') $$,
   $$ values (103000::bigint, 9808000::bigint, -100000::bigint, 100000::bigint, 'pending'::text) $$,
   'the wallet rises by 1,000 (Total too); the borrowing account holds minus 1,000; its due date is pending');
-select is((select (public.create_borrowing('d0000001-0000-4000-8000-000000000001', 'Ravi Kumar', 100000, public.t_acct('Qa Wallet'), public.t_today() - 2, public.t_today() + 30)).id),
+select is((select (public.create_borrowing('d0000001-0000-4000-8000-000000000001', 'Ravi Kumar', 100000, 'friends', p_received_account_id => public.t_acct('Qa Wallet'),
+       p_received_on => public.t_today() - 2, p_return_on => public.t_today() + 30, p_return_plan => 'once', p_pay_from_account_id => public.t_acct('Qa Wallet'))).id),
   public.t_borrow('d0000001-0000-4000-8000-000000000001'), 'double submit of create_borrowing returns the same borrowing');
 select results_eq(
   $$ select (select count(*)::int from public.borrowings where idempotency_key = 'd0000001-0000-4000-8000-000000000001'),
@@ -189,7 +191,8 @@ select results_eq(
             public.t_bal(public.t_acct('Qa Wallet')) $$,
   $$ values (1, 1, 1, 103000::bigint) $$,
   '... one borrowing, one account, one receipt, the wallet credited once');
-select throws_ok($$ select public.create_borrowing('d0000001-0000-4000-8000-000000000001', 'Ravi Kumar', 100001, public.t_acct('Qa Wallet'), public.t_today() - 2, public.t_today() + 30) $$,
+select throws_ok($$ select public.create_borrowing('d0000001-0000-4000-8000-000000000001', 'Ravi Kumar', 100001, 'friends', p_received_account_id => public.t_acct('Qa Wallet'),
+       p_received_on => public.t_today() - 2, p_return_on => public.t_today() + 30, p_return_plan => 'once', p_pay_from_account_id => public.t_acct('Qa Wallet')) $$,
   'FC007', null, 'the same key with a different amount is FC007');
 
 -- Repay 400.00 + 50.00 interest from the bank.
@@ -521,8 +524,8 @@ select results_eq(
   $$ select a.name, a.institution, c.nickname is null from public.credit_cards as c join public.accounts as a on a.id = c.account_id where c.idempotency_key = 'd0000005-0000-4000-8000-000000000001' $$,
   $$ values ('Qa Alpha'::text, 'Qa Alpha'::text, true) $$,
   'the account name and institution come from the issuer (spaces collapsed)');
-select lives_ok($$ select public.create_borrowing('d0000002-0000-4000-8000-000000000001', 'Meera Devi', 100000) $$, 'A records 1,000.00 owed to Meera, received earlier');
-select is(public.t_state(format('select public.update_borrowing(%L, %L)', public.t_borrow('d0000002-0000-4000-8000-000000000001'), 'Meera  Devi Rao')), 'ok', 'a lender can be renamed');
+select lives_ok($$ select public.create_borrowing('d0000002-0000-4000-8000-000000000001', 'Meera Devi', 100000, 'family') $$, 'A records 1,000.00 owed to Meera, received earlier');
+select is(public.t_state(format('select public.update_borrowing(%L, %L, %L)', public.t_borrow('d0000002-0000-4000-8000-000000000001'), 'Meera  Devi Rao', 'family')), 'ok', 'a lender can be renamed');
 select results_eq(
   $$ select a.name, b.lender from public.borrowings as b join public.accounts as a on a.id = b.account_id where b.idempotency_key = 'd0000002-0000-4000-8000-000000000001' $$,
   $$ values ('Meera Devi Rao'::text, 'Meera Devi Rao'::text) $$, '... and the account follows the lender (spaces collapsed)');
@@ -531,13 +534,13 @@ select is((select bool_and(public.t_refused(format('select public.create_card(ge
   'create_card refuses each digit 0 to 9 in the issuer');
 select is((select bool_and(public.t_refused(format('select public.create_card(gen_random_uuid(), %L, 5000000, 1, 1, 0, %L)', 'Bank', 'Ca' || d::text || 'rd'))) from generate_series(0, 9) as d), true,
   'create_card refuses each digit 0 to 9 in the nickname');
-select is((select bool_and(public.t_refused(format('select public.create_borrowing(gen_random_uuid(), %L, 1000)', 'Ra' || d::text || 'vi'))) from generate_series(0, 9) as d), true,
+select is((select bool_and(public.t_refused(format('select public.create_borrowing(gen_random_uuid(), %L, 1000, ''friends'')', 'Ra' || d::text || 'vi'))) from generate_series(0, 9) as d), true,
   'create_borrowing refuses each digit 0 to 9 in the lender');
 select is((select bool_and(public.t_refused(format('select public.update_card(%L, %L, 5000000, 20, 8)', public.t_card('d0000005-0000-4000-8000-000000000001'), 'Ba' || d::text || 'nk'))) from generate_series(0, 9) as d), true,
   'update_card refuses each digit 0 to 9 in the issuer');
 select is((select bool_and(public.t_refused(format('select public.update_card(%L, %L, 5000000, 20, 8, %L)', public.t_card('d0000005-0000-4000-8000-000000000001'), 'Qa Alpha', 'Ca' || d::text || 'rd'))) from generate_series(0, 9) as d), true,
   'update_card refuses each digit 0 to 9 in the nickname');
-select is((select bool_and(public.t_refused(format('select public.update_borrowing(%L, %L)', public.t_borrow('d0000002-0000-4000-8000-000000000001'), 'Ra' || d::text || 'vi'))) from generate_series(0, 9) as d), true,
+select is((select bool_and(public.t_refused(format('select public.update_borrowing(%L, %L, ''family'')', public.t_borrow('d0000002-0000-4000-8000-000000000001'), 'Ra' || d::text || 'vi'))) from generate_series(0, 9) as d), true,
   'update_borrowing refuses each digit 0 to 9 in the lender');
 select results_eq(
   $$ select c.issuer, a.name, (select b.lender from public.borrowings as b where b.idempotency_key = 'd0000002-0000-4000-8000-000000000001')
@@ -556,16 +559,13 @@ select throws_ok($$ update public.accounts set last4 = '1234' where id = public.
 select throws_ok($$ insert into public.accounts (kind, name, last4, currency, opening_balance_minor, opening_balance_date) values ('borrowing', 'Sneaky', '1234', 'INR', 0, public.t_today()) $$,
   'FC032', null, 'nor create a borrowing account with one');
 
--- Unicode digits (full-width, Arabic-Indic, Devanagari) are digits to a person but not to [0-9].
--- FINDING (application): credit_cards_issuer / credit_cards_nickname / borrowings_lender and the
--- zod HAS_DIGIT (/\d/, no u flag) test ASCII digits only. Marked TODO so CI stays green; they pass once fixed.
-select todo_start('FINDING: non-ASCII digits get past the no-digits rule ([0-9] and /\d/ are ASCII only)');
+-- Unicode digits (full-width, Arabic-Indic, Devanagari) are digits too: has_digit (migration
+-- 20261028210000) refuses them, as the shared schema does.
 select ok(public.t_refused(format('select public.create_card(gen_random_uuid(), %L, 5000000, 1, 1)', 'Bank ' || chr(65297) || chr(65298))), 'a full-width digit in the issuer is refused');
 select ok(public.t_refused(format('select public.create_card(gen_random_uuid(), %L, 5000000, 1, 1)', 'Bank ' || chr(1635))), 'an Arabic-Indic digit in the issuer is refused');
 select ok(public.t_refused(format('select public.create_card(gen_random_uuid(), %L, 5000000, 1, 1)', 'Bank ' || chr(2410))), 'a Devanagari digit in the issuer is refused');
 select ok(public.t_refused(format('select public.create_card(gen_random_uuid(), %L, 5000000, 1, 1, 0, %L)', 'Bank', 'Card ' || chr(65297))), 'a full-width digit in the nickname is refused');
-select ok(public.t_refused(format('select public.create_borrowing(gen_random_uuid(), %L, 1000)', 'Ravi ' || chr(2410))), 'a Devanagari digit in the lender is refused');
-select todo_end();
+select ok(public.t_refused(format('select public.create_borrowing(gen_random_uuid(), %L, 1000, ''friends'')', 'Ravi ' || chr(2410))), 'a Devanagari digit in the lender is refused');
 
 -- ============================================================ 3: RLS isolation (as B, with A's ids)
 reset role;
@@ -621,7 +621,8 @@ select throws_ok($$ insert into public.credit_cards (account_id, issuer, currenc
 insert into public.accounts (kind, bank_type, name, currency, opening_balance_minor, opening_balance_date)
   values ('bank', 'savings', 'Qb Bank', 'INR', 1000000, public.t_today() - 30);
 
-select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Mallory', 100, (select bank_id from t_ids), public.t_today() - 1) $$,
+select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Mallory', 100, 'others', p_received_account_id => (select bank_id from t_ids),
+                    p_received_on => public.t_today() - 1) $$,
   'FC010', null, 'B cannot receive a borrowing into A''s account');
 select throws_ok($$ select public.post_liability_payment((select card_acct from t_ids), gen_random_uuid(), public.t_acct('Qb Bank'), public.t_today(), 1) $$,
   'FC010', null, 'post_liability_payment on A''s card account finds nothing');
@@ -638,13 +639,13 @@ select throws_ok($$ select public.pay_due_item((select bill_id from t_ids), gen_
 select throws_ok($$ select public.enter_card_statement((select card_id from t_ids), gen_random_uuid(), public.t_today(), 1) $$,
   'FC008', null, 'B cannot enter a statement on A''s card');
 select throws_ok($$ select public.update_card((select card_id from t_ids), 'Hacked', 1000, 1, 1) $$, 'FC008', null, 'B cannot edit A''s card');
-select throws_ok($$ select public.update_borrowing((select borrow_id from t_ids), 'Hacked') $$, 'FC008', null, 'B cannot edit A''s borrowing');
+select throws_ok($$ select public.update_borrowing((select borrow_id from t_ids), 'Hacked', 'others') $$, 'FC008', null, 'B cannot edit A''s borrowing');
 select throws_ok($$ select public.set_card_archived((select card_id from t_ids), true) $$, 'FC008', null, 'B cannot archive A''s card');
 select throws_ok($$ select public.set_borrowing_archived((select borrow_id from t_ids), false) $$, 'FC008', null, 'B cannot restore A''s borrowing');
 select throws_ok($$ select public.delete_card((select card_id from t_ids)) $$, 'FC008', null, 'B cannot delete A''s card');
 select throws_ok($$ select public.delete_borrowing((select borrow_id from t_ids)) $$, 'FC008', null, 'B cannot delete A''s borrowing');
 select throws_ok($$ select public.delete_card_statement((select stmt_id from t_ids)) $$, 'FC008', null, 'B cannot delete A''s statement');
-select throws_ok($$ select public.set_borrowing_due_date((select borrow_id from t_ids), public.t_today() + 5) $$, 'FC008', null, 'B cannot move A''s borrowing due date');
+select throws_ok($$ select public.set_borrowing_return_plan((select borrow_id from t_ids), 100000, public.t_today() + 5, 'once', null, public.t_acct('Qb Bank')) $$, 'FC008', null, 'B cannot move A''s borrowing due date');
 
 select lives_ok($$ select public.card_sync_due((select card_id from t_ids)); select public.borrowing_sync_due((select borrow_id from t_ids)) $$,
   'card_sync_due and borrowing_sync_due with A''s ids run against nothing');
@@ -691,16 +692,17 @@ select throws_ok($$ select public.card_sync_due(gen_random_uuid()) $$, '42501', 
 select throws_ok($$ select public.liability_owed(gen_random_uuid()) $$, '42501', null, 'anon cannot call liability_owed');
 select is((select count(*)::int from (values
     ('public.liability_owed(uuid, date)'), ('public.card_cycle_date(integer, date)'), ('public.card_due_date(date, integer)'),
-    ('public.create_card(uuid, text, bigint, integer, integer, bigint, text)'), ('public.update_card(uuid, text, bigint, integer, integer, text)'),
+    ('public.create_card(uuid, text, bigint, integer, integer, bigint, text, text, boolean)'), ('public.update_card(uuid, text, bigint, integer, integer, text, text, boolean)'),
     ('public.set_card_archived(uuid, boolean)'), ('public.delete_card(uuid)'), ('public.link_card_emi(uuid, uuid)'),
     ('public.enter_card_statement(uuid, uuid, date, bigint, bigint, date, bigint, uuid)'), ('public.delete_card_statement(uuid)'),
     ('public.borrowing_sync_due(uuid)'), ('public.card_bill_paid(uuid)'), ('public.card_sync_due(uuid)'),
-    ('public.create_borrowing(uuid, text, bigint, uuid, date, date)'), ('public.update_borrowing(uuid, text)'),
-    ('public.set_borrowing_due_date(uuid, date)'), ('public.set_borrowing_archived(uuid, boolean)'), ('public.delete_borrowing(uuid)'),
+    ('public.create_borrowing(uuid, text, bigint, text, text, bigint, uuid, date, date, text, integer, uuid)'), ('public.update_borrowing(uuid, text, text, text)'),
+    ('public.set_borrowing_return_plan(uuid, bigint, date, text, integer, uuid)'), ('public.borrowing_check_plan(uuid, text, bigint, bigint, date, text, integer, uuid)'),
+    ('public.borrowing_insert_due(uuid)'), ('public.set_borrowing_archived(uuid, boolean)'), ('public.delete_borrowing(uuid)'),
     ('public.post_liability_payment(uuid, uuid, uuid, date, bigint, bigint, boolean, uuid)'), ('public.pay_card(uuid, uuid, uuid, date, bigint, boolean)'),
     ('public.repay_borrowing(uuid, uuid, uuid, date, bigint, bigint, boolean)'), ('public.void_liability_payment(uuid, uuid, text)'),
     ('public.edit_liability_payment(uuid, uuid, uuid, date, bigint, bigint, boolean)')
-  ) as f(sig) where has_function_privilege('anon', f.sig, 'EXECUTE')), 0, 'anon can execute none of the 23 card and borrowing functions');
+  ) as f(sig) where has_function_privilege('anon', f.sig, 'EXECUTE')), 0, 'anon can execute none of the 25 card and borrowing functions');
 
 reset role;
 select * from finish();

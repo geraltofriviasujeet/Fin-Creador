@@ -1,4 +1,5 @@
 import {
+  type BorrowingReturnPlan,
   type CardBillState,
   type DueStatus,
   type IsoDate,
@@ -15,7 +16,7 @@ import {
   payBillDefaultMinor,
   statementReminder,
 } from "@fin-creador/domain"
-import type { PayingAccount } from "@fin-creador/schemas"
+import type { BorrowingRelationship, PayingAccount } from "@fin-creador/schemas"
 import type { DueItem, LoanItem, PaymentRecord } from "../loans/view"
 
 // The "Short-term & operational liabilities" box (Sprint 8b): credit cards, their bills and
@@ -72,8 +73,17 @@ export type BorrowingRecord = {
   id: string
   accountId: string
   lender: string
+  relationship: BorrowingRelationship | null
+  reason: string | null
   currency: string
   borrowedMinor: number
+  /** At least borrowedMinor; the extra is interest. */
+  amountToReturnMinor: number
+  returnOn: IsoDate | null
+  returnPlan: BorrowingReturnPlan | null
+  instalmentCount: number | null
+  /** The account the plan says it will be returned from (null if none, or that account was deleted). */
+  repayFromAccountId: string | null
   receivedOn: IsoDate | null
   /** The account the money went into (when it was received into one). */
   receiptAccountId: string | null
@@ -85,8 +95,18 @@ export type BorrowingRecord = {
 export type BorrowingDueRecord = {
   id: string
   borrowingId: string
+  /** 0: the one-time return; 1…n: instalments. */
+  seq: number
   dueDate: IsoDate
   amountDueMinor: number
+  /** The interest within amountDueMinor. */
+  interestMinor: number
+  /** Prefills the Pay form; nothing is paid by itself. */
+  payFromAccountId: string | null
+  /** What is left of it (public.borrowing_due_progress: repayments cover items in order, interest first). */
+  remainingMinor: number
+  remainingInterestMinor: number
+  remainingPrincipalMinor: number
   status: DueStatus
   plannedOn: IsoDate | null
   plannedAccountId: string | null
@@ -164,7 +184,7 @@ export type CardItem = {
   hasHistory: boolean
 }
 
-export type BorrowingDue = BorrowingDueRecord & { plannedAccountName: string | null }
+export type BorrowingDue = BorrowingDueRecord & { plannedAccountName: string | null; payFromAccountName: string | null }
 
 export type BorrowingBadge = "repaid" | "due" | "overdue" | "owed"
 
@@ -174,6 +194,9 @@ export type BorrowingItem = {
   /** What is still owed (not the original amount). */
   owedMinor: number
   repaidMinor: number
+  /** Every due item in order (one, or one per instalment). */
+  dues: BorrowingDue[]
+  /** The next one still pending, else the last one; null without a return date. */
   due: BorrowingDue | null
   badge: BorrowingBadge
   receiptAccountName: string | null
@@ -331,8 +354,15 @@ function freeLine(p: LiabilityPaymentRecord, data: ShortTermData, ctx: Ctx): Lia
 
 function buildBorrowing(b: BorrowingRecord, data: ShortTermData, ctx: Ctx): BorrowingItem {
   const owedMinor = outstandingFromBalance(b.balanceMinor)
-  const dueRecord = data.borrowingDues.find((d) => d.borrowingId === b.id) ?? null
-  const due = dueRecord ? { ...dueRecord, plannedAccountName: nameOf(data.accountNames, ctx.accounts, dueRecord.plannedAccountId) } : null
+  const dues = data.borrowingDues
+    .filter((d) => d.borrowingId === b.id)
+    .sort((x, y) => x.seq - y.seq)
+    .map((d) => ({
+      ...d,
+      plannedAccountName: nameOf(data.accountNames, ctx.accounts, d.plannedAccountId),
+      payFromAccountName: nameOf(data.accountNames, ctx.accounts, d.payFromAccountId),
+    }))
+  const due = dues.find((d) => d.status === "pending") ?? dues.at(-1) ?? null
   const payments = data.liabilityPayments
     .filter((p) => p.liabilityAccountId === b.accountId)
     .map((p) => freeLine(p, data, ctx))
@@ -343,6 +373,7 @@ function buildBorrowing(b: BorrowingRecord, data: ShortTermData, ctx: Ctx): Borr
     name: b.lender,
     owedMinor,
     repaidMinor: Math.max(addMinor(b.borrowedMinor, -owedMinor), 0),
+    dues,
     due,
     badge,
     receiptAccountName: nameOf(data.accountNames, ctx.accounts, b.receiptAccountId),
@@ -470,8 +501,7 @@ export function buildReminders(loanReminders: Reminder<DueItem>[], loanCurrency:
       }
     }
     for (const b of view.borrowings) {
-      if (!b.due) continue
-      for (const r of dueReminders([b.due], today)) {
+      for (const r of dueReminders(b.dues, today)) {
         out.push({
           id: r.item.id,
           source: "borrowing",
@@ -480,7 +510,7 @@ export function buildReminders(loanReminders: Reminder<DueItem>[], loanCurrency:
           dueDate: r.item.dueDate,
           plannedOn: r.item.plannedOn,
           plannedAccountName: r.item.plannedAccountName,
-          amountMinor: b.owedMinor,
+          amountMinor: r.item.remainingMinor,
           currency: b.borrowing.currency,
           reason: r.reason,
           daysOverdue: r.daysOverdue,

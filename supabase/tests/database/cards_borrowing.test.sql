@@ -48,10 +48,10 @@ grant execute on function public.t_today(), public.t_acct(text), public.t_card(u
   public.t_lp(uuid), public.t_dp(uuid), public.t_tx(uuid), public.t_bal(uuid), public.t_misc() to authenticated;
 
 -- ------------------------------------------------------------ privileges and kinds
-select ok(not has_function_privilege('anon', 'public.create_card(uuid, text, bigint, integer, integer, bigint, text)', 'EXECUTE')
+select ok(not has_function_privilege('anon', 'public.create_card(uuid, text, bigint, integer, integer, bigint, text, text, boolean)', 'EXECUTE')
           and not has_function_privilege('anon', 'public.enter_card_statement(uuid, uuid, date, bigint, bigint, date, bigint, uuid)', 'EXECUTE')
           and not has_function_privilege('anon', 'public.pay_card(uuid, uuid, uuid, date, bigint, boolean)', 'EXECUTE')
-          and not has_function_privilege('anon', 'public.create_borrowing(uuid, text, bigint, uuid, date, date)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.create_borrowing(uuid, text, bigint, text, text, bigint, uuid, date, date, text, integer, uuid)', 'EXECUTE')
           and not has_function_privilege('anon', 'public.repay_borrowing(uuid, uuid, uuid, date, bigint, bigint, boolean)', 'EXECUTE'),
   'anon cannot call the card and borrowing functions');
 select ok(not has_function_privilege('authenticated', 'public.credit_cards_validate()', 'EXECUTE')
@@ -406,7 +406,8 @@ select results_eq(
 
 -- ------------------------------------------------------------ borrowing
 select lives_ok(
-  $$ select public.create_borrowing('b1000000-0000-4000-8000-000000000001', 'Ravi', 2000000, public.t_acct('HDFC Bank'), public.t_today() - 5, public.t_today() + 30) $$,
+  $$ select public.create_borrowing('b1000000-0000-4000-8000-000000000001', 'Ravi', 2000000, 'friends', p_received_account_id => public.t_acct('HDFC Bank'), p_received_on => public.t_today() - 5,
+       p_return_on => public.t_today() + 30, p_return_plan => 'once', p_pay_from_account_id => public.t_acct('HDFC Bank')) $$,
   'A borrows 20,000 from Ravi, received into the bank 5 days ago');
 select results_eq(
   $$ select a.kind, a.opening_balance_minor, a.opening_balance_date = public.t_today() - 5, t.type, t.amount_minor, t.counter_account_id = public.t_acct('HDFC Bank'),
@@ -420,21 +421,24 @@ select results_eq(
      where d.borrowing_id = public.t_borrow('b1000000-0000-4000-8000-000000000001') $$,
   $$ values ('borrowing_due'::text, 'pending'::text, 2000000::bigint, true) $$,
   'its due date is a pending due item');
-select is((select (public.create_borrowing('b1000000-0000-4000-8000-000000000001', 'Ravi', 2000000, public.t_acct('HDFC Bank'), public.t_today() - 5)).id),
+select is((select (public.create_borrowing('b1000000-0000-4000-8000-000000000001', 'Ravi', 2000000, 'friends', p_received_account_id => public.t_acct('HDFC Bank'), p_received_on => public.t_today() - 5,
+       p_return_on => public.t_today() + 30, p_return_plan => 'once', p_pay_from_account_id => public.t_acct('HDFC Bank'))).id),
   public.t_borrow('b1000000-0000-4000-8000-000000000001'), 'a retry with the same request key returns the same borrowing');
-select throws_ok($$ select public.create_borrowing('b1000000-0000-4000-8000-000000000001', 'Ravi', 1) $$,
+select throws_ok($$ select public.create_borrowing('b1000000-0000-4000-8000-000000000001', 'Ravi', 1, 'friends') $$,
   'FC007', null, 'the same key for a different borrowing is refused');
-select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Ravi 2', 100) $$, '23514', null, 'a digit in who you owe is refused');
-select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Ravi', 100, public.t_acct('HDFC Bank'), public.t_today() + 1) $$,
+select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Ravi 2', 100, 'friends') $$, '23514', null, 'a digit in who you owe is refused');
+select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Ravi', 100, 'friends', p_received_account_id => public.t_acct('HDFC Bank'), p_received_on => public.t_today() + 1) $$,
   'FC003', null, 'money received in the future is refused');
-select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Ravi', 100, public.t_acct('HDFC Bank')) $$,
+select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Ravi', 100, 'friends', p_received_account_id => public.t_acct('HDFC Bank')) $$,
   '22023', null, 'the account needs the date');
 select throws_ok(
-  $$ select public.create_borrowing(gen_random_uuid(), 'Ravi', 100, public.t_card_acct('c1000000-0000-4000-8000-000000000001'), public.t_today()) $$,
+  $$ select public.create_borrowing(gen_random_uuid(), 'Ravi', 100, 'friends', p_received_account_id => public.t_card_acct('c1000000-0000-4000-8000-000000000001'),
+       p_received_on => public.t_today()) $$,
   'FC038', null, 'money cannot be received into a card');
-select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Ravi', 100, public.t_acct('HDFC Bank'), public.t_today(), public.t_today() - 1) $$,
+select throws_ok($$ select public.create_borrowing(gen_random_uuid(), 'Ravi', 100, 'friends', p_received_account_id => public.t_acct('HDFC Bank'), p_received_on => public.t_today(),
+       p_return_on => public.t_today() - 1, p_return_plan => 'once', p_pay_from_account_id => public.t_acct('HDFC Bank')) $$,
   'FC051', null, 'a due date before the money came is refused');
-select lives_ok($$ select public.create_borrowing('b1000000-0000-4000-8000-000000000002', 'Asha', 500000) $$, 'A records 5,000 borrowed earlier');
+select lives_ok($$ select public.create_borrowing('b1000000-0000-4000-8000-000000000002', 'Asha', 500000, 'family') $$, 'A records 5,000 borrowed earlier');
 select results_eq(
   $$ select a.opening_balance_minor, a.opening_balance_date = public.t_today(), b.receipt_transaction_id,
             (select count(*)::int from public.due_items where borrowing_id = b.id)
@@ -517,17 +521,17 @@ select throws_ok(
   $$ select public.post_liability_payment(public.t_acct('HDFC Bank'), gen_random_uuid(), public.t_acct('Cash in hand'), public.t_today(), 1) $$,
   'FC032', null, 'post_liability_payment refuses an account that is not a card or borrowing');
 
--- ------------------------------------------------------------ due date: change, remove, add
-select throws_ok($$ select public.set_borrowing_due_date(public.t_borrow('b1000000-0000-4000-8000-000000000001'), public.t_today() - 1) $$,
+-- ------------------------------------------------------------ return date: change, remove, add
+select throws_ok($$ select public.set_borrowing_return_plan(public.t_borrow('b1000000-0000-4000-8000-000000000001'), 2000000, public.t_today() - 1, 'once', null, public.t_acct('HDFC Bank')) $$,
   'FC041', null, 'a new due date in the past is refused');
-select lives_ok($$ select public.set_borrowing_due_date(public.t_borrow('b1000000-0000-4000-8000-000000000001'), public.t_today() + 60) $$, 'the due date moves');
+select lives_ok($$ select public.set_borrowing_return_plan(public.t_borrow('b1000000-0000-4000-8000-000000000001'), 2000000, public.t_today() + 60, 'once', null, public.t_acct('HDFC Bank')) $$, 'the due date moves');
 select is((select due_date from public.due_items where borrowing_id = public.t_borrow('b1000000-0000-4000-8000-000000000001')), public.t_today() + 60, '... to the new date');
-select lives_ok($$ select public.set_borrowing_due_date(public.t_borrow('b1000000-0000-4000-8000-000000000001')) $$, 'the due date is removed');
+select lives_ok($$ select public.set_borrowing_return_plan(public.t_borrow('b1000000-0000-4000-8000-000000000001'), 2000000) $$, 'the due date is removed');
 select is((select count(*)::int from public.due_items where borrowing_id = public.t_borrow('b1000000-0000-4000-8000-000000000001')), 0, '... with its due item');
-select lives_ok($$ select public.set_borrowing_due_date(public.t_borrow('b1000000-0000-4000-8000-000000000001'), public.t_today() + 10) $$, 'a due date is added again');
+select lives_ok($$ select public.set_borrowing_return_plan(public.t_borrow('b1000000-0000-4000-8000-000000000001'), 2000000, public.t_today() + 10, 'once', null, public.t_acct('HDFC Bank')) $$, 'a due date is added again');
 select is(public.t_borrow_due('b1000000-0000-4000-8000-000000000001'), 'paid', '... already paid, as nothing is owed');
 select lives_ok(
-  $$ select public.set_borrowing_due_date(public.t_borrow('b1000000-0000-4000-8000-000000000002'), public.t_today() + 10) $$,
+  $$ select public.set_borrowing_return_plan(public.t_borrow('b1000000-0000-4000-8000-000000000002'), 500000, public.t_today() + 10, 'once', null, public.t_acct('HDFC Bank')) $$,
   'a due date for the borrowing recorded earlier');
 select lives_ok(
   $$ update public.due_items set planned_on = public.t_today() + 1, planned_account_id = public.t_acct('HDFC Bank')
@@ -550,7 +554,7 @@ select results_eq(
   $$ values (0, 0) $$,
   '... with its account and due item');
 select lives_ok(
-  $$ select public.create_borrowing('b1000000-0000-4000-8000-000000000003', 'Meera', 300000, public.t_acct('HDFC Bank'), public.t_today()) $$,
+  $$ select public.create_borrowing('b1000000-0000-4000-8000-000000000003', 'Meera', 300000, 'others', p_received_account_id => public.t_acct('HDFC Bank'), p_received_on => public.t_today()) $$,
   'A borrows 3,000 from Meera into the bank');
 select set_config('t.bank_before', public.t_bal(public.t_acct('HDFC Bank'))::text, true);
 select lives_ok($$ select public.delete_borrowing(public.t_borrow('b1000000-0000-4000-8000-000000000003')) $$, 'it is deleted');
@@ -596,7 +600,7 @@ select throws_ok($$ select public.pay_due_item(current_setting('t.bill')::uuid, 
   'FC008', null, 'B cannot pay A''s bill');
 select throws_ok($$ select public.repay_borrowing(current_setting('t.borrow')::uuid, gen_random_uuid(), gen_random_uuid(), current_date, 1) $$,
   'FC008', null, 'B cannot repay A''s borrowing');
-select throws_ok($$ select public.set_borrowing_due_date(current_setting('t.borrow')::uuid, current_date + 1) $$,
+select throws_ok($$ select public.set_borrowing_return_plan(current_setting('t.borrow')::uuid, 1, current_date + 1, 'once', null, gen_random_uuid()) $$,
   'FC008', null, 'B cannot change its due date');
 select throws_ok($$ select public.delete_borrowing(current_setting('t.borrow')::uuid) $$, 'FC008', null, 'B cannot delete it');
 select throws_ok($$ select public.void_liability_payment(current_setting('t.lp')::uuid, gen_random_uuid()) $$,

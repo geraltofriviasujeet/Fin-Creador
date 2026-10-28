@@ -71,8 +71,15 @@ export type Database = {
           currency: string
           id: string
           idempotency_key: string
+          amount_to_return_minor: number
+          instalment_count: number | null
           lender: string
+          reason: string | null
           receipt_transaction_id: string | null
+          relationship: string | null
+          repay_from_account_id: string | null
+          return_on: string | null
+          return_plan: string | null
           received_on: string | null
           updated_at: string
           user_id: string
@@ -85,8 +92,15 @@ export type Database = {
           currency: string
           id?: string
           idempotency_key: string
+          amount_to_return_minor: number
+          instalment_count?: number | null
           lender: string
+          reason?: string | null
           receipt_transaction_id?: string | null
+          relationship?: string | null
+          repay_from_account_id?: string | null
+          return_on?: string | null
+          return_plan?: string | null
           received_on?: string | null
           updated_at?: string
           user_id?: string
@@ -99,8 +113,15 @@ export type Database = {
           currency?: string
           id?: string
           idempotency_key?: string
+          amount_to_return_minor?: number
+          instalment_count?: number | null
           lender?: string
+          reason?: string | null
           receipt_transaction_id?: string | null
+          relationship?: string | null
+          repay_from_account_id?: string | null
+          return_on?: string | null
+          return_plan?: string | null
           received_on?: string | null
           updated_at?: string
           user_id?: string
@@ -116,6 +137,20 @@ export type Database = {
           {
             foreignKeyName: "borrowings_account_owned"
             columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "borrowings_repay_from_owned"
+            columns: ["repay_from_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "borrowings_repay_from_owned"
+            columns: ["repay_from_account_id", "user_id"]
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["id", "user_id"]
@@ -309,6 +344,8 @@ export type Database = {
           limit_minor: number
           nickname: string | null
           opening_owed_minor: number
+          product: string | null
+          product_other: boolean
           statement_day: number
           tracking_started_on: string
           updated_at: string
@@ -326,6 +363,8 @@ export type Database = {
           limit_minor: number
           nickname?: string | null
           opening_owed_minor: number
+          product?: string | null
+          product_other?: boolean
           statement_day: number
           tracking_started_on: string
           updated_at?: string
@@ -343,6 +382,8 @@ export type Database = {
           limit_minor?: number
           nickname?: string | null
           opening_owed_minor?: number
+          product?: string | null
+          product_other?: boolean
           statement_day?: number
           tracking_started_on?: string
           updated_at?: string
@@ -376,7 +417,9 @@ export type Database = {
           id: string
           kind: string
           loan_id: string | null
+          interest_minor: number | null
           minimum_due_minor: number | null
+          pay_from_account_id: string | null
           planned_account_id: string | null
           planned_on: string | null
           seq: number
@@ -394,7 +437,9 @@ export type Database = {
           id?: string
           kind: string
           loan_id?: string | null
+          interest_minor?: number | null
           minimum_due_minor?: number | null
+          pay_from_account_id?: string | null
           planned_account_id?: string | null
           planned_on?: string | null
           seq: number
@@ -412,7 +457,9 @@ export type Database = {
           id?: string
           kind?: string
           loan_id?: string | null
+          interest_minor?: number | null
           minimum_due_minor?: number | null
+          pay_from_account_id?: string | null
           planned_account_id?: string | null
           planned_on?: string | null
           seq?: number
@@ -440,6 +487,20 @@ export type Database = {
             columns: ["loan_id", "user_id"]
             isOneToOne: false
             referencedRelation: "loans"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_items_pay_from_owned"
+            columns: ["pay_from_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "due_items_pay_from_owned"
+            columns: ["pay_from_account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id", "user_id"]
           },
           {
@@ -1312,6 +1373,18 @@ export type Database = {
         }
         Relationships: []
       }
+      borrowing_due_progress: {
+        Row: {
+          borrowing_id: string | null
+          due_item_id: string | null
+          remaining_interest_minor: number | null
+          remaining_minor: number | null
+          remaining_principal_minor: number | null
+          seq: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       card_bill_progress: {
         Row: {
           card_id: string | null
@@ -1406,11 +1479,17 @@ export type Database = {
       create_borrowing: {
         Args: {
           p_amount_minor: number
-          p_due_date?: string
+          p_amount_to_return_minor?: number
           p_idempotency_key: string
+          p_instalment_count?: number
           p_lender: string
+          p_pay_from_account_id?: string
+          p_reason?: string
           p_received_account_id?: string
           p_received_on?: string
+          p_relationship: string
+          p_return_on?: string
+          p_return_plan?: string
         }
         Returns: {
           account_id: string
@@ -1420,8 +1499,15 @@ export type Database = {
           currency: string
           id: string
           idempotency_key: string
+          amount_to_return_minor: number
+          instalment_count: number | null
           lender: string
+          reason: string | null
           receipt_transaction_id: string | null
+          relationship: string | null
+          repay_from_account_id: string | null
+          return_on: string | null
+          return_plan: string | null
           received_on: string | null
           updated_at: string
           user_id: string
@@ -1441,6 +1527,8 @@ export type Database = {
           p_limit_minor: number
           p_nickname?: string
           p_opening_owed_minor?: number
+          p_product?: string
+          p_product_other?: boolean
           p_statement_day: number
         }
         Returns: {
@@ -1455,6 +1543,8 @@ export type Database = {
           limit_minor: number
           nickname: string | null
           opening_owed_minor: number
+          product: string | null
+          product_other: boolean
           statement_day: number
           tracking_started_on: string
           updated_at: string
@@ -2092,8 +2182,15 @@ export type Database = {
           currency: string
           id: string
           idempotency_key: string
+          amount_to_return_minor: number
+          instalment_count: number | null
           lender: string
+          reason: string | null
           receipt_transaction_id: string | null
+          relationship: string | null
+          repay_from_account_id: string | null
+          return_on: string | null
+          return_plan: string | null
           received_on: string | null
           updated_at: string
           user_id: string
@@ -2105,9 +2202,42 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      set_borrowing_due_date: {
-        Args: { p_borrowing_id: string; p_due_date?: string }
-        Returns: undefined
+      set_borrowing_return_plan: {
+        Args: {
+          p_amount_to_return_minor: number
+          p_borrowing_id: string
+          p_instalment_count?: number
+          p_pay_from_account_id?: string
+          p_return_on?: string
+          p_return_plan?: string
+        }
+        Returns: {
+          account_id: string
+          archived_at: string | null
+          borrowed_minor: number
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          amount_to_return_minor: number
+          instalment_count: number | null
+          lender: string
+          reason: string | null
+          receipt_transaction_id: string | null
+          relationship: string | null
+          repay_from_account_id: string | null
+          return_on: string | null
+          return_plan: string | null
+          received_on: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "borrowings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_card_archived: {
         Args: { p_archived: boolean; p_card_id: string }
@@ -2123,6 +2253,8 @@ export type Database = {
           limit_minor: number
           nickname: string | null
           opening_owed_minor: number
+          product: string | null
+          product_other: boolean
           statement_day: number
           tracking_started_on: string
           updated_at: string
@@ -2350,7 +2482,12 @@ export type Database = {
         }
       }
       update_borrowing: {
-        Args: { p_borrowing_id: string; p_lender: string }
+        Args: {
+          p_borrowing_id: string
+          p_lender: string
+          p_reason?: string
+          p_relationship: string
+        }
         Returns: {
           account_id: string
           archived_at: string | null
@@ -2359,8 +2496,15 @@ export type Database = {
           currency: string
           id: string
           idempotency_key: string
+          amount_to_return_minor: number
+          instalment_count: number | null
           lender: string
+          reason: string | null
           receipt_transaction_id: string | null
+          relationship: string | null
+          repay_from_account_id: string | null
+          return_on: string | null
+          return_plan: string | null
           received_on: string | null
           updated_at: string
           user_id: string
@@ -2379,6 +2523,8 @@ export type Database = {
           p_issuer: string
           p_limit_minor: number
           p_nickname?: string
+          p_product?: string
+          p_product_other?: boolean
           p_statement_day: number
         }
         Returns: {
@@ -2393,6 +2539,8 @@ export type Database = {
           limit_minor: number
           nickname: string | null
           opening_owed_minor: number
+          product: string | null
+          product_other: boolean
           statement_day: number
           tracking_started_on: string
           updated_at: string
