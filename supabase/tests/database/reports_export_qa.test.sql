@@ -55,8 +55,9 @@ select is((select count(*)::int from public.transactions where account_id = 'a9e
   'B filtering by A''s account ids: nothing');
 select is((select count(*)::int from public.categories where user_id = '11111111-1111-4111-8111-111111111111'), 0, 'B reads none of A''s categories');
 select is((select count(*)::int from public.accounts where user_id = '11111111-1111-4111-8111-111111111111'), 0, 'B reads none of A''s accounts');
-select is((with u as (update public.transactions set voided_at = now() where id = 'e9e00000-0000-4000-8000-0000000000a1' returning 1) select count(*)::int from u), 0,
-  'B cannot void A''s entry (no row matches)');
+-- The update must be the statement's top-level WITH (Postgres refuses it inside a subquery).
+with u as (update public.transactions set voided_at = now() where id = 'e9e00000-0000-4000-8000-0000000000a1' returning 1)
+select is((select count(*)::int from u), 0, 'B cannot void A''s entry (no row matches)');
 
 -- ------------------------------------------------------------ signed out
 reset role;
