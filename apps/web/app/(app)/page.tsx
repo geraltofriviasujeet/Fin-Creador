@@ -10,6 +10,7 @@ import {
   loadGoalsData,
   loadInvestmentsData,
   loadLoansData,
+  loadNetWorthData,
   loadDashboardBreakdown,
   loadRecurringData,
   loadTransactionPage,
@@ -17,8 +18,9 @@ import {
   loadTransactionsContext,
   readDashboardParams,
 } from "@fin-creador/api"
-import { comparisonFor } from "@fin-creador/domain"
+import { comparisonFor, netWorth } from "@fin-creador/domain"
 import { OVERVIEW_HEADER, OverviewSkeleton, OverviewView } from "@/components/dashboard/overview-view"
+import { NetWorthCard, NetWorthSkeleton } from "@/components/net-worth/overview-card"
 import { UpcomingSection } from "@/components/recurring/upcoming"
 import { PageHeader } from "@/components/shell/app-shell"
 import { FormMessage } from "@/components/ui/field"
@@ -92,11 +94,22 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
       recent={recent.items}
       charts={charts}
       upcoming={upcoming}
+      netWorth={
+        <Suspense fallback={<NetWorthSkeleton />}>
+          <NetWorthSection />
+        </Suspense>
+      }
       goals={goals.ok ? buildGoalsView(goals.data) : null}
       investments={investments.ok ? buildInvestmentsView(investments.data) : null}
       loans={loans.ok ? buildLoansView(loans.data) : null}
     />
   )
+}
+
+/** Net worth (8e): loaded on its own so it never slows the rest of the Overview. */
+async function NetWorthSection() {
+  const load = await loadNetWorthData(await createClient())
+  return load.ok ? <NetWorthCard view={netWorth(load.data)} timeZone={load.timeZone} /> : <NetWorthCard view={null} timeZone={null} />
 }
 
 function LoadError() {

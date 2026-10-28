@@ -67,6 +67,8 @@ export type OverviewViewProps = {
   charts: ChartChoices
   /** The Recurring card (null when recurring items couldn't load). */
   upcoming: React.ReactNode
+  /** The Net worth card, streamed in its own Suspense boundary. */
+  netWorth: React.ReactNode
   /** Budgets and goals (null when they couldn't load; the cards say so). */
   goals: GoalsView | null
   /** Holdings tracker (null when it couldn't load; the card says so). Not in Total available. */
@@ -87,7 +89,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, goals, investments, loans }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
@@ -216,6 +218,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <RecentCard recent={recent} lookup={lookup} today={today} />
         <div className="grid content-start gap-4">
+          {netWorth}
           <DueSoonOverviewCard view={loans} />
           {upcoming}
           <GoalsOverviewCard view={goals} />
