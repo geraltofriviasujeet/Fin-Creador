@@ -153,8 +153,9 @@ test("statutory dues: add, pay in parts with interest, void, Pay anyway, archive
 
   // Payments are expenses: Taxes (₹4,000), Fines & penalties (₹200 interest, ₹1,000 fine).
   await page.goto("/transactions")
-  await expect(page.getByText("Taxes").first()).toBeVisible()
-  await expect(page.getByText("Fines & penalties").first()).toBeVisible()
+  // (The category filter lists them too, hidden: match only what is shown.)
+  await expect(page.locator("main").getByText(/^Taxes\b/).locator("visible=true").first()).toBeVisible()
+  await expect(page.locator("main").getByText(/^Fines & penalties\b/).locator("visible=true").first()).toBeVisible()
   // The bank lost only what was paid from it (₹4,200); cash went ₹900 below zero.
   await page.goto("/income")
   await expect(page.getByText("₹45,800").first()).toBeVisible()
