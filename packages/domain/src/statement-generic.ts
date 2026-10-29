@@ -32,7 +32,7 @@ export interface CardStatementSummary {
  * statement": the review shows it and changes no tick on its own. "unchecked": a figure is missing.
  */
 export interface StatementCheck {
-  name: "summary" | "invoice_total";
+  name: "summary" | "purchases" | "invoice_total";
   status: "ok" | "mismatch" | "unchecked";
   /** What the lines or summary boxes add up to, and what the statement says it should be (minor units). */
   foundMinor: number | null;

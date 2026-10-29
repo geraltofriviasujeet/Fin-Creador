@@ -4,9 +4,12 @@
 //   Amount Due for Month and Minimum Amount Due; dates DD-MON-YYYY;
 // - summary boxes Previous Balance, Purchases and other charges, Cash Advances, Payments and
 //   Other Credits / Shadow Credits, Total Amount Due for Month;
-// - table Transaction Date, Post Date, [Network/Last 4 Digit, in some statements], details,
-//   Amount in Rs ending in Dr or Cr; then label-only total rows, "Total Invoice Value" and
-//   "End of Statement".
+// - table Transaction Date, Post Date, [Network/Last 4 Digit], details, Amount in Rs: a debit has
+//   no marker (or Dr), a credit ends in Cr; then label-only totals (Total Purchase, Total Taxable
+//   Value, Total GST, ...), "Total Invoice Value", adverts and "End of Statement". Lines are read
+//   up to the first of Total Purchase or End of Statement; the self-checks (debit lines against
+//   Purchases and other charges and Total Invoice Value, and the summary boxes against Total Amount
+//   Due) decide whether the review shows "Check this statement".
 // Labels and values may share a row, or a row of labels may be followed by a row of values (as text
 // taken from boxes and tables reads); both are read. The Network/Last 4 Digit cell is dropped
 // before anything else is read from a line, so its digits never leave the parser. The Post Date is
@@ -35,7 +38,8 @@ export interface PnbCardStatementParse extends CardStatementParse {
 }
 
 const DATE = String.raw`\d{1,2}-[A-Za-z]{3}-\d{4}`;
-const AMOUNT = String.raw`\d[\d,]*\.\d{2}(?:\s*(?:Dr|Cr)\b)?`;
+// Box values may be whole rupees ("0", "13583") or have paise ("13854.64"), with Dr / Cr or not.
+const AMOUNT = String.raw`\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:Dr|Cr)\b)?`;
 const VALUE = new RegExp(String.raw`(?<![\w.,])(?:${DATE}|${AMOUNT})(?![\w.,])`, "gi");
 
 // Longest labels first, so "Total Amount Due for Month" is never read as "Total Amount Due".
@@ -122,13 +126,21 @@ const check = (name: StatementCheck["name"], found: number | null, expected: num
   expectedMinor: expected,
 });
 
-// Transaction Date, Post Date, [Network/Last 4 Digit], details, amount with Dr / Cr.
-const LINE = new RegExp(String.raw`^(${DATE})\s+(?:${DATE}\s+)?(.*?)\s*(\d[\d,]*\.\d{2}\s*(?:Dr|Cr))\.?$`, "i");
+// Transaction Date, Post Date, [Network/Last 4 Digit], details, amount: a debit has no marker
+// (or Dr, as other statements print), a credit ends in Cr. The network group ("RUPAY -" and the
+// last 4 digits or a mask, one piece or two, in either order) is dropped wherever it sits between
+// the dates and the details, so its digits never leave the parser.
+const NETWORK_NAME = String.raw`(?:RUPAY|VISA|MASTER\s?CARD|AMEX|DINERS(?:\s+CLUB)?|JCB|DISCOVER|UPI)\s*-`;
+const LAST4 = String.raw`[\dXx*•#]{4}(?![\dXx*•#])`;
+const NETWORK = String.raw`(?:${NETWORK_NAME}\s*${LAST4}|${LAST4}\s+${NETWORK_NAME})`;
+const LINE = new RegExp(
+  String.raw`^(${DATE})\s+(?:${NETWORK}\s+)?(?:${DATE}\s+)?(?:${NETWORK}\s*)?(.*?)\s*(\d[\d,]*\.\d{2}(?:\s*(?:Dr|Cr))?)\.?$`,
+  "i",
+);
 const STARTS_WITH_DATE = new RegExp(String.raw`^${DATE}(?=\s|$)`, "i");
-// The whole Network/Last 4 Digit cell: a network name, a dash and four digits or mask characters.
-const NETWORK_CELL = /^(?:RUPAY|VISA|MASTER\s?CARD|AMEX|DINERS(?:\s+CLUB)?|JCB|DISCOVER|UPI)\s*-\s*[\dXx*•#]{4}(?![\dXx*•#])\s*/i;
 const PERIOD = new RegExp(String.raw`Trnx\s+Details\s+From\s+(${DATE})\s+to\s+(${DATE})`, "i");
-const END = /\bEnd\s+of\s+Statement\b/i;
+// Rows are read up to the first of the totals below the table ("Total Purchase") or "End of Statement".
+const END = /\bEnd\s+of\s+Statement\b|^Total\s+Purchases?\b/i;
 
 /** Reads a PNB credit card statement's text: summary for Enter statement, lines and self-checks. */
 export function parsePnbCardStatementText(text: string): PnbCardStatementParse {
@@ -157,7 +169,7 @@ export function parsePnbCardStatementText(text: string): PnbCardStatementParse {
       issues.push({ line: lineNumber, reason: lineDate ? "bad_amount" : "bad_date", shape: statementRowShape(row) });
       continue;
     }
-    const { description, foreignCurrency } = cleanStatementDescription(m[2]!.replace(NETWORK_CELL, ""));
+    const { description, foreignCurrency } = cleanStatementDescription(m[2]!);
     if (description === "") {
       issues.push({ line: lineNumber, reason: "no_description", shape: statementRowShape(row) });
       continue;
@@ -199,7 +211,7 @@ export function parsePnbCardStatementText(text: string): PnbCardStatementParse {
     summary,
     lines: numberOccurrences(lines),
     issues,
-    checks: [check("summary", fromBoxes, total), check("invoice_total", debits, signed(raw.invoiceTotal))],
+    checks: [check("summary", fromBoxes, total), check("purchases", debits, purchases), check("invoice_total", debits, signed(raw.invoiceTotal))],
     period: from && to ? { from, to } : null,
   };
 }

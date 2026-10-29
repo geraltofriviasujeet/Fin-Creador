@@ -4,7 +4,7 @@
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs"
 import { describe, expect, it } from "vitest"
 import { MAX_STATEMENT_PDF_BYTES, MAX_STATEMENT_PDF_PAGES, parseCardStatement, statementNeedsCheck } from "@fin-creador/domain"
-import { columns, pnbStatementPages as pnbPages, syntheticPdf } from "../../test-support/synthetic-pdf"
+import { columns, pnbRealLayoutPages, pnbStatementPages as pnbPages, syntheticPdf } from "../../test-support/synthetic-pdf"
 import { type PdfLib, readStatementPdf } from "./pdf-reader"
 
 const lib = pdfjs as unknown as PdfLib
@@ -62,6 +62,25 @@ describe.each(["label-row", "beside", "next-row", "one-row"] as const)("readStat
     expect(read.status).toBe("ok")
     if (read.status !== "ok") return
     expect(parseCardStatement(read.text, "Punjab National Bank").summary).toMatchObject({ statementDate: "2026-10-15", dueDate: "2026-11-04" })
+  })
+})
+
+describe("readStatementPdf: PNB real layout (boxed values, no Dr marker, split network group, totals below)", () => {
+  it("reads 2 debits and a Cr payment, no unreadable rows, the dates and passing self-checks", async () => {
+    const read = await readStatementPdf(lib, syntheticPdf(pnbRealLayoutPages()))
+    expect(read.status).toBe("ok")
+    if (read.status !== "ok") return
+    const parsed = parseCardStatement(read.text, "Punjab National Bank")
+    expect(parsed.lines.map((l) => [l.date, l.amountMinor, l.direction, l.kind, l.description])).toEqual([
+      ["2026-08-25", 150_000, "credit", "payment", "PAYMENT RECEIVED BBPS"],
+      ["2026-08-28", 178_400, "debit", "purchase", "FRESH BASKET STORES KOLKATA IN"],
+      ["2026-09-02", 50_064, "debit", "purchase", "CITYFUEL POINT HOWRAH IN"],
+    ])
+    expect(parsed.issues).toEqual([])
+    expect(parsed.summary).toEqual({ statementDate: "2026-09-20", dueDate: "2026-10-10", totalMinor: 228_464, minimumMinor: 11_423 })
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["purchases", "ok"], ["invoice_total", "ok"]])
+    expect(statementNeedsCheck(parsed)).toBe(false)
+    expect(JSON.stringify(parsed)).not.toMatch(/0042|5555|RUPAY|INV123/)
   })
 })
 

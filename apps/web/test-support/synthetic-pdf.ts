@@ -256,3 +256,67 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
   ]
   return [page1, page2]
 }
+
+/**
+ * A one-page PNB card statement in the layout of the owner's real statement (described in text;
+ * invented values): top-block labels with each value in a box to the right, a little off the
+ * label's baseline; summary boxes with labels above whole-rupee or paise values; table rows of
+ * Transaction Date, Post Date, "RUPAY -" and the last 4 digits as two pieces (one row in the other
+ * order), details as printed and an amount with no marker for a debit and Cr for a credit; then
+ * label-only totals, a Total Invoice Value drawn far right, stray "0" values over an advert, a
+ * chart legend and legal text. 2 debits (₹1,784 and ₹500.64) and a ₹1,500 Cr payment; bill ₹2,284.64.
+ */
+export function pnbRealLayoutPages(options: { invoiceDate?: string; lineDate?: string } = {}): SyntheticPage[] {
+  const invoiceIso = options.invoiceDate ?? "2026-09-20"
+  const invoice = pnbDate(invoiceIso)
+  const due = pnbDate(pnbDueDate(invoiceIso))
+  const on = (iso: string) => pnbDate(options.lineDate ?? iso)
+  const boxed = (label: string, value: string): SyntheticRow => [{ x: 40, text: label }, { x: 300, text: value, dy: -2 }]
+  return [
+    [
+      [{ x: 40, text: "PUNJAB NATIONAL BANK" }],
+      boxed("Invoice No", "INV12345678"),
+      boxed("Card No", "5555 XXXX XXXX 0042"),
+      boxed("Invoice Date", invoice),
+      boxed("Payment Due Date", due),
+      boxed("Total Amount Due", "2,284.64"),
+      boxed("Total Amount Due for Month", "2,284.64"),
+      boxed("Minimum Amount Due", "114.23"),
+      [],
+      ...columns([40, 140, 260, 340], [
+        ["Previous Balance", "Purchases and other charges", "Cash Advances", "Payments and Other Credits / Shadow Credits"],
+        ["1500", "2284.64", "0", "1500"],
+      ]),
+      [],
+      ...columns([40, 110, 180, 260, 520], [["Transaction Date", "Post Date", "Network/Last 4 Digit", "Trnx Details", "Amount in Rs"]]),
+      [
+        { x: 40, text: on("2026-08-25") }, { x: 110, text: on("2026-08-26") },
+        { x: 180, text: "RUPAY -" }, { x: 218, text: "0042" },
+        { x: 260, text: "PAYMENT RECEIVED BBPS" }, { x: 520, text: "1,500.00 Cr" },
+      ],
+      [
+        { x: 40, text: on("2026-08-28") }, { x: 110, text: on("2026-08-29") },
+        { x: 180, text: "RUPAY -", dy: 1 }, { x: 218, text: "0042", dy: -1 },
+        { x: 260, text: "FRESH BASKET STORES KOLKATA IN" }, { x: 520, text: "1,784.00" },
+      ],
+      [
+        { x: 40, text: on("2026-09-02") }, { x: 110, text: on("2026-09-03") },
+        { x: 180, text: "0042" }, { x: 205, text: "RUPAY -" },
+        { x: 260, text: "CITYFUEL POINT HOWRAH IN" }, { x: 520, text: "500.64" },
+      ],
+      [],
+      [{ x: 40, text: "Total Purchase" }],
+      [{ x: 40, text: "Total Taxable Value" }],
+      [{ x: 40, text: "Total GST" }],
+      [{ x: 40, text: "Total Charges Reversed" }],
+      [{ x: 40, text: "Total GST Reversed" }],
+      [{ x: 40, text: "Total Invoice Value" }, { x: 540, text: "2,284.64", dy: 1 }],
+      [],
+      [{ x: 300, text: "0" }, { x: 360, text: "0" }],
+      [{ x: 300, text: "SPEND MORE, EARN MORE REWARDS" }],
+      [{ x: 40, text: "Shopping 78%" }, { x: 140, text: "Fuel 22%" }],
+      [{ x: 40, text: "This is a system generated statement. Terms and conditions apply." }],
+      [{ x: 40, text: "End of Statement" }],
+    ],
+  ]
+}

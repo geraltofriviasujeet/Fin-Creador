@@ -88,7 +88,7 @@ describe.each([
   });
 
   it("passes both self-checks", () => {
-    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["invoice_total", "ok"]]);
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["purchases", "ok"], ["invoice_total", "ok"]]);
     expect(statementNeedsCheck(parsed)).toBe(false);
   });
 
@@ -129,7 +129,7 @@ describe("parsePnbCardStatementText self-checks", () => {
       "Total Invoice Value 200.00",
     ].join("\n"));
     expect(parsed.summary).toMatchObject({ totalMinor: 0, minimumMinor: 0 });
-    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["invoice_total", "ok"]]);
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["purchases", "ok"], ["invoice_total", "ok"]]);
   });
 
   it("ignores rows after End of Statement", () => {
@@ -175,4 +175,68 @@ describe("parsePnbCardStatementText: Invoice Date and Payment Due Date", () => {
     ["an amount where the date should be", "Invoice Date 2,334.00\nPayment Due Date 10-OCT-2026"],
     ["no Invoice Date label", "Statement Date 13-OCT-2026\nPayment Due Date 10-OCT-2026"],
   ])("never guesses: %s", (_, text) => expect(dates(text)).toEqual({ statementDate: null, dueDate: "2026-10-10" }));
+});
+
+describe("parsePnbCardStatementText: real PNB layout rules", () => {
+  const one = (row: string) => parsePnbCardStatementText(row);
+
+  it("reads a debit with no marker, with Dr, and a credit with Cr; a missing marker is never unreadable", () => {
+    const parsed = one(["28-AUG-2026 29-AUG-2026 SHOP A 1,784.00", "28-AUG-2026 29-AUG-2026 SHOP B 10.00 Dr", "25-AUG-2026 26-AUG-2026 PAYMENT RECEIVED 1,500.00 Cr"].join("\n"));
+    expect(parsed.lines.map((l) => [l.description, l.direction])).toEqual([["SHOP A", "debit"], ["SHOP B", "debit"], ["PAYMENT RECEIVED", "credit"]]);
+    expect(parsed.issues).toEqual([]);
+  });
+
+  it.each([
+    ["after the post date", "28-AUG-2026 29-AUG-2026 RUPAY - 0042 SHOP A 1,784.00"],
+    ["digits first", "28-AUG-2026 29-AUG-2026 0042 RUPAY - SHOP A 1,784.00"],
+    ["between the dates", "28-AUG-2026 RUPAY - #### 29-AUG-2026 SHOP A 1,784.00"],
+    ["one piece", "28-AUG-2026 29-AUG-2026 RUPAY-0042 SHOP A 1,784.00"],
+  ])("drops the network group %s", (_, row) => {
+    const parsed = one(row);
+    expect(parsed.lines.map((l) => [l.date, l.description])).toEqual([["2026-08-28", "SHOP A"]]);
+    expect(JSON.stringify(parsed)).not.toMatch(/0042|RUPAY/);
+  });
+
+  it("keeps merged merchant fields as printed", () => {
+    expect(one("28-AUG-2026 29-AUG-2026 RUPAY - 0042 AMAZON PAY INDIA PRIVA BANGALORE IN 499.00").lines[0]!.description).toBe("AMAZON PAY INDIA PRIVA BANGALORE IN");
+  });
+
+  it("reads whole-rupee summary values (0, 13583) and paise (13854.64)", () => {
+    const parsed = one([
+      "Total Amount Due 13854.64",
+      "Previous Balance Purchases and other charges Cash Advances Payments and Other Credits / Shadow Credits",
+      "13583 13854.64 0 13583",
+      "02-SEP-2026 03-SEP-2026 SHOP 13,854.64",
+      "Total Invoice Value 13854.64",
+    ].join("\n"));
+    expect(parsed.checks.map((c) => [c.name, c.status, c.foundMinor])).toEqual([
+      ["summary", "ok", 1_385_464],
+      ["purchases", "ok", 1_385_464],
+      ["invoice_total", "ok", 1_385_464],
+    ]);
+  });
+
+  it("stops at Total Purchase: no total, stray value or advert below is a line", () => {
+    const parsed = one([
+      "02-SEP-2026 03-SEP-2026 SHOP 500.64",
+      "Total Purchase",
+      "02-SEP-2026 Total GST 0.00",
+      "0 0",
+      "Total Invoice Value 500.64",
+      "End of Statement",
+    ].join("\n"));
+    expect(parsed.lines).toHaveLength(1);
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.checks.find((c) => c.name === "invoice_total")?.status).toBe("ok");
+  });
+
+  it("flags debit lines that don't match Purchases and other charges", () => {
+    const parsed = one([
+      "Previous Balance Purchases and other charges Cash Advances Payments and Other Credits / Shadow Credits",
+      "0 900 0 0",
+      "02-SEP-2026 03-SEP-2026 SHOP 500.64",
+    ].join("\n"));
+    expect(parsed.checks.find((c) => c.name === "purchases")).toMatchObject({ status: "mismatch", foundMinor: 50_064, expectedMinor: 90_000 });
+    expect(statementNeedsCheck(parsed)).toBe(true);
+  });
 });

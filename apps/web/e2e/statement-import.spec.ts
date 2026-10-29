@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { pnbDueDate, pnbStatementPages, syntheticPdf } from "../test-support/synthetic-pdf"
+import { pnbDueDate, pnbRealLayoutPages, pnbStatementPages, syntheticPdf } from "../test-support/synthetic-pdf"
 import { addBank, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Card statement import (Sprint 9a.3 to 9a.5, web): a statement PDF read in the browser with
@@ -389,4 +389,24 @@ test("a statement date that can't be read is left empty and blocks Save until en
   await expect(save).toBeDisabled()
   await review(page).getByLabel("Also enter this statement").uncheck()
   await expect(save).toBeEnabled()
+})
+
+test("the real PNB layout: 3 lines (the Cr payment skipped), nothing unreadable, dates from their labels, checks pass", async ({ page }) => {
+  const today = todayInIndia()
+  await setUp(page, "Kiran Joshi")
+  await openImport(page, PNB_CARD)
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbRealLayoutPages({ invoiceDate: today, lineDate: today }))))
+  await expect(lines(page)).toHaveCount(3)
+  await expect(lineFor(page, "PAYMENT RECEIVED BBPS")).toContainText("Skipped: payment")
+  await expect(tick(page, "FRESH BASKET STORES KOLKATA IN")).toBeChecked()
+  await expect(tick(page, "CITYFUEL POINT HOWRAH IN")).toBeChecked()
+  await expect(review(page)).not.toContainText("could not be read")
+  await expect(review(page)).not.toContainText("Check this statement")
+  await expect(review(page)).not.toContainText("RUPAY")
+  await expect(page.getByText("0042")).toHaveCount(0)
+  await expect(review(page).getByLabel("Statement date")).toHaveValue(today)
+  await expect(review(page).getByLabel("Due date")).toHaveValue(pnbDueDate(today))
+  await expect(review(page).getByLabel("Bill total (₹)")).toHaveValue("2,284.64")
+  await expect(review(page).getByText(/^Ticked:/)).toHaveText("Ticked: ₹2,284.64 (2 lines) · Bill total: ₹2,284.64")
+  await shot(page, "statement-import-real-layout")
 })

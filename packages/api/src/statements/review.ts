@@ -207,7 +207,9 @@ export function checkReasons(checks: readonly StatementCheck[], currency: string
     .map((c) =>
       c.name === "summary"
         ? `The statement's summary (previous balance + purchases + cash advances − payments) comes to ${money(c.foundMinor)}, but its Total Amount Due is ${money(c.expectedMinor)}.`
-        : `The debit lines read add up to ${money(c.foundMinor)}, but the statement's Total Invoice Value is ${money(c.expectedMinor)}. A line may not have been read.`,
+        : c.name === "purchases"
+          ? `The debit lines read add up to ${money(c.foundMinor)}, but the statement's Purchases and other charges is ${money(c.expectedMinor)}. A line may not have been read.`
+          : `The debit lines read add up to ${money(c.foundMinor)}, but the statement's Total Invoice Value is ${money(c.expectedMinor)}. A line may not have been read.`,
     )
 }
 

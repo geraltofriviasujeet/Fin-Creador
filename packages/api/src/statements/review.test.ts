@@ -139,6 +139,9 @@ describe("checkReasons and saveBlockers", () => {
       "The debit lines read add up to ₹2,134, but the statement's Total Invoice Value is ₹2,233.50. A line may not have been read.",
     ])
     expect(checkReasons(parse.checks, "INR")).toEqual([])
+    expect(checkReasons([{ name: "purchases", status: "mismatch", foundMinor: 50_064, expectedMinor: 90_000 }], "INR")).toEqual([
+      "The debit lines read add up to ₹500.64, but the statement's Purchases and other charges is ₹900. A line may not have been read.",
+    ])
   })
 
   it("blocks Save until the check is confirmed, a line is ticked and every ticked line is valid", () => {
