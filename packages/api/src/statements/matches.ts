@@ -8,23 +8,44 @@ import type { ImportMatches } from "./review"
 const KEY_CHUNK = 100
 const MAX_CARD_ENTRIES = 5000
 
+/** How many edits are followed from an imported row; a longer chain counts as live. */
+export const MAX_EDIT_DEPTH = 20
+
+const chunked = <T>(xs: readonly T[]) => Array.from({ length: Math.ceil(xs.length / KEY_CHUNK) }, (_, i) => xs.slice(i * KEY_CHUNK, (i + 1) * KEY_CHUNK))
+
 /**
- * Which request keys already have a ledger row: "live" for a row that counts or was edited (an
- * edit voids it and a newer version replaces it), "deleted" for a row voided with no newer version
- * (clients cannot hard-delete entries, so a deleted entry is a voided one). Null when the read fails.
+ * Which request keys already have a ledger row: "live" when the latest version of the row counts,
+ * "deleted" when the latest version is voided (clients cannot hard-delete entries, so a deleted
+ * entry is a voided one). An edit voids a row and inserts a newer version under a new key with
+ * replaces_id set, so a voided row is followed to its latest version, one batched read per edit
+ * level, up to MAX_EDIT_DEPTH (beyond that: "live"). Null when a read fails.
  */
 export async function existingKeys(supabase: UserClient, keys: readonly string[]): Promise<Map<string, "live" | "deleted"> | null> {
-  const unique = [...new Set(keys)]
-  const chunks = Array.from({ length: Math.ceil(unique.length / KEY_CHUNK) }, (_, i) => unique.slice(i * KEY_CHUNK, (i + 1) * KEY_CHUNK))
-  const rows = await Promise.all(chunks.map((chunk) => supabase.from("transactions").select("id, idempotency_key, voided_at").in("idempotency_key", chunk)))
+  const rows = await Promise.all(chunked([...new Set(keys)]).map((chunk) => supabase.from("transactions").select("id, idempotency_key, voided_at").in("idempotency_key", chunk)))
   if (rows.some((r) => r.error)) return null
   const found = rows.flatMap((r) => r.data ?? [])
-  const voided = found.filter((t) => t.voided_at !== null).map((t) => t.id)
-  const voidedChunks = Array.from({ length: Math.ceil(voided.length / KEY_CHUNK) }, (_, i) => voided.slice(i * KEY_CHUNK, (i + 1) * KEY_CHUNK))
-  const replaced = await Promise.all(voidedChunks.map((chunk) => supabase.from("transactions").select("replaces_id").in("replaces_id", chunk)))
-  if (replaced.some((r) => r.error)) return null
-  const edited = new Set(replaced.flatMap((r) => (r.data ?? []).map((t) => t.replaces_id)))
-  return new Map(found.map((t) => [t.idempotency_key, t.voided_at === null || edited.has(t.id) ? "live" : "deleted"]))
+  const state = new Map(found.map((t) => [t.idempotency_key, t.voided_at === null ? ("live" as const) : ("deleted" as const)]))
+
+  // The latest version reached so far, for each key whose row is voided.
+  let heads = new Map(found.filter((t) => t.voided_at !== null).map((t) => [t.idempotency_key, t.id]))
+  for (let depth = 0; heads.size > 0; depth++) {
+    if (depth > MAX_EDIT_DEPTH) {
+      for (const key of heads.keys()) state.set(key, "live")
+      break
+    }
+    const next = await Promise.all(chunked([...new Set(heads.values())]).map((chunk) => supabase.from("transactions").select("id, voided_at, replaces_id").in("replaces_id", chunk)))
+    if (next.some((r) => r.error)) return null
+    const newer = new Map(next.flatMap((r) => r.data ?? []).map((t) => [t.replaces_id, t]))
+    const still = new Map<string, string>()
+    for (const [key, id] of heads) {
+      const version = newer.get(id)
+      if (!version) continue // voided with nothing newer: deleted
+      if (version.voided_at === null) state.set(key, "live")
+      else still.set(key, version.id)
+    }
+    heads = still
+  }
+  return state
 }
 
 export type ImportMatchesLoad = { ok: true; matches: ImportMatches } | { ok: false; reason: "invalid" | "not_found" | "unavailable" }

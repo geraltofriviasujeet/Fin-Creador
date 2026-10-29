@@ -26,7 +26,7 @@ export type LineSaveResult = { key: string; status: LineSaveStatus; reason?: str
 export type ImportSaveResult = { ok: true; results: LineSaveResult[] } | { ok: false; message: string }
 
 const INVALID = "These lines couldn't be checked. Read the statement again and try again."
-const SIGNED_OUT = "Your session has ended. Please sign in again."
+const SIGNED_OUT = "Sign in again; your file is still here."
 const UNAVAILABLE = "We couldn't reach your entries. Check your connection and try again."
 const CARD_NOT_FOUND = "We couldn't find this card. It may be archived."
 const NOT_SPENDING = "Not a purchase on the card"
@@ -95,7 +95,12 @@ export async function saveImportLines(supabase: UserClient, input: unknown): Pro
     })
     if (error?.code === "FC007") results.push({ key, status: "already_saved" })
     else if (error || !data) results.push({ key, status: "failed", reason: ledgerErrorMessage(error).message })
-    else results.push({ key, status: data.voided_at === null ? "saved" : "deleted" })
+    else if (data.voided_at === null) results.push({ key, status: "saved" })
+    else {
+      // Another save got there first and that row is voided: report its latest version.
+      const latest = await existingKeys(supabase, [key])
+      results.push({ key, status: latest?.get(key) === "live" ? "already_saved" : "deleted" })
+    }
   }
   return { ok: true, results }
 }

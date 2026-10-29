@@ -102,6 +102,26 @@ describe("saveImportLines", () => {
     expect(rpcs).toEqual([])
   })
 
+  it("follows an edited line to its latest version: edited then deleted is deleted, and nothing is posted", async () => {
+    const { client, rpcs } = fakeClient({
+      transactions: [
+        { id: "t1", idempotency_key: keyOf(), voided_at: "2026-10-20T10:00:00Z", replaces_id: null },
+        { id: "t2", idempotency_key: "edit-1", voided_at: "2026-10-21T10:00:00Z", replaces_id: "t1" },
+        { id: "t3", idempotency_key: "edit-2", voided_at: "2026-10-22T10:00:00Z", replaces_id: "t2" },
+      ],
+    })
+    const result = await saveImportLines(client, input([line()]))
+    expect(result).toEqual({ ok: true, results: [{ key: keyOf(), status: "deleted" }] })
+    expect(rpcs).toEqual([])
+  })
+
+  it("signed out mid-save: asks to sign in again, saves nothing", async () => {
+    const { client, rpcs } = fakeClient()
+    ;(client as unknown as { auth: { getUser: () => Promise<unknown> } }).auth.getUser = async () => ({ data: { user: null } })
+    expect(await saveImportLines(client, input([line()]))).toEqual({ ok: false, message: "Sign in again; your file is still here." })
+    expect(rpcs).toEqual([])
+  })
+
   it("checks each line against the person's today, the card's start, the amount and their categories", async () => {
     const { client, rpcs } = fakeClient()
     const result = await saveImportLines(
