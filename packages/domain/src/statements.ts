@@ -6,7 +6,7 @@
 // never its text. Dates are day first (DD/MM/YYYY), as Indian statements print them.
 import { type IsoDate, isIsoDate } from "./dates";
 import { stripDigitRuns } from "./digits";
-import { MAX_AMOUNT_MINOR } from "./money";
+import { MAX_AMOUNT_MINOR, addMinor } from "./money";
 
 /** transactions.note holds at most 280 characters. */
 export const STATEMENT_NOTE_MAX = 280;
@@ -35,6 +35,8 @@ export interface StatementLine {
   foreignCurrency: string | null;
   /** 0 for the first of identical lines (same date, amount, direction and description), then 1, 2... */
   occurrence: number;
+  /** Running balance after the line, signed (negative: overdrawn), when the statement prints one (bank statements). */
+  balanceMinor?: number;
 }
 
 export type StatementIssueReason = "no_amount" | "bad_date" | "bad_amount" | "no_description" | "too_many_lines" | "too_long";
@@ -101,17 +103,59 @@ export interface StatementAmount {
  * an amount above MAX_AMOUNT_MINOR. A minus sign means a credit.
  */
 export function parseStatementAmount(text: string): StatementAmount | null {
+  const read = readAmount(text);
+  if (!read || read.minor === 0) return null;
+  const direction: StatementDirection | null =
+    read.marker === "cr" || read.minus ? "credit" : read.marker === "dr" ? "debit" : null;
+  return { minor: read.minor, direction };
+}
+
+function readAmount(text: string): { minor: number; marker: "dr" | "cr" | null; minus: boolean } | null {
   const m = /^([-+])?\s*(?:₹|Rs\.?|INR)?\s*(-)?(\d{1,3}(?:,\d{2,3})*|\d+)(?:\.(\d{1,2}))?(?:\s*(Dr|Cr)\.?)?$/i.exec(text.trim());
   if (!m) return null;
   const whole = Number(m[3]!.replace(/,/g, ""));
   const minor = whole * 100 + Number((m[4] ?? "").padEnd(2, "0"));
-  if (!Number.isSafeInteger(minor) || minor === 0 || minor > MAX_AMOUNT_MINOR) return null;
-  const marker = m[5]?.toLowerCase();
+  if (!Number.isSafeInteger(minor) || minor > MAX_AMOUNT_MINOR) return null;
+  const marker = (m[5]?.toLowerCase() ?? null) as "dr" | "cr" | null;
   const minus = m[1] === "-" || m[2] === "-";
   if (marker && minus) return null;
-  const direction: StatementDirection | null =
-    marker === "cr" || minus ? "credit" : marker === "dr" ? "debit" : null;
-  return { minor, direction };
+  return { minor, marker, minus };
+}
+
+/** A separate Type column: "DR" / "D" / "Debit" or "CR" / "C" / "Credit" (any case); null otherwise. */
+export function parseStatementDirection(text: string): StatementDirection | null {
+  const value = text.trim().toLowerCase().replace(/\.$/, "");
+  if (value === "dr" || value === "d" || value === "debit") return "debit";
+  if (value === "cr" || value === "c" || value === "credit") return "credit";
+  return null;
+}
+
+/**
+ * An amount cell with its own Type (DR / CR) column. An empty Type cell falls back to the
+ * amount's own marker or sign; null when either cell is unreadable or the two disagree.
+ */
+export function parseStatementAmountWithType(amountText: string, typeText: string): StatementAmount | null {
+  const amount = parseStatementAmount(amountText);
+  if (!amount) return null;
+  if (typeText.trim() === "") return amount;
+  const direction = parseStatementDirection(typeText);
+  if (!direction || (amount.direction !== null && amount.direction !== direction)) return null;
+  return { minor: amount.minor, direction };
+}
+
+/**
+ * A running balance cell, signed: "12,000.0", "12,000.00 Cr" and "0.00" are positive or zero;
+ * "-250.00" and "250.00 Dr" are overdrawn (negative). Null when unreadable.
+ */
+export function parseStatementBalance(text: string): number | null {
+  const read = readAmount(text);
+  if (!read) return null;
+  return read.marker === "dr" || read.minus ? -read.minor : read.minor;
+}
+
+/** A page footer such as "Date: 29/10/2026 ... Page 2"; parsers drop these rows. */
+export function isStatementPageFooter(row: string): boolean {
+  return /^\s*Date\s*:.*\bPage\s+\d+\s*(of\s+\d+\s*)?$/i.test(row);
 }
 
 // Currencies a foreign card purchase is printed in. A fixed list, so "UPI 123" is never read as one.
@@ -124,12 +168,22 @@ const FOREIGN_AMOUNT = new RegExp(
   String.raw`\b(${FOREIGN_CODE})\s*\d[\d,]*(?:\.\d{1,3})?(?!\d)|(?<![\d.,])\d[\d,]*(?:\.\d{1,3})?\s*(${FOREIGN_CODE})\b`,
 );
 
+// UPI/DR|CR/<reference>/<payee name>/<bank>/<handle>: only the payee name is kept (the reference,
+// bank code and handle, which can hold a phone number, are dropped). Spaces around "/" are allowed
+// because a wrapped Remarks cell is joined with a space.
+const UPI_REMARKS = /^UPI ?\/ ?(?:DR|CR) ?\/[^/]*\/ ?([^/]*?) ?(?:\/.*)?$/i;
+
 /**
- * The description as it may be stored: a foreign amount ("USD 12.00") dropped, runs of 4 or
+ * The description as it may be stored: for UPI remarks the payee name only; a foreign amount ("USD 12.00") dropped, runs of 4 or
  * more digits stripped, masking ("XXXX", "****") removed, spaces collapsed, at most
  * STATEMENT_NOTE_MAX characters.
  */
 export function cleanStatementDescription(raw: string): { description: string; foreignCurrency: string | null } {
+  const upi = UPI_REMARKS.exec(raw.replace(/\s+/g, " ").trim());
+  if (upi) {
+    const payee = cleanStatementDescription(upi[1]!).description;
+    return { description: payee === "" ? "UPI" : payee, foreignCurrency: null };
+  }
   let text = raw;
   let foreignCurrency: string | null = null;
   const foreign = FOREIGN_AMOUNT.exec(text);
@@ -200,4 +254,35 @@ export function statementLineKeySource(cardId: string, statementDate: IsoDate, l
     "card-statement-line:v1", cardId, statementDate, line.date, line.amountMinor,
     line.direction, line.description, line.occurrence,
   ]);
+}
+
+export type BalanceOrder = "newest_first" | "oldest_first";
+
+export type BalanceCheck =
+  | { status: "ok" }
+  /** Fewer than two lines, or a line without a balance: nothing to check against. */
+  | { status: "unchecked" }
+  /** Indexes (in the order given) of lines whose balance does not follow from the line before it in time. */
+  | { status: "broken"; lines: number[] };
+
+/**
+ * The statement's self-check: each balance equals the previous balance (in time) plus a credit
+ * or minus a debit. `order` is the order the lines are printed in. A broken chain means
+ * "Check this statement": the caller shows it and changes no tick on its own.
+ */
+export function checkBalanceChain(
+  lines: readonly Pick<StatementLine, "amountMinor" | "direction" | "balanceMinor">[],
+  order: BalanceOrder,
+): BalanceCheck {
+  if (lines.length < 2 || lines.some((line) => line.balanceMinor === undefined)) return { status: "unchecked" };
+  const indexed = lines.map((line, index) => ({ line, index }));
+  const inTime = order === "oldest_first" ? indexed : indexed.reverse();
+  const broken: number[] = [];
+  for (let i = 1; i < inTime.length; i++) {
+    const { line, index } = inTime[i]!;
+    const signed = line.direction === "credit" ? line.amountMinor : -line.amountMinor;
+    if (addMinor(inTime[i - 1]!.line.balanceMinor!, signed) !== line.balanceMinor) broken.push(index);
+  }
+  broken.sort((a, b) => a - b);
+  return broken.length === 0 ? { status: "ok" } : { status: "broken", lines: broken };
 }
