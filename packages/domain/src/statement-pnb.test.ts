@@ -108,7 +108,7 @@ describe("parsePnbCardStatementText self-checks", () => {
 
   it("flags Dr lines that do not sum to Total Invoice Value (a line the parser could not read)", () => {
     const parsed = parsePnbCardStatementText(LAYOUT_B.replace("FINANCE CHARGES 899.50 Dr", "FINANCE CHARGES"));
-    expect(parsed.issues).toEqual([{ line: 15, reason: "no_amount" }]);
+    expect(parsed.issues).toEqual([{ line: 15, reason: "no_amount", shape: "date, text, no amount" }]);
     expect(parsed.checks).toContainEqual(expect.objectContaining({ name: "invoice_total", status: "mismatch", foundMinor: 338_450, expectedMinor: 428_400 }));
     expect(statementNeedsCheck(parsed)).toBe(true);
   });
@@ -142,5 +142,12 @@ describe("parseCardStatement", () => {
   it("uses the PNB parser for Punjab National Bank cards and the generic one otherwise", () => {
     expect(parseCardStatement(LAYOUT_A, "Punjab National Bank")).toEqual(parsePnbCardStatementText(LAYOUT_A));
     expect(parseCardStatement(LAYOUT_A, "HDFC Bank")).toEqual(parseCardStatementText(LAYOUT_A));
+  });
+});
+
+describe("parsePnbCardStatementText: the Network/Last 4 Digit cell", () => {
+  it.each(["RUPAY - 0042", "RUPAY - ####", "VISA-XXXX", "RUPAY  -  ****"])("drops %s whole", (cell) => {
+    const parsed = parsePnbCardStatementText(`21-SEP-2026 22-SEP-2026 ${cell} FRESH BASKET STORES 1784.00 Dr`);
+    expect(parsed.lines.map((l) => l.description)).toEqual(["FRESH BASKET STORES"]);
   });
 });

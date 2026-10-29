@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { type CardStatementParse, type StatementLine, statementLineKey } from "@fin-creador/domain"
-import { buildReview, canTick, checkReasons, lineErrors, reviewKeys, reviewTotals, saveBlockers } from "./review"
+import { buildReview, canTick, checkReasons, lineErrors, reviewKeys, reviewTotals, saveBlockers, statementDatesWarning } from "./review"
 
 // Synthetic statement lines only.
 const CARD = "00000000-0000-4000-8000-0000000000c1"
@@ -28,7 +28,7 @@ const parse: CardStatementParse = {
     line({ date: "2026-10-02", amountMinor: 30_000, description: "PHONE MART" }),
     line({ date: "2026-10-03", amountMinor: 12_000, description: "CINEMA" }),
   ],
-  issues: [{ line: 40, reason: "no_amount" }],
+  issues: [{ line: 40, reason: "no_amount", shape: "date, text, no amount" }],
   checks: [
     { name: "summary", status: "ok", foundMinor: 233_400, expectedMinor: 233_400 },
     { name: "invoice_total", status: "ok", foundMinor: 223_350, expectedMinor: 223_350 },
@@ -62,6 +62,7 @@ describe("buildReview", () => {
     ])
     expect(review.lines[1]!.amount).toBe("1,784")
     expect(review.unreadableRows).toBe(1)
+    expect(review.unreadable).toEqual([{ page: null, row: 40, shape: "date, text, no amount" }])
     expect(review.statement).toEqual({ ...parse.summary, exists: false })
   })
 
@@ -150,5 +151,23 @@ describe("checkReasons and saveBlockers", () => {
     expect(saveBlockers(r, categories, context, true)).toEqual(["line_errors"])
     const none2 = { ...r, lines: r.lines.map((l) => ({ ...l, ticked: false })) }
     expect(saveBlockers(none2, categories, context, true)).toEqual(["nothing_ticked"])
+    // Statement only: nothing ticked is fine when the statement is entered; the check still applies.
+    expect(saveBlockers(none2, categories, context, true, true)).toEqual([])
+    expect(saveBlockers(none2, categories, context, false, true)).toEqual(["check_not_confirmed"])
+  })
+})
+
+describe("unreadable rows and statement dates", () => {
+  it("places an unreadable row on its PDF page and row, with only its masked shape", () => {
+    const r = buildReview(parse, none, categories, context, [30, 25])
+    expect(r.unreadable).toEqual([{ page: 2, row: 10, shape: "date, text, no amount" }])
+    expect(JSON.stringify(r.unreadable)).not.toMatch(/\d{3,}|FRESH|BASKET/)
+  })
+
+  it("warns when the due date is before the statement date", () => {
+    expect(statementDatesWarning("2026-10-15", "2026-10-05")).toMatch(/^Check statement dates/)
+    expect(statementDatesWarning("2026-10-15", "2026-11-04")).toBeNull()
+    expect(statementDatesWarning("2026-10-15", "2026-10-15")).toBeNull()
+    expect(statementDatesWarning("2026-10-15", "")).toBeNull()
   })
 })

@@ -4,7 +4,8 @@
 // RC4), or with no text at all (only a drawn shape, as a scanned page has). Test use only.
 import { createHash } from "node:crypto"
 
-export type SyntheticCell = { x: number; text: string }
+/** A cell at x on its row; `dy` moves it up (+) or down (-) from the row's baseline. */
+export type SyntheticCell = { x: number; text: string; dy?: number }
 export type SyntheticRow = SyntheticCell[]
 export type SyntheticPage = SyntheticRow[]
 
@@ -80,7 +81,7 @@ function contentStream(page: SyntheticPage, noText: boolean): string {
   if (noText) return "0.8 0.8 0.8 rg 40 500 500 250 re f 0 0 0 rg 60 700 300 12 re f\n"
   const lines = ["BT", "/F1 9 Tf"]
   page.forEach((row, r) => {
-    for (const cell of row) lines.push(`1 0 0 1 ${cell.x} ${800 - r * 14} Tm (${escape(cell.text)}) Tj`)
+    for (const cell of row) lines.push(`1 0 0 1 ${cell.x} ${800 - r * 14 + (cell.dy ?? 0)} Tm (${escape(cell.text)}) Tj`)
   })
   lines.push("ET")
   return `${lines.join("\n")}\n`
@@ -167,6 +168,13 @@ export type PnbStatementOptions = {
   invoiceTotal?: string
   /** Extra ₹100.00 purchases ("SHOP 1", "SHOP 2"...) on page 2; the totals include them. */
   extraPurchases?: number
+  /**
+   * The FRESH BASKET row as some real statements draw it (network column only): its details
+   * wrapped over two lines ("FRESH BASKET" / "STORES BENGAL") and its cells at slightly different
+   * heights, given as y offsets from the row's baseline; `overprint` draws the first details line
+   * twice. A blank row follows it, as the wrap pushes the next row down.
+   */
+  wrapped?: { date: number; network: number; line1: number; line2: number; overprint?: boolean }
 }
 
 const rupees = (minor: number) => (minor / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -201,10 +209,23 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
     ...columns(xs, [
       header,
       [on("2026-09-18"), on("2026-09-19"), ...net, "PAYMENT RECEIVED - THANK YOU", "1500.00 Cr"],
-      [on("2026-09-21"), on("2026-09-22"), ...net, "FRESH BASKET STORES BENGAL", "1784.00 Dr"],
+      ...(network && options.wrapped ? [] : [[on("2026-09-21"), on("2026-09-22"), ...net, "FRESH BASKET STORES BENGAL", "1784.00 Dr"]]),
     ]),
     ...columns([40], [[`Date: ${invoice} Page 1`]]),
   ]
+  if (network && options.wrapped) {
+    const w = options.wrapped
+    const row: SyntheticRow = [
+      { x: 40, text: on("2026-09-21"), dy: w.date },
+      { x: 110, text: on("2026-09-22"), dy: w.date },
+      { x: 180, text: "RUPAY - 0042", dy: w.network },
+      { x: 260, text: "FRESH BASKET", dy: w.line1 },
+      ...(w.overprint ? [{ x: 260, text: "FRESH BASKET", dy: w.line1 }] : []),
+      { x: 260, text: "STORES BENGAL", dy: w.line2 },
+      { x: 520, text: "1784.00 Dr", dy: w.date },
+    ]
+    page1.splice(page1.length - 1, 0, row, [])
+  }
   // Page 2: no repeated header.
   const page2 = [
     ...columns(xs, [

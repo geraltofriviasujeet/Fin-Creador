@@ -29,6 +29,28 @@ describe.each([true, false])("readStatementPdf: PNB text PDF (network column: %s
   })
 })
 
+describe.each([
+  ["details on the baseline, second line below", { date: 0, network: 2, line1: 0, line2: -10 }],
+  ["date centred on two lines of details", { date: 0, network: -1.5, line1: 5, line2: -5 }],
+  ["cells drifting, first line overprinted", { date: -4, network: 1, line1: 1, line2: -9, overprint: true }],
+])("readStatementPdf: PNB network column with wrapped, offset details (%s)", (_, wrapped) => {
+  it("drops the whole network cell and joins the wrapped details in order", async () => {
+    const read = await readStatementPdf(lib, syntheticPdf(pnbPages(true, { wrapped })))
+    expect(read.status).toBe("ok")
+    if (read.status !== "ok") return
+    const parsed = parseCardStatement(read.text, "Punjab National Bank")
+    expect(parsed.lines.map((l) => l.description)).toEqual([
+      "PAYMENT RECEIVED - THANK YOU",
+      "FRESH BASKET STORES BENGAL",
+      "LATE PAYMENT FEE",
+      "IGST @18% ON LATE PAYMENT FEE",
+    ])
+    expect(parsed.issues).toEqual([])
+    expect(statementNeedsCheck(parsed)).toBe(false)
+    expect(JSON.stringify(parsed)).not.toMatch(/RUPAY|0042/)
+  })
+})
+
 describe("readStatementPdf: password", () => {
   const pdf = syntheticPdf(pnbPages(false), { password: "fake-pass-1" })
 

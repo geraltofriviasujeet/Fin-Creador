@@ -326,3 +326,37 @@ test("phone width: no sideways scroll, Save reachable; a session ended mid-save 
   await expect(tick(page, "LATE PAYMENT FEE")).toBeChecked()
   await expect(save).toBeEnabled()
 })
+
+test("wrapped network-column rows read cleanly; a dates warning; Save with no line ticked enters the statement only", async ({ page }) => {
+  const today = todayInIndia()
+  await setUp(page, "Indu Varma")
+  await openImport(page, PNB_CARD)
+  const wrapped = { date: 0, network: -1.5, line1: 5, line2: -5 }
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true, { invoiceDate: today, lineDate: today, wrapped }))))
+  await expect(lines(page)).toHaveCount(4)
+  await expect(lineFor(page, "FRESH BASKET STORES BENGAL")).toHaveCount(1)
+  await expect(review(page)).not.toContainText("RUPAY")
+  await expect(review(page)).not.toContainText("could not be read")
+
+  // A due date before the statement date is flagged.
+  const due = review(page).getByLabel("Due date")
+  const prefilled = await due.inputValue()
+  await due.fill("2020-01-01")
+  await expect(review(page)).toContainText("Check statement dates: the due date is before the statement date.")
+  await due.fill(prefilled)
+  await expect(review(page)).not.toContainText("Check statement dates")
+
+  // Nothing ticked, statement ticked: the statement only.
+  for (const text of ["FRESH BASKET", "LATE PAYMENT FEE", "IGST"]) await tick(page, text).uncheck()
+  await expect(review(page)).not.toContainText("Tick at least one line.")
+  await review(page).getByRole("button", { name: "Save statement only" }).click()
+  const confirm = dialog(page, "Enter this statement?")
+  await expect(confirm).toContainText("No lines are saved: only the statement is entered.")
+  await confirm.getByRole("button", { name: "Enter statement" }).click()
+  await expect(review(page)).toContainText("Statement saved")
+  await expect(review(page)).toContainText("The statement is entered.")
+  await expect(review(page).getByRole("button", { name: "Save ticked lines" })).toBeDisabled()
+  // ₹1,500 owed and a ₹2,334 bill: the ₹834 difference is added in Bank charges & interest.
+  await page.goto("/loans-liabilities")
+  await expect(cardRow(page)).toContainText("₹2,334")
+})

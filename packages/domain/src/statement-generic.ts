@@ -15,6 +15,7 @@ import {
   numberOccurrences,
   parseStatementAmount,
   parseStatementDate,
+  statementRowShape,
 } from "./statements";
 
 /** What prefills Enter statement; each field is null when the text does not state it. */
@@ -101,23 +102,23 @@ export function parseCardStatementText(text: string): CardStatementParse {
     const lineNumber = index + 1;
     const m = LINE.exec(row);
     if (!m || !TWO_DECIMALS.test(m[3]!)) {
-      issues.push({ line: lineNumber, reason: "no_amount" });
+      issues.push({ line: lineNumber, reason: "no_amount", shape: statementRowShape(row) });
       continue;
     }
     const date = parseStatementDate(m[1]!);
     const amount = parseStatementAmount(m[3]!);
     if (!date || !amount) {
-      issues.push({ line: lineNumber, reason: date ? "bad_amount" : "bad_date" });
+      issues.push({ line: lineNumber, reason: date ? "bad_amount" : "bad_date", shape: statementRowShape(row) });
       continue;
     }
     if (BALANCE_LINE.test(m[2]!)) continue;
     const { description, foreignCurrency } = cleanStatementDescription(m[2]!);
     if (description === "") {
-      issues.push({ line: lineNumber, reason: "no_description" });
+      issues.push({ line: lineNumber, reason: "no_description", shape: statementRowShape(row) });
       continue;
     }
     if (lines.length === MAX_STATEMENT_LINES) {
-      issues.push({ line: lineNumber, reason: "too_many_lines" });
+      issues.push({ line: lineNumber, reason: "too_many_lines", shape: statementRowShape(row) });
       break;
     }
     const direction = amount.direction ?? "debit";

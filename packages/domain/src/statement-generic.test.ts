@@ -69,11 +69,11 @@ describe("parseCardStatementText (generic)", () => {
     for (const l of parsed.lines) expect(hasDigitRun(l.description, 4)).toBe(false);
   });
 
-  it("reports unreadable lines by number only and skips balance lines", () => {
+  it("reports unreadable lines by number and masked shape only, and skips balance lines", () => {
     expect(parsed.issues).toEqual([
-      { line: 18, reason: "bad_date" },
-      { line: 19, reason: "no_amount" },
-      { line: 20, reason: "no_description" },
+      { line: 18, reason: "bad_date", shape: "number, text, amount" },
+      { line: 19, reason: "no_amount", shape: "date, text, no amount" },
+      { line: 20, reason: "no_description", shape: "date, number, amount" },
     ]);
     expect(JSON.stringify(parsed)).not.toMatch(/Opening|Closing|5555|2222/);
   });
@@ -88,6 +88,6 @@ describe("parseCardStatementText (generic)", () => {
     const many = Array.from({ length: MAX_STATEMENT_LINES + 2 }, () => "01/10/2026 SHOP 1.00").join("\n");
     const capped = parseCardStatementText(many);
     expect(capped.lines).toHaveLength(MAX_STATEMENT_LINES);
-    expect(capped.issues).toEqual([{ line: MAX_STATEMENT_LINES + 1, reason: "too_many_lines" }]);
+    expect(capped.issues).toEqual([{ line: MAX_STATEMENT_LINES + 1, reason: "too_many_lines", shape: "date, text, amount" }]);
   });
 });

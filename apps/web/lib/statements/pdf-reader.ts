@@ -6,7 +6,7 @@ import {
   MAX_STATEMENT_PDF_BYTES,
   MAX_STATEMENT_PDF_PAGES,
   type PdfTextItem,
-  statementTextFromPages,
+  statementPages,
 } from "@fin-creador/domain"
 
 /** The part of pdf.js used here. */
@@ -31,7 +31,7 @@ type PdfDocument = {
 }
 
 export type PdfReadResult =
-  | { status: "ok"; text: string; pages: number }
+  | { status: "ok"; text: string; pages: number; pageRowCounts: number[] }
   | { status: "needs_password" }
   | { status: "wrong_password" }
   | { status: "no_text" }
@@ -94,9 +94,9 @@ export async function readStatementPdf(lib: PdfLib, data: Uint8Array, password?:
         })),
       )
     }
-    const text = statementTextFromPages(pages)
+    const { text, pageRowCounts } = statementPages(pages)
     if (text.trim() === "") return { status: "no_text" }
-    return { status: "ok", text, pages: doc.numPages }
+    return { status: "ok", text, pages: doc.numPages, pageRowCounts }
   } catch {
     return { status: "unreadable" }
   } finally {

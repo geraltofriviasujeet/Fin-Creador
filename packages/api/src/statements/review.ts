@@ -9,6 +9,7 @@ import {
   cardLineDecision,
   formatMoney,
   isIsoDate,
+  linePosition,
   minorToGroupedInputString,
   parseAmount,
   statementLineKey,
@@ -65,7 +66,12 @@ export type Review = {
   statement: CardStatementSummary & { exists: boolean }
   checks: StatementCheck[]
   unreadableRows: number
+  /** Where each unreadable row is and its masked shape (no text or numbers), in text order. */
+  unreadable: UnreadableRow[]
 }
+
+/** An unreadable row: its page and row in the PDF (null when not known) and its masked shape. */
+export type UnreadableRow = { page: number | null; row: number; shape: string }
 
 export type ReviewContext = { cardId: string; cardAddedOn: IsoDate; today: IsoDate; currency: string }
 
@@ -88,6 +94,8 @@ export function buildReview(
   matches: ImportMatches,
   categories: readonly ReviewCategory[],
   context: ReviewContext,
+  /** Rows each PDF page gave (from the reader), to place unreadable rows; else they're numbered in the text. */
+  pageRowCounts?: readonly number[],
 ): Review {
   const keys = reviewKeys(context.cardId, parse)
   const imported = new Set(matches.importedKeys)
@@ -130,6 +138,12 @@ export function buildReview(
     statement: { ...parse.summary, exists: matches.statementExists },
     checks: parse.checks,
     unreadableRows: parse.issues.length,
+    unreadable: parse.issues
+      .filter((issue) => issue.line > 0)
+      .map((issue) => {
+        const at = pageRowCounts ? linePosition(issue.line, pageRowCounts) : null
+        return { page: at?.page ?? null, row: at?.row ?? issue.line, shape: issue.shape ?? "" }
+      }),
   }
 }
 
@@ -205,11 +219,19 @@ export function saveBlockers(
   categories: readonly ReviewCategory[],
   context: Pick<ReviewContext, "cardAddedOn" | "today" | "currency">,
   checkConfirmed: boolean,
+  /** The statement will be entered too: then Save works with no line ticked (statement only). */
+  entersStatement = false,
 ): SaveBlocker[] {
   const ticked = review.lines.filter((l) => l.ticked)
   const blockers: SaveBlocker[] = []
-  if (ticked.length === 0) blockers.push("nothing_ticked")
+  if (ticked.length === 0 && !entersStatement) blockers.push("nothing_ticked")
   if (ticked.some((l) => Object.keys(lineErrors(l, categories, context)).length > 0)) blockers.push("line_errors")
   if (checkReasons(review.checks, context.currency).length > 0 && !checkConfirmed) blockers.push("check_not_confirmed")
   return blockers
+}
+
+/** A warning when the statement's dates look wrong (shown with Enter statement); null when they look right. */
+export function statementDatesWarning(statementDate: string, dueDate: string): string | null {
+  if (!isIsoDate(statementDate) || !isIsoDate(dueDate)) return null
+  return dueDate < statementDate ? "Check statement dates: the due date is before the statement date. Compare them with your PDF." : null
 }

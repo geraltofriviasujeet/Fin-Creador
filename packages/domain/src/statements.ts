@@ -42,10 +42,37 @@ export interface StatementLine {
 
 export type StatementIssueReason = "no_amount" | "bad_date" | "bad_amount" | "no_description" | "too_many_lines" | "too_long";
 
-/** A line the reader could not use; `line` is its 1-based number in the text (0: the whole text). */
+/**
+ * A line the reader could not use; `line` is its 1-based number in the text (0: the whole text).
+ * `shape` describes the row with no text or numbers in it (statementRowShape), to show which row.
+ */
 export interface StatementIssue {
   line: number;
   reason: StatementIssueReason;
+  shape?: string;
+}
+
+/**
+ * A row's shape, masked: what each part looks like ("date", "amount", "number", "text"), runs of
+ * the same kind once, then "no amount" when it has none. E.g. "date, date, text, no amount".
+ */
+export function statementRowShape(row: string): string {
+  const tokens = row.trim().split(/\s+/).filter((t) => t !== "");
+  const kinds: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    let kind = "text";
+    if (i + 2 < tokens.length && parseStatementDate(tokens.slice(i, i + 3).join(" "))) {
+      kind = "date";
+      i += 2;
+    } else if (parseStatementDate(tokens[i]!)) kind = "date";
+    else if (/^-?(?:₹|Rs\.?|INR)?\d[\d,]*\.\d{1,2}(?:Dr|Cr)?\.?$/i.test(tokens[i]!)) {
+      kind = "amount";
+      if (/^(?:Dr|Cr)\.?$/i.test(tokens[i + 1] ?? "")) i += 1;
+    } else if (/^[\d,./-]+$/.test(tokens[i]!)) kind = "number";
+    if (kinds[kinds.length - 1] !== kind) kinds.push(kind);
+  }
+  if (!kinds.includes("amount")) kinds.push("no amount");
+  return kinds.join(", ");
 }
 
 const MONTH_NAMES = [

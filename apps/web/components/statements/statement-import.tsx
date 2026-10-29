@@ -15,6 +15,7 @@ import {
   reviewKeys,
   reviewTotals,
   saveBlockers,
+  statementDatesWarning,
 } from "@fin-creador/api"
 import {
   type CardLineSkipReason,
@@ -62,6 +63,8 @@ const SKIP_TEXT: Record<CardLineSkipReason, string> = {
   future: "Skipped: future date",
 }
 
+const MAX_UNREADABLE_SHOWN = 10
+
 function dateRange(parse: CardStatementParse, fallback: string): { from: string; to: string } {
   const dates = parse.lines.map((l) => l.date).sort()
   return { from: dates[0] ?? fallback, to: dates.at(-1) ?? fallback }
@@ -73,6 +76,7 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
   const file = useRef<File | null>(null)
   // The statement's text, for reading it again with the other parser; it never leaves this page.
   const text = useRef<string | null>(null)
+  const pageRowCounts = useRef<number[] | undefined>(undefined)
   const issuerIsPnb = card.issuer === PNB
   const context: Context = { cardId: card.id, cardAddedOn: card.trackingStartedOn, today, currency: card.currency }
 
@@ -88,7 +92,7 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
       statementDate: parse.summary.statementDate,
     }).catch(() => null)
     if (!result?.ok) return setPhase({ step: "match_failed" })
-    setPhase({ step: "review", review: buildReview(parse, result.matches, categories, context), asPnb, pnbOffer })
+    setPhase({ step: "review", review: buildReview(parse, result.matches, categories, context, pageRowCounts.current), asPnb, pnbOffer })
   }
 
   const read = async (pdf: File, pass?: string) => {
@@ -98,6 +102,7 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
       const result = await readStatementPdf(lib, new Uint8Array(await pdf.arrayBuffer()), pass)
       if (result.status === "ok") {
         text.current = result.text
+        pageRowCounts.current = result.pageRowCounts
         await review(issuerIsPnb)
       } else if (result.status === "needs_password") setPhase({ step: "password" })
       else if (result.status === "wrong_password") setPhase({ step: "password", message: PDF_READ_MESSAGES.wrong_password })
@@ -257,7 +262,9 @@ function StatementReview({
   const review: Review = { ...initial, lines }
   const totals = reviewTotals(review, c)
   const reasons = checkReasons(initial.checks, c)
-  const blockers = saveBlockers(review, categories, context, checkConfirmed)
+  const statementOnly = statement.enter && !statementDone && !s.exists
+  const blockers = saveBlockers(review, categories, context, checkConfirmed, statementOnly)
+  const datesWarning = statementOnly ? statementDatesWarning(statement.statementDate, statement.dueDate) : null
 
   const update = (i: number, patch: Partial<ReviewLine>) => setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)))
   const applyBulk = () => {
@@ -369,6 +376,17 @@ function StatementReview({
       {initial.unreadableRows > 0 && (
         <FormMessage tone="error">
           {initial.unreadableRows === 1 ? "1 row could not be read" : `${initial.unreadableRows} rows could not be read`}. Compare the lines with your PDF.
+          {initial.unreadable.length > 0 && (
+            <ul aria-label="Rows that could not be read" className="mt-1 list-disc pl-5">
+              {initial.unreadable.slice(0, MAX_UNREADABLE_SHOWN).map((u, i) => (
+                <li key={i}>
+                  {u.page === null ? `Row ${u.row}` : `Page ${u.page}, row ${u.row}`}
+                  {u.shape && `: ${u.shape}`}
+                </li>
+              ))}
+              {initial.unreadable.length > MAX_UNREADABLE_SHOWN && <li>and {initial.unreadable.length - MAX_UNREADABLE_SHOWN} more</li>}
+            </ul>
+          )}
         </FormMessage>
       )}
 
@@ -436,6 +454,7 @@ function StatementReview({
                 <TextField name="dueDate" type="date" label="Due date" value={statement.dueDate} onChange={setField("dueDate")} />
               </div>
             )}
+            {datesWarning && <FormMessage tone="error">{datesWarning}</FormMessage>}
           </>
         )}
       </fieldset>
@@ -454,36 +473,52 @@ function StatementReview({
         )}
         <div className="flex flex-wrap items-center gap-3">
           <Button disabled={blockers.length > 0 || saving} aria-busy={saving} onClick={() => setConfirming(true)}>
-            {saving ? "Saving…" : "Save ticked lines"}
+            {saving ? "Saving…" : tickedLines.length === 0 && statementOnly ? "Save statement only" : "Save ticked lines"}
           </Button>
           <span className="text-xs text-muted-foreground">Nothing is saved until you confirm.</span>
         </div>
       </div>
 
       <Dialog open={confirming} onOpenChange={setConfirming}>
-        <DialogContent eyebrow={card.name} title="Save these purchases?">
-          <div className="grid gap-3 text-sm">
-            <p className="font-semibold">
-              {tickedLines.length === 1 ? "1 purchase" : `${tickedLines.length} purchases`}, {money(totals.tickedMinor, c)} in all.
-            </p>
-            <p>
-              These are purchases already made on the card. No money moves from any bank account: they are added to what the card owes.
-            </p>
-            {s.exists ? (
-              <p>A statement for this date is already entered: only the lines are saved.</p>
-            ) : statement.enter && !statementDone ? (
+        <DialogContent eyebrow={card.name} title={tickedLines.length === 0 ? "Enter this statement?" : "Save these purchases?"}>
+          {tickedLines.length === 0 ? (
+            <div className="grid gap-3 text-sm">
+              <p className="font-semibold">No lines are saved: only the statement is entered.</p>
               <p>
-                Then the statement of {statement.statementDate ? fullDate(statement.statementDate) : "this date"} is entered (bill {symbol}
+                The statement of {statement.statementDate ? fullDate(statement.statementDate) : "this date"} is entered (bill {symbol}
                 {statement.total}). If the bill is more than the card owes, the difference is added in Bank charges &amp; interest.
               </p>
-            ) : null}
-            <div className="flex flex-wrap justify-end gap-2">
-              <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
-              <Button type="button" onClick={() => void save()}>
-                Save {tickedLines.length === 1 ? "1 line" : `${tickedLines.length} lines`}
-              </Button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
+                <Button type="button" onClick={() => void save()}>
+                  Enter statement
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="grid gap-3 text-sm">
+              <p className="font-semibold">
+                {tickedLines.length === 1 ? "1 purchase" : `${tickedLines.length} purchases`}, {money(totals.tickedMinor, c)} in all.
+              </p>
+              <p>
+                These are purchases already made on the card. No money moves from any bank account: they are added to what the card owes.
+              </p>
+              {s.exists ? (
+                <p>A statement for this date is already entered: only the lines are saved.</p>
+              ) : statement.enter && !statementDone ? (
+                <p>
+                  Then the statement of {statement.statementDate ? fullDate(statement.statementDate) : "this date"} is entered (bill {symbol}
+                  {statement.total}). If the bill is more than the card owes, the difference is added in Bank charges &amp; interest.
+                </p>
+              ) : null}
+              <div className="flex flex-wrap justify-end gap-2">
+                <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
+                <Button type="button" onClick={() => void save()}>
+                  Save {tickedLines.length === 1 ? "1 line" : `${tickedLines.length} lines`}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </section>

@@ -26,6 +26,7 @@ import {
   numberOccurrences,
   parseStatementAmount,
   parseStatementDate,
+  statementRowShape,
 } from "./statements";
 
 export interface PnbCardStatementParse extends CardStatementParse {
@@ -106,7 +107,8 @@ const check = (name: StatementCheck["name"], found: number | null, expected: num
 // Transaction Date, Post Date, [Network/Last 4 Digit], details, amount with Dr / Cr.
 const LINE = new RegExp(String.raw`^(${DATE})\s+(?:${DATE}\s+)?(.*?)\s*(\d[\d,]*\.\d{2}\s*(?:Dr|Cr))\.?$`, "i");
 const STARTS_WITH_DATE = new RegExp(String.raw`^${DATE}(?=\s|$)`, "i");
-const NETWORK_CELL = /^(?:RUPAY|VISA|MASTER\s?CARD|AMEX|DINERS(?:\s+CLUB)?|JCB|DISCOVER|UPI)\s*-\s*[\dXx*•]{4}(?![\dXx*•])\s*/i;
+// The whole Network/Last 4 Digit cell: a network name, a dash and four digits or mask characters.
+const NETWORK_CELL = /^(?:RUPAY|VISA|MASTER\s?CARD|AMEX|DINERS(?:\s+CLUB)?|JCB|DISCOVER|UPI)\s*-\s*[\dXx*•#]{4}(?![\dXx*•#])\s*/i;
 const PERIOD = new RegExp(String.raw`Trnx\s+Details\s+From\s+(${DATE})\s+to\s+(${DATE})`, "i");
 const END = /\bEnd\s+of\s+Statement\b/i;
 
@@ -128,22 +130,22 @@ export function parsePnbCardStatementText(text: string): PnbCardStatementParse {
     const lineNumber = index + 1;
     const m = LINE.exec(row);
     if (!m) {
-      issues.push({ line: lineNumber, reason: "no_amount" });
+      issues.push({ line: lineNumber, reason: "no_amount", shape: statementRowShape(row) });
       continue;
     }
     const lineDate = parseStatementDate(m[1]!);
     const amount = parseStatementAmount(m[3]!);
     if (!lineDate || !amount) {
-      issues.push({ line: lineNumber, reason: lineDate ? "bad_amount" : "bad_date" });
+      issues.push({ line: lineNumber, reason: lineDate ? "bad_amount" : "bad_date", shape: statementRowShape(row) });
       continue;
     }
     const { description, foreignCurrency } = cleanStatementDescription(m[2]!.replace(NETWORK_CELL, ""));
     if (description === "") {
-      issues.push({ line: lineNumber, reason: "no_description" });
+      issues.push({ line: lineNumber, reason: "no_description", shape: statementRowShape(row) });
       continue;
     }
     if (lines.length === MAX_STATEMENT_LINES) {
-      issues.push({ line: lineNumber, reason: "too_many_lines" });
+      issues.push({ line: lineNumber, reason: "too_many_lines", shape: statementRowShape(row) });
       break;
     }
     const direction = amount.direction ?? "debit";
