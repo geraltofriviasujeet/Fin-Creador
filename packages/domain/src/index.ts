@@ -21,4 +21,5 @@ export * from "./digits";
 export * from "./statements";
 export * from "./statement-generic";
 export * from "./statement-pnb";
+export * from "./pdf-rows";
 export * from "./reports";

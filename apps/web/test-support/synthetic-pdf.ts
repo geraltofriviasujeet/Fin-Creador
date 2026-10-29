@@ -1,0 +1,190 @@
+// Synthetic statement PDFs for tests (Sprint 9a.3), written by hand so no PDF library or real
+// statement is needed: text placed at given x / y on each page (Helvetica, a standard font),
+// optionally protected with a user password (PDF Standard security handler, revision 3, 128-bit
+// RC4), or with no text at all (only a drawn shape, as a scanned page has). Test use only.
+import { createHash } from "node:crypto"
+
+export type SyntheticCell = { x: number; text: string }
+export type SyntheticRow = SyntheticCell[]
+export type SyntheticPage = SyntheticRow[]
+
+const PAD = Uint8Array.from([
+  0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08,
+  0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
+])
+
+const md5 = (...parts: Uint8Array[]) => {
+  const h = createHash("md5")
+  for (const p of parts) h.update(p)
+  return new Uint8Array(h.digest())
+}
+
+function rc4(key: Uint8Array, data: Uint8Array): Uint8Array {
+  const s = Uint8Array.from({ length: 256 }, (_, i) => i)
+  let j = 0
+  for (let i = 0; i < 256; i++) {
+    j = (j + s[i]! + key[i % key.length]!) & 255
+    ;[s[i], s[j]] = [s[j]!, s[i]!]
+  }
+  const out = new Uint8Array(data.length)
+  let i = 0
+  j = 0
+  for (let k = 0; k < data.length; k++) {
+    i = (i + 1) & 255
+    j = (j + s[i]!) & 255
+    ;[s[i], s[j]] = [s[j]!, s[i]!]
+    out[k] = data[k]! ^ s[(s[i]! + s[j]!) & 255]!
+  }
+  return out
+}
+
+const latin1 = (text: string) => Uint8Array.from(text, (c) => c.charCodeAt(0) & 255)
+const padded = (password: string) => {
+  const out = new Uint8Array(32)
+  const bytes = latin1(password).slice(0, 32)
+  out.set(bytes)
+  out.set(PAD.slice(0, 32 - bytes.length), bytes.length)
+  return out
+}
+const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex")
+const xorKey = (key: Uint8Array, n: number) => key.map((b) => b ^ n)
+
+/** Standard security handler, R3, 128-bit key: the /O and /U entries and the file key. */
+function security(userPassword: string, ownerPassword: string, id: Uint8Array, permissions: number) {
+  let h = md5(padded(ownerPassword))
+  for (let i = 0; i < 50; i++) h = md5(h)
+  const ownerKey = h.slice(0, 16)
+  let o = rc4(ownerKey, padded(userPassword))
+  for (let i = 1; i <= 19; i++) o = rc4(xorKey(ownerKey, i), o)
+
+  const p = new Uint8Array(4)
+  new DataView(p.buffer).setInt32(0, permissions, true)
+  let k = md5(padded(userPassword), o, p, id)
+  for (let i = 0; i < 50; i++) k = md5(k.slice(0, 16))
+  const fileKey = k.slice(0, 16)
+
+  let u = rc4(fileKey, md5(PAD, id))
+  for (let i = 1; i <= 19; i++) u = rc4(xorKey(fileKey, i), u)
+  const uFull = new Uint8Array(32)
+  uFull.set(u)
+  return { o, u: uFull, fileKey }
+}
+
+function objectKey(fileKey: Uint8Array, num: number, gen: number) {
+  return md5(fileKey, Uint8Array.from([num & 255, (num >> 8) & 255, (num >> 16) & 255, gen & 255, (gen >> 8) & 255])).slice(0, 16)
+}
+
+const escape = (text: string) => text.replace(/[\\()]/g, (c) => `\\${c}`)
+
+function contentStream(page: SyntheticPage, noText: boolean): string {
+  if (noText) return "0.8 0.8 0.8 rg 40 500 500 250 re f 0 0 0 rg 60 700 300 12 re f\n"
+  const lines = ["BT", "/F1 9 Tf"]
+  page.forEach((row, r) => {
+    for (const cell of row) lines.push(`1 0 0 1 ${cell.x} ${800 - r * 14} Tm (${escape(cell.text)}) Tj`)
+  })
+  lines.push("ET")
+  return `${lines.join("\n")}\n`
+}
+
+/**
+ * A PDF with the given pages. `password` protects it (anyone opening it needs that password);
+ * `noText` draws shapes instead of text, as a scanned statement has no text layer.
+ */
+export function syntheticPdf(pages: readonly SyntheticPage[], options: { password?: string; noText?: boolean } = {}): Uint8Array {
+  const id = md5(latin1(`synthetic-${pages.length}-${options.password ?? ""}-${options.noText ? 1 : 0}`))
+  const sec = options.password === undefined ? null : security(options.password, "synthetic-owner", id, -4)
+
+  // 1 catalog, 2 pages, 3 font, then a page and its content stream per page.
+  const objects: (string | Uint8Array)[] = []
+  const pageNums = pages.map((_, i) => 4 + i * 2)
+  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>"
+  objects[2] = `<< /Type /Pages /Kids [${pageNums.map((n) => `${n} 0 R`).join(" ")}] /Count ${pages.length} >>`
+  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+  pages.forEach((page, i) => {
+    const num = pageNums[i]!
+    objects[num] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${num + 1} 0 R >>`
+    let data: Uint8Array = latin1(contentStream(page, options.noText === true))
+    if (sec) data = rc4(objectKey(sec.fileKey, num + 1, 0), data)
+    objects[num + 1] = data
+  })
+  const encryptNum = objects.length
+  if (sec) objects[encryptNum] = `<< /Filter /Standard /V 2 /R 3 /Length 128 /P -4 /O <${hex(sec.o)}> /U <${hex(sec.u)}> >>`
+
+  const chunks: Uint8Array[] = [latin1("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")]
+  let offset = chunks[0]!.length
+  const offsets: number[] = []
+  const push = (bytes: Uint8Array) => {
+    chunks.push(bytes)
+    offset += bytes.length
+  }
+  for (let num = 1; num < objects.length; num++) {
+    const body = objects[num]
+    if (body === undefined) continue
+    offsets[num] = offset
+    if (typeof body === "string") push(latin1(`${num} 0 obj\n${body}\nendobj\n`))
+    else {
+      push(latin1(`${num} 0 obj\n<< /Length ${body.length} >>\nstream\n`))
+      push(body)
+      push(latin1("\nendstream\nendobj\n"))
+    }
+  }
+  const xrefAt = offset
+  const size = objects.length
+  const xref = ["xref", `0 ${size}`, "0000000000 65535 f "]
+  for (let num = 1; num < size; num++) xref.push(`${String(offsets[num] ?? 0).padStart(10, "0")} 00000 n `)
+  const trailer = `trailer\n<< /Size ${size} /Root 1 0 R /ID [<${hex(id)}> <${hex(id)}>]${sec ? ` /Encrypt ${encryptNum} 0 R` : ""} >>\nstartxref\n${xrefAt}\n%%EOF\n`
+  push(latin1(`${xref.join("\n")}\n${trailer}`))
+
+  const out = new Uint8Array(offset)
+  let at = 0
+  for (const c of chunks) {
+    out.set(c, at)
+    at += c.length
+  }
+  return out
+}
+
+/** Places each row's cells at fixed column x positions (left to right). */
+export const columns = (xs: readonly number[], rows: readonly (readonly string[])[]): SyntheticPage =>
+  rows.map((row) => row.map((text, i) => ({ x: xs[i] ?? xs[xs.length - 1]! + 60 * (i - xs.length + 1), text })).filter((c) => c.text !== ""))
+
+const TOP = [
+  ...columns([40], [["PUNJAB NATIONAL BANK CREDIT CARD STATEMENT"], ["EXAMPLE PERSON"], ["Card Number 5555 XXXX XXXX 0042"]]),
+  ...columns([40, 120, 220, 320, 450], [
+    ["Invoice Date", "Payment Due Date", "Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"],
+    ["15-OCT-2026", "04-NOV-2026", "2,334.00", "2,334.00", "116.70"],
+  ]),
+  ...columns([40, 140, 260, 340, 500], [
+    ["Previous Balance", "Purchases and other charges", "Cash Advances", "Payments and Other Credits / Shadow Credits", ""],
+    ["1,500.00", "2,334.00", "0.00", "1,500.00", ""],
+  ]),
+]
+
+/**
+ * A two-page PNB-style card statement (layout from the owner's description; invented person,
+ * merchants and card digits), with or without the Network/Last 4 Digit column. Bill ₹2,334.00.
+ */
+export function pnbStatementPages(network: boolean): SyntheticPage[] {
+  const xs = network ? [40, 110, 180, 260, 520] : [40, 110, 180, 520]
+  const net = network ? ["RUPAY - 0042"] : []
+  const header = ["Transaction Date", "Post Date", ...(network ? ["Network/Last 4 Digit"] : []), "Trnx Details From 16-SEP-2026 to 15-OCT-2026", "Amount in Rs"]
+  const page1 = [
+    ...TOP,
+    ...columns(xs, [
+      header,
+      ["18-SEP-2026", "19-SEP-2026", ...net, "PAYMENT RECEIVED - THANK YOU", "1500.00 Cr"],
+      ["21-SEP-2026", "22-SEP-2026", ...net, "FRESH BASKET STORES BENGAL", "1784.00 Dr"],
+    ]),
+    ...columns([40], [["Date: 15-OCT-2026 Page 1"]]),
+  ]
+  // Page 2: no repeated header.
+  const page2 = [
+    ...columns(xs, [
+      ["10-OCT-2026", "10-OCT-2026", ...net, "LATE PAYMENT FEE", "500.00 Dr"],
+      ["10-OCT-2026", "10-OCT-2026", ...net, "IGST @18% ON LATE PAYMENT FEE", "50.00 Dr"],
+    ]),
+    ...columns([40, 200], [["Total GST", "50.00"], ["Total Invoice Value", "2,334.00"], ["End of Statement", ""]]),
+    ...columns([40], [["Date: 15-OCT-2026 Page 2"]]),
+  ]
+  return [page1, page2]
+}

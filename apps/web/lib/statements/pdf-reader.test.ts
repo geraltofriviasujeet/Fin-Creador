@@ -1,0 +1,67 @@
+// readStatementPdf on synthetic PDFs written in the test (apps/web/test-support/synthetic-pdf.ts),
+// with the pdf.js Node build: a text PDF in the two PNB layouts, a password-protected one, one with
+// no text, and the caps. Never a real statement.
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs"
+import { describe, expect, it } from "vitest"
+import { MAX_STATEMENT_PDF_BYTES, MAX_STATEMENT_PDF_PAGES, parseCardStatement, statementNeedsCheck } from "@fin-creador/domain"
+import { columns, pnbStatementPages as pnbPages, syntheticPdf } from "../../test-support/synthetic-pdf"
+import { type PdfLib, readStatementPdf } from "./pdf-reader"
+
+const lib = pdfjs as unknown as PdfLib
+
+describe.each([true, false])("readStatementPdf: PNB text PDF (network column: %s)", (network) => {
+  it("reads rows by position and the PNB parser gets every line, summary and check", async () => {
+    const read = await readStatementPdf(lib, syntheticPdf(pnbPages(network)))
+    expect(read.status).toBe("ok")
+    if (read.status !== "ok") return
+    expect(read.pages).toBe(2)
+    const parsed = parseCardStatement(read.text, "Punjab National Bank")
+    expect(parsed.summary).toEqual({ statementDate: "2026-10-15", dueDate: "2026-11-04", totalMinor: 233_400, minimumMinor: 11_670 })
+    expect(parsed.lines.map((l) => [l.date, l.amountMinor, l.direction, l.kind, l.description])).toEqual([
+      ["2026-09-18", 150_000, "credit", "payment", "PAYMENT RECEIVED - THANK YOU"],
+      ["2026-09-21", 178_400, "debit", "purchase", "FRESH BASKET STORES BENGAL"],
+      ["2026-10-10", 50_000, "debit", "fee", "LATE PAYMENT FEE"],
+      ["2026-10-10", 5_000, "debit", "tax", "IGST @18% ON LATE PAYMENT FEE"],
+    ])
+    expect(parsed.issues).toEqual([])
+    expect(statementNeedsCheck(parsed)).toBe(false)
+    expect(JSON.stringify(parsed)).not.toMatch(/0042|5555|EXAMPLE PERSON/)
+  })
+})
+
+describe("readStatementPdf: password", () => {
+  const pdf = syntheticPdf(pnbPages(false), { password: "fake-pass-1" })
+
+  it("asks for the password, refuses a wrong one, and reads with the right one", async () => {
+    expect(await readStatementPdf(lib, pdf)).toEqual({ status: "needs_password" })
+    expect(await readStatementPdf(lib, pdf, "wrong")).toEqual({ status: "wrong_password" })
+    const read = await readStatementPdf(lib, pdf, "fake-pass-1")
+    expect(read.status).toBe("ok")
+    if (read.status === "ok") expect(parseCardStatement(read.text, "Punjab National Bank").lines).toHaveLength(4)
+  })
+
+  it("leaves the caller's bytes usable for a retry", async () => {
+    const copy = pdf.slice()
+    await readStatementPdf(lib, copy, "wrong")
+    expect(copy).toEqual(pdf)
+  })
+})
+
+describe("readStatementPdf: what it refuses", () => {
+  it("a PDF with no text", async () => {
+    expect(await readStatementPdf(lib, syntheticPdf([[]], { noText: true }))).toEqual({ status: "no_text" })
+  })
+
+  it("a file above the size cap, before reading it", async () => {
+    expect(await readStatementPdf(lib, new Uint8Array(MAX_STATEMENT_PDF_BYTES + 1))).toEqual({ status: "too_large" })
+  })
+
+  it("more pages than the cap", async () => {
+    const pages = Array.from({ length: MAX_STATEMENT_PDF_PAGES + 1 }, () => columns([40], [["Page"]]))
+    expect(await readStatementPdf(lib, syntheticPdf(pages))).toEqual({ status: "too_many_pages" })
+  })
+
+  it("something that is not a PDF", async () => {
+    expect(await readStatementPdf(lib, new TextEncoder().encode("not a pdf"))).toEqual({ status: "unreadable" })
+  })
+})
