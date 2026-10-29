@@ -133,8 +133,11 @@ test("review: ticks, defaults, a possible duplicate, edits, bulk category and th
   await expect(review(page).getByRole("button", { name: "Save ticked lines" })).toBeEnabled()
   await shot(page, "statement-import-review")
 
-  // Nothing ticked: Save is blocked.
+  // Nothing ticked and the statement not entered either: Save is blocked (with the statement
+  // ticked, Save enters the statement only).
   for (const text of ["FRESH BASKET", "LATE PAYMENT FEE", "IGST"]) await tick(page, text).uncheck()
+  await expect(review(page).getByRole("button", { name: "Save statement only" })).toBeEnabled()
+  await review(page).getByLabel("Also enter this statement").uncheck()
   await expect(review(page)).toContainText("Tick at least one line.")
   await expect(review(page).getByRole("button", { name: "Save ticked lines" })).toBeDisabled()
 })
