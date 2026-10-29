@@ -4,6 +4,7 @@ import type * as React from "react"
 import { useRef, useState } from "react"
 import {
   type ImportCard,
+  type LineSaveResult,
   type Review,
   type ReviewCategory,
   type ReviewLine,
@@ -22,10 +23,12 @@ import {
   minorToGroupedInputString,
   parseCardStatement,
 } from "@fin-creador/domain"
-import { importMatchesAction } from "@/app/(app)/loans-liabilities/import/actions"
+import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
+import { importMatchesAction, importStatementAction, saveImportLinesAction } from "@/app/(app)/loans-liabilities/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -35,7 +38,9 @@ import { PDF_READ_MESSAGES, readStatementPdf } from "@/lib/statements/pdf-reader
 // Card statement import (Sprint 9a.3 and 9a.4): read the PDF in the browser, then review it: a
 // tick and an editable date, amount and category per line. The file and its password never
 // leave the browser (the password is cleared after each attempt); only request keys and a date
-// range go to the server, to find lines already imported and possible duplicates. Saving is 9a.5.
+// range go to the server, to find lines already imported and possible duplicates. Save (9a.5)
+// sends the ticked lines in chunks, each line saved on its own, then enters the statement; a
+// cut-off import is finished by saving again (the same key is never posted twice).
 
 const PNB = "Punjab National Bank"
 
@@ -203,7 +208,16 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
 const STATUS_BADGE: Partial<Record<ReviewLine["status"], { text: string; tone: "info" | "neutral" }>> = {
   duplicate: { text: "Possible duplicate", tone: "info" },
   imported: { text: "Already imported", tone: "neutral" },
+  deleted: { text: "Already imported (deleted)", tone: "neutral" },
 }
+
+const RESULT_BADGE: Record<Exclude<LineSaveResult["status"], "failed">, { text: string; tone: "positive" | "neutral" }> = {
+  saved: { text: "Saved", tone: "positive" },
+  already_saved: { text: "Already imported", tone: "neutral" },
+  deleted: { text: "Already imported (deleted)", tone: "neutral" },
+}
+
+type Outcome = { tone: "success" | "error" | "info"; text: string }
 
 function StatementReview({
   card,
@@ -235,6 +249,11 @@ function StatementReview({
     minimum: s.minimumMinor === null ? "" : minorToGroupedInputString(s.minimumMinor, c),
     dueDate: s.dueDate ?? "",
   })
+  const [confirming, setConfirming] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [results, setResults] = useState<Record<string, LineSaveResult>>({})
+  const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const [statementDone, setStatementDone] = useState(s.exists)
   const review: Review = { ...initial, lines }
   const totals = reviewTotals(review, c)
   const reasons = checkReasons(initial.checks, c)
@@ -244,6 +263,70 @@ function StatementReview({
   const applyBulk = () => {
     if (bulkCategory) setLines((ls) => ls.map((l) => (l.ticked ? { ...l, categoryId: bulkCategory } : l)))
   }
+
+  const save = async () => {
+    setConfirming(false)
+    setSaving(true)
+    setOutcome(null)
+    const ticked = lines.filter((l) => l.ticked)
+    const done: LineSaveResult[] = []
+    let stopped: string | null = null
+    for (let i = 0; i < ticked.length; i += IMPORT_SAVE_CHUNK) {
+      const chunk = ticked.slice(i, i + IMPORT_SAVE_CHUNK)
+      const result = await saveImportLinesAction({
+        cardId: card.id,
+        statementDate: s.statementDate ?? "",
+        lines: chunk.map((l) => ({ original: l.original, date: l.date, amount: l.amount, categoryId: l.categoryId })),
+      }).catch(() => null)
+      if (!result?.ok) {
+        stopped = result?.message ?? "We couldn't reach the server. Check your connection."
+        break
+      }
+      done.push(...result.results)
+      const byKey = new Map(result.results.map((r) => [r.key, r]))
+      setResults((prev) => ({ ...prev, ...Object.fromEntries(byKey) }))
+      setLines((ls) =>
+        ls.map((l) => {
+          const r = byKey.get(l.key)
+          if (!r || r.status === "failed") return l
+          return { ...l, ticked: false, status: r.status === "deleted" ? "deleted" : "imported" }
+        }),
+      )
+    }
+    const saved = done.filter((r) => r.status === "saved").length
+    const settled = done.filter((r) => r.status !== "failed").length
+    const lineText = (n: number) => (n === 1 ? "1 line" : `${n} lines`)
+    if (settled < ticked.length) {
+      setOutcome({
+        tone: "error",
+        text: `Saved ${lineText(saved)} of ${ticked.length}. ${lineText(ticked.length - settled)} not saved: check them and press Save again to finish.${stopped ? ` ${stopped}` : ""}`,
+      })
+    } else {
+      let text =
+        ticked.length === 0
+          ? ""
+          : saved === ticked.length
+            ? `${lineText(saved)} saved.`
+            : `${lineText(saved)} saved; ${lineText(ticked.length - saved)} were already imported.`
+      let tone: Outcome["tone"] = "success"
+      if (statement.enter && !statementDone) {
+        const st = await importStatementAction({
+          cardId: card.id,
+          statementDate: statement.statementDate,
+          total: statement.total,
+          minimum: statement.minimum,
+          dueDate: statement.dueDate,
+        }).catch(() => null)
+        if (st && st.status !== "error") setStatementDone(true)
+        if (!st || st.status === "error") tone = "error"
+        text = `${text} ${st?.message ?? "The statement wasn't entered: check your connection and try again."}`.trim()
+      } else if (s.exists) text += " The statement for this date was already entered."
+      setOutcome({ tone, text })
+    }
+    setSaving(false)
+  }
+
+  const tickedLines = lines.filter((l) => l.ticked)
   const setField = (name: Exclude<keyof typeof statement, "enter">) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setStatement((v) => ({ ...v, [name]: e.target.value }))
 
@@ -313,7 +396,7 @@ function StatementReview({
       ) : (
         <ul aria-label="Statement lines" className="grid gap-2">
           {lines.map((line, i) => (
-            <ReviewRow key={line.key} line={line} categories={categories} context={context} onChange={(patch) => update(i, patch)} />
+            <ReviewRow key={line.key} line={line} result={results[line.key]} categories={categories} context={context} onChange={(patch) => update(i, patch)} />
           ))}
         </ul>
       )}
@@ -325,7 +408,9 @@ function StatementReview({
 
       <fieldset className="grid gap-3 rounded-xl border border-line p-3">
         <legend className="px-1 text-sm font-semibold">Enter statement</legend>
-        {s.exists ? (
+        {statementDone && !s.exists ? (
+          <FormMessage tone="success">The statement is entered.</FormMessage>
+        ) : s.exists ? (
           <FormMessage tone="info">
             A statement of {s.statementDate ? fullDate(s.statementDate) : "this date"} is already entered for this card. Only the lines will be saved.
           </FormMessage>
@@ -358,28 +443,62 @@ function StatementReview({
       <div className="grid gap-2">
         {blockers.includes("check_not_confirmed") && <p className="text-xs text-danger">Confirm you have compared the lines with your PDF.</p>}
         {blockers.includes("line_errors") && <p className="text-xs text-danger">Fix the highlighted lines.</p>}
-        {blockers.includes("nothing_ticked") && <p className="text-xs text-muted-foreground">Tick at least one line.</p>}
+        {blockers.includes("nothing_ticked") && Object.keys(results).length === 0 && <p className="text-xs text-muted-foreground">Tick at least one line.</p>}
+        {outcome && <FormMessage tone={outcome.tone}>{outcome.text}</FormMessage>}
+        {statement.enter && !statementDone && tickedLines.length === 0 && Object.keys(results).length > 0 && !saving && (
+          <div>
+            <Button variant="secondary" onClick={() => void save()}>
+              Enter the statement
+            </Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Saving is the next step (9a.5); until then the button stays off. */}
-          <Button disabled aria-describedby="save-note">
-            Save ticked lines
+          <Button disabled={blockers.length > 0 || saving} aria-busy={saving} onClick={() => setConfirming(true)}>
+            {saving ? "Saving…" : "Save ticked lines"}
           </Button>
-          <span id="save-note" className="text-xs text-muted-foreground">
-            {blockers.length === 0 ? "Ready. Saving comes in the next update; nothing is saved yet." : "Nothing is saved yet."}
-          </span>
+          <span className="text-xs text-muted-foreground">Nothing is saved until you confirm.</span>
         </div>
       </div>
+
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogContent eyebrow={card.name} title="Save these purchases?">
+          <div className="grid gap-3 text-sm">
+            <p className="font-semibold">
+              {tickedLines.length === 1 ? "1 purchase" : `${tickedLines.length} purchases`}, {money(totals.tickedMinor, c)} in all.
+            </p>
+            <p>
+              These are purchases already made on the card. No money moves from any bank account: they are added to what the card owes.
+            </p>
+            {s.exists ? (
+              <p>A statement for this date is already entered: only the lines are saved.</p>
+            ) : statement.enter && !statementDone ? (
+              <p>
+                Then the statement of {statement.statementDate ? fullDate(statement.statementDate) : "this date"} is entered (bill {symbol}
+                {statement.total}). If the bill is more than the card owes, the difference is added in Bank charges &amp; interest.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
+              <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
+              <Button type="button" onClick={() => void save()}>
+                Save {tickedLines.length === 1 ? "1 line" : `${tickedLines.length} lines`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
 
 function ReviewRow({
   line,
+  result,
   categories,
   context,
   onChange,
 }: {
   line: ReviewLine
+  result: LineSaveResult | undefined
   categories: ReviewCategory[]
   context: Context
   onChange: (patch: Partial<ReviewLine>) => void
@@ -388,7 +507,7 @@ function ReviewRow({
   const tickable = canTick(line)
   const errors = line.ticked ? lineErrors(line, categories, context) : {}
   const name = `${original.description}, ${fullDate(original.date)}`
-  const badge = STATUS_BADGE[line.status]
+  const badge = result && result.status !== "failed" ? RESULT_BADGE[result.status] : STATUS_BADGE[line.status]
 
   return (
     <li className="grid gap-2 rounded-xl border border-line px-3 py-2.5">
@@ -418,6 +537,7 @@ function ReviewRow({
             <Badge tone={badge.tone}>{badge.text}</Badge>
           </span>
         )}
+        {result?.status === "failed" && <span className="basis-full pl-7 text-xs font-semibold text-danger">Not saved: {result.reason}</span>}
       </div>
       {tickable && line.ticked && (
         <div className="grid gap-2 pl-7 md:grid-cols-[10rem_9rem_1fr]">

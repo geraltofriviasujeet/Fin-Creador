@@ -163,9 +163,13 @@ export type PnbStatementOptions = {
   invoiceDate?: string
   /** One date for every transaction line, ISO (each line keeps its own date otherwise). */
   lineDate?: string
-  /** Printed Total Invoice Value; default the Dr lines' sum (2,334.00). */
+  /** Printed Total Invoice Value; default the Dr lines' sum (2,334.00 plus any extra purchases). */
   invoiceTotal?: string
+  /** Extra ₹100.00 purchases ("SHOP 1", "SHOP 2"...) on page 2; the totals include them. */
+  extraPurchases?: number
 }
+
+const rupees = (minor: number) => (minor / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 /**
  * A two-page PNB-style card statement (layout from the owner's description; invented person,
@@ -175,16 +179,18 @@ export type PnbStatementOptions = {
 export function pnbStatementPages(network: boolean, options: PnbStatementOptions = {}): SyntheticPage[] {
   const invoice = pnbDate(options.invoiceDate ?? "2026-10-15")
   const due = pnbDate(pnbDueDate(options.invoiceDate ?? "2026-10-15"))
+  const extra = options.extraPurchases ?? 0
+  const purchases = rupees(233_400 + extra * 10_000)
   const on = (iso: string) => pnbDate(options.lineDate ?? iso)
   const top = [
     ...columns([40], [["PUNJAB NATIONAL BANK CREDIT CARD STATEMENT"], ["EXAMPLE PERSON"], ["Card Number 5555 XXXX XXXX 0042"]]),
     ...columns([40, 120, 220, 320, 450], [
       ["Invoice Date", "Payment Due Date", "Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"],
-      [invoice, due, "2,334.00", "2,334.00", "116.70"],
+      [invoice, due, purchases, purchases, "116.70"],
     ]),
     ...columns([40, 140, 260, 340, 500], [
       ["Previous Balance", "Purchases and other charges", "Cash Advances", "Payments and Other Credits / Shadow Credits", ""],
-      ["1,500.00", "2,334.00", "0.00", "1,500.00", ""],
+      ["1,500.00", purchases, "0.00", "1,500.00", ""],
     ]),
   ]
   const xs = network ? [40, 110, 180, 260, 520] : [40, 110, 180, 520]
@@ -204,8 +210,9 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
     ...columns(xs, [
       [on("2026-10-10"), on("2026-10-10"), ...net, "LATE PAYMENT FEE", "500.00 Dr"],
       [on("2026-10-10"), on("2026-10-10"), ...net, "IGST @18% ON LATE PAYMENT FEE", "50.00 Dr"],
+      ...Array.from({ length: extra }, (_, i) => [on("2026-10-11"), on("2026-10-11"), ...net, `SHOP ${i + 1}`, "100.00 Dr"]),
     ]),
-    ...columns([40, 200], [["Total GST", "50.00"], ["Total Invoice Value", options.invoiceTotal ?? "2,334.00"], ["End of Statement", ""]]),
+    ...columns([40, 200], [["Total GST", "50.00"], ["Total Invoice Value", options.invoiceTotal ?? purchases], ["End of Statement", ""]]),
     ...columns([40], [[`Date: ${invoice} Page 2`]]),
   ]
   return [page1, page2]

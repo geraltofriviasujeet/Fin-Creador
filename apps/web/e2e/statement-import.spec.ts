@@ -2,10 +2,10 @@ import { type Page, expect, test } from "@playwright/test"
 import { pnbDueDate, pnbStatementPages, syntheticPdf } from "../test-support/synthetic-pdf"
 import { addBank, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
-// Card statement import (Sprint 9a.3 and 9a.4, web): a statement PDF read in the browser with
-// the bundled pdf.js worker, then reviewed. Synthetic PDFs written in the test (never a real
-// statement): a text PDF, a password-protected one and one with no text. Nothing is saved yet
-// (9a.5). Screenshots in e2e-screenshots/.
+// Card statement import (Sprint 9a.3 to 9a.5, web): a statement PDF read in the browser with
+// the bundled pdf.js worker, reviewed and saved. Synthetic PDFs written in the test (never a real
+// statement): text PDFs, password-protected ones and one with no text. Screenshots in
+// e2e-screenshots/.
 
 const SHOTS = "e2e-screenshots"
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true })
@@ -179,4 +179,91 @@ test("another issuer's card offers the PNB reader for a PNB statement", async ({
   await expect(review(page)).toContainText("Read as a Punjab National Bank statement.")
   await expect(review(page).getByText(/^Ticked:/)).toContainText("Bill total: ₹2,334")
   await expect(lines(page)).toHaveCount(4)
+})
+
+async function readLocked(page: Page, bytes: Uint8Array, password: string) {
+  await chooser(page).setInputFiles(pdf("locked.pdf", bytes))
+  await page.getByLabel("PDF password").fill(password)
+  await page.getByRole("button", { name: "Open PDF" }).click()
+  await expect(review(page)).toBeVisible()
+}
+
+const cardRow = (page: Page) => box(page).getByRole("listitem").filter({ hasText: PNB_CARD }).first()
+
+test("save: confirm, saved once, re-import changes nothing, a deleted line stays blocked", async ({ page }) => {
+  const today = todayInIndia()
+  await setUp(page, "Eshan Shah")
+  const locked = syntheticPdf(pnbStatementPages(false, { invoiceDate: today, lineDate: today }), { password: "fake-pass-2" })
+
+  await openImport(page, PNB_CARD)
+  await readLocked(page, locked, "fake-pass-2")
+  await review(page).getByRole("button", { name: "Save ticked lines" }).click()
+  const confirm = dialog(page, "Save these purchases?")
+  await expect(confirm).toContainText("3 purchases, ₹2,334 in all.")
+  await expect(confirm).toContainText("These are purchases already made on the card. No money moves from any bank account")
+  await expect(confirm).toContainText("the difference is added in Bank charges & interest")
+  await shot(page, "statement-import-confirm")
+  await confirm.getByRole("button", { name: "Save 3 lines" }).click()
+  await expect(review(page)).toContainText("3 lines saved. Statement saved.")
+  await expect(lineFor(page, "FRESH BASKET")).toContainText("Saved")
+  await expect(review(page)).toContainText("The statement is entered.")
+  await shot(page, "statement-import-saved")
+
+  // Owed: the ₹1,500 owed when the card was added plus the ₹2,334 imported, counted once; bill ₹2,334.
+  await page.goto("/loans-liabilities")
+  await expect(cardRow(page)).toContainText("₹3,834")
+  await expect(cardRow(page)).toContainText("₹2,334")
+
+  // The same statement again: every line already imported, nothing to tick, the statement already entered.
+  await openImport(page, PNB_CARD)
+  await readLocked(page, locked, "fake-pass-2")
+  for (const text of ["FRESH BASKET", "LATE PAYMENT FEE", "IGST"]) await expect(lineFor(page, text)).toContainText("Already imported")
+  await expect(review(page).getByRole("checkbox", { name: /^Import / })).toHaveCount(0)
+  await expect(review(page).getByRole("button", { name: "Save ticked lines" })).toBeDisabled()
+  await expect(review(page)).toContainText("is already entered for this card. Only the lines will be saved.")
+
+  // Delete (void) one imported line: it stays blocked as "Already imported (deleted)".
+  await page.goto("/transactions")
+  await page.getByRole("button", { name: "Void FRESH BASKET STORES BENGAL" }).click()
+  await dialog(page, "Void this expense?").getByRole("button", { name: "Void expense" }).click()
+  await expect(toast(page, "Expense voided.")).toBeVisible()
+  await openImport(page, PNB_CARD)
+  await readLocked(page, locked, "fake-pass-2")
+  await expect(lineFor(page, "FRESH BASKET")).toContainText("Already imported (deleted)")
+  await expect(tick(page, "FRESH BASKET")).toHaveCount(0)
+  await expect(lineFor(page, "IGST")).toContainText("Already imported")
+  await shot(page, "statement-import-deleted")
+  await page.goto("/loans-liabilities")
+  await expect(cardRow(page)).toContainText("₹2,050")
+})
+
+test("a cut-off save is finished by saving again, with no line posted twice", async ({ page }) => {
+  const today = todayInIndia()
+  await setUp(page, "Farah Khan")
+  await openImport(page, PNB_CARD)
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true, { invoiceDate: today, lineDate: today, extraPurchases: 13 }))))
+  await expect(lines(page)).toHaveCount(17)
+
+  // The second chunk of ten never reaches the server.
+  let actions = 0
+  await page.route("**/loans-liabilities/import**", async (route) => {
+    const request = route.request()
+    if (request.method() === "POST" && request.headers()["next-action"] && ++actions === 2) return route.abort()
+    return route.continue()
+  })
+  await review(page).getByRole("button", { name: "Save ticked lines" }).click()
+  await dialog(page, "Save these purchases?").getByRole("button", { name: "Save 16 lines" }).click()
+  await expect(review(page)).toContainText("Saved 10 lines of 16. 6 lines not saved: check them and press Save again to finish.")
+  await expect(lineFor(page, "FRESH BASKET")).toContainText("Saved")
+  await expect(tick(page, "SHOP 13")).toBeChecked()
+  await shot(page, "statement-import-partial")
+
+  await page.unroute("**/loans-liabilities/import**")
+  await review(page).getByRole("button", { name: "Save ticked lines" }).click()
+  await dialog(page, "Save these purchases?").getByRole("button", { name: "Save 6 lines" }).click()
+  await expect(review(page)).toContainText("6 lines saved. Statement saved.")
+
+  // ₹1,500 owed when added + ₹2,334 + 13 × ₹100, each line once.
+  await page.goto("/loans-liabilities")
+  await expect(cardRow(page)).toContainText("₹5,134")
 })

@@ -36,7 +36,7 @@ const parse: CardStatementParse = {
 }
 
 const keys = reviewKeys(CARD, parse)
-const none = { importedKeys: [], cardEntries: [], statementExists: false }
+const none = { importedKeys: [], deletedKeys: [], cardEntries: [], statementExists: false }
 
 describe("reviewKeys", () => {
   it("derives each key from the card, the statement date and the line as read", () => {
@@ -69,6 +69,12 @@ describe("buildReview", () => {
     const r = buildReview(parse, { ...none, importedKeys: [keys[6]!] }, categories, context)
     expect(r.lines[6]).toMatchObject({ status: "imported", ticked: false })
     expect(canTick(r.lines[6]!)).toBe(false)
+  })
+
+  it("marks a key whose entry was deleted as Already imported (deleted), never tickable", () => {
+    const r = buildReview(parse, { ...none, deletedKeys: [keys[7]!] }, categories, context)
+    expect(r.lines[7]).toMatchObject({ status: "deleted", ticked: false })
+    expect(canTick(r.lines[7]!)).toBe(false)
   })
 
   it("marks a line matching an existing card entry as a possible duplicate, unticked; one entry marks one line", () => {

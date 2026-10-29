@@ -21,7 +21,8 @@ import {
 // - Request keys come from the line exactly as read (statementLineKey), never from edits, so the
 //   same statement imported again maps to the same keys.
 // - Skipped (payments, refunds, card EMIs, lines before the card was added or in the future) are
-//   listed, never tickable. A key already in the ledger is "Already imported", never tickable.
+//   listed, never tickable. A key already in the ledger is "Already imported", never tickable; one
+//   whose entry was deleted (voided, no newer version) is "Already imported (deleted)", never tickable.
 // - A line with the same date and amount as an existing entry on the card is a "Possible
 //   duplicate" and starts unticked (each existing entry marks one line).
 // - Fee, interest and tax lines default to the system category Bank charges & interest; other
@@ -34,15 +35,17 @@ export type ReviewCategory = { id: string; name: string; systemKey: string | nul
 
 /** What the database already holds, read for this card and statement (loadImportMatches). */
 export type ImportMatches = {
-  /** Request keys of this statement's lines already in the ledger (voided ones included). */
+  /** Request keys of this statement's lines already in the ledger and counting (or edited since). */
   importedKeys: string[]
+  /** Request keys whose ledger row was deleted (voided, no newer version): never imported again. */
+  deletedKeys: string[]
   /** Current expense entries on the card in the statement's date range, other than this statement's lines. */
   cardEntries: { date: IsoDate; amountMinor: number }[]
   /** Enter statement already holds a statement for this card and date. */
   statementExists: boolean
 }
 
-export type ReviewStatus = "new" | "duplicate" | "imported" | "skipped"
+export type ReviewStatus = "new" | "duplicate" | "imported" | "deleted" | "skipped"
 
 export type ReviewLine = {
   key: string
@@ -88,6 +91,7 @@ export function buildReview(
 ): Review {
   const keys = reviewKeys(context.cardId, parse)
   const imported = new Set(matches.importedKeys)
+  const deleted = new Set(matches.deletedKeys)
   const existing = new Map<string, number>()
   for (const entry of matches.cardEntries) {
     const k = `${entry.date}|${entry.amountMinor}`
@@ -100,6 +104,7 @@ export function buildReview(
     let status: ReviewStatus = "new"
     if (!decision.importable) status = "skipped"
     else if (imported.has(key)) status = "imported"
+    else if (deleted.has(key)) status = "deleted"
     else {
       const k = `${line.date}|${line.amountMinor}`
       const left = existing.get(k) ?? 0
