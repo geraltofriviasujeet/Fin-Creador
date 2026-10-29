@@ -118,8 +118,10 @@ select set_config('request.jwt.claims', '{"sub": "1b000000-0000-4000-8000-000000
 set local role authenticated;
 select is(public.loan_category_id('bank_charges'), pg_temp.bank('1b000000-0000-4000-8000-000000000001'),
   'loan_category_id returns the caller''s category for the key');
+-- (Called first: a query does not see a row its own function call inserts.)
+select public.loan_category_id('loan_fees');
 select is(
-  (select name from public.categories where id = public.loan_category_id('loan_fees')),
+  (select name from public.categories where system_key = 'loan_fees'),
   'Loan fees & charges', 'loan_category_id still creates the loan categories'
 );
 
