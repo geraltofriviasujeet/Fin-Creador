@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { type CardStatementParse, type StatementLine, statementLineKey } from "@fin-creador/domain"
-import { buildReview, canTick, checkReasons, lineErrors, reviewKeys, reviewTotals, saveBlockers, statementDatesWarning } from "./review"
+import { buildReview, canTick, checkReasons, importOutcome, lineErrors, reviewKeys, reviewTotals, saveBlockers, statementDatesWarning, unsupportedIssuerMessage } from "./review"
 
 // Synthetic statement lines only.
 const CARD = "00000000-0000-4000-8000-0000000000c1"
@@ -176,5 +176,31 @@ describe("unreadable rows and statement dates", () => {
     expect(statementDatesWarning("2026-10-15", "2026-11-04")).toBeNull()
     expect(statementDatesWarning("2026-10-15", "2026-10-15")).toBeNull()
     expect(statementDatesWarning("2026-10-15", "")).toBeNull()
+  })
+})
+
+describe("importOutcome", () => {
+  const empty: CardStatementParse = { summary: { statementDate: null, dueDate: null, totalMinor: null, minimumMinor: null }, lines: [], issues: [], checks: [] }
+  const ok = [
+    { name: "summary" as const, status: "ok" as const, foundMinor: 1, expectedMinor: 1 },
+    { name: "purchases" as const, status: "ok" as const, foundMinor: 1, expectedMinor: 1 },
+  ]
+
+  it("the issuer's own reader reviews what it finds, and calls a file with nothing in it unreadable", () => {
+    expect(importOutcome(parse, true)).toBe("review")
+    expect(importOutcome(empty, true)).toBe("unreadable")
+    expect(importOutcome({ ...empty, issues: [{ line: 3, reason: "no_amount" }] }, true)).toBe("review")
+  })
+
+  it("another issuer's statement is read by the general reader only when it verifies itself", () => {
+    expect(importOutcome({ ...parse, checks: ok }, false)).toBe("general")
+    expect(importOutcome({ ...parse, checks: [ok[0]!, { ...ok[1]!, status: "mismatch" }] }, false)).toBe("unsupported")
+    expect(importOutcome({ ...parse, checks: [] }, false)).toBe("unsupported")
+    expect(importOutcome({ ...parse, checks: ok, summary: { ...parse.summary, totalMinor: null } }, false)).toBe("unsupported")
+    expect(importOutcome(empty, false)).toBe("unsupported")
+  })
+
+  it("names the issuer and says the file stayed on the device", () => {
+    expect(unsupportedIssuerMessage("HDFC Bank")).toMatch(/^We can't read HDFC Bank statements yet\..*wasn't saved or uploaded\./)
   })
 })

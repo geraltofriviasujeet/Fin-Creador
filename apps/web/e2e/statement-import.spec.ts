@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { pnbDueDate, pnbRealLayoutPages, pnbStatementPages, syntheticPdf } from "../test-support/synthetic-pdf"
+import { genericStatementPages, pnbDueDate, pnbRealLayoutPages, pnbStatementPages, syntheticPdf } from "../test-support/synthetic-pdf"
 import { addBank, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Card statement import (Sprint 9a.3 to 9a.5, web): a statement PDF read in the browser with
@@ -13,6 +13,8 @@ const box = (page: Page) => page.getByRole("region", { name: "Short-term & opera
 const pdf = (name: string, bytes: Uint8Array) => ({ name, mimeType: "application/pdf", buffer: Buffer.from(bytes) })
 const todayInIndia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
 const PNB_CARD = "Punjab National Bank Rupay Select"
+const UNREADABLE =
+  "We couldn't read this file. Check that it's the text PDF from your bank (not a scan or a photo), and enter the password if it has one."
 
 async function addCard(page: Page, issuer: string, product: { pick?: string; typed?: string }) {
   await page.goto("/loans-liabilities")
@@ -68,7 +70,7 @@ test("a PNB card: text PDF, password-protected PDF and a scanned PDF", async ({ 
   await expect(page.getByText("This PDF is protected. Enter the password your bank gave for it.")).toBeVisible()
   await page.getByLabel("PDF password").fill("wrong")
   await page.getByRole("button", { name: "Open PDF" }).click()
-  await expect(page.getByText("That password didn't open the PDF. Check it and try again.")).toBeVisible()
+  await expect(page.getByText(UNREADABLE)).toBeVisible()
   await expect(page.getByLabel("PDF password")).toHaveValue("")
   await shot(page, "statement-import-wrong-password")
   await page.getByLabel("PDF password").fill("fake-pass-1")
@@ -78,7 +80,7 @@ test("a PNB card: text PDF, password-protected PDF and a scanned PDF", async ({ 
 
   // No text layer.
   await chooser(page).setInputFiles(pdf("scan.pdf", syntheticPdf([[]], { noText: true })))
-  await expect(page.getByText("This looks like a scanned PDF; only text PDFs can be read.")).toBeVisible()
+  await expect(page.getByText(UNREADABLE)).toBeVisible()
   await expect(review(page)).toHaveCount(0)
 })
 
@@ -173,13 +175,17 @@ test("Check this statement needs a confirm; a statement already entered offers l
   await shot(page, "statement-import-check")
 })
 
-test("another issuer's card offers the PNB reader for a PNB statement", async ({ page }) => {
+test("another issuer's card: not supported yet, with the PNB reader offered for a PNB statement", async ({ page }) => {
   await setUp(page, "Devi Menon", "HDFC Bank", { pick: "HDFC Regalia Gold" })
   await openImport(page, "HDFC Regalia Gold")
 
   await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true))))
-  await expect(review(page)).toContainText("This looks like a Punjab National Bank statement.")
-  await review(page).getByRole("button", { name: "Read it as a PNB statement" }).click()
+  await expect(page.getByText(/^We can't read HDFC Bank statements yet\. Right now we support Punjab National Bank credit card statements/)).toBeVisible()
+  await expect(page.getByText("Your file was read on this device only and wasn't saved or uploaded.", { exact: false })).toBeVisible()
+  await expect(review(page)).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Save ticked lines" })).toHaveCount(0)
+  await expect(page.getByText("This looks like a Punjab National Bank statement.", { exact: false })).toBeVisible()
+  await page.getByRole("button", { name: "Read it as a PNB statement" }).click()
   await expect(review(page)).toContainText("Read as a Punjab National Bank statement.")
   await expect(review(page).getByText(/^Ticked:/)).toContainText("Bill total: ₹2,334")
   await expect(lines(page)).toHaveCount(4)
@@ -409,4 +415,43 @@ test("the real PNB layout: 3 lines (the Cr payment skipped), nothing unreadable,
   await expect(review(page).getByLabel("Bill total (₹)")).toHaveValue("2,284.64")
   await expect(review(page).getByText(/^Ticked:/)).toHaveText("Ticked: ₹2,284.64 (2 lines) · Bill total: ₹2,284.64")
   await shot(page, "statement-import-real-layout")
+})
+
+test("a new file clears the previous review at once; an unreadable one leaves nothing to save", async ({ page }) => {
+  await setUp(page, "Lata Mehra")
+  await openImport(page, PNB_CARD)
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true))))
+  await expect(lines(page)).toHaveCount(4)
+  await review(page).getByRole("textbox", { name: /^Amount for FRESH BASKET/ }).fill("1,800")
+
+  await chooser(page).setInputFiles(pdf("scan.pdf", syntheticPdf([[]], { noText: true })))
+  await expect(page.getByText(UNREADABLE)).toBeVisible()
+  await expect(review(page)).toHaveCount(0)
+  await expect(page.getByText("FRESH BASKET")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: /^Save/ })).toHaveCount(0)
+  await expect(page.getByLabel("Also enter this statement")).toHaveCount(0)
+
+  // Clearing the input drops the result too.
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true))))
+  await expect(lines(page)).toHaveCount(4)
+  await expect(review(page).getByRole("textbox", { name: /^Amount for FRESH BASKET/ })).toHaveValue("1,784")
+  await chooser(page).setInputFiles([])
+  await expect(review(page)).toHaveCount(0)
+})
+
+test("another issuer: a statement that verifies itself is read with the general reader; one that doesn't is not", async ({ page }) => {
+  const today = todayInIndia()
+  await setUp(page, "Mohan Rao", "HDFC Bank", { pick: "HDFC Regalia Gold" })
+  await openImport(page, "HDFC Regalia Gold")
+
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(genericStatementPages({ statementDate: today, lineDate: today }))))
+  await expect(review(page)).toContainText("Read with the general reader; compare the lines with your PDF.")
+  await expect(lines(page)).toHaveCount(4)
+  await expect(review(page)).not.toContainText("Check this statement")
+  await expect(review(page).getByRole("button", { name: "Save ticked lines" })).toBeEnabled()
+
+  await chooser(page).setInputFiles(pdf("other.pdf", syntheticPdf(genericStatementPages({ statementDate: today, lineDate: today, balanced: false }))))
+  await expect(page.getByText(/^We can't read HDFC Bank statements yet\./)).toBeVisible()
+  await expect(review(page)).toHaveCount(0)
+  await expect(page.getByRole("button", { name: /^Save/ })).toHaveCount(0)
 })

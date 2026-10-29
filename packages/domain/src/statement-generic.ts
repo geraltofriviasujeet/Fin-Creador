@@ -1,7 +1,10 @@
 // Generic credit card statement parser: works on the text of any statement whose transaction
 // lines read "<date> [<date>] <description> <amount> [Dr|Cr]", and on summary labels followed
 // by their value on the same line. Issuer parsers (PNB first) handle layouts this one cannot.
-// A card line with no Dr / Cr marker or minus sign is a debit (spending).
+// A card line with no Dr / Cr marker or minus sign is a debit (spending). When the statement prints
+// its summary (previous balance, purchases, payments, total due; cash advances if any) beside the
+// labels, two self-checks are made: the summary adds up to the total due, and the debit lines add
+// up to the purchases. A statement whose total was found and whose two checks pass verifies itself.
 import { type IsoDate } from "./dates";
 import {
   MAX_STATEMENT_LINES,
@@ -43,7 +46,7 @@ export interface CardStatementParse {
   summary: CardStatementSummary;
   lines: StatementLine[];
   issues: StatementIssue[];
-  /** Self-checks the layout allows (none for the generic parser). */
+  /** Self-checks the layout allows (none when the figures they need aren't printed). */
   checks: StatementCheck[];
 }
 
@@ -89,6 +92,44 @@ function readSummary(rows: readonly string[]): CardStatementSummary {
   return summary;
 }
 
+// Summary figures beside their labels (not on a transaction line), signed: a credit is negative.
+const BOX_LABELS = {
+  previous: /\b(?:previous|opening)\s+balance\b/i,
+  purchases: /\bpurchases?(?:\s*(?:and|&|\/)\s*other\s+(?:charges|debits))?\b/i,
+  cash: /\bcash\s+advances?\b/i,
+  payments: /\bpayments?(?:\s*(?:and|&|\/)\s*(?:other\s+)?credits)?\b(?!\s+due)/i,
+  total: SUMMARY_LABELS.totalMinor,
+} as const;
+type BoxField = keyof typeof BOX_LABELS;
+
+function readBoxes(rows: readonly string[]): Partial<Record<BoxField, number>> {
+  const out: Partial<Record<BoxField, number>> = {};
+  for (const row of rows) {
+    if (STARTS_WITH_DATE.test(row)) continue;
+    for (const field of Object.keys(BOX_LABELS) as BoxField[]) {
+      if (out[field] !== undefined) continue;
+      const label = BOX_LABELS[field].exec(row);
+      const value = label && AMOUNT_AFTER.exec(row.slice(label.index + label[0].length));
+      if (!value) continue;
+      const amount = parseStatementAmount(value[1]!);
+      if (amount) out[field] = amount.direction === "credit" ? -amount.minor : amount.minor;
+      else if (/^[^\d]*0+(?:\.0+)?\b/.test(value[1]!)) out[field] = 0;
+    }
+  }
+  return out;
+}
+
+const selfCheck = (name: StatementCheck["name"], found: number | null, expected: number | null): StatementCheck => ({
+  name,
+  status: found === null || expected === null ? "unchecked" : found === expected ? "ok" : "mismatch",
+  foundMinor: found,
+  expectedMinor: expected,
+});
+
+/** True when a statement read by the generic parser checks out on its own: total found, both checks pass. */
+export const statementVerifiesItself = (parse: CardStatementParse): boolean =>
+  parse.summary.totalMinor !== null && parse.checks.length >= 2 && parse.checks.every((c) => c.status === "ok");
+
 /** Reads a card statement's text into its summary and transaction lines. */
 export function parseCardStatementText(text: string): CardStatementParse {
   const empty: CardStatementSummary = { statementDate: null, dueDate: null, totalMinor: null, minimumMinor: null };
@@ -126,5 +167,15 @@ export function parseCardStatementText(text: string): CardStatementParse {
       date, amountMinor: amount.minor, direction, kind: classifyCardLine(direction, description), description, foreignCurrency,
     });
   }
-  return { summary: readSummary(rows), lines: numberOccurrences(lines), issues, checks: [] };
+  const boxes = readBoxes(rows);
+  const { previous, purchases, payments, total } = boxes;
+  const debits = lines.filter((l) => l.direction === "debit").reduce((sum, l) => sum + l.amountMinor, 0);
+  const checks: StatementCheck[] =
+    previous === undefined || purchases === undefined || payments === undefined || total === undefined
+      ? []
+      : [
+          selfCheck("summary", previous + purchases + (boxes.cash ?? 0) - Math.abs(payments), total),
+          selfCheck("purchases", lines.length === 0 ? null : debits, purchases),
+        ];
+  return { summary: readSummary(rows), lines: numberOccurrences(lines), issues, checks };
 }

@@ -320,3 +320,35 @@ export function pnbRealLayoutPages(options: { invoiceDate?: string; lineDate?: s
     ],
   ]
 }
+
+const slashDate = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
+
+/**
+ * A one-page card statement from a bank with no reader of its own (invented layout and values),
+ * that verifies itself: its summary beside the labels adds up to the total due, and its debit lines
+ * add up to the purchases (₹1,784 + ₹500 + ₹50 = ₹2,334, after a ₹1,500 Cr payment).
+ * `balanced: false` prints a total that doesn't add up, so it doesn't verify itself.
+ */
+export function genericStatementPages(options: { statementDate?: string; lineDate?: string; balanced?: boolean } = {}): SyntheticPage[] {
+  const statement = options.statementDate ?? "2026-10-15"
+  const on = (iso: string) => slashDate(options.lineDate ?? iso)
+  return [
+    columns([40, 260], [
+      ["EXAMPLE BANK CREDIT CARD STATEMENT", ""],
+      ["Statement Date", slashDate(statement)],
+      ["Payment Due Date", slashDate(pnbDueDate(statement))],
+      ["Total Amount Due", options.balanced === false ? "2,434.00" : "2,334.00"],
+      ["Minimum Amount Due", "116.70"],
+      ["Previous Balance", "1,500.00"],
+      ["Purchases & Other Charges", "2,334.00"],
+      ["Payments & Credits", "1,500.00 Cr"],
+    ]).concat(
+      columns([40, 120, 520], [
+        [on("2026-09-18"), "PAYMENT RECEIVED THANK YOU", "1,500.00 Cr"],
+        [on("2026-09-21"), "FRESH BASKET STORES", "1,784.00"],
+        [on("2026-10-10"), "LATE PAYMENT FEE", "500.00"],
+        [on("2026-10-10"), "IGST ON LATE PAYMENT FEE", "50.00"],
+      ]),
+    ),
+  ]
+}

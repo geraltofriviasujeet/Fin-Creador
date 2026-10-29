@@ -3,8 +3,8 @@
 // no text, and the caps. Never a real statement.
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs"
 import { describe, expect, it } from "vitest"
-import { MAX_STATEMENT_PDF_BYTES, MAX_STATEMENT_PDF_PAGES, parseCardStatement, statementNeedsCheck } from "@fin-creador/domain"
-import { columns, pnbRealLayoutPages, pnbStatementPages as pnbPages, syntheticPdf } from "../../test-support/synthetic-pdf"
+import { MAX_STATEMENT_PDF_BYTES, MAX_STATEMENT_PDF_PAGES, parseCardStatement, statementNeedsCheck, statementVerifiesItself } from "@fin-creador/domain"
+import { columns, genericStatementPages, pnbRealLayoutPages, pnbStatementPages as pnbPages, syntheticPdf } from "../../test-support/synthetic-pdf"
 import { type PdfLib, readStatementPdf } from "./pdf-reader"
 
 const lib = pdfjs as unknown as PdfLib
@@ -81,6 +81,19 @@ describe("readStatementPdf: PNB real layout (boxed values, no Dr marker, split n
     expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["purchases", "ok"], ["invoice_total", "ok"]])
     expect(statementNeedsCheck(parsed)).toBe(false)
     expect(JSON.stringify(parsed)).not.toMatch(/0042|5555|RUPAY|INV123/)
+  })
+})
+
+describe("readStatementPdf: another bank's statement and the general reader", () => {
+  it("verifies itself when its summary and debit lines add up, and not when they don't", async () => {
+    for (const [balanced, verifies] of [[true, true], [false, false]] as const) {
+      const read = await readStatementPdf(lib, syntheticPdf(genericStatementPages({ balanced })))
+      expect(read.status).toBe("ok")
+      if (read.status !== "ok") continue
+      const parsed = parseCardStatement(read.text, "Example Bank")
+      expect(parsed.lines).toHaveLength(4)
+      expect(statementVerifiesItself(parsed)).toBe(verifies)
+    }
   })
 })
 

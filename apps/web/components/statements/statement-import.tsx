@@ -8,15 +8,19 @@ import {
   type Review,
   type ReviewCategory,
   type ReviewLine,
+  GENERAL_READER_NOTE,
+  UNREADABLE_FILE,
   buildReview,
   canTick,
   checkReasons,
+  importOutcome,
   lineErrors,
   reviewKeys,
   reviewTotals,
   saveBlockers,
   STATEMENT_DATE_MISSING,
   statementDatesWarning,
+  unsupportedIssuerMessage,
 } from "@fin-creador/api"
 import {
   type CardLineSkipReason,
@@ -52,7 +56,9 @@ type Phase =
   | { step: "password"; message?: string }
   | { step: "matching" }
   | { step: "match_failed" }
-  | { step: "review"; review: Review; asPnb: boolean; pnbOffer: boolean }
+  /** No review and no Save: the file can't be read, or the issuer isn't supported yet. */
+  | { step: "message"; text: string; pnbOffer: boolean }
+  | { step: "review"; review: Review; asPnb: boolean; pnbOffer: boolean; general: boolean }
 
 type Context = { cardId: string; cardAddedOn: string; today: string; currency: string }
 
@@ -78,13 +84,22 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
   // The statement's text, for reading it again with the other parser; it never leaves this page.
   const text = useRef<string | null>(null)
   const pageRowCounts = useRef<number[] | undefined>(undefined)
+  // Each pick (and each read or parser switch) gets a number; a result for an older one is dropped.
+  const attempt = useRef(0)
   const issuerIsPnb = card.issuer === PNB
   const context: Context = { cardId: card.id, cardAddedOn: card.trackingStartedOn, today, currency: card.currency }
 
+  /** A file this card's reader can't use: the PNB message, or that the issuer isn't supported yet. */
+  const cannotRead = (pnbOffer = false): Phase => ({ step: "message", text: issuerIsPnb ? UNREADABLE_FILE : unsupportedIssuerMessage(card.issuer), pnbOffer })
+
   const review = async (asPnb: boolean) => {
     if (text.current === null) return
+    const id = ++attempt.current
     const parse = parseCardStatement(text.current, asPnb ? PNB : card.issuer)
     const pnbOffer = !issuerIsPnb && /Punjab National Bank/i.test(text.current)
+    const outcome = importOutcome(parse, asPnb)
+    if (outcome === "unreadable") return setPhase({ step: "message", text: UNREADABLE_FILE, pnbOffer: false })
+    if (outcome === "unsupported") return setPhase(cannotRead(pnbOffer))
     setPhase({ step: "matching" })
     const result = await importMatchesAction({
       cardId: card.id,
@@ -92,24 +107,35 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
       ...dateRange(parse, today),
       statementDate: parse.summary.statementDate,
     }).catch(() => null)
+    if (id !== attempt.current) return
     if (!result?.ok) return setPhase({ step: "match_failed" })
-    setPhase({ step: "review", review: buildReview(parse, result.matches, categories, context, pageRowCounts.current), asPnb, pnbOffer })
+    setPhase({
+      step: "review",
+      review: buildReview(parse, result.matches, categories, context, pageRowCounts.current),
+      asPnb,
+      pnbOffer,
+      general: outcome === "general",
+    })
   }
 
   const read = async (pdf: File, pass?: string) => {
+    const id = ++attempt.current
     setPhase({ step: "reading" })
     try {
       const lib = await loadPdfjs()
       const result = await readStatementPdf(lib, new Uint8Array(await pdf.arrayBuffer()), pass)
+      if (id !== attempt.current) return
       if (result.status === "ok") {
         text.current = result.text
         pageRowCounts.current = result.pageRowCounts
         await review(issuerIsPnb)
       } else if (result.status === "needs_password") setPhase({ step: "password" })
-      else if (result.status === "wrong_password") setPhase({ step: "password", message: PDF_READ_MESSAGES.wrong_password })
+      else if (result.status === "wrong_password")
+        setPhase({ step: "password", message: issuerIsPnb ? UNREADABLE_FILE : PDF_READ_MESSAGES.wrong_password })
+      else if (result.status === "no_text" || result.status === "unreadable") setPhase(cannotRead())
       else setPhase({ step: "choose", message: PDF_READ_MESSAGES[result.status] })
     } catch {
-      setPhase({ step: "choose", message: PDF_READ_MESSAGES.unreadable })
+      if (id === attempt.current) setPhase(cannotRead())
     } finally {
       setPassword("")
     }
@@ -118,8 +144,14 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
   const choose = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0] ?? null
     e.target.value = ""
+    // A new pick (or a cleared input) drops everything from the previous file at once: its review
+    // (lines, notices, ticks, statement fields, any open confirm), its text and the password.
+    attempt.current++
     text.current = null
     file.current = null
+    pageRowCounts.current = undefined
+    setPassword("")
+    setPhase({ step: "choose" })
     if (!picked) return
     if (!/\.pdf$/i.test(picked.name) && picked.type !== "application/pdf") return setPhase({ step: "choose", message: "Choose a PDF file." })
     if (picked.size > MAX_STATEMENT_PDF_BYTES) return setPhase({ step: "choose", message: PDF_READ_MESSAGES.too_large })
@@ -161,6 +193,20 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
         {phase.step === "choose" && phase.message && <FormMessage tone="error">{phase.message}</FormMessage>}
         {phase.step === "reading" && <FormMessage tone="info">Reading the statement…</FormMessage>}
         {phase.step === "matching" && <FormMessage tone="info">Checking it against your entries…</FormMessage>}
+        {phase.step === "message" && (
+          <FormMessage tone="error">
+            {phase.text}
+            {phase.pnbOffer && (
+              <>
+                {" "}
+                This looks like a Punjab National Bank statement.{" "}
+                <button type="button" className="font-semibold underline underline-offset-4" onClick={() => void review(true)}>
+                  Read it as a PNB statement
+                </button>
+              </>
+            )}
+          </FormMessage>
+        )}
         {phase.step === "match_failed" && (
           <FormMessage tone="error">
             We couldn&apos;t check this statement against your entries. Check your connection.{" "}
@@ -204,6 +250,7 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
           initial={phase.review}
           pnbOffer={phase.pnbOffer}
           asPnb={phase.asPnb}
+          general={phase.general}
           onParser={(asPnb) => void review(asPnb)}
         />
       )}
@@ -232,6 +279,7 @@ function StatementReview({
   initial,
   pnbOffer,
   asPnb,
+  general,
   onParser,
 }: {
   card: ImportCard
@@ -240,6 +288,7 @@ function StatementReview({
   initial: Review
   pnbOffer: boolean
   asPnb: boolean
+  general: boolean
   onParser: (asPnb: boolean) => void
 }) {
   const [lines, setLines] = useState(initial.lines)
@@ -344,6 +393,7 @@ function StatementReview({
         Review the statement
       </h2>
 
+      {general && <FormMessage tone="info">{GENERAL_READER_NOTE}</FormMessage>}
       {pnbOffer && (
         <FormMessage tone="info">
           {asPnb ? "Read as a Punjab National Bank statement." : "This looks like a Punjab National Bank statement."}{" "}

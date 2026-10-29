@@ -13,6 +13,7 @@ import {
   minorToGroupedInputString,
   parseAmount,
   statementLineKey,
+  statementVerifiesItself,
 } from "@fin-creador/domain"
 
 // The review of an imported card statement (Sprint 9a.4), shared by web and mobile: one row per
@@ -243,4 +244,26 @@ export const STATEMENT_DATE_MISSING = "Couldn't read the statement date; enter i
 export function statementDatesWarning(statementDate: string, dueDate: string): string | null {
   if (!isIsoDate(statementDate) || !isIsoDate(dueDate)) return null
   return dueDate < statementDate ? "Check statement dates: the due date is before the statement date. Compare them with your PDF." : null
+}
+
+export const UNREADABLE_FILE =
+  "We couldn't read this file. Check that it's the text PDF from your bank (not a scan or a photo), and enter the password if it has one."
+
+export const GENERAL_READER_NOTE = "Read with the general reader; compare the lines with your PDF."
+
+export const unsupportedIssuerMessage = (issuer: string) =>
+  `We can't read ${issuer} statements yet. Right now we support Punjab National Bank credit card statements, and we're working on more banks. Your file was read on this device only and wasn't saved or uploaded. You can still add purchases by hand or use Enter statement.`
+
+/**
+ * What the import page shows for a statement read: its review ("review"; "general" adds
+ * GENERAL_READER_NOTE), or a message with no review and no Save. The issuer's own reader (PNB)
+ * reviews whatever it finds, unless it finds nothing at all ("unreadable"). Any other issuer's
+ * statement, read by the general reader, is reviewed only when it verifies itself (its total found
+ * and both self-checks pass); else "unsupported".
+ */
+export function importOutcome(parse: CardStatementParse, ownReader: boolean): "review" | "general" | "unsupported" | "unreadable" {
+  const { statementDate, dueDate, totalMinor, minimumMinor } = parse.summary
+  const nothing = parse.lines.length === 0 && parse.issues.length === 0 && [statementDate, dueDate, totalMinor, minimumMinor].every((v) => v === null)
+  if (ownReader) return nothing ? "unreadable" : "review"
+  return statementVerifiesItself(parse) ? "general" : "unsupported"
 }

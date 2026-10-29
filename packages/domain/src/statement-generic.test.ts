@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hasDigitRun } from "./digits";
-import { parseCardStatementText } from "./statement-generic";
+import { parseCardStatementText, statementVerifiesItself } from "./statement-generic";
 import { MAX_STATEMENT_LINES, MAX_STATEMENT_TEXT_CHARS } from "./statements";
 
 // Synthetic statement text: invented merchants, amounts and a made-up card number. Never a real statement.
@@ -89,5 +89,32 @@ describe("parseCardStatementText (generic)", () => {
     const capped = parseCardStatementText(many);
     expect(capped.lines).toHaveLength(MAX_STATEMENT_LINES);
     expect(capped.issues).toEqual([{ line: MAX_STATEMENT_LINES + 1, reason: "too_many_lines", shape: "date, text, amount" }]);
+  });
+});
+
+describe("parseCardStatementText: self-checks and statementVerifiesItself", () => {
+  const text = (total = "2,334.00") => [
+    "Statement Date 15/10/2026",
+    `Total Amount Due ${total}`,
+    "Previous Balance 1,500.00",
+    "Purchases & Other Charges 2,334.00",
+    "Payments & Credits 1,500.00 Cr",
+    "Payment Due Date 04/11/2026",
+    "18/09/2026 PAYMENT RECEIVED 1,500.00 Cr",
+    "21/09/2026 FRESH BASKET 1,784.00",
+    "10/10/2026 LATE PAYMENT FEE 550.00",
+  ].join("\n");
+
+  it("checks the summary and the debit lines, and verifies a statement whose checks pass", () => {
+    const parsed = parseCardStatementText(text());
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["purchases", "ok"]]);
+    expect(statementVerifiesItself(parsed)).toBe(true);
+  });
+
+  it("does not verify a statement whose summary doesn't add up, or that prints no summary", () => {
+    expect(statementVerifiesItself(parseCardStatementText(text("2,434.00")))).toBe(false);
+    const bare = parseCardStatementText("Total Amount Due 2,334.00\n21/09/2026 FRESH BASKET 1,784.00");
+    expect(bare.checks).toEqual([]);
+    expect(statementVerifiesItself(bare)).toBe(false);
   });
 });
