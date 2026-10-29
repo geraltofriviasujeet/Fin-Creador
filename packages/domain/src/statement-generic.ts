@@ -26,11 +26,26 @@ export interface CardStatementSummary {
   minimumMinor: number | null;
 }
 
+/**
+ * A statement's own arithmetic, checked against what was read. A "mismatch" means "Check this
+ * statement": the review shows it and changes no tick on its own. "unchecked": a figure is missing.
+ */
+export interface StatementCheck {
+  name: "summary" | "invoice_total";
+  status: "ok" | "mismatch" | "unchecked";
+}
+
 export interface CardStatementParse {
   summary: CardStatementSummary;
   lines: StatementLine[];
   issues: StatementIssue[];
+  /** Self-checks the layout allows (none for the generic parser). */
+  checks: StatementCheck[];
 }
+
+/** True when the review must show "Check this statement". */
+export const statementNeedsCheck = (parse: Pick<CardStatementParse, "checks">): boolean =>
+  parse.checks.some((check) => check.status === "mismatch");
 
 const LINE = new RegExp(
   String.raw`^(${STATEMENT_DATE_SOURCE})(?=\s)(?:\s+(?:${STATEMENT_DATE_SOURCE})(?=\s))?\s+(.*?)\s*(${STATEMENT_AMOUNT_SOURCE})(?:\s+\d{1,6})?$`,
@@ -73,7 +88,7 @@ function readSummary(rows: readonly string[]): CardStatementSummary {
 /** Reads a card statement's text into its summary and transaction lines. */
 export function parseCardStatementText(text: string): CardStatementParse {
   const empty: CardStatementSummary = { statementDate: null, dueDate: null, totalMinor: null, minimumMinor: null };
-  if (text.length > MAX_STATEMENT_TEXT_CHARS) return { summary: empty, lines: [], issues: [{ line: 0, reason: "too_long" }] };
+  if (text.length > MAX_STATEMENT_TEXT_CHARS) return { summary: empty, lines: [], issues: [{ line: 0, reason: "too_long" }], checks: [] };
 
   const rows = text.split(/\r\n|\r|\n/).map((row) => row.replace(/\s+/g, " ").trim());
   const issues: StatementIssue[] = [];
@@ -107,5 +122,5 @@ export function parseCardStatementText(text: string): CardStatementParse {
       date, amountMinor: amount.minor, direction, kind: classifyCardLine(direction, description), description, foreignCurrency,
     });
   }
-  return { summary: readSummary(rows), lines: numberOccurrences(lines), issues };
+  return { summary: readSummary(rows), lines: numberOccurrences(lines), issues, checks: [] };
 }

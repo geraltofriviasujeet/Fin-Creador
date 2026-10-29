@@ -211,10 +211,12 @@ describe("borrowingFormSchema", () => {
 
 describe("card-data", () => {
   it("lists each issuer's products with the issuer's name in them, no run of 3 digits and no duplicates", () => {
-    const brand: Record<string, string> = { "HDFC Bank": "HDFC", "SBI Card": "SBI", "ICICI Bank": "ICICI", "Axis Bank": "Axis", "Kotak Mahindra Bank": "Kotak" };
+    const brand: Record<string, string> = { "HDFC Bank": "HDFC", "SBI Card": "SBI", "ICICI Bank": "ICICI", "Axis Bank": "Axis", "Kotak Mahindra Bank": "Kotak", "Punjab National Bank": "PNB" };
+    // Issuers listed by name only until the next list refresh (their cards are typed under "Other").
+    const nameOnly = new Set(["Punjab National Bank"]);
     for (const issuer of CARD_ISSUERS) {
       const products = CARD_PRODUCTS[issuer];
-      expect(products.length).toBeGreaterThan(0);
+      expect(products.length > 0 || nameOnly.has(issuer)).toBe(true);
       expect(new Set(products).size).toBe(products.length);
       for (const p of products) {
         expect(p).toContain(brand[issuer]);

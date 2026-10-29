@@ -20,4 +20,5 @@ export * from "./csv";
 export * from "./digits";
 export * from "./statements";
 export * from "./statement-generic";
+export * from "./statement-pnb";
 export * from "./reports";
