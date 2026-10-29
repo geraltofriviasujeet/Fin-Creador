@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DIGIT_RANGES, hasDigitRun } from "../packages/schemas/src/digits";
+import { DIGIT_RANGES, hasDigitRun } from "../packages/domain/src/digits";
 
 // public.has_digit (migration 20261028210000) and hasDigitRun in packages/schemas must count the
 // same characters as digits: the ranges in the migration's regular expression are compared with

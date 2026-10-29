@@ -17,4 +17,7 @@ export * from "./borrowing";
 export * from "./statutory";
 export * from "./net-worth";
 export * from "./csv";
+export * from "./digits";
+export * from "./statements";
+export * from "./statement-generic";
 export * from "./reports";
