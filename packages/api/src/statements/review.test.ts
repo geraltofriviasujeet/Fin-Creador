@@ -152,8 +152,12 @@ describe("checkReasons and saveBlockers", () => {
     const none2 = { ...r, lines: r.lines.map((l) => ({ ...l, ticked: false })) }
     expect(saveBlockers(none2, categories, context, true)).toEqual(["nothing_ticked"])
     // Statement only: nothing ticked is fine when the statement is entered; the check still applies.
-    expect(saveBlockers(none2, categories, context, true, true)).toEqual([])
-    expect(saveBlockers(none2, categories, context, false, true)).toEqual(["check_not_confirmed"])
+    const entered = { enters: true, date: "2026-10-15" }
+    expect(saveBlockers(none2, categories, context, true, entered)).toEqual([])
+    expect(saveBlockers(none2, categories, context, false, entered)).toEqual(["check_not_confirmed"])
+    // A statement date that couldn't be read is never guessed: Save waits until it's entered.
+    expect(saveBlockers(none2, categories, context, true, { enters: true, date: "" })).toEqual(["statement_date_missing"])
+    expect(saveBlockers(r, categories, context, true, { enters: true, date: "" })).toEqual(["statement_date_missing", "line_errors"])
   })
 })
 

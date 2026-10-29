@@ -15,6 +15,7 @@ import {
   reviewKeys,
   reviewTotals,
   saveBlockers,
+  STATEMENT_DATE_MISSING,
   statementDatesWarning,
 } from "@fin-creador/api"
 import {
@@ -248,7 +249,7 @@ function StatementReview({
   const c = card.currency
   const symbol = c === "INR" ? "₹" : c
   const [statement, setStatement] = useState({
-    enter: !s.exists && s.statementDate !== null && s.totalMinor !== null,
+    enter: !s.exists && s.totalMinor !== null,
     statementDate: s.statementDate ?? "",
     total: s.totalMinor === null ? "" : minorToGroupedInputString(s.totalMinor, c),
     minimum: s.minimumMinor === null ? "" : minorToGroupedInputString(s.minimumMinor, c),
@@ -263,7 +264,7 @@ function StatementReview({
   const totals = reviewTotals(review, c)
   const reasons = checkReasons(initial.checks, c)
   const statementOnly = statement.enter && !statementDone && !s.exists
-  const blockers = saveBlockers(review, categories, context, checkConfirmed, statementOnly)
+  const blockers = saveBlockers(review, categories, context, checkConfirmed, { enters: statementOnly, date: statement.statementDate })
   const datesWarning = statementOnly ? statementDatesWarning(statement.statementDate, statement.dueDate) : null
 
   const update = (i: number, patch: Partial<ReviewLine>) => setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)))
@@ -448,7 +449,15 @@ function StatementReview({
             </label>
             {statement.enter && (
               <div className="grid gap-3 md:grid-cols-4">
-                <TextField name="statementDate" type="date" label="Statement date" value={statement.statementDate} max={context.today} onChange={setField("statementDate")} />
+                <TextField
+                  name="statementDate"
+                  type="date"
+                  label="Statement date"
+                  value={statement.statementDate}
+                  max={context.today}
+                  error={statement.statementDate === "" ? STATEMENT_DATE_MISSING : undefined}
+                  onChange={setField("statementDate")}
+                />
                 <TextField name="total" label={`Bill total (${symbol})`} inputMode="decimal" value={statement.total} onChange={setField("total")} />
                 <TextField name="minimum" label={`Minimum due (${symbol})`} inputMode="decimal" value={statement.minimum} onChange={setField("minimum")} />
                 <TextField name="dueDate" type="date" label="Due date" value={statement.dueDate} onChange={setField("dueDate")} />
@@ -462,11 +471,12 @@ function StatementReview({
       <div className="grid gap-2">
         {blockers.includes("check_not_confirmed") && <p className="text-xs text-danger">Confirm you have compared the lines with your PDF.</p>}
         {blockers.includes("line_errors") && <p className="text-xs text-danger">Fix the highlighted lines.</p>}
+        {blockers.includes("statement_date_missing") && <p className="text-xs text-danger">Enter the statement date.</p>}
         {blockers.includes("nothing_ticked") && Object.keys(results).length === 0 && <p className="text-xs text-muted-foreground">Tick at least one line.</p>}
         {outcome && <FormMessage tone={outcome.tone}>{outcome.text}</FormMessage>}
         {statement.enter && !statementDone && tickedLines.length === 0 && Object.keys(results).length > 0 && !saving && (
           <div>
-            <Button variant="secondary" onClick={() => void save()}>
+            <Button variant="secondary" disabled={blockers.includes("statement_date_missing")} onClick={() => void save()}>
               Enter the statement
             </Button>
           </div>

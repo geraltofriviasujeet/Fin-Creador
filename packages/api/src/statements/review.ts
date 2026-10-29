@@ -211,7 +211,7 @@ export function checkReasons(checks: readonly StatementCheck[], currency: string
     )
 }
 
-export type SaveBlocker = "nothing_ticked" | "line_errors" | "check_not_confirmed"
+export type SaveBlocker = "nothing_ticked" | "line_errors" | "check_not_confirmed" | "statement_date_missing"
 
 /** What stops Save: nothing ticked, a ticked line with errors, or an unconfirmed "Check this statement". */
 export function saveBlockers(
@@ -219,16 +219,23 @@ export function saveBlockers(
   categories: readonly ReviewCategory[],
   context: Pick<ReviewContext, "cardAddedOn" | "today" | "currency">,
   checkConfirmed: boolean,
-  /** The statement will be entered too: then Save works with no line ticked (statement only). */
-  entersStatement = false,
+  /**
+   * The statement to enter too, if any: Save then works with no line ticked (statement only), and
+   * needs its date (never guessed: empty when the Invoice Date couldn't be read).
+   */
+  statement: { enters: boolean; date: string } = { enters: false, date: "" },
 ): SaveBlocker[] {
   const ticked = review.lines.filter((l) => l.ticked)
   const blockers: SaveBlocker[] = []
-  if (ticked.length === 0 && !entersStatement) blockers.push("nothing_ticked")
+  if (ticked.length === 0 && !statement.enters) blockers.push("nothing_ticked")
+  if (statement.enters && !isIsoDate(statement.date)) blockers.push("statement_date_missing")
   if (ticked.some((l) => Object.keys(lineErrors(l, categories, context)).length > 0)) blockers.push("line_errors")
   if (checkReasons(review.checks, context.currency).length > 0 && !checkConfirmed) blockers.push("check_not_confirmed")
   return blockers
 }
+
+/** Shown at an empty Statement date: the date is read only from the Invoice Date label, never guessed. */
+export const STATEMENT_DATE_MISSING = "Couldn't read the statement date; enter it"
 
 /** A warning when the statement's dates look wrong (shown with Enter statement); null when they look right. */
 export function statementDatesWarning(statementDate: string, dueDate: string): string | null {

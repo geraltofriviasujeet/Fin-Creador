@@ -51,6 +51,20 @@ describe.each([
   })
 })
 
+it("leaves the statement date empty when the Invoice Date can't be read (no guess from another date)", async () => {
+  const read = await readStatementPdf(lib, syntheticPdf(pnbPages(false, { dateLayout: "unreadable" })))
+  expect(read.status === "ok" && parseCardStatement(read.text, "Punjab National Bank").summary).toMatchObject({ statementDate: null, dueDate: "2026-11-04" })
+})
+
+describe.each(["label-row", "beside", "next-row", "one-row"] as const)("readStatementPdf: PNB statement date layout %s", (dateLayout) => {
+  it("reads the statement date from Invoice Date only, never the earlier header date", async () => {
+    const read = await readStatementPdf(lib, syntheticPdf(pnbPages(false, { dateLayout, headerDate: "2026-10-13" })))
+    expect(read.status).toBe("ok")
+    if (read.status !== "ok") return
+    expect(parseCardStatement(read.text, "Punjab National Bank").summary).toMatchObject({ statementDate: "2026-10-15", dueDate: "2026-11-04" })
+  })
+})
+
 describe("readStatementPdf: password", () => {
   const pdf = syntheticPdf(pnbPages(false), { password: "fake-pass-1" })
 

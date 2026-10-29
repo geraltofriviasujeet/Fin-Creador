@@ -66,22 +66,40 @@ function labelsIn(row: string): { field: Field; after: string }[] {
 
 const valuesIn = (text: string): string[] => [...text.matchAll(VALUE)].map((m) => m[0]);
 
-/** Raw value text per field: on the label's row, or in the next row (in label order). */
+const DATE_FIELDS: ReadonlySet<Field> = new Set(["statementDate", "dueDate"]);
+const IS_DATE = new RegExp(String.raw`^${DATE}$`, "i");
+/** A date field takes only a date, an amount field only an amount. */
+const fits = (field: Field, value: string | undefined): value is string =>
+  value !== undefined && DATE_FIELDS.has(field) === IS_DATE.test(value);
+/** A row holding values only (dates, amounts and + = - between them). */
+const valuesOnly = (row: string) => row.replace(VALUE, "").replace(/[\s+=-]/g, "") === "" && valuesIn(row).length > 0;
+
+/**
+ * Raw value text per field, only where the layout says which label it belongs to, never a guess:
+ * - beside its label (before the next label on the row);
+ * - after the last of several labels on one row, when exactly one value per label without one
+ *   follows it ("Invoice Date Payment Due Date 20-SEP-2026 10-OCT-2026"), in label order;
+ * - in the next row, when that row holds values only and exactly one per label of the label row.
+ * A date field takes only a date and an amount field only an amount; the first reading wins.
+ */
 function readLabelled(rows: readonly string[]): Partial<Record<Field, string>> {
   const out: Partial<Record<Field, string>> = {};
   rows.forEach((row, i) => {
     const labels = labelsIn(row);
     if (labels.length === 0) return;
-    const sameRow = labels.map((label) => valuesIn(label.after)[0]);
-    if (sameRow.every((value) => value !== undefined)) {
-      labels.forEach((label, k) => (out[label.field] ??= sameRow[k]));
-      return;
+    const found: (string | undefined)[] = labels.map((label) => valuesIn(label.after)[0]);
+    const lastValues = valuesIn(labels[labels.length - 1]!.after);
+    const firstMissing = found.findIndex((value) => value === undefined);
+    if (firstMissing !== -1 && found.slice(firstMissing, -1).every((value) => value === undefined) && lastValues.length === labels.length - firstMissing) {
+      lastValues.forEach((value, k) => (found[firstMissing + k] = value));
     }
-    const next = rows.slice(i + 1).find((r) => r !== "");
-    const below = next !== undefined && labelsIn(next).length === 0 ? valuesIn(next) : [];
+    if (found.some((value) => value === undefined)) {
+      const next = rows.slice(i + 1).find((r) => r !== "");
+      const below = next !== undefined && valuesOnly(next) ? valuesIn(next) : [];
+      if (below.length === labels.length) below.forEach((value, k) => (found[k] ??= value));
+    }
     labels.forEach((label, k) => {
-      const value = sameRow[k] ?? (below.length === labels.length ? below[k] : labels.length === 1 ? below[0] : undefined);
-      if (value !== undefined) out[label.field] ??= value;
+      if (fits(label.field, found[k])) out[label.field] ??= found[k];
     });
   });
   return out;

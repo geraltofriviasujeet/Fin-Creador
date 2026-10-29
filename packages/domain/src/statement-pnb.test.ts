@@ -151,3 +151,28 @@ describe("parsePnbCardStatementText: the Network/Last 4 Digit cell", () => {
     expect(parsed.lines.map((l) => l.description)).toEqual(["FRESH BASKET STORES"]);
   });
 });
+
+// The statement date comes only from the Invoice Date label; synthetic values.
+describe("parsePnbCardStatementText: Invoice Date and Payment Due Date", () => {
+  const dates = (text: string) => {
+    const { statementDate, dueDate } = parsePnbCardStatementText(text).summary;
+    return { statementDate, dueDate };
+  };
+  const both = { statementDate: "2026-09-20", dueDate: "2026-10-10" };
+
+  it.each([
+    ["beside each label", "Invoice Date 20-SEP-2026\nPayment Due Date 10-OCT-2026"],
+    ["on the next row", "Invoice Date\n20-SEP-2026\nPayment Due Date\n10-OCT-2026"],
+    ["a row of values under a row of labels", "Invoice Date Payment Due Date Total Amount Due\n20-SEP-2026 10-OCT-2026 2,334.00"],
+    ["another date earlier in the header", "Statement generated on 13-OCT-2026\nDate 13-OCT-2026\nInvoice Date Payment Due Date\n20-SEP-2026 10-OCT-2026"],
+    ["both labels, then both dates, on one row", "Invoice Date Payment Due Date 20-SEP-2026 10-OCT-2026"],
+    ["one row with an amount label too", "Invoice Date Payment Due Date Minimum Amount Due 20-SEP-2026 10-OCT-2026 116.70"],
+  ])("%s", (_, text) => expect(dates(text)).toEqual(both));
+
+  it.each([
+    ["a text row with a date under the label", "Invoice Date\nPrinted on 13-OCT-2026 for you\nPayment Due Date 10-OCT-2026"],
+    ["two dates under one label", "Invoice Date\n13-OCT-2026 20-SEP-2026\nPayment Due Date 10-OCT-2026"],
+    ["an amount where the date should be", "Invoice Date 2,334.00\nPayment Due Date 10-OCT-2026"],
+    ["no Invoice Date label", "Statement Date 13-OCT-2026\nPayment Due Date 10-OCT-2026"],
+  ])("never guesses: %s", (_, text) => expect(dates(text)).toEqual({ statementDate: null, dueDate: "2026-10-10" }));
+});

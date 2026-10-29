@@ -175,6 +175,15 @@ export type PnbStatementOptions = {
    * twice. A blank row follows it, as the wrap pushes the next row down.
    */
   wrapped?: { date: number; network: number; line1: number; line2: number; overprint?: boolean }
+  /**
+   * Where the Invoice Date and Payment Due Date values sit: "label-row" (default: a row of labels,
+   * then a row of values), "beside" (each value after its label), "next-row" (each label, then its
+   * value on the row below), "one-row" (both labels, then both dates, on one row) or "unreadable"
+   * (the Invoice Date label with no value of its own: a text row with another date under it).
+   */
+  dateLayout?: "label-row" | "beside" | "next-row" | "one-row" | "unreadable"
+  /** Another date earlier in the header block ("Statement generated on ..."), ISO. */
+  headerDate?: string
 }
 
 const rupees = (minor: number) => (minor / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -190,12 +199,21 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
   const extra = options.extraPurchases ?? 0
   const purchases = rupees(233_400 + extra * 10_000)
   const on = (iso: string) => pnbDate(options.lineDate ?? iso)
-  const top = [
-    ...columns([40], [["PUNJAB NATIONAL BANK CREDIT CARD STATEMENT"], ["EXAMPLE PERSON"], ["Card Number 5555 XXXX XXXX 0042"]]),
-    ...columns([40, 120, 220, 320, 450], [
+  const amounts = columns([40, 160, 320], [["Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"], [purchases, purchases, "116.70"]])
+  const dates: Record<NonNullable<PnbStatementOptions["dateLayout"]>, SyntheticPage> = {
+    "label-row": columns([40, 120, 220, 320, 450], [
       ["Invoice Date", "Payment Due Date", "Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"],
       [invoice, due, purchases, purchases, "116.70"],
     ]),
+    beside: [...columns([40, 130], [["Invoice Date", invoice], ["Payment Due Date", due]]), ...amounts],
+    "next-row": [...columns([40], [["Invoice Date"], [invoice], ["Payment Due Date"], [due]]), ...amounts],
+    "one-row": [...columns([40, 110, 230, 320], [["Invoice Date", "Payment Due Date", invoice, due]]), ...amounts],
+    unreadable: [...columns([40, 130], [["Invoice Date"], [`Printed on ${pnbDate("2026-10-13")} for you`], ["Payment Due Date", due]]), ...amounts],
+  }
+  const top = [
+    ...columns([40], [["PUNJAB NATIONAL BANK CREDIT CARD STATEMENT"], ["EXAMPLE PERSON"], ["Card Number 5555 XXXX XXXX 0042"]]),
+    ...(options.headerDate ? columns([40], [[`Statement generated on ${pnbDate(options.headerDate)}`]]) : []),
+    ...dates[options.dateLayout ?? "label-row"],
     ...columns([40, 140, 260, 340, 500], [
       ["Previous Balance", "Purchases and other charges", "Cash Advances", "Payments and Other Credits / Shadow Credits", ""],
       ["1,500.00", purchases, "0.00", "1,500.00", ""],
