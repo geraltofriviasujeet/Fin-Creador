@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { type NextRequest, NextResponse } from "next/server"
 import type { Database } from "@fin-creador/api"
-import { decideRoute } from "@/lib/auth/routes"
+import { answersSignedOutAction, decideRoute } from "@/lib/auth/routes"
 import { getPublicEnv } from "@/lib/env"
 
 /**
@@ -33,11 +33,9 @@ export async function updateSession(request: NextRequest) {
 
   const decision = decideRoute(request.nextUrl.pathname, request.nextUrl.search, signedIn)
   if (!decision) return response
-  // A server action whose session has ended is not redirected: the redirect would come back as
-  // a sign-in page the client can't read, and the person would lose what's on the screen. The
-  // action checks the user itself (and RLS refuses a signed-out caller), so it answers "sign in
-  // again" and the page keeps its state.
-  if (!signedIn && request.method === "POST" && request.headers.has("next-action")) return response
+  // The statement import's actions (opt-in, see answersSignedOutAction) answer "sign in again"
+  // themselves, so the page keeps its review; everything else is redirected.
+  if (!signedIn && answersSignedOutAction(request.nextUrl.pathname, request.method, request.headers.has("next-action"))) return response
 
   const redirect = NextResponse.redirect(new URL(decision.redirectTo, request.url))
   // Carry refreshed session cookies and cache headers onto the redirect.
