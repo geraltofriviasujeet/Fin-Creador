@@ -2,7 +2,7 @@
 
 import type * as React from "react"
 import { useState } from "react"
-import { type BorrowingDue, type BorrowingItem, type CardItem, type CardWriteResult, type LiabilityPaymentLine, type LoanItem, type WriteResult, newRequestKey } from "@fin-creador/api"
+import { type BorrowingDue, type BorrowingItem, type CardItem, type CardWriteResult, DIFFERENCE_CATEGORY_KEY, type ExpenseCategoryOption, type LiabilityPaymentLine, type LoanItem, type WriteResult, newRequestKey } from "@fin-creador/api"
 import {
   type BorrowingReturnPlan,
   addMinor,
@@ -293,7 +293,7 @@ export function CardForm({ card, currency, onDone }: { card?: CardItem; currency
 // Enter a statement
 // ---------------------------------------------------------------------------
 
-export function StatementForm({ item, today, categories, onDone }: { item: CardItem; today: string; categories: { id: string; name: string }[]; onDone: () => void }) {
+export function StatementForm({ item, today, categories, onDone }: { item: CardItem; today: string; categories: ExpenseCategoryOption[]; onDone: () => void }) {
   const [requestKey] = useState(newRequestKey)
   const { card } = item
   const startDate = item.statementToAdd ?? latestStatementCycle(card.statementDay, today).statementDate
@@ -304,7 +304,7 @@ export function StatementForm({ item, today, categories, onDone }: { item: CardI
     total: "",
     minimum: "",
     emiIncluded: item.linkedEmis.length ? emis(startDate) : "",
-    differenceCategoryId: "",
+    differenceCategoryId: categories.find((c) => c.systemKey === DIFFERENCE_CATEGORY_KEY)?.id ?? "",
   })
   const [recordDifference, setRecordDifference] = useState(false)
   const { errors, formError, pending, submit } = useSubmit(onDone)

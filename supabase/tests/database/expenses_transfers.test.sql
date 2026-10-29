@@ -123,7 +123,7 @@ set local role authenticated;
 -- ------------------------------------------------------------ expense categories (14-20)
 select is(
   (select count(*)::int from public.categories where kind = 'expense' and is_default and icon is not null),
-  14, 'sign-up creates 14 default expense categories with icons'
+  15, 'sign-up creates 15 default expense categories with icons'
 );
 select is(public.ensure_my_expense_categories(), 0, 'the lazy fallback does nothing when defaults exist');
 select lives_ok(
@@ -589,10 +589,10 @@ select throws_ok(
   'FC010', null, 'B cannot record on A''s account'
 );
 -- Defaults a person archived are never re-created; a person with none gets them lazily.
-update public.categories set archived_at = now() where kind = 'expense';
+update public.categories set archived_at = now() where kind = 'expense' and system_key is null;
 select is(public.ensure_my_expense_categories(), 0, 'archived defaults are not re-created');
 select set_config('request.jwt.claims', '{"sub": "33333333-3333-4333-8333-333333333333", "role": "authenticated"}', true);
-select is(public.ensure_my_expense_categories(), 14, 'the lazy fallback creates the 14 defaults');
+select is(public.ensure_my_expense_categories(), 15, 'the lazy fallback creates the 15 defaults');
 
 select * from finish();
 rollback;

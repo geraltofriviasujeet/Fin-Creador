@@ -1,0 +1,242 @@
+// Synthetic PNB-style statement text built from the owner's description of the layout only:
+// invented person, merchants, amounts and card digits. Never a real statement.
+import { describe, expect, it } from "vitest";
+import { hasDigitRun } from "./digits";
+import { parseCardStatementText, statementNeedsCheck } from "./statement-generic";
+import { parseCardStatement, parsePnbCardStatementText } from "./statement-pnb";
+
+// Layout A: rows of labels followed by rows of values; the Network/Last 4 Digit column is present;
+// page 2 has no repeated header.
+const LAYOUT_A = [
+  "PUNJAB NATIONAL BANK CREDIT CARD STATEMENT",
+  "EXAMPLE PERSON",
+  "12 SAMPLE ROAD, EXAMPLE NAGAR 560001",
+  "Card Number 5555 XXXX XXXX 0042",
+  "Invoice Date Payment Due Date Total Amount Due Total Amount Due for Month Minimum Amount Due",
+  "15-OCT-2026 04-NOV-2026 3,834.00 3,834.00 191.70",
+  "Previous Balance Purchases and other charges Cash Advances Payments and Other Credits / Shadow Credits Total Amount Due for Month",
+  "1,500.00 4,284.00 0.00 1,950.00 3,834.00",
+  "Reward Points Earned 42",
+  "Credit Limit 50,000.00 Available Credit Limit 46,166.00",
+  "Transaction Date Post Date Network/Last 4 Digit Trnx Details From 16-SEP-2026 to 15-OCT-2026 Amount in Rs",
+  "18-SEP-2026 19-SEP-2026 RUPAY - 0042 PAYMENT RECEIVED - THANK YOU 1500.00 Cr",
+  "21-SEP-2026 22-SEP-2026 RUPAY - 0042 FRESH BASKET STORES BENGAL 1784.00 Dr",
+  "02-OCT-2026 03-OCT-2026 RUPAY - 0042 CLOUDHOST INC USD 12.00 1010.50 Dr",
+  "05-OCT-2026 05-OCT-2026 RUPAY - 0042 REFUND FRESH BASKET 450.00 Cr",
+  "Date: 15-OCT-2026 Page 1",
+  "10-OCT-2026 10-OCT-2026 RUPAY - 0042 LATE PAYMENT FEE 500.00 Dr",
+  "10-OCT-2026 10-OCT-2026 RUPAY - 0042 IGST @18% ON LATE PAYMENT FEE 90.00 Dr",
+  "12-OCT-2026 12-OCT-2026 RUPAY - 0042 FINANCE CHARGES 899.50 Dr",
+  "Total Purchase 2,794.50",
+  "Total Taxable Value 500.00",
+  "Total GST 90.00",
+  "Total Charges Reversed 0.00",
+  "Total GST Reversed 0.00",
+  "Total Invoice Value 4,284.00",
+  "End of Statement",
+  "Date: 15-OCT-2026 Page 2",
+  "Terms and conditions apply. Call 1800 000 0000.",
+].join("\n");
+
+// Layout B: each label with its value on the same row (or the value on the next row), summary boxes
+// printed with + - = signs, and no Network/Last 4 Digit column.
+const LAYOUT_B = [
+  "Invoice Date : 15-OCT-2026",
+  "Payment Due Date : 04-NOV-2026",
+  "Total Amount Due 3,834.00 Total Amount Due for Month 3,834.00",
+  "Minimum Amount Due",
+  "191.70",
+  "Previous Balance Purchases and other charges Cash Advances Payments and Other Credits / Shadow Credits Total Amount Due for Month",
+  "1,500.00 + 4,284.00 + 0.00 - 1,950.00 = 3,834.00",
+  "Transaction Date Post Date Trnx Details From 16-SEP-2026 to 15-OCT-2026 Amount in Rs",
+  "18-SEP-2026 19-SEP-2026 PAYMENT RECEIVED - THANK YOU 1500.00 Cr",
+  "21-SEP-2026 22-SEP-2026 FRESH BASKET STORES BENGAL 1784.00 Dr",
+  "02-OCT-2026 03-OCT-2026 CLOUDHOST INC USD 12.00 1010.50 Dr",
+  "05-OCT-2026 05-OCT-2026 REFUND FRESH BASKET 450.00 Cr",
+  "10-OCT-2026 10-OCT-2026 LATE PAYMENT FEE 500.00 Dr",
+  "10-OCT-2026 10-OCT-2026 IGST @18% ON LATE PAYMENT FEE 90.00 Dr",
+  "12-OCT-2026 12-OCT-2026 FINANCE CHARGES 899.50 Dr",
+  "Total Invoice Value 4,284.00",
+  "End of Statement",
+].join("\n");
+
+const EXPECTED_LINES = [
+  ["2026-09-18", 150_000, "credit", "payment", "PAYMENT RECEIVED - THANK YOU"],
+  ["2026-09-21", 178_400, "debit", "purchase", "FRESH BASKET STORES BENGAL"],
+  ["2026-10-02", 101_050, "debit", "purchase", "CLOUDHOST INC"],
+  ["2026-10-05", 45_000, "credit", "refund", "REFUND FRESH BASKET"],
+  ["2026-10-10", 50_000, "debit", "fee", "LATE PAYMENT FEE"],
+  ["2026-10-10", 9_000, "debit", "tax", "IGST @18% ON LATE PAYMENT FEE"],
+  ["2026-10-12", 89_950, "debit", "interest", "FINANCE CHARGES"],
+];
+
+describe.each([
+  ["labels above values, Network/Last 4 Digit column", LAYOUT_A],
+  ["labels beside values, no network column", LAYOUT_B],
+])("parsePnbCardStatementText: %s", (_, text) => {
+  const parsed = parsePnbCardStatementText(text);
+
+  it("prefills Enter statement from the top block (Invoice Date, Total Amount Due, Payment Due Date, Minimum Amount Due)", () => {
+    expect(parsed.summary).toEqual({ statementDate: "2026-10-15", dueDate: "2026-11-04", totalMinor: 383_400, minimumMinor: 19_170 });
+    expect(parsed.period).toEqual({ from: "2026-09-16", to: "2026-10-15" });
+  });
+
+  it("reads each line by its Transaction Date, with Dr / Cr, and keeps the description as printed", () => {
+    expect(parsed.lines.map((l) => [l.date, l.amountMinor, l.direction, l.kind, l.description])).toEqual(EXPECTED_LINES);
+    expect(parsed.lines.find((l) => l.foreignCurrency)?.foreignCurrency).toBe("USD");
+    expect(parsed.issues).toEqual([]);
+  });
+
+  it("passes both self-checks", () => {
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["purchases", "ok"], ["invoice_total", "ok"]]);
+    expect(statementNeedsCheck(parsed)).toBe(false);
+  });
+
+  it("keeps no card digits, name or address", () => {
+    const out = JSON.stringify(parsed);
+    expect(out).not.toMatch(/0042|5555|RUPAY|EXAMPLE PERSON|SAMPLE ROAD|560001/);
+    for (const l of parsed.lines) expect(hasDigitRun(l.description, 4)).toBe(false);
+  });
+});
+
+describe("parsePnbCardStatementText self-checks", () => {
+  it("flags a summary that does not add up", () => {
+    const parsed = parsePnbCardStatementText(LAYOUT_B.replace("1,500.00 + 4,284.00", "1,600.00 + 4,284.00"));
+    expect(parsed.checks).toContainEqual(expect.objectContaining({ name: "summary", status: "mismatch", foundMinor: 393_400, expectedMinor: 383_400 }));
+    expect(statementNeedsCheck(parsed)).toBe(true);
+  });
+
+  it("flags Dr lines that do not sum to Total Invoice Value (a line the parser could not read)", () => {
+    const parsed = parsePnbCardStatementText(LAYOUT_B.replace("FINANCE CHARGES 899.50 Dr", "FINANCE CHARGES"));
+    expect(parsed.issues).toEqual([{ line: 15, reason: "no_amount", shape: "date, text, no amount" }]);
+    expect(parsed.checks).toContainEqual(expect.objectContaining({ name: "invoice_total", status: "mismatch", foundMinor: 338_450, expectedMinor: 428_400 }));
+    expect(statementNeedsCheck(parsed)).toBe(true);
+  });
+
+  it("leaves a check unchecked when a figure is missing", () => {
+    const parsed = parsePnbCardStatementText(LAYOUT_B.replace("Total Invoice Value 4,284.00\n", ""));
+    expect(parsed.checks).toContainEqual(expect.objectContaining({ name: "invoice_total", status: "unchecked" }));
+    expect(statementNeedsCheck(parsed)).toBe(false);
+  });
+
+  it("gives a credit balance as a bill of 0 and still checks it", () => {
+    const parsed = parsePnbCardStatementText([
+      "Invoice Date 15-OCT-2026 Payment Due Date 04-NOV-2026",
+      "Total Amount Due 300.00 Cr Minimum Amount Due 0.00",
+      "Previous Balance Purchases and other charges Cash Advances Payments and Other Credits / Shadow Credits",
+      "0.00 200.00 0.00 500.00",
+      "21-SEP-2026 22-SEP-2026 SHOP 200.00 Dr",
+      "Total Invoice Value 200.00",
+    ].join("\n"));
+    expect(parsed.summary).toMatchObject({ totalMinor: 0, minimumMinor: 0 });
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["purchases", "ok"], ["invoice_total", "ok"]]);
+  });
+
+  it("ignores rows after End of Statement", () => {
+    const parsed = parsePnbCardStatementText(`${LAYOUT_B}\n20-OCT-2026 20-OCT-2026 AFTER THE END 10.00 Dr`);
+    expect(parsed.lines).toHaveLength(EXPECTED_LINES.length);
+  });
+});
+
+describe("parseCardStatement", () => {
+  it("uses the PNB parser for Punjab National Bank cards and the generic one otherwise", () => {
+    expect(parseCardStatement(LAYOUT_A, "Punjab National Bank")).toEqual(parsePnbCardStatementText(LAYOUT_A));
+    expect(parseCardStatement(LAYOUT_A, "HDFC Bank")).toEqual(parseCardStatementText(LAYOUT_A));
+  });
+});
+
+describe("parsePnbCardStatementText: the Network/Last 4 Digit cell", () => {
+  it.each(["RUPAY - 0042", "RUPAY - ####", "VISA-XXXX", "RUPAY  -  ****"])("drops %s whole", (cell) => {
+    const parsed = parsePnbCardStatementText(`21-SEP-2026 22-SEP-2026 ${cell} FRESH BASKET STORES 1784.00 Dr`);
+    expect(parsed.lines.map((l) => l.description)).toEqual(["FRESH BASKET STORES"]);
+  });
+});
+
+// The statement date comes only from the Invoice Date label; synthetic values.
+describe("parsePnbCardStatementText: Invoice Date and Payment Due Date", () => {
+  const dates = (text: string) => {
+    const { statementDate, dueDate } = parsePnbCardStatementText(text).summary;
+    return { statementDate, dueDate };
+  };
+  const both = { statementDate: "2026-09-20", dueDate: "2026-10-10" };
+
+  it.each([
+    ["beside each label", "Invoice Date 20-SEP-2026\nPayment Due Date 10-OCT-2026"],
+    ["on the next row", "Invoice Date\n20-SEP-2026\nPayment Due Date\n10-OCT-2026"],
+    ["a row of values under a row of labels", "Invoice Date Payment Due Date Total Amount Due\n20-SEP-2026 10-OCT-2026 2,334.00"],
+    ["another date earlier in the header", "Statement generated on 13-OCT-2026\nDate 13-OCT-2026\nInvoice Date Payment Due Date\n20-SEP-2026 10-OCT-2026"],
+    ["both labels, then both dates, on one row", "Invoice Date Payment Due Date 20-SEP-2026 10-OCT-2026"],
+    ["one row with an amount label too", "Invoice Date Payment Due Date Minimum Amount Due 20-SEP-2026 10-OCT-2026 116.70"],
+  ])("%s", (_, text) => expect(dates(text)).toEqual(both));
+
+  it.each([
+    ["a text row with a date under the label", "Invoice Date\nPrinted on 13-OCT-2026 for you\nPayment Due Date 10-OCT-2026"],
+    ["two dates under one label", "Invoice Date\n13-OCT-2026 20-SEP-2026\nPayment Due Date 10-OCT-2026"],
+    ["an amount where the date should be", "Invoice Date 2,334.00\nPayment Due Date 10-OCT-2026"],
+    ["no Invoice Date label", "Statement Date 13-OCT-2026\nPayment Due Date 10-OCT-2026"],
+  ])("never guesses: %s", (_, text) => expect(dates(text)).toEqual({ statementDate: null, dueDate: "2026-10-10" }));
+});
+
+describe("parsePnbCardStatementText: real PNB layout rules", () => {
+  const one = (row: string) => parsePnbCardStatementText(row);
+
+  it("reads a debit with no marker, with Dr, and a credit with Cr; a missing marker is never unreadable", () => {
+    const parsed = one(["28-AUG-2026 29-AUG-2026 SHOP A 1,784.00", "28-AUG-2026 29-AUG-2026 SHOP B 10.00 Dr", "25-AUG-2026 26-AUG-2026 PAYMENT RECEIVED 1,500.00 Cr"].join("\n"));
+    expect(parsed.lines.map((l) => [l.description, l.direction])).toEqual([["SHOP A", "debit"], ["SHOP B", "debit"], ["PAYMENT RECEIVED", "credit"]]);
+    expect(parsed.issues).toEqual([]);
+  });
+
+  it.each([
+    ["after the post date", "28-AUG-2026 29-AUG-2026 RUPAY - 0042 SHOP A 1,784.00"],
+    ["digits first", "28-AUG-2026 29-AUG-2026 0042 RUPAY - SHOP A 1,784.00"],
+    ["between the dates", "28-AUG-2026 RUPAY - #### 29-AUG-2026 SHOP A 1,784.00"],
+    ["one piece", "28-AUG-2026 29-AUG-2026 RUPAY-0042 SHOP A 1,784.00"],
+  ])("drops the network group %s", (_, row) => {
+    const parsed = one(row);
+    expect(parsed.lines.map((l) => [l.date, l.description])).toEqual([["2026-08-28", "SHOP A"]]);
+    expect(JSON.stringify(parsed)).not.toMatch(/0042|RUPAY/);
+  });
+
+  it("keeps merged merchant fields as printed", () => {
+    expect(one("28-AUG-2026 29-AUG-2026 RUPAY - 0042 AMAZON PAY INDIA PRIVA BANGALORE IN 499.00").lines[0]!.description).toBe("AMAZON PAY INDIA PRIVA BANGALORE IN");
+  });
+
+  it("reads whole-rupee summary values (0, 13583) and paise (13854.64)", () => {
+    const parsed = one([
+      "Total Amount Due 13854.64",
+      "Previous Balance Purchases and other charges Cash Advances Payments and Other Credits / Shadow Credits",
+      "13583 13854.64 0 13583",
+      "02-SEP-2026 03-SEP-2026 SHOP 13,854.64",
+      "Total Invoice Value 13854.64",
+    ].join("\n"));
+    expect(parsed.checks.map((c) => [c.name, c.status, c.foundMinor])).toEqual([
+      ["summary", "ok", 1_385_464],
+      ["purchases", "ok", 1_385_464],
+      ["invoice_total", "ok", 1_385_464],
+    ]);
+  });
+
+  it("stops at Total Purchase: no total, stray value or advert below is a line", () => {
+    const parsed = one([
+      "02-SEP-2026 03-SEP-2026 SHOP 500.64",
+      "Total Purchase",
+      "02-SEP-2026 Total GST 0.00",
+      "0 0",
+      "Total Invoice Value 500.64",
+      "End of Statement",
+    ].join("\n"));
+    expect(parsed.lines).toHaveLength(1);
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.checks.find((c) => c.name === "invoice_total")?.status).toBe("ok");
+  });
+
+  it("flags debit lines that don't match Purchases and other charges", () => {
+    const parsed = one([
+      "Previous Balance Purchases and other charges Cash Advances Payments and Other Credits / Shadow Credits",
+      "0 900 0 0",
+      "02-SEP-2026 03-SEP-2026 SHOP 500.64",
+    ].join("\n"));
+    expect(parsed.checks.find((c) => c.name === "purchases")).toMatchObject({ status: "mismatch", foundMinor: 50_064, expectedMinor: 90_000 });
+    expect(statementNeedsCheck(parsed)).toBe(true);
+  });
+});

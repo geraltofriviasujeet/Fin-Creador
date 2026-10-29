@@ -4,7 +4,8 @@ import type { WriteResult } from "../income/types"
 import type { FormInput } from "../income/writers"
 
 // Expense categories: add, rename (and change the icon), archive and restore, shared by
-// web and mobile. Defaults can be archived like any other category; nothing is deleted
+// web and mobile. Defaults can be archived like any other category, except system categories
+// (system_key: the ones the app posts to itself, FC042); nothing is deleted
 // (clients have no delete grant), so archived categories keep their entries' history.
 // One active category per name, ignoring case and spaces (categories_user_kind_name_active_idx).
 
@@ -13,6 +14,8 @@ export type ExpenseCategoryItem = {
   name: string
   icon: ExpenseIcon
   isDefault: boolean
+  /** A system category (loan interest, Bank charges & interest...): can be renamed, never archived. */
+  system: boolean
   archived: boolean
 }
 
@@ -25,7 +28,7 @@ export async function loadExpenseCategories(
   supabase: UserClient,
 ): Promise<{ ok: true; categories: ExpenseCategoryItem[] } | { ok: false }> {
   const load = () =>
-    supabase.from("categories").select("id, name, icon, is_default, archived_at").eq("kind", "expense").order("name")
+    supabase.from("categories").select("id, name, icon, is_default, system_key, archived_at").eq("kind", "expense").order("name")
   let res = await load()
   if (!res.error && res.data.length === 0) {
     // Lazy fallback: sign-up seeding never blocks sign-up, so it may not have run.
@@ -40,6 +43,7 @@ export async function loadExpenseCategories(
       name: c.name,
       icon: (c.icon ?? "other") as ExpenseIcon,
       isDefault: c.is_default,
+      system: c.system_key !== null,
       archived: c.archived_at !== null,
     })),
   }

@@ -11,6 +11,18 @@ export const RECOVERY_PAGE = "/update-password"
 /** Always reachable: the email/OAuth callback must work with or without a session. */
 const PUBLIC_PREFIXES = ["/auth/"]
 
+/**
+ * Pages whose server actions answer a signed-out caller themselves instead of being redirected
+ * to sign-in, so the page keeps what's on screen (the statement import's review). Opt-in: every
+ * other protected page and action still redirects. Those actions check the user and run under
+ * RLS as the caller.
+ */
+const SIGNED_OUT_ACTION_PAGES = ["/loans-liabilities/import"] as const
+
+export function answersSignedOutAction(pathname: string, method: string, isServerAction: boolean): boolean {
+  return method === "POST" && isServerAction && SIGNED_OUT_ACTION_PAGES.some((p) => pathname === p)
+}
+
 export type RouteKind = "auth" | "recovery" | "public" | "protected"
 
 export function routeKind(pathname: string): RouteKind {

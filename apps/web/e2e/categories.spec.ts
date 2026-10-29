@@ -32,8 +32,12 @@ test("expense categories: add, rename, archive and restore, without duplicates o
   await expect(toast(page, "Expense saved.")).toBeVisible()
 
   await page.goto("/settings")
-  await expect(active(page).getByRole("listitem")).toHaveCount(14)
+  await expect(active(page).getByRole("listitem")).toHaveCount(15)
   await expect(active(page).getByRole("listitem").filter({ hasText: "Groceries" })).toContainText("Default")
+  // A system category can be renamed, never archived: no Archive button.
+  const bank = active(page).getByRole("listitem").filter({ hasText: "Bank charges & interest" })
+  await expect(bank.getByRole("button", { name: "Rename Bank charges & interest" })).toBeVisible()
+  await expect(bank.getByRole("button", { name: /^Archive/ })).toHaveCount(0)
 
   // Add, then a duplicate name (any case, spaces) is refused and the typed name is kept.
   let d = await addCategory(page, "Pets", "Health")

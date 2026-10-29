@@ -2,6 +2,7 @@
 
 import type * as React from "react"
 import { Fragment, useState, useTransition } from "react"
+import Link from "next/link"
 import { ChevronDown, Plus } from "lucide-react"
 import {
   BORROWING_BADGE_LABEL,
@@ -27,9 +28,10 @@ import {
 } from "@/app/(app)/loans-liabilities/actions"
 import { Meter } from "@/components/goals/display"
 import { ConfirmAction, run } from "@/components/loans/confirm"
+import { LOANS_PATH } from "@/components/loans/display"
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { DialogContent } from "@/components/ui/dialog"
 import { TextField } from "@/components/ui/field"
@@ -270,6 +272,9 @@ function CardRow({ item, onOpen }: { item: CardItem; onOpen: (open: ShortTermOpe
           <Button variant="ghost" size="sm" aria-label={`Enter statement for ${item.name}`} onClick={() => onOpen({ kind: "statement", card: item })}>
             Statement
           </Button>
+          <Link href={`${LOANS_PATH}/import?card=${item.card.id}`} aria-label={`Import a statement PDF for ${item.name}`} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            Import PDF
+          </Link>
           {item.owedMinor > 0 && (
             <Button variant="secondary" size="sm" aria-label={`Pay ${item.name}`} onClick={() => onOpen({ kind: "payCard", card: item })}>
               Pay
