@@ -130,12 +130,13 @@ test("review: ticks, defaults, a possible duplicate, edits, bulk category and th
   await expect(review(page).getByLabel("Bill total (₹)")).toHaveValue("2,334")
   await expect(review(page).getByLabel("Minimum due (₹)")).toHaveValue("116.70")
   await expect(review(page).getByLabel("Due date")).toHaveValue(pnbDueDate(today))
-  await expect(review(page)).toContainText("Ready. Saving comes in the next update; nothing is saved yet.")
+  await expect(review(page).getByRole("button", { name: "Save ticked lines" })).toBeEnabled()
   await shot(page, "statement-import-review")
 
   // Nothing ticked: Save is blocked.
   for (const text of ["FRESH BASKET", "LATE PAYMENT FEE", "IGST"]) await tick(page, text).uncheck()
   await expect(review(page)).toContainText("Tick at least one line.")
+  await expect(review(page).getByRole("button", { name: "Save ticked lines" })).toBeDisabled()
 })
 
 test("Check this statement needs a confirm; a statement already entered offers lines only", async ({ page }) => {

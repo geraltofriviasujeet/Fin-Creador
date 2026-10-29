@@ -91,7 +91,7 @@ select throws_ok(
 select throws_ok(
   $$ select public.record_transaction('expense', gen_random_uuid(), 1000, public.user_local_today(auth.uid()),
        pg_temp.card_acct('9c000000-0000-4000-8000-000000000003'), current_setting('test.a_other')::uuid) $$,
-  'FC006', null, 'or with another user''s category'
+  '23503', null, 'or with another user''s category (the ownership foreign key)'
 );
 select is((select count(*)::int from public.transactions where idempotency_key::text like '9d000000-%'), 0, 'and another user reads none of the imported lines');
 
