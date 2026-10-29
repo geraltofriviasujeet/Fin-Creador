@@ -418,9 +418,11 @@ test("the real PNB layout: 3 lines (the Cr payment skipped), nothing unreadable,
 })
 
 test("a new file clears the previous review at once; an unreadable one leaves nothing to save", async ({ page }) => {
+  const today = todayInIndia()
+  const statement = syntheticPdf(pnbStatementPages(true, { invoiceDate: today, lineDate: today }))
   await setUp(page, "Lata Mehra")
   await openImport(page, PNB_CARD)
-  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true))))
+  await chooser(page).setInputFiles(pdf("statement.pdf", statement))
   await expect(lines(page)).toHaveCount(4)
   await review(page).getByRole("textbox", { name: /^Amount for FRESH BASKET/ }).fill("1,800")
 
@@ -432,7 +434,7 @@ test("a new file clears the previous review at once; an unreadable one leaves no
   await expect(page.getByLabel("Also enter this statement")).toHaveCount(0)
 
   // Clearing the input drops the result too.
-  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true))))
+  await chooser(page).setInputFiles(pdf("statement.pdf", statement))
   await expect(lines(page)).toHaveCount(4)
   await expect(review(page).getByRole("textbox", { name: /^Amount for FRESH BASKET/ })).toHaveValue("1,784")
   await chooser(page).setInputFiles([])
