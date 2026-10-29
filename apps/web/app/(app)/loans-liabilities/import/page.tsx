@@ -49,7 +49,7 @@ async function ImportContent({ searchParams }: { searchParams: Promise<{ card?: 
   return (
     <>
       <PageHeader eyebrow={load.card.name} title="Import statement" description="Read your card statement PDF and check the lines." actions={back} />
-      <StatementImport card={load.card} today={load.today} />
+      <StatementImport card={load.card} today={load.today} categories={load.categories} />
     </>
   )
 }

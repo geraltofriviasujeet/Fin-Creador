@@ -33,6 +33,9 @@ export interface CardStatementSummary {
 export interface StatementCheck {
   name: "summary" | "invoice_total";
   status: "ok" | "mismatch" | "unchecked";
+  /** What the lines or summary boxes add up to, and what the statement says it should be (minor units). */
+  foundMinor: number | null;
+  expectedMinor: number | null;
 }
 
 export interface CardStatementParse {

@@ -148,43 +148,65 @@ export function syntheticPdf(pages: readonly SyntheticPage[], options: { passwor
 export const columns = (xs: readonly number[], rows: readonly (readonly string[])[]): SyntheticPage =>
   rows.map((row) => row.map((text, i) => ({ x: xs[i] ?? xs[xs.length - 1]! + 60 * (i - xs.length + 1), text })).filter((c) => c.text !== ""))
 
-const TOP = [
-  ...columns([40], [["PUNJAB NATIONAL BANK CREDIT CARD STATEMENT"], ["EXAMPLE PERSON"], ["Card Number 5555 XXXX XXXX 0042"]]),
-  ...columns([40, 120, 220, 320, 450], [
-    ["Invoice Date", "Payment Due Date", "Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"],
-    ["15-OCT-2026", "04-NOV-2026", "2,334.00", "2,334.00", "116.70"],
-  ]),
-  ...columns([40, 140, 260, 340, 500], [
-    ["Previous Balance", "Purchases and other charges", "Cash Advances", "Payments and Other Credits / Shadow Credits", ""],
-    ["1,500.00", "2,334.00", "0.00", "1,500.00", ""],
-  ]),
-]
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+/** "2026-10-15" -> "15-OCT-2026", as PNB prints dates. */
+export const pnbDate = (iso: string) => `${iso.slice(8, 10)}-${MONTHS[Number(iso.slice(5, 7)) - 1]}-${iso.slice(0, 4)}`
+
+/** The statement's Payment Due Date: 20 days after the invoice date (ISO). */
+export function pnbDueDate(invoiceIso: string): string {
+  const [y, m, d] = invoiceIso.split("-").map(Number) as [number, number, number]
+  return new Date(Date.UTC(y, m - 1, d + 20)).toISOString().slice(0, 10)
+}
+
+export type PnbStatementOptions = {
+  /** Invoice (statement) date, ISO; default 2026-10-15. */
+  invoiceDate?: string
+  /** One date for every transaction line, ISO (each line keeps its own date otherwise). */
+  lineDate?: string
+  /** Printed Total Invoice Value; default the Dr lines' sum (2,334.00). */
+  invoiceTotal?: string
+}
 
 /**
  * A two-page PNB-style card statement (layout from the owner's description; invented person,
- * merchants and card digits), with or without the Network/Last 4 Digit column. Bill ₹2,334.00.
+ * merchants and card digits), with or without the Network/Last 4 Digit column. Bill ₹2,334.00:
+ * a ₹1,500 payment, ₹1,784 purchase, ₹500 late fee and ₹50 IGST.
  */
-export function pnbStatementPages(network: boolean): SyntheticPage[] {
+export function pnbStatementPages(network: boolean, options: PnbStatementOptions = {}): SyntheticPage[] {
+  const invoice = pnbDate(options.invoiceDate ?? "2026-10-15")
+  const due = pnbDate(pnbDueDate(options.invoiceDate ?? "2026-10-15"))
+  const on = (iso: string) => pnbDate(options.lineDate ?? iso)
+  const top = [
+    ...columns([40], [["PUNJAB NATIONAL BANK CREDIT CARD STATEMENT"], ["EXAMPLE PERSON"], ["Card Number 5555 XXXX XXXX 0042"]]),
+    ...columns([40, 120, 220, 320, 450], [
+      ["Invoice Date", "Payment Due Date", "Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"],
+      [invoice, due, "2,334.00", "2,334.00", "116.70"],
+    ]),
+    ...columns([40, 140, 260, 340, 500], [
+      ["Previous Balance", "Purchases and other charges", "Cash Advances", "Payments and Other Credits / Shadow Credits", ""],
+      ["1,500.00", "2,334.00", "0.00", "1,500.00", ""],
+    ]),
+  ]
   const xs = network ? [40, 110, 180, 260, 520] : [40, 110, 180, 520]
   const net = network ? ["RUPAY - 0042"] : []
-  const header = ["Transaction Date", "Post Date", ...(network ? ["Network/Last 4 Digit"] : []), "Trnx Details From 16-SEP-2026 to 15-OCT-2026", "Amount in Rs"]
+  const header = ["Transaction Date", "Post Date", ...(network ? ["Network/Last 4 Digit"] : []), `Trnx Details From 16-SEP-2026 to ${invoice}`, "Amount in Rs"]
   const page1 = [
-    ...TOP,
+    ...top,
     ...columns(xs, [
       header,
-      ["18-SEP-2026", "19-SEP-2026", ...net, "PAYMENT RECEIVED - THANK YOU", "1500.00 Cr"],
-      ["21-SEP-2026", "22-SEP-2026", ...net, "FRESH BASKET STORES BENGAL", "1784.00 Dr"],
+      [on("2026-09-18"), on("2026-09-19"), ...net, "PAYMENT RECEIVED - THANK YOU", "1500.00 Cr"],
+      [on("2026-09-21"), on("2026-09-22"), ...net, "FRESH BASKET STORES BENGAL", "1784.00 Dr"],
     ]),
-    ...columns([40], [["Date: 15-OCT-2026 Page 1"]]),
+    ...columns([40], [[`Date: ${invoice} Page 1`]]),
   ]
   // Page 2: no repeated header.
   const page2 = [
     ...columns(xs, [
-      ["10-OCT-2026", "10-OCT-2026", ...net, "LATE PAYMENT FEE", "500.00 Dr"],
-      ["10-OCT-2026", "10-OCT-2026", ...net, "IGST @18% ON LATE PAYMENT FEE", "50.00 Dr"],
+      [on("2026-10-10"), on("2026-10-10"), ...net, "LATE PAYMENT FEE", "500.00 Dr"],
+      [on("2026-10-10"), on("2026-10-10"), ...net, "IGST @18% ON LATE PAYMENT FEE", "50.00 Dr"],
     ]),
-    ...columns([40, 200], [["Total GST", "50.00"], ["Total Invoice Value", "2,334.00"], ["End of Statement", ""]]),
-    ...columns([40], [["Date: 15-OCT-2026 Page 2"]]),
+    ...columns([40, 200], [["Total GST", "50.00"], ["Total Invoice Value", options.invoiceTotal ?? "2,334.00"], ["End of Statement", ""]]),
+    ...columns([40], [[`Date: ${invoice} Page 2`]]),
   ]
   return [page1, page2]
 }

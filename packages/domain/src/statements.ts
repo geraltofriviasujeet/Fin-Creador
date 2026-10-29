@@ -7,6 +7,7 @@
 import { type IsoDate, isIsoDate } from "./dates";
 import { stripDigitRuns } from "./digits";
 import { MAX_AMOUNT_MINOR, addMinor } from "./money";
+import { uuidV5 } from "./uuid-v5";
 
 /** transactions.note holds at most 280 characters. */
 export const STATEMENT_NOTE_MAX = 280;
@@ -255,6 +256,13 @@ export function statementLineKeySource(cardId: string, statementDate: IsoDate, l
     line.direction, line.description, line.occurrence,
   ]);
 }
+
+/** Namespace of statement line request keys (fixed: changing it changes every key). */
+export const STATEMENT_LINE_KEY_NAMESPACE = "d86164a8-ddf1-4478-b11d-4184e5e78764";
+
+/** A line's request key: UUID v5 of statementLineKeySource, the same on every client and the server. */
+export const statementLineKey = (cardId: string, statementDate: IsoDate, line: StatementLine): string =>
+  uuidV5(statementLineKeySource(cardId, statementDate, line), STATEMENT_LINE_KEY_NAMESPACE);
 
 export type BalanceOrder = "newest_first" | "oldest_first";
 

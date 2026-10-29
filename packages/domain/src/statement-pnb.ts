@@ -96,9 +96,11 @@ function signed(text: string | undefined): number | null {
 
 const date = (text: string | undefined): IsoDate | null => (text === undefined ? null : parseStatementDate(text));
 
-const check = (name: StatementCheck["name"], left: number | null, right: number | null): StatementCheck => ({
+const check = (name: StatementCheck["name"], found: number | null, expected: number | null): StatementCheck => ({
   name,
-  status: left === null || right === null ? "unchecked" : left === right ? "ok" : "mismatch",
+  status: found === null || expected === null ? "unchecked" : found === expected ? "ok" : "mismatch",
+  foundMinor: found,
+  expectedMinor: expected,
 });
 
 // Transaction Date, Post Date, [Network/Last 4 Digit], details, amount with Dr / Cr.

@@ -88,7 +88,7 @@ describe.each([
   });
 
   it("passes both self-checks", () => {
-    expect(parsed.checks).toEqual([{ name: "summary", status: "ok" }, { name: "invoice_total", status: "ok" }]);
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["invoice_total", "ok"]]);
     expect(statementNeedsCheck(parsed)).toBe(false);
   });
 
@@ -102,20 +102,20 @@ describe.each([
 describe("parsePnbCardStatementText self-checks", () => {
   it("flags a summary that does not add up", () => {
     const parsed = parsePnbCardStatementText(LAYOUT_B.replace("1,500.00 + 4,284.00", "1,600.00 + 4,284.00"));
-    expect(parsed.checks).toContainEqual({ name: "summary", status: "mismatch" });
+    expect(parsed.checks).toContainEqual(expect.objectContaining({ name: "summary", status: "mismatch", foundMinor: 393_400, expectedMinor: 383_400 }));
     expect(statementNeedsCheck(parsed)).toBe(true);
   });
 
   it("flags Dr lines that do not sum to Total Invoice Value (a line the parser could not read)", () => {
     const parsed = parsePnbCardStatementText(LAYOUT_B.replace("FINANCE CHARGES 899.50 Dr", "FINANCE CHARGES"));
     expect(parsed.issues).toEqual([{ line: 15, reason: "no_amount" }]);
-    expect(parsed.checks).toContainEqual({ name: "invoice_total", status: "mismatch" });
+    expect(parsed.checks).toContainEqual(expect.objectContaining({ name: "invoice_total", status: "mismatch", foundMinor: 338_450, expectedMinor: 428_400 }));
     expect(statementNeedsCheck(parsed)).toBe(true);
   });
 
   it("leaves a check unchecked when a figure is missing", () => {
     const parsed = parsePnbCardStatementText(LAYOUT_B.replace("Total Invoice Value 4,284.00\n", ""));
-    expect(parsed.checks).toContainEqual({ name: "invoice_total", status: "unchecked" });
+    expect(parsed.checks).toContainEqual(expect.objectContaining({ name: "invoice_total", status: "unchecked" }));
     expect(statementNeedsCheck(parsed)).toBe(false);
   });
 
@@ -129,7 +129,7 @@ describe("parsePnbCardStatementText self-checks", () => {
       "Total Invoice Value 200.00",
     ].join("\n"));
     expect(parsed.summary).toMatchObject({ totalMinor: 0, minimumMinor: 0 });
-    expect(parsed.checks).toEqual([{ name: "summary", status: "ok" }, { name: "invoice_total", status: "ok" }]);
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["invoice_total", "ok"]]);
   });
 
   it("ignores rows after End of Statement", () => {

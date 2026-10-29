@@ -6,7 +6,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(30);
+select plan(31);
 
 insert into auth.users (id, email) values
   ('1b000000-0000-4000-8000-000000000001', 'bc-asha@example.test'),
@@ -125,7 +125,7 @@ select is(
   'Loan fees & charges', 'loan_category_id still creates the loan categories'
 );
 
--- ------------------------------------------------------------ guard and RLS (26-30)
+-- ------------------------------------------------------------ guard and RLS (26-31)
 select throws_ok(
   $$ update public.categories set archived_at = now() where system_key = 'bank_charges' $$,
   'FC042', 'This category is used by the app and can''t be archived', 'the category cannot be archived (generic message)'
@@ -140,6 +140,10 @@ select is(
   1, 'a user sees only their own'
 );
 reset role;
+select throws_ok(
+  $$ update public.categories set system_key = null where system_key = 'bank_charges' and user_id = '1b000000-0000-4000-8000-000000000002' $$,
+  'FC009', 'A category''s identity can''t change', 'even the owner cannot take the key off a system category'
+);
 select throws_ok(
   $$ select public.system_category_id(null, 'bank_charges') $$,
   '42501', null, 'system_category_id needs a user'
