@@ -215,7 +215,7 @@ const sign = (direction: StatementDirection, minor: number) => (direction === "c
 export type BankReadFailure =
   | { reason: "no_header"; closest: { line: number; missing: HeaderNeed[] } | null }
   | ({ reason: "no_lines" | "dates_out_of_order" | "totals_failed" | "closing_mismatch" | "nothing_kept" } & AfterHeader)
-  | ({ reason: "chain_broken"; rows: number } & AfterHeader);
+  | ({ reason: "chain_broken"; rows: number; suspects: { line: number; before: number | null }[] } & AfterHeader);
 
 /** The header row's line, and what became of each row below it that wasn't skipped ("line" or why not). */
 type AfterHeader = { header: number; verdicts: Record<number, string> };
@@ -419,7 +419,16 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
     for (let k = issues.length - 1; k >= 0; k--) if (dateless.has(issues[k]!.line)) issues.splice(k, 1);
     totals = { name: "totals", status: "ok", foundMinor: closingMinor, expectedMinor: closingMinor };
   } else {
-    if (suspect.size > 0) return { failure: { reason: "chain_broken", rows: suspect.size, ...after() } };
+    if (suspect.size > 0) {
+      const found = after();
+      const suspects = timeOrder.flatMap((r, k) => {
+        if (!suspect.has(r)) return [];
+        const before = k > 0 ? timeOrder[k - 1]! : null;
+        found.verdicts[r.line] = `flagged: balance doesn't follow (${chainHint(r, before?.balanceMinor ?? openingMinor, timeOrder[k + 1] ?? null, before)})`;
+        return [{ line: r.line, before: before?.line ?? null }];
+      });
+      return { failure: { reason: "chain_broken", rows: suspect.size, suspects, ...found } };
+    }
     if (closingMinor !== null && timeOrder[timeOrder.length - 1]!.balanceMinor !== closingMinor) return { failure: { reason: "closing_mismatch", ...after() } };
     // No endpoints to settle a disagreement: a row whose marker and balance disagree is flagged.
     flagged = new Set([...conflicts, ...raw.filter((r) => !asStated(r))]);
@@ -454,6 +463,20 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
       ],
     },
   };
+}
+
+/**
+ * Why a row's balance doesn't follow, in words only (no figures): the balance didn't move, the move is
+ * the row's amount with its decimal point shifted, the move is a neighbouring row's amount (rows out of
+ * order), or the move is another amount.
+ */
+function chainHint(r: Raw, before: number | null, next: Raw | null, previous: Raw | null): string {
+  if (before === null) return "nothing before it";
+  const moved = Math.abs(r.balanceMinor - before);
+  if (moved === 0) return "the balance didn't move";
+  if ([10, 100].some((f) => moved === r.amountMinor * f || moved * f === r.amountMinor)) return "the move is the amount with its decimal point shifted";
+  if ((next && moved === next.amountMinor) || (previous && moved === previous.amountMinor)) return "the move is a neighbouring row's amount: rows out of order?";
+  return r.date === previous?.date ? "the move is not the row's amount; same date as the row before" : "the move is not the row's amount";
 }
 
 /**
@@ -602,6 +625,11 @@ export function bankReadFailureText(read: {
   if (failure.reason !== "no_header") {
     // The header row, then the rows under it with what became of each.
     const below = Array.from({ length: Math.min(rows.length - failure.header, BANK_FAILURE_ROWS_SHOWN) }, (_, i) => failure.header + 1 + i);
+    // Rows whose balance doesn't follow, and the row before each, wherever they are.
+    if (failure.reason === "chain_broken") {
+      for (const { line, before } of failure.suspects) for (const l of [before, line]) if (l !== null && !below.includes(l)) below.push(l);
+      below.sort((a, b) => a - b);
+    }
     return [
       `Why: ${failureText(failure, at)}`,
       `${at1(failure.header)} (header): ${layout(failure.header)}`,

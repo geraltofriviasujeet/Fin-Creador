@@ -548,6 +548,20 @@ describe("bankReadFailureText", () => {
     );
   });
 
+  it("names a row whose balance doesn't follow, and the row before it, past the first 30 rows, with a hint and no figures", () => {
+    // 40 rows of 10.00 out; on the 34th the amount reads 1.00 while the balance moves by 10.00.
+    const rows = Array.from({ length: 40 }, (_, i) => {
+      const day = String(1 + Math.floor(i / 2)).padStart(2, "0");
+      return `${day}/10/2026,SHOP,${i === 33 ? "1.00" : "10.00"},,${(1000 - 10 * (i + 1)).toFixed(2)}`;
+    });
+    const out = csv(["Date,Narration,Debit,Credit,Balance", ...rows]).split("\n");
+    expect(out[0]).toBe("Why: Header row at row 1. No opening and closing balance printed, and 1 row's balance doesn't follow from the row before.");
+    expect(out).toContain("Row 34: date col1 c10 | text col2 c4 | amount col3 c5 | amount col5 c6 → line");
+    expect(out).toContain("Row 35: date col1 c10 | text col2 c4 | amount col3 c4 | amount col5 c6 → flagged: balance doesn't follow (the move is the amount with its decimal point shifted)");
+    expect(out).toHaveLength(2 + 30 + 2);
+    expect(out.join("\n")).not.toMatch(/SHOP|10\.00|2026/);
+  });
+
   it("for a PDF: page and row, and the masked layout of the first 30 rows plus the closest header further down", () => {
     const p = (str: string, x: number, y: number) => ({ str, x, y, width: str.length * 4.5, height: 10 });
     const top = Array.from({ length: 34 }, (_, i) => p(`EXAMPLE PERSON LINE ${i}`, 30, 800 - i * 20));
