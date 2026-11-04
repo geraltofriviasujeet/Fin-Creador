@@ -97,6 +97,20 @@ describe("readStatementPdf: another bank's statement and the general reader", ()
   })
 })
 
+describe("readStatementPdf: masked row layouts for rows the reader can't use", () => {
+  it("gives every text line a layout, and the unreadable row's has its pieces' kinds and positions only", async () => {
+    const read = await readStatementPdf(lib, syntheticPdf(pnbPages(true, { unreadableRow: true })))
+    expect(read.status).toBe("ok")
+    if (read.status !== "ok") return
+    expect(read.rowLayouts).toHaveLength(read.text.split("\n").length)
+    const parsed = parseCardStatement(read.text, "Punjab National Bank")
+    expect(parsed.issues).toHaveLength(1)
+    const layout = read.rowLayouts[parsed.issues[0]!.line - 1]!
+    expect(layout).toMatch(/^date x\d+ w\d+ c11 dy0 \| date x\d+ w\d+ c11 dy0 \| text .* \| text x\d+ w\d+ c16 dy0$/)
+    expect(read.rowLayouts.join("\n")).not.toMatch(/MYSTERY|OCT|RUPAY|0042|1784/)
+  })
+})
+
 describe("readStatementPdf: password", () => {
   const pdf = syntheticPdf(pnbPages(false), { password: "fake-pass-1" })
 

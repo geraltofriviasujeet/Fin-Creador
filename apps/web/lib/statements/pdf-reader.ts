@@ -31,7 +31,7 @@ type PdfDocument = {
 }
 
 export type PdfReadResult =
-  | { status: "ok"; text: string; pages: number; pageRowCounts: number[] }
+  | { status: "ok"; text: string; pages: number; pageRowCounts: number[]; rowLayouts: string[] }
   | { status: "needs_password" }
   | { status: "wrong_password" }
   | { status: "no_text" }
@@ -94,9 +94,9 @@ export async function readStatementPdf(lib: PdfLib, data: Uint8Array, password?:
         })),
       )
     }
-    const { text, pageRowCounts } = statementPages(pages)
+    const { text, pageRowCounts, rowLayouts } = statementPages(pages)
     if (text.trim() === "") return { status: "no_text" }
-    return { status: "ok", text, pages: doc.numPages, pageRowCounts }
+    return { status: "ok", text, pages: doc.numPages, pageRowCounts, rowLayouts }
   } catch {
     return { status: "unreadable" }
   } finally {

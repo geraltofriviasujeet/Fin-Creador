@@ -77,9 +77,11 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Fonts (self-hosted faces imported in app/layout.tsx; variables set in :root below) */
-  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-manrope), var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Fonts (self-hosted faces imported in app/layout.tsx; variables set in :root below). Each
+     var() names the font as its own fallback: an undefined variable would otherwise make the
+     whole font-family invalid and the browser would fall back to its default serif. */
+  --font-sans: var(--font-dm-sans, "DM Sans Variable"), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-manrope, "Manrope Variable"), var(--font-dm-sans, "DM Sans Variable"), ui-sans-serif, system-ui, sans-serif;
 
   /* Web density (owner, 2026-10-26): the root is 14px (see html below), so every rem-based
      size (spacing, heights) is 12.5% smaller than the shared tokens. The type scale is

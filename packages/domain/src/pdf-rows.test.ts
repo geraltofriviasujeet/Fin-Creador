@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type PdfTextItem, linePosition, pageRows, rowText, statementPages, statementTextFromPages } from "./pdf-rows";
+import { type PdfTextItem, linePosition, pageRows, pieceKind, rowLayout, rowText, statementPages, statementTextFromPages } from "./pdf-rows";
 
 const item = (str: string, x: number, y: number, width = str.length * 5, height = 9): PdfTextItem => ({ str, x, y, width, height });
 
@@ -83,5 +83,26 @@ describe("statementPages and linePosition", () => {
     expect(linePosition(2, pageRowCounts)).toEqual({ page: 1, row: 2 });
     expect(linePosition(3, pageRowCounts)).toEqual({ page: 2, row: 1 });
     expect(linePosition(4, pageRowCounts)).toBeNull();
+  });
+});
+
+describe("rowLayout: a masked layout for rows the reader can't use", () => {
+  it("names each piece's kind, never its text", () => {
+    expect(["21-SEP-2026", "21/09/2026", "1784.00 Dr", "13,854.64", "₹500.00", "0042", "12,000", "FRESH BASKET 4021", "Dr"].map(pieceKind)).toEqual([
+      "date", "date", "amount", "amount", "amount", "number", "number", "text", "text",
+    ]);
+  });
+
+  it("lists pieces left to right with x, width, characters and offset from the top baseline, rounded", () => {
+    const layout = rowLayout([item("1784.00 Dr", 520.4, 786.2, 46.6), item("21-SEP-2026", 39.6, 786.2, 52.2), item("FRESH BASKET", 180, 782.9, 60.49)]);
+    expect(layout).toBe("date x40 w52 c11 dy0 | text x180 w60 c12 dy3 | amount x520 w47 c10 dy0");
+  });
+
+  it("carries no text or digits from the statement, in every line's layout", () => {
+    const pieces = [item("21-SEP-2026", 40, 786), item("FRESH BASKET 4021 1234", 110, 786), item("4021", 300, 786), item("1784.00 Dr", 520, 786)];
+    const { rowLayouts } = statementPages([pieces, [item("Total Purchase", 40, 800)]]);
+    expect(rowLayouts).toHaveLength(2);
+    for (const secret of ["FRESH", "SEP", "2026", "4021", "1234", "1784", "Total"]) expect(rowLayouts.join("\n")).not.toContain(secret);
+    expect(rowLayouts[1]).toBe("text x40 w70 c14 dy0");
   });
 });

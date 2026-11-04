@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { type CardStatementParse, type StatementLine, statementLineKey } from "@fin-creador/domain"
-import { buildReview, canTick, checkReasons, importOutcome, lineErrors, reviewKeys, reviewTotals, saveBlockers, statementDatesWarning, unsupportedIssuerMessage } from "./review"
+import { buildReview, canTick, checkReasons, importOutcome, lineErrors, reviewKeys, reviewTotals, saveBlockers, statementDatesWarning, unreadableLayoutText, unsupportedIssuerMessage } from "./review"
 
 // Synthetic statement lines only.
 const CARD = "00000000-0000-4000-8000-0000000000c1"
@@ -62,7 +62,7 @@ describe("buildReview", () => {
     ])
     expect(review.lines[1]!.amount).toBe("1,784")
     expect(review.unreadableRows).toBe(1)
-    expect(review.unreadable).toEqual([{ page: null, row: 40, shape: "date, text, no amount" }])
+    expect(review.unreadable).toEqual([{ page: null, row: 40, shape: "date, text, no amount", layout: "" }])
     expect(review.statement).toEqual({ ...parse.summary, exists: false })
   })
 
@@ -167,8 +167,19 @@ describe("checkReasons and saveBlockers", () => {
 describe("unreadable rows and statement dates", () => {
   it("places an unreadable row on its PDF page and row, with only its masked shape", () => {
     const r = buildReview(parse, none, categories, context, [30, 25])
-    expect(r.unreadable).toEqual([{ page: 2, row: 10, shape: "date, text, no amount" }])
+    expect(r.unreadable).toEqual([{ page: 2, row: 10, shape: "date, text, no amount", layout: "" }])
     expect(JSON.stringify(r.unreadable)).not.toMatch(/\d{3,}|FRESH|BASKET/)
+  })
+
+  it("Copy layout: one line per unreadable row, its place and the reader's masked layout", () => {
+    const layouts = Array.from({ length: 55 }, (_, i) => `text x${i} w10 c3 dy0`)
+    layouts[39] = "date x40 w52 c11 dy0 | text x110 w180 c24 dy0"
+    const r = buildReview(parse, none, categories, context, [30, 25], layouts)
+    expect(r.unreadable[0]!.layout).toBe("date x40 w52 c11 dy0 | text x110 w180 c24 dy0")
+    expect(unreadableLayoutText(r.unreadable)).toBe("Page 2, row 10: date x40 w52 c11 dy0 | text x110 w180 c24 dy0")
+    expect(unreadableLayoutText([...r.unreadable, { page: null, row: 3, shape: "", layout: "" }])).toBe(
+      "Page 2, row 10: date x40 w52 c11 dy0 | text x110 w180 c24 dy0\nRow 3: no layout",
+    )
   })
 
   it("warns when the due date is before the statement date", () => {

@@ -441,6 +441,43 @@ test("a new file clears the previous review at once; an unreadable one leaves no
   await expect(review(page)).toHaveCount(0)
 })
 
+test("another card's import page starts empty: no review, notice or file from the last card", async ({ page }) => {
+  const today = todayInIndia()
+  await setUp(page, "Uma Iyer")
+  await addCard(page, "Punjab National Bank", { typed: "Rupay Platinum" })
+  await openImport(page, PNB_CARD)
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true, { invoiceDate: today, lineDate: today }))))
+  await expect(lines(page)).toHaveCount(4)
+
+  // In-app links only (client navigation, which keeps the previous page's state).
+  await page.getByRole("link", { name: "Back to Loans & Liabilities" }).click()
+  await box(page).getByRole("link", { name: "Import a statement PDF for Punjab National Bank Rupay Platinum" }).click()
+  await expect(page).toHaveURL(/\/loans-liabilities\/import\?card=/)
+  await expect(page.getByText("Punjab National Bank Rupay Platinum", { exact: true })).toBeVisible()
+  await expect(review(page)).toHaveCount(0)
+  await expect(page.getByText("FRESH BASKET")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: /^Save/ })).toHaveCount(0)
+  expect(await chooser(page).evaluate((input: HTMLInputElement) => input.files?.length ?? 0)).toBe(0)
+})
+
+test("Copy layout: each unreadable row's place and piece positions, never its text", async ({ page, context }) => {
+  const today = todayInIndia()
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  await setUp(page, "Vani Rao")
+  await openImport(page, PNB_CARD)
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true, { invoiceDate: today, lineDate: today, unreadableRow: true }))))
+  await expect(review(page)).toContainText("1 row could not be read")
+  await expect(review(page).getByRole("list", { name: "Rows that could not be read" })).toContainText(/^Page 2, row \d+: date, .*no amount$/)
+
+  await review(page).getByRole("button", { name: "Copy layout" }).click()
+  await expect(review(page).getByRole("status").filter({ hasText: "Layout copied" })).toBeVisible()
+  const copied = await page.evaluate(() => navigator.clipboard.readText())
+  // One line: the place, then per piece its kind, x, width, characters and baseline offset.
+  expect(copied).toMatch(/^Page 2, row \d+: date x\d+ w\d+ c\d+ dy-?\d+( \| (date|text|number|amount) x\d+ w\d+ c\d+ dy-?\d+)+$/)
+  expect(copied.split("\n")).toHaveLength(1)
+  for (const secret of ["MYSTERY", "MERCHANT", "OCT", "RUPAY", today.slice(0, 4)]) expect(copied).not.toContain(secret)
+})
+
 test("another issuer: a statement that verifies itself is read with the general reader; one that doesn't is not", async ({ page }) => {
   const today = todayInIndia()
   await setUp(page, "Mohan Rao", "HDFC Bank", { pick: "HDFC Regalia Gold" })

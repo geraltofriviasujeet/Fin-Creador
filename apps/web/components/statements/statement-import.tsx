@@ -20,6 +20,7 @@ import {
   saveBlockers,
   STATEMENT_DATE_MISSING,
   statementDatesWarning,
+  unreadableLayoutText,
   unsupportedIssuerMessage,
 } from "@fin-creador/api"
 import {
@@ -84,6 +85,8 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
   // The statement's text, for reading it again with the other parser; it never leaves this page.
   const text = useRef<string | null>(null)
   const pageRowCounts = useRef<number[] | undefined>(undefined)
+  // Each text line's masked layout (no statement text), for the "Copy layout" diagnostic.
+  const rowLayouts = useRef<string[] | undefined>(undefined)
   // Each pick (and each read or parser switch) gets a number; a result for an older one is dropped.
   const attempt = useRef(0)
   const issuerIsPnb = card.issuer === PNB
@@ -111,7 +114,7 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
     if (!result?.ok) return setPhase({ step: "match_failed" })
     setPhase({
       step: "review",
-      review: buildReview(parse, result.matches, categories, context, pageRowCounts.current),
+      review: buildReview(parse, result.matches, categories, context, pageRowCounts.current, rowLayouts.current),
       asPnb,
       pnbOffer,
       general: outcome === "general",
@@ -128,6 +131,7 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
       if (result.status === "ok") {
         text.current = result.text
         pageRowCounts.current = result.pageRowCounts
+        rowLayouts.current = result.rowLayouts
         await review(issuerIsPnb)
       } else if (result.status === "needs_password") setPhase({ step: "password" })
       else if (result.status === "wrong_password")
@@ -150,6 +154,7 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
     text.current = null
     file.current = null
     pageRowCounts.current = undefined
+    rowLayouts.current = undefined
     setPassword("")
     setPhase({ step: "choose" })
     if (!picked) return
@@ -294,6 +299,7 @@ function StatementReview({
   const [lines, setLines] = useState(initial.lines)
   const [checkConfirmed, setCheckConfirmed] = useState(false)
   const [bulkCategory, setBulkCategory] = useState("")
+  const [layoutCopied, setLayoutCopied] = useState<"copied" | "failed" | null>(null)
   const s = initial.statement
   const c = card.currency
   const symbol = c === "INR" ? "₹" : c
@@ -437,6 +443,31 @@ function StatementReview({
               ))}
               {initial.unreadable.length > MAX_UNREADABLE_SHOWN && <li>and {initial.unreadable.length - MAX_UNREADABLE_SHOWN} more</li>}
             </ul>
+          )}
+          {initial.unreadable.length > 0 && (
+            <span className="mt-2 flex flex-wrap items-center gap-2">
+              {/* For support: where each unreadable piece sits, never its text or digits. */}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(unreadableLayoutText(initial.unreadable))
+                    .then(() => setLayoutCopied("copied"))
+                    .catch(() => setLayoutCopied("failed"))
+                }
+              >
+                Copy layout
+              </Button>
+              <span role="status" className="text-sm">
+                {layoutCopied === "copied"
+                  ? "Layout copied: positions and sizes only, no text or numbers from your statement."
+                  : layoutCopied === "failed"
+                    ? "Couldn't copy. Allow clipboard access and try again."
+                    : ""}
+              </span>
+            </span>
           )}
         </FormMessage>
       )}

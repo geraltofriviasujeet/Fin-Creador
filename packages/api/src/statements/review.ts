@@ -71,8 +71,11 @@ export type Review = {
   unreadable: UnreadableRow[]
 }
 
-/** An unreadable row: its page and row in the PDF (null when not known) and its masked shape. */
-export type UnreadableRow = { page: number | null; row: number; shape: string }
+/**
+ * An unreadable row: its page and row in the PDF (null when not known), its masked shape, and its
+ * masked layout from the PDF reader (rowLayout; "" when not known). Neither holds statement text.
+ */
+export type UnreadableRow = { page: number | null; row: number; shape: string; layout: string }
 
 export type ReviewContext = { cardId: string; cardAddedOn: IsoDate; today: IsoDate; currency: string }
 
@@ -97,6 +100,8 @@ export function buildReview(
   context: ReviewContext,
   /** Rows each PDF page gave (from the reader), to place unreadable rows; else they're numbered in the text. */
   pageRowCounts?: readonly number[],
+  /** Each text line's masked layout (from the reader), for the "Copy layout" diagnostic. */
+  rowLayouts?: readonly string[],
 ): Review {
   const keys = reviewKeys(context.cardId, parse)
   const imported = new Set(matches.importedKeys)
@@ -143,7 +148,7 @@ export function buildReview(
       .filter((issue) => issue.line > 0)
       .map((issue) => {
         const at = pageRowCounts ? linePosition(issue.line, pageRowCounts) : null
-        return { page: at?.page ?? null, row: at?.row ?? issue.line, shape: issue.shape ?? "" }
+        return { page: at?.page ?? null, row: at?.row ?? issue.line, shape: issue.shape ?? "", layout: rowLayouts?.[issue.line - 1] ?? "" }
       }),
   }
 }
@@ -266,4 +271,9 @@ export function importOutcome(parse: CardStatementParse, ownReader: boolean): "r
   const nothing = parse.lines.length === 0 && parse.issues.length === 0 && [statementDate, dueDate, totalMinor, minimumMinor].every((v) => v === null)
   if (ownReader) return nothing ? "unreadable" : "review"
   return statementVerifiesItself(parse) ? "general" : "unsupported"
+}
+
+/** The "Copy layout" text: one unreadable row per line, its place and masked layout only. */
+export function unreadableLayoutText(rows: readonly UnreadableRow[]): string {
+  return rows.map((u) => `${u.page === null ? `Row ${u.row}` : `Page ${u.page}, row ${u.row}`}: ${u.layout || "no layout"}`).join("\n")
 }

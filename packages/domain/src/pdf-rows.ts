@@ -8,6 +8,7 @@
 // left to right, and a gap wider than about a character starts a new cell. A piece drawn twice at
 // the same place (overprinted text) is read once. Pure, so any client that can list a page's text
 // pieces (pdf.js on web) gets the same rows.
+import { parseStatementDate } from "./statements";
 
 /** Largest statement PDF read (bytes), and the most pages. */
 export const MAX_STATEMENT_PDF_BYTES = 10 * 1024 * 1024;
@@ -25,6 +26,8 @@ export interface PdfTextItem {
 export interface PdfRow {
   /** Cells left to right; spaces inside a cell are kept as single spaces. */
   cells: string[];
+  /** The row's pieces, masked (rowLayout): no text or digits from the statement. */
+  layout: string;
 }
 
 const clean = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -113,6 +116,29 @@ function rowCells(pieces: readonly Piece[]): string[] {
   return cells;
 }
 
+/** What a piece looks like, never what it says: a date, an amount (with a decimal part), a number, or text. */
+export function pieceKind(text: string): "date" | "amount" | "number" | "text" {
+  const t = clean(text);
+  if (parseStatementDate(t)) return "date";
+  if (/^-?(?:₹|Rs\.?|INR)?\s?\d[\d,]*\.\d{1,2}(?:\s?(?:Dr|Cr)\.?)?$/i.test(t)) return "amount";
+  if (/^[\d,./\s-]+$/.test(t)) return "number";
+  return "text";
+}
+
+/**
+ * A row's layout for diagnosing a row the reader couldn't use, masked: per piece left to right,
+ * its kind, x start, width, characters, and baseline offset from the row's top piece (dy, down is
+ * positive), all rounded. E.g. "date x40 w52 c11 dy0 | text x110 w180 c24 dy0". No text or digits
+ * from the statement.
+ */
+export function rowLayout(pieces: readonly PdfTextItem[]): string {
+  const top = Math.max(...pieces.map((p) => p.y));
+  return [...pieces]
+    .sort((a, b) => a.x - b.x || b.y - a.y)
+    .map((p) => `${pieceKind(p.str)} x${Math.round(p.x)} w${Math.round(p.width)} c${clean(p.str).length} dy${Math.round(top - p.y)}`)
+    .join(" | ");
+}
+
 /** One page's rows, top to bottom. Pieces with no visible text are ignored. */
 export function pageRows(items: readonly PdfTextItem[]): PdfRow[] {
   const pieces: Piece[] = [];
@@ -122,7 +148,7 @@ export function pageRows(items: readonly PdfTextItem[]): PdfRow[] {
     if (pieces.some((p) => p.str === piece.str && Math.abs(p.x - piece.x) < 1 && Math.abs(p.y - piece.y) < 1)) continue;
     pieces.push(piece);
   }
-  return mergeFragments(baselines(pieces)).map((band) => ({ cells: rowCells(band.pieces) }));
+  return mergeFragments(baselines(pieces)).map((band) => ({ cells: rowCells(band.pieces), layout: rowLayout(band.pieces) }));
 }
 
 /** A row as the parsers read it: its cells joined by single spaces. */
@@ -133,10 +159,17 @@ export function statementTextFromPages(pages: readonly (readonly PdfTextItem[])[
   return statementPages(pages).text;
 }
 
-/** The statement text and how many of its rows (lines) each page gave, to say where a line is. */
-export function statementPages(pages: readonly (readonly PdfTextItem[])[]): { text: string; pageRowCounts: number[] } {
-  const rows = pages.map((page) => pageRows(page).map(rowText));
-  return { text: rows.flat().join("\n"), pageRowCounts: rows.map((r) => r.length) };
+/**
+ * The statement text, how many of its rows (lines) each page gave, to say where a line is, and
+ * each line's masked layout (rowLayout), in text order.
+ */
+export function statementPages(pages: readonly (readonly PdfTextItem[])[]): { text: string; pageRowCounts: number[]; rowLayouts: string[] } {
+  const rows = pages.map((page) => pageRows(page));
+  return {
+    text: rows.flat().map(rowText).join("\n"),
+    pageRowCounts: rows.map((r) => r.length),
+    rowLayouts: rows.flat().map((r) => r.layout),
+  };
 }
 
 /** Where a 1-based line of the statement text is: its page and its row on that page (both 1-based). */

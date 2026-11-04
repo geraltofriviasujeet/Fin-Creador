@@ -184,6 +184,8 @@ export type PnbStatementOptions = {
   dateLayout?: "label-row" | "beside" | "next-row" | "one-row" | "unreadable"
   /** Another date earlier in the header block ("Statement generated on ..."), ISO. */
   headerDate?: string
+  /** A dated row with no amount on page 2 ("MYSTERY MERCHANT"), which the reader can't use. */
+  unreadableRow?: boolean
 }
 
 const rupees = (minor: number) => (minor / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -250,6 +252,7 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
       [on("2026-10-10"), on("2026-10-10"), ...net, "LATE PAYMENT FEE", "500.00 Dr"],
       [on("2026-10-10"), on("2026-10-10"), ...net, "IGST @18% ON LATE PAYMENT FEE", "50.00 Dr"],
       ...Array.from({ length: extra }, (_, i) => [on("2026-10-11"), on("2026-10-11"), ...net, `SHOP ${i + 1}`, "100.00 Dr"]),
+      ...(options.unreadableRow ? [[on("2026-10-12"), on("2026-10-12"), ...net, "MYSTERY MERCHANT", ""]] : []),
     ]),
     ...columns([40, 200], [["Total GST", "50.00"], ["Total Invoice Value", options.invoiceTotal ?? purchases], ["End of Statement", ""]]),
     ...columns([40], [[`Date: ${invoice} Page 2`]]),

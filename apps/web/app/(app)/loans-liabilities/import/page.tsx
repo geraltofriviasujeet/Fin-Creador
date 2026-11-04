@@ -49,7 +49,9 @@ async function ImportContent({ searchParams }: { searchParams: Promise<{ card?: 
   return (
     <>
       <PageHeader eyebrow={load.card.name} title="Import statement" description="Read your card statement PDF and check the lines." actions={back} />
-      <StatementImport card={load.card} today={load.today} categories={load.categories} />
+      {/* Keyed by card: moving to another card's import (a client navigation that keeps this
+          page's state) starts with no file, review, notices or password from the last card. */}
+      <StatementImport key={load.card.id} card={load.card} today={load.today} categories={load.categories} />
     </>
   )
 }
