@@ -56,9 +56,11 @@ export function ExpenseCategories({ categories }: { categories: ExpenseCategoryI
               <Button variant="ghost" size="sm" aria-label={`Rename ${c.name}`} onClick={() => show({ type: "rename", category: c })}>
                 Rename
               </Button>
-              <Button variant="ghost" size="sm" aria-label={`Archive ${c.name}`} onClick={() => show({ type: "archive", category: c })}>
-                Archive
-              </Button>
+              {!c.system && (
+                <Button variant="ghost" size="sm" aria-label={`Archive ${c.name}`} onClick={() => show({ type: "archive", category: c })}>
+                  Archive
+                </Button>
+              )}
             </li>
           ))}
         </ul>

@@ -4,9 +4,21 @@ import { PASSWORD, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers
 
 // Fixed deposits end to end (Sprint 7), against the throwaway local Supabase in CI (and the
 // fictional instruments of e2e/fixtures/instruments.sql for the All tab). Expected values were
-// computed with Python's fractions module, not with the app's code. Dates are fixed in the
-// past, so the figures don't depend on the day the test runs, except "worth today" of a
-// running deposit, which is only checked to be shown. Screenshots in e2e-screenshots/.
+// computed with Python's fractions module, not with the app's code. Matured deposits use dates
+// fixed in the past; running deposits start on the 15th of this month a year ago (or the 1st),
+// so they stay running whenever the test runs and keep the same whole periods (the figures
+// count whole calendar periods). "Worth today" of a running deposit is only checked to be
+// shown. Screenshots in e2e-screenshots/.
+
+const todayInIndia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+/** Day `day` of this month (India), `years` from now: an ISO date. */
+function thisMonthIn(years: number, day: number) {
+  const [y, m] = todayInIndia().split("-").map(Number) as [number, number]
+  return `${y + years}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+}
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+/** "2025-01-15" -> "15 Jan 2025", as the form writes dates in words. */
+const inWords = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`
 
 const SHOTS = "e2e-screenshots"
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true })
@@ -59,6 +71,9 @@ async function addHolding(page: Page, query: string, name: string, units: string
 
 test("add (double submit adds once), edit, archive, restore and delete a fixed deposit", async ({ page }) => {
   await newUser(page, "fd-crud")
+  // Two years from the 15th of this month a year ago: 8 whole quarters, still running today.
+  const start = thisMonthIn(-1, 15)
+  const maturity = thisMonthIn(1, 15)
   await expect(page.getByText("No fixed deposits yet")).toBeVisible()
   await page.getByRole("button", { name: "Add fixed deposit" }).first().click()
   const form = await fillDeposit(page, "Add fixed deposit", {
@@ -66,12 +81,12 @@ test("add (double submit adds once), edit, archive, restore and delete a fixed d
     label: "Emergency fund",
     principal: "1,00,000",
     rate: "7.25",
-    start: "2025-01-15",
-    maturity: "2027-01-15",
+    start,
+    maturity,
   })
   await expect(form.getByLabel("Interest added")).toHaveValue("quarterly") // the default
-  await expect(form).toContainText("15 Jan 2025") // dates also in words
-  await expect(form).toContainText("15 Jan 2027")
+  await expect(form).toContainText(inWords(start)) // dates also in words
+  await expect(form).toContainText(inWords(maturity))
   // 8 quarters at 7.25%: ₹1,15,453.95, interest ₹15,453.95; started in the past, so worth today shows.
   await expect(form).toContainText("₹1,15,453.95")
   await expect(form).toContainText("Interest ₹15,453.95")
@@ -87,7 +102,7 @@ test("add (double submit adds once), edit, archive, restore and delete a fixed d
   await form.getByLabel("Start date").fill("2099-01-01")
   await form.getByRole("button", { name: "Add fixed deposit" }).click()
   await expect(form).toContainText("The start date can't be in the future")
-  await form.getByLabel("Start date").fill("2025-01-15")
+  await form.getByLabel("Start date").fill(start)
   // Double click: the request key adds the deposit once.
   await form.getByRole("button", { name: "Add fixed deposit" }).dblclick()
   await expect(toast(page, "Fixed deposit added.").first()).toBeVisible()
@@ -136,7 +151,7 @@ test("a matured deposit, the four categories on the All tab and the Overview car
   await newUser(page, "fd-matured")
   // ₹50,000 at 7% yearly for one year, matured on 15 Jan 2025: ₹53,500.
   await addDeposit(page, { bank: "HDFC Bank", principal: "50,000", rate: "7", compounding: "Yearly", start: "2024-01-15", maturity: "2025-01-15" })
-  await addDeposit(page, { bank: "My Co-op Bank", label: "Car fund", principal: "1,00,000", rate: "7.1", start: "2025-06-01", maturity: "2030-06-01" })
+  await addDeposit(page, { bank: "My Co-op Bank", label: "Car fund", principal: "1,00,000", rate: "7.1", start: thisMonthIn(-1, 1), maturity: thisMonthIn(4, 1) })
   await page.reload()
   const matured = row(page, "HDFC Bank")
   await expect(matured).toContainText("Matured")

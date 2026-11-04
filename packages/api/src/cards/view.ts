@@ -135,9 +135,14 @@ export type ShortTermData = {
   liabilityPayments: LiabilityPaymentRecord[]
   /** Names of every account a payment or receipt touched (archived ones included). */
   accountNames: Record<string, string>
-  /** Active expense categories, for "record the difference as an expense". */
-  expenseCategories: { id: string; name: string }[]
+  /** Active expense categories, for "record the difference as an expense" (default: system_key bank_charges). */
+  expenseCategories: ExpenseCategoryOption[]
 }
+
+export type ExpenseCategoryOption = { id: string; name: string; systemKey: string | null }
+
+/** The category Enter statement's difference picker starts on: Bank charges & interest, by key (it can be renamed). */
+export const DIFFERENCE_CATEGORY_KEY = "bank_charges"
 
 export type CardBill = CardBillRecord & {
   statement: StatementRecord
@@ -217,7 +222,7 @@ export type ShortTermView = {
   cardEmis: LoanItem[]
   /** Cards, card EMIs and borrowings owed now, in the profile currency. */
   totalOwedMinor: number
-  expenseCategories: { id: string; name: string }[]
+  expenseCategories: ExpenseCategoryOption[]
 }
 
 /** One reminder line for Due soon and the bell: a loan EMI, a card bill, a borrowing or a statement to add. */

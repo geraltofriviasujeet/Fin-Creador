@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 
 select plan(85);
 
--- Users A, B (fictional; sign-up gives them 14 expense defaults), and D, E who stand in for
+-- Users A, B (fictional; sign-up gives them 15 expense defaults), and D, E who stand in for
 -- users created before this migration.
 insert into auth.users (id, email) values
   ('11111111-1111-4111-8111-111111111111', 'asha@example.test'),
@@ -55,7 +55,7 @@ select is(
 select is(public.backfill_default_expense_categories(), 0, 'running the backfill again creates nothing');
 select is(
   (select count(*)::int from public.categories where user_id = '55555555-5555-4555-8555-555555555555' and kind = 'expense'),
-  14, 'and leaves E with its 12 classic and 2 keyed defaults'
+  15, 'and leaves E with its 12 classic, 2 keyed and 1 system (Bank charges & interest) defaults'
 );
 
 select set_config('request.jwt.claims', '{"sub": "11111111-1111-4111-8111-111111111111", "role": "authenticated"}', true);
@@ -64,7 +64,7 @@ set local role authenticated;
 -- ------------------------------------------------------------ categories (7-11)
 select is(
   (select count(*)::int from public.categories where kind = 'expense' and is_default and icon is not null),
-  14, 'sign-up creates 14 default expense categories with icons'
+  15, 'sign-up creates 15 default expense categories with icons'
 );
 select results_eq(
   $$ select key, name, icon from public.categories where key is not null order by key $$,

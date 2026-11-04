@@ -85,6 +85,8 @@ test("a card: add, purchase, statement with the difference, minimum, full and a 
   await expect(st).toContainText("Card EMIs are paid from the loan row")
   await expect(st).toContainText("Bill ₹9,000")
   await st.getByLabel("Record the difference as an expense").check()
+  // The picker starts on the system category Bank charges & interest.
+  await expect(st.getByLabel("Category for the difference").locator("option:checked")).toHaveText("Bank charges & interest")
   await st.getByLabel("Category for the difference").selectOption({ label: "Shopping" })
   await shot(page, "cards-statement")
   await st.getByRole("button", { name: "Save statement" }).click()

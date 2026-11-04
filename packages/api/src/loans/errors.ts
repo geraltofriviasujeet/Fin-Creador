@@ -15,7 +15,7 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC039: { message: "That date is before this account's opening balance.", field: "paidOn" },
   FC040: { message: "A loan with payments can't be deleted. Keep it archived instead." },
   FC041: { message: "Choose today or a later date.", field: "plannedOn" },
-  FC042: { message: "This category is used for loan payments, so it can't be archived." },
+  FC042: { message: "This category is used by the app and can't be archived." },
   FC043: { message: "Check the EMI dates and try again.", field: "nextDueDate" },
   FC044: { message: "Archive the loan before deleting it." },
   FC053: { message: "This due is archived. Restore it first." },

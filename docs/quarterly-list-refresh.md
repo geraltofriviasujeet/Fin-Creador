@@ -29,6 +29,7 @@ checked on 2026-10-28 (names only, from the issuer's own credit card page):
 | ICICI Bank | https://www.icici.bank.in/personal-banking/cards/credit-card |
 | Axis Bank | https://www.axis.bank.in/cards/credit-card |
 | Kotak Mahindra Bank | https://www.kotak.bank.in/en/personal-banking/cards/credit-cards.html |
+| Punjab National Bank | https://creditcard.pnb.bank.in/ (issuer name only since 2026-10-29; add its cards in the January 2027 refresh) |
 
 ## When
 

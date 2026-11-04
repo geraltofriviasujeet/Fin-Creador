@@ -32,7 +32,7 @@ export async function loadShortTermData(supabase: UserClient): Promise<{ data: S
     // History the database counts for deletes (voided payments included).
     supabase.from("liability_payments").select("liability_account_id"),
     supabase.from("due_payments").select("due_item_id"),
-    supabase.from("categories").select("id, name").eq("kind", "expense").is("archived_at", null).order("name"),
+    supabase.from("categories").select("id, name, system_key").eq("kind", "expense").is("archived_at", null).order("name"),
     supabase.from("borrowing_due_progress").select("due_item_id, remaining_minor, remaining_interest_minor, remaining_principal_minor"),
   ])
   if (
@@ -176,7 +176,7 @@ export async function loadShortTermData(supabase: UserClient): Promise<{ data: S
         interestMinor: p.interest_minor,
       })),
       accountNames: Object.fromEntries((names.data ?? []).map((a) => [a.id, a.name])),
-      expenseCategories: categories.data,
+      expenseCategories: categories.data.map((c) => ({ id: c.id, name: c.name, systemKey: c.system_key })),
     },
   }
 }

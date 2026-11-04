@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { parsePublicEnv } from "../env"
 import { authCallbackUrl, rootCodeHandoff, safeNextPath } from "./redirect"
-import { decideRoute, routeKind } from "./routes"
+import { answersSignedOutAction, decideRoute, routeKind } from "./routes"
 
 describe("safeNextPath (open-redirect guard)", () => {
   it.each([
@@ -123,6 +123,22 @@ describe("route rules", () => {
   it("has no sign-in exception for the removed recurring prototype", () => {
     expect(routeKind("/dev/recurring")).toBe("protected")
     expect(decideRoute("/recurring", "", false)).toEqual({ redirectTo: "/sign-in?next=%2Frecurring" })
+  })
+})
+
+describe("signed-out server actions", () => {
+  it("only the statement import's actions answer a signed-out caller themselves", () => {
+    expect(answersSignedOutAction("/loans-liabilities/import", "POST", true)).toBe(true)
+    expect(answersSignedOutAction("/loans-liabilities/import", "GET", false)).toBe(false)
+    expect(answersSignedOutAction("/loans-liabilities/import", "POST", false)).toBe(false)
+    expect(answersSignedOutAction("/loans-liabilities/import/x", "POST", true)).toBe(false)
+  })
+
+  it("every other protected page and its actions still redirect to sign-in", () => {
+    for (const path of ["/transactions", "/loans-liabilities", "/income", "/settings"]) {
+      expect(answersSignedOutAction(path, "POST", true)).toBe(false)
+      expect(decideRoute(path, "", false)).toEqual({ redirectTo: `/sign-in?next=${encodeURIComponent(path)}` })
+    }
   })
 })
 

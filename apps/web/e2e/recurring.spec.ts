@@ -11,6 +11,10 @@ const daysAgo = (n: number) => {
   return d.toISOString().slice(0, 10)
 }
 
+// The confirmed entry is dated on its due day, which may fall in an earlier month than today,
+// so the ledger is opened on a range that covers every rule's start rather than "this month".
+const ledgerSince = (n: number) => `/transactions?period=custom&from=${daysAgo(n)}&to=${kolkataToday()}`
+
 const panel = (page: Page, title: RegExp | string) => page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: title }) })
 // Cost tiles only (a group panel is also called "Subscriptions").
 const tile = (page: Page, label: string) =>
@@ -73,7 +77,7 @@ test("a recurring expense is due, confirmed through the Add dialog, and costed",
   await page.screenshot({ path: "e2e-screenshots/recurring-page.png", fullPage: true })
 
   // The entry is a normal expense; the Upcoming card on Transactions links to Recurring.
-  await page.goto("/transactions")
+  await page.goto(ledgerSince(40))
   await expect(ledgerRow(page, "Streaming")).toContainText("699")
   await expect(page.getByRole("heading", { name: "Upcoming" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Open Recurring" })).toHaveAttribute("href", "/recurring")
@@ -131,7 +135,7 @@ test("a double-submitted confirm saves one entry", async ({ page }) => {
     form.requestSubmit()
   })
   await expect(add).toBeHidden()
-  await page.goto("/transactions")
+  await page.goto(ledgerSince(35))
   await expect(ledgerRow(page, "Sports club")).toHaveCount(1)
 })
 

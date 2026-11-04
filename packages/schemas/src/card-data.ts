@@ -6,7 +6,10 @@
 // (credit_cards_product), so a card such as Kotak's "811" card is left out: pick "Other" with
 // a name without the number, or the issuer alone.
 
-export const CARD_ISSUERS = ["HDFC Bank", "SBI Card", "ICICI Bank", "Axis Bank", "Kotak Mahindra Bank"] as const;
+// Punjab National Bank: issuer name only (checked on PNB's own card portal, 2026-10-29) for card
+// statement import; its products come with the January 2027 list refresh. Until then its card is
+// typed under "Other".
+export const CARD_ISSUERS = ["HDFC Bank", "SBI Card", "ICICI Bank", "Axis Bank", "Kotak Mahindra Bank", "Punjab National Bank"] as const;
 export type CardIssuer = (typeof CARD_ISSUERS)[number];
 
 export const CARD_PRODUCTS: Readonly<Record<CardIssuer, readonly string[]>> = {
@@ -105,6 +108,7 @@ export const CARD_PRODUCTS: Readonly<Record<CardIssuer, readonly string[]>> = {
     "Kotak Zen",
     "PVR INOX Kotak",
   ],
+  "Punjab National Bank": [],
 };
 
 /** The day the issuer and product lists were last checked against the issuers' pages. */
