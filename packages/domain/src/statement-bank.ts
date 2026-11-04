@@ -55,11 +55,12 @@ export interface BankStatementSummary {
  * and changes no tick on its own. "unchecked": a figure is missing.
  */
 export interface BankStatementCheck {
-  name: "balance_chain" | "opening" | "closing";
+  /** totals (generic reader): opening + credits − debits = closing, over every row read. */
+  name: "balance_chain" | "opening" | "closing" | "totals";
   status: "ok" | "mismatch" | "unchecked";
   foundMinor: number | null;
   expectedMinor: number | null;
-  /** balance_chain: indexes (in `lines`) of lines whose balance doesn't follow. */
+  /** balance_chain: indexes (in `lines`) of lines whose balance doesn't follow (generic reader: none, those rows are issues). */
   lines?: number[];
 }
 

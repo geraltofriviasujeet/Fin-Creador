@@ -50,7 +50,10 @@ export const BANK_TYPE_LABELS: Record<BankStatementLine["direction"], Record<Ban
 
 /** A file with no column header or lines the bank reader can use. */
 export const BANK_UNREADABLE =
-  "We couldn't read this file as a bank statement. Right now we read Punjab National Bank savings account statements (the text PDF from the bank) and CSV files with a header row naming the date, description, amount (with a DR / CR column, or debit and credit columns) and balance. Your file was read on this device only and wasn't saved or uploaded. You can still add entries by hand."
+  "We couldn't read this file as a bank statement. We read the text PDF or CSV from your bank when its table names the date, description, amounts (debit and credit columns, or one amount column) and balance, and its balances add up line by line or from the opening to the closing balance. Scanned or photographed statements can't be read. Your file was read on this device only and wasn't saved or uploaded. You can still add entries by hand."
+
+/** Shown above a review read by the generic reader (not a bank-specific one). */
+export const BANK_GENERIC_NOTE = "Read from the statement's table and checked against its balances; compare the lines with your file."
 
 export const REFUND_NOTE = "A refund lowers this category's spending and adds the money back to the account. It isn't income."
 
@@ -206,7 +209,9 @@ export function buildBankReview(
       .filter((issue) => issue.line > 0)
       .map((issue) => {
         const at = pageRowCounts ? linePosition(issue.line, pageRowCounts) : null
-        return { page: at?.page ?? null, row: at?.row ?? issue.line, shape: issue.shape ?? "", layout: rowLayouts?.[issue.line - 1] ?? "" }
+        // A row the generic reader read but whose balance doesn't follow says so before its shape.
+        const shape = issue.reason === "balance_mismatch" ? `balance doesn't follow${issue.shape ? `, ${issue.shape}` : ""}` : (issue.shape ?? "")
+        return { page: at?.page ?? null, row: at?.row ?? issue.line, shape, layout: rowLayouts?.[issue.line - 1] ?? "" }
       }),
   }
 }
@@ -364,6 +369,9 @@ export function bankCheckReasons(checks: readonly BankStatementCheck[], lines: r
   return checks
     .filter((c) => c.status === "mismatch")
     .map((c) => {
+      if (c.name === "balance_chain" && c.lines === undefined) {
+        return "Some rows' balances don't follow from the row before them, so they aren't offered for saving: they're listed with the rows that could not be read. Add them by hand if you need them."
+      }
       if (c.name === "balance_chain") {
         const first = c.lines?.[0]
         const at = first === undefined ? "" : ` (first on ${lines[first]?.date ?? "a line"})`

@@ -28,6 +28,8 @@ export interface PdfTextItem {
 export interface PdfRow {
   /** Cells left to right; spaces inside a cell are kept as single spaces. */
   cells: string[];
+  /** Each cell's x range (start, end) in PDF units, to place it under a column header. */
+  spans: [number, number][];
   /** The row's pieces, masked (rowLayout): no text or digits from the statement. */
   layout: string;
 }
@@ -112,7 +114,7 @@ function columnText(pieces: readonly Piece[]): { text: string; start: number; en
   };
 }
 
-function rowCells(pieces: readonly Piece[]): string[] {
+function rowCells(pieces: readonly Piece[]): { cells: string[]; spans: [number, number][] } {
   // Columns: pieces whose x ranges overlap (a wrapped cell's lines), left to right.
   const columns: Piece[][] = [];
   let columnEnd = -Infinity;
@@ -126,18 +128,28 @@ function rowCells(pieces: readonly Piece[]): string[] {
     }
   }
   const cells: string[] = [];
+  const spans: [number, number][] = [];
   let cell = "";
+  let start = 0;
   let end = -Infinity;
   for (const column of columns.map(columnText)) {
     const gap = column.start - end;
     if (cell !== "" && gap > column.height) {
       cells.push(clean(cell));
+      spans.push([start, end]);
       cell = column.text;
-    } else cell += cell !== "" && gap > column.height * 0.15 ? ` ${column.text}` : column.text;
+      start = column.start;
+    } else {
+      if (cell === "") start = column.start;
+      cell += cell !== "" && gap > column.height * 0.15 ? ` ${column.text}` : column.text;
+    }
     end = Math.max(end, column.end);
   }
-  if (clean(cell) !== "") cells.push(clean(cell));
-  return cells;
+  if (clean(cell) !== "") {
+    cells.push(clean(cell));
+    spans.push([start, end]);
+  }
+  return { cells, spans };
 }
 
 /** What a piece looks like, never what it says: a date, an amount (with a decimal part), a number, or text. */
@@ -172,7 +184,7 @@ export function pageRows(items: readonly PdfTextItem[]): PdfRow[] {
     if (pieces.some((p) => p.str === piece.str && Math.abs(p.x - piece.x) < 1 && Math.abs(p.y - piece.y) < 1)) continue;
     pieces.push(piece);
   }
-  return mergeFragments(baselines(pieces)).map((band) => ({ cells: rowCells(band.pieces), layout: rowLayout(band.pieces) }));
+  return mergeFragments(baselines(pieces)).map((band) => ({ ...rowCells(band.pieces), layout: rowLayout(band.pieces) }));
 }
 
 /** A row as the parsers read it: its cells joined by single spaces. */
@@ -184,15 +196,22 @@ export function statementTextFromPages(pages: readonly (readonly PdfTextItem[])[
 }
 
 /**
- * The statement text, how many of its rows (lines) each page gave, to say where a line is, and
- * each line's masked layout (rowLayout), in text order.
+ * The statement text, how many of its rows (lines) each page gave, to say where a line is, each
+ * line's masked layout (rowLayout), and each line's cells with their x ranges (the generic bank
+ * reader places them under the column headers), in text order.
  */
-export function statementPages(pages: readonly (readonly PdfTextItem[])[]): { text: string; pageRowCounts: number[]; rowLayouts: string[] } {
+export function statementPages(pages: readonly (readonly PdfTextItem[])[]): {
+  text: string;
+  pageRowCounts: number[];
+  rowLayouts: string[];
+  rows: { cells: string[]; spans: [number, number][] }[];
+} {
   const rows = pages.map((page) => pageRows(page));
   return {
     text: rows.flat().map(rowText).join("\n"),
     pageRowCounts: rows.map((r) => r.length),
     rowLayouts: rows.flat().map((r) => r.layout),
+    rows: rows.flat().map(({ cells, spans }) => ({ cells, spans })),
   };
 }
 

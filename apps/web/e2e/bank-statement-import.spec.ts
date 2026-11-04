@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { type SavingsRow, isoDaysBefore, pnbSavingsPages, savingsDefaultRows, syntheticPdf } from "../test-support/synthetic-pdf"
+import { type SavingsRow, isoDaysBefore, pnbSavingsPages, savingsDefaultRows, separateColumnsDefaultRows, separateColumnsPages, syntheticPdf } from "../test-support/synthetic-pdf"
 import { addBank, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Bank account statement import (Sprint 9b, web): a PNB savings statement PDF read in the browser,
@@ -228,4 +228,30 @@ test("a CSV export: columns found by name, read and saved; the same file again i
   await chooser(page).setInputFiles(file("notes.csv", "Name,Amount\nLunch,100"))
   await expect(page.getByText(/^We couldn't read this file as a bank statement\./)).toBeVisible()
   await expect(review(page)).toHaveCount(0)
+})
+
+test("another bank's PDF (Sprint 9d): read by its table, checked against its balances, saved; a misprinted balance flags its rows", async ({ page }) => {
+  const today = todayInIndia()
+  await setUp(page, "Farah Ali")
+  await openImport(page, SBI)
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(separateColumnsPages({ rows: separateColumnsDefaultRows(today) }))))
+  await expect(lines(page)).toHaveCount(7)
+  await expect(review(page)).toContainText("Read from the statement's table and checked against its balances")
+  await expect(review(page)).not.toContainText("Check this statement")
+  for (const secret of ["EXAMPLE PERSON", "50100012345678", "REF000111", "N27526001"]) await expect(page.getByText(secret)).toHaveCount(0)
+  await expect(tickOf(page, "UPI-FRESH BASKET")).toBeChecked()
+  await expect(review(page)).toContainText("2 credits need a choice")
+  await shot(page, "bank-import-generic")
+  await review(page).getByRole("button", { name: "Save ticked lines" }).click()
+  await dialog(page, "Save these lines?").getByRole("button", { name: "Save 5 lines" }).click()
+  await expect(review(page)).toContainText("5 lines saved.")
+
+  await openImport(page, PNB)
+  await chooser(page).setInputFiles(pdf("broken.pdf", syntheticPdf(separateColumnsPages({ rows: separateColumnsDefaultRows(today), breakChainAt: 3 }))))
+  await expect(lines(page)).toHaveCount(5)
+  await expect(review(page).getByRole("alert").first()).toContainText("Check this statement")
+  await expect(review(page)).toContainText("Some rows' balances don't follow")
+  await expect(review(page)).toContainText("2 rows could not be read")
+  await expect(review(page)).toContainText("balance doesn't follow")
+  await expect(review(page).getByRole("button", { name: "Save ticked lines" })).toBeDisabled()
 })

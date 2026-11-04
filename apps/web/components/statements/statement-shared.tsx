@@ -3,7 +3,7 @@
 import type * as React from "react"
 import { useRef, useState } from "react"
 import { type LineSaveResult, type UnreadableRow, unreadableLayoutText } from "@fin-creador/api"
-import { MAX_STATEMENT_PDF_BYTES } from "@fin-creador/domain"
+import { type BankTableRow, MAX_STATEMENT_PDF_BYTES } from "@fin-creador/domain"
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,7 @@ export type FilePhase<R> =
   | ({ step: "review" } & R)
 
 /** What a successful read gives the import: the statement's text, its format, and (PDF) where its rows are. */
-export type StatementText = { text: string; format: "pdf" | "csv"; pageRowCounts?: number[]; rowLayouts?: string[] }
+export type StatementText = { text: string; format: "pdf" | "csv"; pageRowCounts?: number[]; rowLayouts?: string[]; rows?: BankTableRow[] }
 
 const isCsv = (file: File) => /\.csv$/i.test(file.name) || file.type === "text/csv"
 
@@ -64,7 +64,7 @@ export function useStatementReader<R>({
       const result = await readStatementPdf(lib, new Uint8Array(await pdf.arrayBuffer()), pass)
       if (id !== attempt.current) return
       if (result.status === "ok") {
-        read.current = { text: result.text, format: "pdf", pageRowCounts: result.pageRowCounts, rowLayouts: result.rowLayouts }
+        read.current = { text: result.text, format: "pdf", pageRowCounts: result.pageRowCounts, rowLayouts: result.rowLayouts, rows: result.rows }
         await onText(read.current)
       } else if (result.status === "needs_password") setPhase({ step: "password" })
       else if (result.status === "wrong_password") setPhase({ step: "password", message: wrongPassword })

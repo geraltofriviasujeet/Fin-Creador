@@ -193,6 +193,22 @@ describe("the statement's own figures and the app's balance are worded apart", (
   })
 })
 
+describe("rows the generic reader flags (Sprint 9d)", () => {
+  it("are listed as unreadable with why, and the chain reason says they aren't offered; Save needs the check", () => {
+    const flagged: BankStatementParse = {
+      ...parse,
+      issues: [{ line: 7, reason: "balance_mismatch", shape: "date, text, amount, amount" }],
+      checks: [{ name: "balance_chain", status: "mismatch", foundMinor: null, expectedMinor: null }, { name: "totals", status: "ok", foundMinor: 0, expectedMinor: 0 }],
+    }
+    const review = buildBankReview(flagged, none, options, context)
+    expect(review.unreadable).toEqual([{ page: null, row: 7, shape: "balance doesn't follow, date, text, amount, amount", layout: "" }])
+    expect(bankCheckReasons(review.checks, LINES, "INR")).toEqual([
+      "Some rows' balances don't follow from the row before them, so they aren't offered for saving: they're listed with the rows that could not be read. Add them by hand if you need them.",
+    ])
+    expect(bankSaveBlockers(review, options, context, false)).toContain("check_not_confirmed")
+  })
+})
+
 describe("a 1,200-line statement: filters and pages", () => {
   // An invented year of lines, oldest first, separate withdrawal and deposit columns, balances with
   // thousand commas: every 4th line a salary-style credit, every 10th a repeat payee credit.
