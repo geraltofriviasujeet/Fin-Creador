@@ -191,6 +191,38 @@ describe("parseGenericBankStatement: CSV", () => {
     ).toBeNull();
   });
 
+  it("a row with no date but an amount and a balance takes the date above (date printed once per day); a wrapped description still joins", () => {
+    const parsed = generic([
+      "Date,Narration,Debit,Credit,Balance",
+      "Opening Balance,,,,1000.00",
+      "01/10/2026,SHOP,100.00,,900.00",
+      ",TEA,10.00,,890.00",
+      ",UPI-FRESH BASKET,50.00,,840.00",
+      ",STORES KOLKATA,,,",
+      "02/10/2026,SALARY,,500.00,1340.00",
+      ",FUEL,40.00,,1300.00",
+      "Closing Balance,,,,1300.00",
+    ]);
+    expect(read(parsed)).toEqual([
+      ["2026-10-01", 10_000, "debit", 90_000, "SHOP"],
+      ["2026-10-01", 1_000, "debit", 89_000, "TEA"],
+      ["2026-10-01", 5_000, "debit", 84_000, "UPI-FRESH BASKET STORES KOLKATA"],
+      ["2026-10-02", 50_000, "credit", 134_000, "SALARY"],
+      ["2026-10-02", 4_000, "debit", 130_000, "FUEL"],
+    ]);
+    expect(parsed?.issues).toEqual([]);
+    expect(parsed?.checks.map((c) => c.status)).toEqual(["ok", "ok"]);
+  });
+
+  it("a dateless row with nothing above it, or under a row whose date wasn't read, is unreadable", () => {
+    const first = generic(["Date,Narration,Debit,Credit,Balance", ",TEA,10.00,,890.00", "01/10/2026,SHOP,100.00,,790.00", "02/10/2026,FUEL,10.00,,780.00"]);
+    expect(first?.issues.map((i) => [i.line, i.reason])).toEqual([[2, "bad_date"]]);
+    expect(first?.lines.map((l) => l.description)).toEqual(["SHOP", "FUEL"]);
+    const under = generic(["Date,Narration,Debit,Credit,Balance", "01/10/2026,SHOP,100.00,,900.00", "31/02/2026,TEA,10.00,,890.00", ",FUEL,10.00,,880.00"]);
+    expect(under?.lines.map((l) => l.description)).toEqual(["SHOP"]);
+    expect(under?.issues.map((i) => [i.line, i.reason])).toEqual([[3, "bad_date"], [4, "bad_date"]]);
+  });
+
   it("skips totals and page furniture, and reads nothing without a header", () => {
     const parsed = generic(["Date,Narration,Debit,Credit,Balance", "01/10/2026,SHOP,100.00,,900.00", "02/10/2026,TEA,10.00,,890.00", "Total,,110.00,0.00,", "Page 1 of 1"]);
     expect(parsed?.lines).toHaveLength(2);
@@ -256,6 +288,40 @@ describe("parseGenericBankStatement: PDF", () => {
   it("keeps no account number, name, reference or UPI id", () => {
     const kept = JSON.stringify(parseGenericBankStatement(statementPages(PDF_PAGES).rows));
     for (const secret of ["Example Bank", "00000012345678901", "EXAMPLE PERSON", "412345678901", "N275260012345678", "HDFC"]) expect(kept).not.toContain(secret);
+  });
+});
+
+describe("parseGenericBankStatement: PDF, date once per day", () => {
+  it("reads the dateless rows on the day above, and a wrapped description after one joins it", () => {
+    const dateless = (y: number, description: string, debit: string | null, credit: string | null, balance: string) => [
+      piece(description, 160, y, Math.min(description.length * 5, 150)),
+      ...(debit ? [piece(debit, 420, y, 40)] : []),
+      ...(credit ? [piece(credit, 500, y, 40)] : []),
+      piece(balance, 580, y, 45),
+    ];
+    const pages: PdfTextItem[][] = [
+      [
+        ...header(740),
+        piece("Opening Balance", 160, 720, 70), piece("10,000.00", 580, 720, 45),
+        ...row(700, "01 Oct 2026", "UPI-FRESH BASKET", null, "500.00", null, "9,500.00"),
+        ...dateless(680, "UPI-RAVI KUMAR", "649.00", null, "8,851.00"),
+        piece("KOLKATA BRANCH", 160, 662, 70),
+        ...dateless(640, "NEFT EXAMPLE EMPLOYER", null, "50,000.00", "58,851.00"),
+        ...row(620, "02 Oct 2026", "ATM CASH", null, "2,000.00", null, "56,851.00"),
+        ...dateless(600, "INTEREST CREDIT", null, "12.30", "56,863.30"),
+        piece("Closing Balance", 160, 580, 70), piece("56,863.30", 580, 580, 45),
+      ],
+    ];
+    const parsed = parseGenericBankStatement(statementPages(pages).rows);
+    expect(read(parsed)).toEqual([
+      ["2026-10-01", 50_000, "debit", 950_000, "UPI-FRESH BASKET"],
+      ["2026-10-01", 64_900, "debit", 885_100, "UPI-RAVI KUMAR KOLKATA BRANCH"],
+      ["2026-10-01", 5_000_000, "credit", 5_885_100, "NEFT EXAMPLE EMPLOYER"],
+      ["2026-10-02", 200_000, "debit", 5_685_100, "ATM CASH"],
+      ["2026-10-02", 1_230, "credit", 5_686_330, "INTEREST CREDIT"],
+    ]);
+    expect(parsed?.issues).toEqual([]);
+    expect(parsed?.checks.map((c) => c.status)).toEqual(["ok", "ok"]);
   });
 });
 

@@ -7,7 +7,8 @@
 //   kept. Value date, cheque, reference, instrument and serial columns are dropped; a PDF cell goes
 //   to the header it overlaps most (nearest when none).
 // - Repeated headers, page footers and totals are skipped; a row with no date and no amount continues
-//   the description above it. Dates are day first, one format a file; dates that run out of order
+//   the description above it. A row with no date but an amount and a balance takes the date of the
+//   row above (statements that print the date once per day). Dates are day first, one format a file; dates that run out of order
 //   across the file mean the file was not read (a month-first file read day first).
 // - Direction: the column (debit / credit) or the Dr / Cr marker; else the balance movement.
 // - Acceptance, never a percentage. When the statement prints its opening and closing balances:
@@ -194,6 +195,8 @@ export function parseGenericBankStatement(rows: readonly BankTableRow[]): BankSt
   let labels: string[] | null = null;
   let dateFormat: string | null = null;
   let open: Raw | null = null;
+  // The date of the row above, for a row printed without one; null after a row whose date wasn't read.
+  let dateAbove: IsoDate | null = null;
   for (let index = start + 1; index < rows.length; index++) {
     const row = rows[index]!;
     const line = index + 1;
@@ -267,13 +270,17 @@ export function parseGenericBankStatement(rows: readonly BankTableRow[]): BankSt
       if (CLOSING_ROW.test(description)) closingMinor = balance;
       continue;
     }
-    const date = dateMatch ? parseStatementDate(dateMatch[0]) : null;
-    const format = dateMatch ? dateMatch[0].replace(/\d+/g, "9").replace(/[a-z]+/gi, "a") : null;
+    // Here a row without a date has an amount: with a balance too, it is on the day of the row above.
+    const inherited: IsoDate | null = !dateMatch && balance !== null ? dateAbove : null;
+    const date: IsoDate | null = dateMatch ? parseStatementDate(dateMatch[0]) : inherited;
+    const format: string | null = dateMatch ? dateMatch[0].replace(/\d+/g, "9").replace(/[a-z]+/gi, "a") : inherited ? dateFormat : null;
     if (date && format) dateFormat ??= format;
     if (!date || format !== dateFormat) {
+      dateAbove = null;
       issues.push({ line, reason: "bad_date", shape: statementRowShape(text) });
       continue;
     }
+    dateAbove = date;
     if (!amount || balance === null) {
       issues.push({ line, reason: hasAmount ? "bad_amount" : "no_amount", shape: statementRowShape(text) });
       continue;
