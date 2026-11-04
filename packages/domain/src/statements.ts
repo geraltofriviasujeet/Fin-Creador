@@ -246,7 +246,7 @@ export function classifyCardLine(direction: StatementDirection, description: str
 }
 
 /** Numbers each line among identical ones (same date, amount, direction, description). */
-export function numberOccurrences<T extends Omit<StatementLine, "occurrence">>(lines: readonly T[]): (T & { occurrence: number })[] {
+export function numberOccurrences<T extends Pick<StatementLine, "date" | "amountMinor" | "direction" | "description">>(lines: readonly T[]): (T & { occurrence: number })[] {
   const seen = new Map<string, number>();
   return lines.map((line) => {
     const key = [line.date, line.amountMinor, line.direction, line.description].join("\u0000");

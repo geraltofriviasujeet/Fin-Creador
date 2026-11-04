@@ -1,4 +1,4 @@
-import { MAX_AMOUNT_MINOR, MAX_STATEMENT_LINES, STATEMENT_NOTE_MAX, isIsoDate } from "@fin-creador/domain"
+import { MAX_AMOUNT_MINOR, MAX_BANK_STATEMENT_LINES, MAX_STATEMENT_LINES, STATEMENT_NOTE_MAX, isIsoDate } from "@fin-creador/domain"
 import { hasDigitRun } from "./digits"
 import { z } from "zod"
 
@@ -65,3 +65,51 @@ export const importStatementInputSchema = z.object({
   minimum: z.string().max(40),
   dueDate: z.string().max(10),
 })
+
+// Bank account statement import (Sprint 9b).
+
+/** Lookup for a bank review: which keys exist (entries and card payments), the account's entries and transfers in the range. */
+export const bankImportMatchesInputSchema = z
+  .object({
+    accountId: z.uuid(),
+    keys: z.array(z.uuid()).max(MAX_BANK_STATEMENT_LINES),
+    from: isoDate,
+    to: isoDate,
+  })
+  .refine((v) => v.from <= v.to, { message: "The range ends before it starts", path: ["to"] })
+
+/** A bank line exactly as the parser read it (its key comes from these values only). */
+const bankLineSchema = z.object({
+  date: isoDate,
+  amountMinor: z.number().int().positive().max(MAX_AMOUNT_MINOR),
+  direction: z.enum(["debit", "credit"]),
+  description: z
+    .string()
+    .max(STATEMENT_NOTE_MAX)
+    .refine((v) => v === v.trim() && !hasDigitRun(v, 4), "No card or account numbers"),
+  balanceMinor: z.number().int().min(-MAX_AMOUNT_MINOR).max(MAX_AMOUNT_MINOR),
+  occurrence: z.number().int().min(0).max(MAX_BANK_STATEMENT_LINES),
+})
+
+const optionalId = z.union([z.uuid(), z.literal("")])
+
+/** Ticked bank lines to save: the line as read, and the date, amount, type and its target as reviewed. */
+export const bankImportSaveInputSchema = z.object({
+  accountId: z.uuid(),
+  lines: z
+    .array(
+      z.object({
+        original: bankLineSchema,
+        date: z.string().max(10),
+        amount: z.string().max(40),
+        type: z.enum(["expense", "income", "transfer", "card_payment"]),
+        categoryId: optionalId,
+        otherAccountId: optionalId,
+        cardId: optionalId,
+      }),
+    )
+    .min(1)
+    .max(IMPORT_SAVE_CHUNK),
+})
+
+export type BankImportSaveInput = z.infer<typeof bankImportSaveInputSchema>

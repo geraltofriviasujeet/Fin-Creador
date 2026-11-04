@@ -22,5 +22,6 @@ export * from "./statements";
 export * from "./statement-generic";
 export * from "./statement-pnb";
 export * from "./pdf-rows";
+export * from "./statement-bank";
 export * from "./uuid-v5";
 export * from "./reports";

@@ -20,8 +20,13 @@ const chunked = <T>(xs: readonly T[]) => Array.from({ length: Math.ceil(xs.lengt
  * replaces_id set, so a voided row is followed to its latest version, one batched read per edit
  * level, up to MAX_EDIT_DEPTH (beyond that: "live"). Null when a read fails.
  */
-export async function existingKeys(supabase: UserClient, keys: readonly string[]): Promise<Map<string, "live" | "deleted"> | null> {
-  const rows = await Promise.all(chunked([...new Set(keys)]).map((chunk) => supabase.from("transactions").select("id, idempotency_key, voided_at").in("idempotency_key", chunk)))
+export async function existingKeys(
+  supabase: UserClient,
+  keys: readonly string[],
+  /** liability_payments: card payments, whose key is the payment's (its ledger rows have their own). */
+  table: "transactions" | "liability_payments" = "transactions",
+): Promise<Map<string, "live" | "deleted"> | null> {
+  const rows = await Promise.all(chunked([...new Set(keys)]).map((chunk) => supabase.from(table).select("id, idempotency_key, voided_at").in("idempotency_key", chunk)))
   if (rows.some((r) => r.error)) return null
   const found = rows.flatMap((r) => r.data ?? [])
   const state = new Map(found.map((t) => [t.idempotency_key, t.voided_at === null ? ("live" as const) : ("deleted" as const)]))
@@ -33,7 +38,7 @@ export async function existingKeys(supabase: UserClient, keys: readonly string[]
       for (const key of heads.keys()) state.set(key, "live")
       break
     }
-    const next = await Promise.all(chunked([...new Set(heads.values())]).map((chunk) => supabase.from("transactions").select("id, voided_at, replaces_id").in("replaces_id", chunk)))
+    const next = await Promise.all(chunked([...new Set(heads.values())]).map((chunk) => supabase.from(table).select("id, voided_at, replaces_id").in("replaces_id", chunk)))
     if (next.some((r) => r.error)) return null
     const newer = new Map(next.flatMap((r) => r.data ?? []).map((t) => [t.replaces_id, t]))
     const still = new Map<string, string>()
