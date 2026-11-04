@@ -453,10 +453,12 @@ test("another card's import page starts empty: no review, notice or file from th
   await page.getByRole("link", { name: "Back to Loans & Liabilities" }).click()
   await box(page).getByRole("link", { name: "Import a statement PDF for Punjab National Bank Rupay Platinum" }).click()
   await expect(page).toHaveURL(/\/loans-liabilities\/import\?card=/)
-  await expect(page.getByText("Punjab National Bank Rupay Platinum", { exact: true })).toBeVisible()
-  await expect(review(page)).toHaveCount(0)
-  await expect(page.getByText("FRESH BASKET")).toHaveCount(0)
-  await expect(page.getByRole("button", { name: /^Save/ })).toHaveCount(0)
+  // Pages visited before stay in the DOM, hidden (Cache Components): only what shows counts.
+  await expect(page.getByText("Punjab National Bank Rupay Platinum", { exact: true }).filter({ visible: true })).toHaveCount(1)
+  await expect(page.getByRole("heading", { level: 1, name: "Import statement" })).toBeVisible()
+  await expect(review(page).filter({ visible: true })).toHaveCount(0)
+  await expect(page.getByText("FRESH BASKET").filter({ visible: true })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: /^Save/ }).filter({ visible: true })).toHaveCount(0)
   expect(await chooser(page).evaluate((input: HTMLInputElement) => input.files?.length ?? 0)).toBe(0)
 })
 
