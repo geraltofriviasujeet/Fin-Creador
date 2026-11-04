@@ -97,7 +97,7 @@ begin
   where r.refund_of_id = v_target.id and r.voided_at is null and r.id <> p_refund.id;
   if v_linked + p_refund.amount_minor > v_target.amount_minor then
     raise exception 'Refunds can''t add up to more than the purchase' using errcode = 'FC055',
-      detail = pg_catalog.greatest(v_target.amount_minor - v_linked, 0)::text;
+      detail = greatest(v_target.amount_minor - v_linked, 0)::text;
   end if;
 end;
 $$;
