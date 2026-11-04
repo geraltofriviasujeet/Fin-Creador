@@ -71,6 +71,25 @@ describe("buildGoalsView: budgets", () => {
     expect(view.unbudgeted).toEqual([])
   })
 
+  it("refunds larger than the month's purchases count as nothing spent, never below zero", () => {
+    const view = buildGoalsView({
+      ...base,
+      spending: new Map([
+        ["food", -2_000_00],
+        ["fuel", 1_000_00],
+      ]),
+      budgetRows: [
+        { categoryId: "food", effectiveFrom: "2026-10-01", amountMinor: 10_000_00, currency: "INR" },
+        { categoryId: "fuel", effectiveFrom: "2026-10-01", amountMinor: 5_000_00, currency: "INR" },
+      ],
+    })
+    expect(view.budgets.map((b) => [b.category.id, b.spentMinor, b.status?.usedBps, b.status?.leftMinor, b.status?.level])).toEqual([
+      ["food", 0, 0, 10_000_00, "ok"],
+      ["fuel", 1_000_00, 2_000, 4_000_00, "ok"],
+    ])
+    expect(view.total).toMatchObject({ spentMinor: 1_000_00, budgetMinor: 15_000_00 })
+  })
+
   it("a budget in another currency gets no percentage and is left out of the total", () => {
     const view = buildGoalsView({
       ...base,

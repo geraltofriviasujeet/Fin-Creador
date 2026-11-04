@@ -5,7 +5,7 @@ import type { EntryType, LedgerItem } from "./types"
 
 // Text for entries, shared by web and mobile so both say exactly the same thing.
 
-export const TYPE_NOUN: Record<EntryType, string> = { expense: "expense", income: "income", transfer: "transfer" }
+export const TYPE_NOUN: Record<EntryType, string> = { expense: "expense", income: "income", transfer: "transfer", refund: "refund" }
 
 export function entryTitle(entry: LedgerItem, lookup: Lookup): string {
   if (entry.note) return entry.note
@@ -27,14 +27,15 @@ export function accountChipText(entry: LedgerItem, lookup: Lookup): string {
   return [mode, accountName(entry.accountId, lookup)].filter(Boolean).join(" · ")
 }
 
-/** Category (or "Transfer") for the subtitle. */
+/** Category (or "Transfer") for the subtitle; a refund says so before its category. */
 export function entryKindLabel(entry: LedgerItem, lookup: Lookup): string {
   if (entry.type === "transfer") return "Transfer"
   const category = entry.categoryId ? lookup.categories.get(entry.categoryId) : undefined
-  return category ? `${category.name}${category.archived ? " (archived)" : ""}` : "Uncategorised"
+  const name = category ? `${category.name}${category.archived ? " (archived)" : ""}` : "Uncategorised"
+  return entry.type === "refund" ? `Refund · ${name}` : name
 }
 
-/** −₹2,480 for expenses, +₹95,000 for income, ₹5,000 for transfers (they move, not earn or spend). */
+/** −₹2,480 for expenses, +₹95,000 for income and refunds, ₹5,000 for transfers (they move, not earn or spend). */
 export function signedAmount(entry: Pick<LedgerItem, "type" | "amountMinor" | "currency">): string {
   if (entry.type === "transfer") return formatMoney(entry.amountMinor, { currency: entry.currency })
   return formatMoney(entry.type === "expense" ? -entry.amountMinor : entry.amountMinor, { currency: entry.currency, signed: true })

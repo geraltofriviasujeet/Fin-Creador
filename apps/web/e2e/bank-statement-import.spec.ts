@@ -61,7 +61,7 @@ function rowsEndingToday(): SavingsRow[] {
 const whatIs = (page: Page, text: string, nth = 0) => lineAt(page, text, nth).getByRole("combobox", { name: /^What is / })
 const tickOf = (page: Page, text: string, nth = 0) => lineAt(page, text, nth).getByRole("checkbox", { name: /^Import / })
 
-test("label each line: expenses ticked, credits need a choice, transfer and card payment paths, refund skipped, payee remembered", async ({ page }) => {
+test("label each line: expenses ticked, credits need a choice, transfer and card payment paths, a refund saved, payee remembered", async ({ page }) => {
   await setUp(page, "Asha Rao")
   await addCard(page)
   await openImport(page, PNB)
@@ -88,11 +88,14 @@ test("label each line: expenses ticked, credits need a choice, transfer and card
   await lineAt(page, "NEFT/SALARY").getByRole("combobox", { name: /^Income source for / }).selectOption({ label: "Salary" })
   await tickOf(page, "NEFT/SALARY").check()
 
-  // The RAVI KUMAR credit: a refund can't be saved yet; it says so and has no tick.
+  // The RAVI KUMAR credit as a refund (Sprint 9c): no purchase of ₹1,200 to link, so it needs a category, then a tick.
   const raviCredit = lines(page).filter({ hasText: startsWith("RAVI KUMAR") }).filter({ hasText: "₹1,200 Cr" })
   await raviCredit.getByRole("combobox", { name: /^What is / }).selectOption({ label: "Refund" })
-  await expect(raviCredit).toContainText("Refunds can't be saved yet")
-  await expect(raviCredit.getByRole("checkbox")).toHaveCount(0)
+  await expect(raviCredit).toContainText("It isn't income.")
+  await expect(raviCredit.getByRole("combobox", { name: /^Refund of, for / })).toHaveValue("")
+  await expect(raviCredit.getByRole("checkbox")).not.toBeChecked()
+  await raviCredit.getByRole("combobox", { name: /^Category for / }).selectOption({ label: "Shopping" })
+  await raviCredit.getByRole("checkbox").check()
 
   await whatIs(page, "IMPS/TRANSFER TO OWN ACCOUNT").selectOption({ label: "Transfer to my own account" })
   await lineAt(page, "IMPS/TRANSFER TO OWN ACCOUNT").getByRole("combobox", { name: /^To account for / }).selectOption({ label: SBI })
@@ -115,18 +118,19 @@ test("label each line: expenses ticked, credits need a choice, transfer and card
   const confirm = dialog(page, "Save these lines?")
   await expect(confirm).toContainText("Transfers move money between your own accounts")
   await expect(confirm).toContainText("Card payments are recorded on the card")
-  await confirm.getByRole("button", { name: "Save 6 lines" }).click()
-  await expect(review(page)).toContainText("6 lines saved.")
+  await expect(confirm).toContainText("Refunds lower their category's spending")
+  await confirm.getByRole("button", { name: "Save 7 lines" }).click()
+  await expect(review(page)).toContainText("7 lines saved.")
 
-  // PNB: 24,600 + 50,000 − 1,784 − 649 − 5,000 − 2,334 − 649 = 64,184; SBI: 10,000 + 5,000 (a transfer, not income).
+  // PNB: 24,600 + 50,000 + 1,200 (the refund) − 1,784 − 649 − 5,000 − 2,334 − 649 = 65,384; SBI: 10,000 + 5,000 (a transfer, not income).
   await page.goto("/income")
-  await expect(holding(page, PNB)).toContainText("₹64,184")
+  await expect(holding(page, PNB)).toContainText("₹65,384")
   await expect(holding(page, SBI)).toContainText("₹15,000")
 
   // The same file again: every saved line is Already imported.
   await openImport(page, PNB)
   await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbSavingsPages({ rows: rowsEndingToday() }))))
-  await expect(lines(page).filter({ hasText: "Already imported" })).toHaveCount(6)
+  await expect(lines(page).filter({ hasText: "Already imported" })).toHaveCount(7)
   await expect(review(page).getByRole("checkbox", { name: /^Import / })).toHaveCount(0)
 })
 

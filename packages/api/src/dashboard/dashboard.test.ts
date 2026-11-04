@@ -81,6 +81,23 @@ describe("buildBreakdown", () => {
     expect(b.buckets[1]).toEqual({ start: "2026-10-27", incomeMinor: 0, expenseMinor: 500 })
     expect(b.buckets.reduce((s, x) => s + x.expenseMinor, 0)).toBe(500)
     expect(b.categories).toEqual([{ categoryId: "food", expenseMinor: 500 }])
+    expect(b.refunded).toEqual([])
     expect(b.otherCurrencies).toEqual(["USD"])
+  })
+
+  it("a category below zero (refunds more than the spending) is listed apart, never as a share", () => {
+    const b = buildBreakdown(
+      [
+        row({ bucket_start: "2026-10-27", expense_minor: -1_500 }),
+        row({ kind: "category", category_id: "food", expense_minor: 500 }),
+        row({ kind: "category", category_id: "shoes", expense_minor: -2_000 }),
+        row({ kind: "category", category_id: "fuel", expense_minor: 0 }),
+      ],
+      { start: "2026-10-26", end: "2026-11-01" },
+      "INR",
+    )
+    expect(b.categories).toEqual([{ categoryId: "food", expenseMinor: 500 }])
+    expect(b.refunded).toEqual([{ categoryId: "shoes", expenseMinor: -2_000 }])
+    expect(b.buckets[1]!.expenseMinor).toBe(-1_500)
   })
 })

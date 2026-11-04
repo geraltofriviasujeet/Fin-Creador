@@ -100,6 +100,32 @@ describe("saveTransaction", () => {
     if (field && result.status === "error") expect(result.fieldErrors?.[field]).toBeTruthy()
   })
 
+  it("records a refund in an expense category, linked to its purchase, on a card too", async () => {
+    const PURCHASE = "e0000000-0000-4000-8000-0000000000bb"
+    const { client, rpcs } = fakeClient({ account: { currency: "INR", kind: "card" } })
+    const refund = { type: "refund", amount: "500", categoryId: CAT, accountId: ACC, occurredOn: "2026-10-22", refundOfId: PURCHASE, paymentMode: "upi", idempotencyKey: KEY }
+    expect(await saveTransaction(client, refund)).toEqual({ status: "success", message: "Refund saved." })
+    expect(rpcs[0]?.args).toMatchObject({ p_type: "refund", p_refund_of_id: PURCHASE, p_amount_minor: 50000, p_category_id: CAT })
+    expect(rpcs[0]?.args.p_payment_mode).toBeUndefined()
+  })
+
+  it("never sends a link on anything but a refund, or on an edit", async () => {
+    const PURCHASE = "e0000000-0000-4000-8000-0000000000bb"
+    const { client, rpcs } = fakeClient()
+    await saveTransaction(client, { ...expense, refundOfId: PURCHASE })
+    await saveTransaction(client, { ...expense, type: "refund", paymentMode: "", refundOfId: PURCHASE, transactionId: "e0000000-0000-4000-8000-0000000000aa" })
+    expect(rpcs.map((r) => r.args.p_refund_of_id)).toEqual([undefined, undefined])
+  })
+
+  it.each([
+    ["50000", "Only ₹500 is left to refund on this purchase."],
+    ["0", "This purchase is already fully refunded."],
+  ])("a linked refund over what is left (detail %s) says how much is left, on the amount", async (details, message) => {
+    const { client } = fakeClient({ rpcError: { code: "FC055", message: "raw database text", details } as { code: string; message: string } })
+    const result = await saveTransaction(client, { type: "refund", amount: "900", categoryId: CAT, accountId: ACC, occurredOn: "2026-10-22", idempotencyKey: KEY })
+    expect(result).toEqual({ status: "error", message: "Please fix the highlighted fields.", fieldErrors: { amount: message } })
+  })
+
   it("saves nothing when today can't be read from the database", async () => {
     const { client, rpcs } = fakeClient({ today: null })
     expect((await saveTransaction(client, expense)).status).toBe("error")

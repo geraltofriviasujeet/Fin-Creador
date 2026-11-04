@@ -123,9 +123,9 @@ describe("cardLineDecision", () => {
     expect(cardLineDecision({ kind: "purchase", date: "2026-10-29" }, card)).toEqual({ importable: true });
   });
 
-  it("skips payments, refunds, EMI lines, lines before the card and future lines, with the reason", () => {
+  it("skips payments, EMI lines, lines before the card and future lines, with the reason; refunds are imported", () => {
     expect(cardLineDecision({ kind: "payment", date: "2026-10-12" }, card)).toEqual({ importable: false, reason: "payment" });
-    expect(cardLineDecision({ kind: "refund", date: "2026-10-12" }, card)).toEqual({ importable: false, reason: "refund" });
+    expect(cardLineDecision({ kind: "refund", date: "2026-10-12" }, card)).toEqual({ importable: true });
     expect(cardLineDecision({ kind: "emi", date: "2026-10-12" }, card)).toEqual({ importable: false, reason: "emi" });
     expect(cardLineDecision({ kind: "purchase", date: "2026-09-30" }, card)).toEqual({ importable: false, reason: "before_card" });
     expect(cardLineDecision({ kind: "purchase", date: "2026-10-30" }, card)).toEqual({ importable: false, reason: "future" });

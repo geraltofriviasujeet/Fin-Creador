@@ -53,6 +53,7 @@ const CHIP: Record<EntryType, string> = {
   expense: "bg-chip-peach",
   income: "bg-chip-mint",
   transfer: "bg-chip-blue",
+  refund: "bg-chip-mint",
 }
 
 /** An expense category's icon in its chip (Settings → Categories). */

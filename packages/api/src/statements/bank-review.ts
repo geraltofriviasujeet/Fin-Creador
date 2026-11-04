@@ -14,6 +14,7 @@ import {
   parseAmount,
 } from "@fin-creador/domain"
 import { fullDate } from "../transactions/format"
+import { type RefundCandidate, suggestRefundLinks } from "./refunds"
 import { OTHER_EXPENSES_NAME, type ReviewCategory, type ReviewStatus, type UnreadableRow } from "./review"
 
 // The review of an imported bank account statement (Sprint 9b), shared by web and mobile. Pure:
@@ -24,8 +25,9 @@ import { OTHER_EXPENSES_NAME, type ReviewCategory, type ReviewStatus, type Unrea
 // - Each line has a type. A debit starts ticked as an expense (Other expenses); it may become a
 //   transfer to another own account, a card payment (through the card payment path) or be skipped.
 //   A credit starts unticked with no type: income (with an income source), a transfer from another
-//   own account, a refund or skip, and it can't be ticked until one is chosen. Refunds can't be
-//   saved yet (the ledger has no negative expense): a refund is never tickable and says so.
+//   own account, a refund (Sprint 9c: in an expense category, linked to the purchase it reverses
+//   when one has exactly that amount left, else unlinked) or skip, and it can't be ticked until one
+//   is chosen.
 // - Already imported: its key is in the ledger, or (transfers) the same money is already recorded
 //   as a transfer touching this account, e.g. from the other account's import; never tickable.
 //   Already imported (deleted): the key's entry was voided. A line with the same date, amount and
@@ -50,7 +52,7 @@ export const BANK_TYPE_LABELS: Record<BankStatementLine["direction"], Record<Ban
 export const BANK_UNREADABLE =
   "We couldn't read this file as a bank statement. Right now we read Punjab National Bank savings account statements (the text PDF from the bank) and CSV files with a header row naming the date, description, amount (with a DR / CR column, or debit and credit columns) and balance. Your file was read on this device only and wasn't saved or uploaded. You can still add entries by hand."
 
-export const REFUND_NOTE = "Refunds can't be saved yet: this line is skipped. To undo the purchase, void or edit it on Transactions."
+export const REFUND_NOTE = "A refund lowers this category's spending and adds the money back to the account. It isn't income."
 
 export type BankImportAccount = {
   id: string
@@ -76,12 +78,14 @@ export type BankImportOptions = {
 export type BankImportMatches = {
   importedKeys: string[]
   deletedKeys: string[]
-  /** Live income (credit) and expense (debit) entries on the account in the range, other than this statement's lines. */
+  /** Live income and refund (credit) and expense (debit) entries on the account in the range, other than this statement's lines. */
   entries: { date: IsoDate; amountMinor: number; direction: "debit" | "credit" }[]
   /** Live transfers touching the account in the range (money out: debit; in: credit), other than this statement's lines. */
   transfers: { date: IsoDate; amountMinor: number; direction: "debit" | "credit" }[]
   /** The account's balance in the app at the end of the statement's last day; null when not read. */
   bookBalanceMinor: number | null
+  /** Purchases from the account a refund line may be linked to (loadRefundCandidates). */
+  refundCandidates: RefundCandidate[]
 }
 
 export type BankReviewLine = {
@@ -95,10 +99,12 @@ export type BankReviewLine = {
   type: BankLineType | ""
   date: string
   amount: string
-  /** Expense category or income source, by type. */
+  /** Expense category (expense, refund) or income source, by type. */
   categoryId: string
   otherAccountId: string
   cardId: string
+  /** Refunds only: the purchase it reverses ("" for none). */
+  refundOfId: string
   /** The person set this line's type; a payee label is never offered over it. */
   touched: boolean
   /** The type was offered from another line of the same payee in this file; it still needs a tick. */
@@ -107,6 +113,8 @@ export type BankReviewLine = {
 
 export type BankReview = {
   lines: BankReviewLine[]
+  /** For refund lines: the purchases they may be linked to. */
+  refundCandidates: RefundCandidate[]
   summary: BankStatementParse["summary"]
   checks: BankStatementCheck[]
   /** Soft: the app's balance and the statement's closing differ. Never blocks Save. */
@@ -181,6 +189,7 @@ export function buildBankReview(
       categoryId: open && debit ? expenseDefault : "",
       otherAccountId: "",
       cardId: "",
+      refundOfId: "",
       touched: false,
       suggested: false,
     }
@@ -188,6 +197,7 @@ export function buildBankReview(
 
   return {
     lines,
+    refundCandidates: matches.refundCandidates,
     summary: parse.summary,
     checks: parse.checks,
     balanceWarning: balanceWarning(parse, matches.bookBalanceMinor, context.currency),
@@ -219,15 +229,26 @@ export function balanceWarning(parse: Pick<BankStatementParse, "summary" | "line
 }
 
 export const canTickBank = (line: Pick<BankReviewLine, "status" | "type">): boolean =>
-  (line.status === "new" || line.status === "duplicate") && line.type !== "" && line.type !== "refund" && line.type !== "skip"
+  (line.status === "new" || line.status === "duplicate") && line.type !== "" && line.type !== "skip"
 
-/** Chooses a line's type (by the person): clears targets that no longer apply, unticks when it can't be saved. */
-export function setBankLineType(line: BankReviewLine, type: BankLineType | "", options: BankImportOptions): BankReviewLine {
+/**
+ * Chooses a line's type (by the person): clears targets that no longer apply, unticks when it can't
+ * be saved. A refund is linked to the purchase with exactly its amount left (taking its category),
+ * if `candidates` has one; else it stays unlinked with no category.
+ */
+export function setBankLineType(line: BankReviewLine, type: BankLineType | "", options: BankImportOptions, candidates: readonly RefundCandidate[] = []): BankReviewLine {
   const next: BankReviewLine = { ...line, type, touched: true, suggested: false }
   if (type !== line.type) {
     next.categoryId = type === "expense" ? otherExpenses(options.expenseCategories) : ""
     next.otherAccountId = ""
     next.cardId = ""
+    next.refundOfId = ""
+    if (type === "refund") {
+      const link = suggestRefundLinks([line.original], candidates)[0] ?? null
+      const category = candidates.find((c) => c.id === link)?.categoryId ?? ""
+      next.refundOfId = link ?? ""
+      next.categoryId = options.expenseCategories.some((c) => c.id === category) ? category : ""
+    }
   }
   if (!canTickBank(next)) next.ticked = false
   return next
@@ -249,7 +270,8 @@ export function offerPayeeLabel(lines: readonly BankReviewLine[], from: number):
     line.original.direction !== source.original.direction ||
     !(line.status === "new" || line.status === "duplicate")
       ? line
-      : { ...line, type: source.type, categoryId: source.categoryId, otherAccountId: source.otherAccountId, cardId: source.cardId, ticked: false, suggested: true },
+      : // A refund link is never copied: each refund reverses its own purchase.
+        { ...line, type: source.type, categoryId: source.categoryId, otherAccountId: source.otherAccountId, cardId: source.cardId, refundOfId: "", ticked: false, suggested: true },
   )
 }
 
@@ -292,7 +314,7 @@ export function bankLineErrors(
   const amount = parseAmount(line.amount, context.currency)
   if (!amount.ok) errors.amount = amount.error === "empty" ? "Enter an amount" : "Enter an amount above zero"
   if (line.type === "") errors.type = "Choose what this is"
-  else if (line.type === "expense" && !options.expenseCategories.some((c) => c.id === line.categoryId)) errors.target = "Choose a category"
+  else if ((line.type === "expense" || line.type === "refund") && !options.expenseCategories.some((c) => c.id === line.categoryId)) errors.target = "Choose a category"
   else if (line.type === "income" && !options.incomeSources.some((c) => c.id === line.categoryId)) errors.target = "Choose an income source"
   else if (line.type === "transfer" && !options.accounts.some((a) => a.id === line.otherAccountId)) errors.target = "Choose the other account"
   else if (line.type === "card_payment" && !options.cards.some((c) => c.id === line.cardId)) errors.target = "Choose the card"

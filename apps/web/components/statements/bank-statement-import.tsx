@@ -13,6 +13,9 @@ import {
   type BankReviewLine,
   type LineSaveResult,
   REFUND_NOTE,
+  type RefundCandidate,
+  refundCandidateLabel,
+  refundOptions,
   bankCheckReasons,
   bankLineErrors,
   bankLinesShown,
@@ -25,7 +28,7 @@ import {
   reviewPage,
   setBankLineType,
 } from "@fin-creador/api"
-import { type BankLineSkipReason, parseBankStatementCsv, parsePnbSavingsStatementText } from "@fin-creador/domain"
+import { type BankLineSkipReason, parseAmount, parseBankStatementCsv, parsePnbSavingsStatementText } from "@fin-creador/domain"
 import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { bankImportMatchesAction, saveBankImportLinesAction } from "@/app/(app)/income/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
@@ -138,7 +141,7 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
       return label ? offerPayeeLabel(next, i) : next
     })
   const setType = (i: number, type: BankLineType | "") =>
-    setLines((ls) => offerPayeeLabel(ls.map((l, k) => (k === i ? setBankLineType(l, type, options) : l)), i))
+    setLines((ls) => offerPayeeLabel(ls.map((l, k) => (k === i ? setBankLineType(l, type, options, initial.refundCandidates) : l)), i))
   const applyBulk = () => {
     if (bulkCategory) setLines((ls) => ls.map((l) => (l.ticked && l.type === "expense" ? { ...l, categoryId: bulkCategory } : l)))
   }
@@ -166,6 +169,7 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
             categoryId: l.categoryId,
             otherAccountId: l.otherAccountId,
             cardId: l.cardId,
+            refundOfId: l.refundOfId,
           })),
         }),
       (chunkResults) => {
@@ -188,6 +192,7 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
   const tickedLines = lines.filter((l) => l.ticked)
   const transfers = tickedLines.filter((l) => l.type === "transfer").length
   const cardPayments = tickedLines.filter((l) => l.type === "card_payment").length
+  const refunds = tickedLines.filter((l) => l.type === "refund").length
 
   return (
     <section aria-labelledby="review-heading" className="grid gap-4 rounded-2xl border border-line bg-surface p-4 md:p-5">
@@ -255,6 +260,7 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
               line={line}
               result={results[line.key]}
               options={options}
+              candidates={initial.refundCandidates}
               context={context}
               onChange={(patch, label) => change(index, patch, label)}
               onType={(type) => setType(index, type)}
@@ -301,6 +307,7 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
             </p>
             {transfers > 0 && <p>Transfers move money between your own accounts: they are neither income nor expenses.</p>}
             {cardPayments > 0 && <p>Card payments are recorded on the card and reduce what it owes; they aren&apos;t expenses.</p>}
+            {refunds > 0 && <p>Refunds lower their category&apos;s spending and add the money back to this account; they aren&apos;t income.</p>}
             <div className="flex flex-wrap justify-end gap-2">
               <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
               <Button type="button" onClick={() => void save()}>
@@ -318,6 +325,7 @@ function BankRow({
   line,
   result,
   options,
+  candidates,
   context,
   onChange,
   onType,
@@ -325,6 +333,7 @@ function BankRow({
   line: BankReviewLine
   result: LineSaveResult | undefined
   options: BankImportOptions
+  candidates: RefundCandidate[]
   context: Context
   onChange: (patch: Partial<BankReviewLine>, label: boolean) => void
   onType: (type: BankLineType | "") => void
@@ -337,7 +346,7 @@ function BankRow({
   const errors = line.ticked ? bankLineErrors(line, options, context) : {}
   const labels = BANK_TYPE_LABELS[original.direction]
   const target =
-    line.type === "expense"
+    line.type === "expense" || line.type === "refund"
       ? { label: "Category", value: line.categoryId, field: "categoryId" as const, items: options.expenseCategories, empty: "Choose a category" }
       : line.type === "income"
         ? { label: "Income source", value: line.categoryId, field: "categoryId" as const, items: options.incomeSources, empty: "Choose an income source" }
@@ -402,7 +411,24 @@ function BankRow({
               {errors.target && <span className="text-xs text-danger">{errors.target}</span>}
             </div>
           )}
-          {line.type === "refund" && <p className="text-xs text-muted-foreground md:col-span-2">{REFUND_NOTE}</p>}
+          {line.type === "refund" && (
+            <>
+              <BankRefundOf
+                name={name}
+                line={line}
+                candidates={candidates}
+                options={options}
+                currency={context.currency}
+                onChange={(refundOfId) => {
+                  // Linking takes the purchase's category when none is chosen yet.
+                  const category = candidates.find((c) => c.id === refundOfId)?.categoryId
+                  const take = line.categoryId === "" && category && options.expenseCategories.some((cat) => cat.id === category)
+                  onChange({ refundOfId, ...(take ? { categoryId: category } : {}) }, false)
+                }}
+              />
+              <p className="text-xs text-muted-foreground md:col-span-2">{REFUND_NOTE}</p>
+            </>
+          )}
           {line.suggested && !line.ticked && (
             <p className="text-xs text-muted-foreground md:col-span-2">Same as your choice for another {description} line in this file. Tick it to use it.</p>
           )}
@@ -435,5 +461,38 @@ function BankRow({
         </div>
       )}
     </li>
+  )
+}
+
+/** "Refund of": the purchase from this account the refund reverses, or none (it still counts). */
+function BankRefundOf({
+  name,
+  line,
+  candidates,
+  options,
+  currency,
+  onChange,
+}: {
+  name: string
+  line: BankReviewLine
+  candidates: RefundCandidate[]
+  options: BankImportOptions
+  currency: string
+  onChange: (refundOfId: string) => void
+}) {
+  const amount = parseAmount(line.amount, currency)
+  const choices = refundOptions({ date: line.date, amountMinor: amount.ok ? amount.minor : null }, candidates, line.refundOfId)
+  const categoryName = (id: string | null) => options.expenseCategories.find((c) => c.id === id)?.name ?? null
+  return (
+    <div className="grid gap-1 md:col-span-2">
+      <NativeSelect aria-label={`Refund of, for ${name}`} value={line.refundOfId} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not linked to a purchase</option>
+        {choices.map((c) => (
+          <option key={c.id} value={c.id}>
+            Refund of {refundCandidateLabel(c, categoryName, currency)}
+          </option>
+        ))}
+      </NativeSelect>
+    </div>
   )
 }

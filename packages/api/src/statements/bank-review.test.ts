@@ -45,7 +45,7 @@ const options: BankImportOptions = {
   cards: [{ id: "c1", name: "PNB Rupay" }],
 }
 const context = { accountId: ACCOUNT, openingBalanceDate: "2026-10-01", today: "2026-10-30", currency: "INR" }
-const none: BankImportMatches = { importedKeys: [], deletedKeys: [], entries: [], transfers: [], bookBalanceMinor: null }
+const none: BankImportMatches = { importedKeys: [], deletedKeys: [], entries: [], transfers: [], bookBalanceMinor: null, refundCandidates: [] }
 const keyOf = (i: number) => bankStatementLineKey(ACCOUNT, LINES[i]!)
 
 describe("buildBankReview", () => {
@@ -121,14 +121,27 @@ describe("buildBankReview", () => {
 describe("types, payee labels and errors", () => {
   const r = buildBankReview(parse, none, options, context)
 
-  it("a credit becomes tickable once a type is chosen; refund and skip never are", () => {
+  it("a credit becomes tickable once a type is chosen, a refund too; skip never is", () => {
     const income = setBankLineType(r.lines[2]!, "income", options)
     expect(canTickBank(income)).toBe(true)
     expect(income.ticked).toBe(false)
-    expect(canTickBank(setBankLineType(r.lines[2]!, "refund", options))).toBe(false)
-    expect(REFUND_NOTE).toMatch(/can't be saved yet/)
+    const refund = setBankLineType(r.lines[2]!, "refund", options)
+    expect([canTickBank(refund), refund.ticked, refund.categoryId, refund.refundOfId]).toEqual([true, false, "", ""])
+    expect(bankLineErrors(refund, options, context)).toEqual({ target: "Choose a category" })
+    expect(REFUND_NOTE).toMatch(/isn't income/)
     const skipped = setBankLineType(r.lines[0]!, "skip", options)
     expect([skipped.ticked, canTickBank(skipped)]).toEqual([false, false])
+  })
+
+  it("a refund takes the purchase with exactly its amount left (and its category); a payee label never copies the link", () => {
+    const purchase = { id: "p1", date: "2026-10-20", amountMinor: 120_000, leftMinor: 120_000, categoryId: "e2", note: "RAVI KUMAR" }
+    const refund = setBankLineType(r.lines[2]!, "refund", options, [purchase])
+    expect([refund.refundOfId, refund.categoryId]).toEqual(["p1", "e2"])
+    const later = setBankLineType(r.lines[2]!, "refund", options, [{ ...purchase, date: "2026-10-27" }])
+    expect(later.refundOfId).toBe("") // a purchase after the refund can't be the one refunded
+    const twin = { ...r.lines[2]!, key: "twin" }
+    const offered = offerPayeeLabel([{ ...refund, ticked: true }, twin], 0)
+    expect([offered[1]!.type, offered[1]!.categoryId, offered[1]!.refundOfId]).toEqual(["refund", "e2", ""])
   })
 
   it("labelling a payee offers the same label on its other lines (same direction), unticked, never over the person's own choice", () => {

@@ -64,6 +64,7 @@ export function toLedgerItem(row: LedgerRow): LedgerItem {
     categoryId: row.category_id,
     voided: row.voided_at !== null,
     replacesId: row.replaces_id,
+    refundOfId: row.refund_of_id,
     note: row.note,
     paymentMode: row.payment_mode as PaymentModeValue | null,
     createdAt: row.created_at,
@@ -128,19 +129,22 @@ export async function loadTransactionTotals(
   if (error || !Array.isArray(data)) return { ok: false }
   const same = data.find((r) => r.currency === currency)
   const incomeMinor = same?.income_minor ?? 0
+  // Net of refunds (transaction_summary, 20261104120000): may be below zero.
   const expenseMinor = same?.expense_minor ?? 0
   return {
     ok: true,
     totals: {
       incomeMinor,
       expenseMinor,
+      refundMinor: same?.refund_minor ?? 0,
       netMinor: addMinor(incomeMinor, -expenseMinor),
       incomeCount: same?.income_count ?? 0,
       expenseCount: same?.expense_count ?? 0,
+      refundCount: same?.refund_count ?? 0,
       transferCount: same?.transfer_count ?? 0,
       otherCurrencyCount: data
         .filter((r) => r.currency !== currency)
-        .reduce((n, r) => n + r.income_count + r.expense_count + r.transfer_count, 0),
+        .reduce((n, r) => n + r.income_count + r.expense_count + r.refund_count + r.transfer_count, 0),
     },
   }
 }

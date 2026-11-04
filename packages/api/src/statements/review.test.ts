@@ -36,7 +36,7 @@ const parse: CardStatementParse = {
 }
 
 const keys = reviewKeys(CARD, parse)
-const none = { importedKeys: [], deletedKeys: [], cardEntries: [], statementExists: false }
+const none = { importedKeys: [], deletedKeys: [], cardEntries: [], refundCandidates: [], statementExists: false }
 
 describe("reviewKeys", () => {
   it("derives each key from the card, the statement date and the line as read", () => {
@@ -80,7 +80,7 @@ describe("buildReview", () => {
 
   it("marks a line matching an existing card entry as a possible duplicate, unticked; one entry marks one line", () => {
     const twice = { ...parse, lines: [...parse.lines, line({ date: "2026-10-03", amountMinor: 12_000, description: "CINEMA", occurrence: 1 })] }
-    const r = buildReview(twice, { ...none, cardEntries: [{ date: "2026-10-03", amountMinor: 12_000 }] }, categories, context)
+    const r = buildReview(twice, { ...none, cardEntries: [{ date: "2026-10-03", amountMinor: 12_000, direction: "debit" as const }] }, categories, context)
     expect(r.lines.slice(-2).map((l) => [l.status, l.ticked])).toEqual([["duplicate", false], ["new", true]])
     expect(canTick(r.lines.at(-2)!)).toBe(true)
   })
@@ -89,6 +89,46 @@ describe("buildReview", () => {
     const withoutBank = buildReview(parse, none, categories.filter((c) => c.systemKey === null), context)
     expect(withoutBank.lines[2]!.categoryId).toBe("cat-other")
     expect(buildReview(parse, none, [categories[2]!], context).lines[1]!.categoryId).toBe("")
+  })
+
+  describe("refunds (credits)", () => {
+    const refund = (over: Partial<StatementLine>) => line({ direction: "credit", kind: "refund", ...over })
+    const purchase = { id: "p-fresh", date: "2026-09-21", amountMinor: 178_400, leftMinor: 178_400, categoryId: "cat-food", note: "FRESH BASKET" }
+    const withRefunds = {
+      ...parse,
+      lines: [
+        ...parse.lines,
+        refund({ date: "2026-10-05", amountMinor: 178_400, description: "REFUND FRESH BASKET" }),
+        refund({ date: "2026-10-06", amountMinor: 4_000, description: "SURCHARGE WAIVER" }),
+      ],
+    }
+
+    it("links a full refund to the purchase with exactly that left, takes its category and ticks it", () => {
+      const r = buildReview(withRefunds, { ...none, refundCandidates: [purchase] }, categories, context)
+      expect(r.lines.slice(-2).map((l) => [l.status, l.ticked, l.categoryId, l.refundOfId])).toEqual([
+        ["new", true, "cat-food", "p-fresh"],
+        ["new", false, "", ""],
+      ])
+    })
+
+    it("leaves a refund with no matching purchase unlinked and unticked until a category is chosen", () => {
+      const r = buildReview(withRefunds, none, categories, context)
+      expect(r.lines.at(-2)).toMatchObject({ status: "new", skipReason: null, ticked: false, categoryId: "", refundOfId: "" })
+      expect(canTick(r.lines.at(-2)!)).toBe(true)
+    })
+
+    it("a refund is a possible duplicate of an existing refund only, never of a purchase", () => {
+      const r = buildReview(withRefunds, { ...none, cardEntries: [{ date: "2026-10-05", amountMinor: 178_400, direction: "debit" as const }] }, categories, context)
+      expect(r.lines.at(-2)!.status).toBe("new")
+      const dup = buildReview(withRefunds, { ...none, cardEntries: [{ date: "2026-10-05", amountMinor: 178_400, direction: "credit" as const }] }, categories, context)
+      expect(dup.lines.at(-2)).toMatchObject({ status: "duplicate", ticked: false })
+    })
+
+    it("ticked refunds come off what the ticked lines add to the card", () => {
+      const r = buildReview(withRefunds, { ...none, refundCandidates: [purchase] }, categories, context)
+      const totals = reviewTotals({ lines: r.lines.map((l) => ({ ...l, ticked: l.original.description === "FRESH BASKET" || l.original.description === "REFUND FRESH BASKET" })) }, "INR")
+      expect(totals).toMatchObject({ ticked: 2, tickedRefunds: 1, tickedMinor: 0 })
+    })
   })
 
   it("keeps keys from the parsed line whatever is edited", () => {
@@ -118,6 +158,7 @@ describe("reviewTotals", () => {
     r.lines[7] = { ...r.lines[7]!, ticked: false }
     expect(reviewTotals(r, "INR")).toEqual({
       ticked: 5,
+      tickedRefunds: 0,
       tickedMinor: 180_000 + 50_000 + 5_000 + 9_950 + 30_000,
       skipped: { count: 2, totalMinor: 151_000, reasons: ["payments", "before you added the card"] },
     })

@@ -11,7 +11,7 @@ describe("URL filters", () => {
   })
 
   it("ignores unknown values and bad dates", () => {
-    expect(read("type=refund&period=forever&from=2026-02-30")).toMatchObject({ type: "all", period: "this-month", from: "2026-10-01" })
+    expect(read("type=loan&period=forever&from=2026-02-30")).toMatchObject({ type: "all", period: "this-month", from: "2026-10-01" })
   })
 
   it("round-trips through the query string, leaving defaults out", () => {

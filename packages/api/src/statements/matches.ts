@@ -1,6 +1,7 @@
 import { type ImportMatchesInput, importMatchesInputSchema } from "@fin-creador/schemas"
 import type { UserClient } from "../income/client"
 import type { ImportMatches } from "./review"
+import { loadRefundCandidates } from "./refunds"
 
 // What the database already holds for a statement under review (Sprint 9a.4), read as the
 // signed-in user (RLS): another person's card or keys find nothing. Reads only.
@@ -64,13 +65,13 @@ export async function loadImportMatches(supabase: UserClient, input: unknown): P
   if (card.error) return { ok: false, reason: "unavailable" }
   if (!card.data) return { ok: false, reason: "not_found" }
 
-  const [existing, entries, statement] = await Promise.all([
+  const [existing, entries, statement, candidates] = await Promise.all([
     existingKeys(supabase, keys),
     supabase
       .from("transactions")
-      .select("occurred_on, amount_minor, idempotency_key")
+      .select("type, occurred_on, amount_minor, idempotency_key")
       .eq("account_id", card.data.account_id)
-      .eq("type", "expense")
+      .in("type", ["expense", "refund"])
       .is("voided_at", null)
       .gte("occurred_on", from)
       .lte("occurred_on", to)
@@ -78,8 +79,9 @@ export async function loadImportMatches(supabase: UserClient, input: unknown): P
     statementDate === null
       ? Promise.resolve({ data: null, error: null })
       : supabase.from("card_statements").select("id").eq("card_id", cardId).eq("statement_date", statementDate).maybeSingle(),
+    loadRefundCandidates(supabase, card.data.account_id, from, to),
   ])
-  if (!existing || entries.error || statement.error) return { ok: false, reason: "unavailable" }
+  if (!existing || entries.error || statement.error || !candidates) return { ok: false, reason: "unavailable" }
 
   const own = new Set(keys)
   return {
@@ -87,7 +89,10 @@ export async function loadImportMatches(supabase: UserClient, input: unknown): P
     matches: {
       importedKeys: [...existing].filter(([, state]) => state === "live").map(([key]) => key),
       deletedKeys: [...existing].filter(([, state]) => state === "deleted").map(([key]) => key),
-      cardEntries: entries.data.filter((t) => !own.has(t.idempotency_key)).map((t) => ({ date: t.occurred_on, amountMinor: t.amount_minor })),
+      cardEntries: entries.data
+        .filter((t) => !own.has(t.idempotency_key))
+        .map((t) => ({ date: t.occurred_on, amountMinor: t.amount_minor, direction: t.type === "refund" ? ("credit" as const) : ("debit" as const) })),
+      refundCandidates: candidates,
       statementExists: statement.data !== null,
     },
   }

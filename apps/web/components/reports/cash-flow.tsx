@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { type CashFlowData, type LedgerCategory, transactionsHref } from "@fin-creador/api"
-import { type CategorySpend, type DateRange, formatMoney, formatPercentFromBasisPoints, ratioToBasisPoints } from "@fin-creador/domain"
+import { type CategorySpend, type DateRange, addMinor, formatMoney, formatPercentFromBasisPoints, ratioToBasisPoints } from "@fin-creador/domain"
 import { cn } from "cn"
 import { TimeChart } from "@/components/dashboard/time-chart"
 import { money, rangeText } from "@/components/transactions/display"
@@ -28,6 +28,7 @@ export function CashFlowSection({ data, categories, chartRange }: { data: CashFl
   const empty = report.rows.every((r) => r.incomeMinor === 0 && r.expenseMinor === 0)
   const newestFirst = [...report.rows].reverse()
   const { totals } = report
+  const listedMinor = addMinor(...report.topCategories.map((c) => c.expenseMinor))
 
   return (
     <Card aria-labelledby="cash-flow-title" className="grid gap-4">
@@ -121,7 +122,8 @@ export function CashFlowSection({ data, categories, chartRange }: { data: CashFl
               <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Top categories for the range</h3>
               <ol aria-label="Top categories for the range" className="grid gap-1.5 text-sm">
                 {report.topCategories.map((c) => {
-                  const share = ratioToBasisPoints(c.expenseMinor, totals.expenseMinor) ?? 0
+                  // Shares of the categories listed (totals.expenseMinor is net of refunds and may be lower).
+                  const share = ratioToBasisPoints(c.expenseMinor, listedMinor) ?? 0
                   return (
                     <li key={c.categoryId ?? "rest"} className="grid gap-1">
                       <div className="flex items-baseline justify-between gap-3">

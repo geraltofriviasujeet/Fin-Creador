@@ -78,7 +78,7 @@ export async function addCash(page: Page, amount: string) {
   await expect(d).toBeHidden()
 }
 
-export type Entry = { type?: "Expense" | "Income" | "Transfer"; amount: string; category?: string; from: string; to?: string; note?: string; mode?: string }
+export type Entry = { type?: "Expense" | "Income" | "Transfer" | "Refund"; amount: string; category?: string; from: string; to?: string; note?: string; mode?: string }
 
 /** Opens Add transaction from the topbar and saves one entry. */
 export async function addEntry(page: Page, e: Entry) {
@@ -93,7 +93,7 @@ export async function addEntry(page: Page, e: Entry) {
     await d.getByLabel("To").selectOption({ label: e.to! })
   } else {
     await d.getByLabel(type === "Income" ? "Source" : "Category").selectOption({ label: e.category! })
-    await d.getByLabel(type === "Income" ? "Received into" : "Paid from").selectOption({ label: e.from })
+    await d.getByLabel(type === "Income" ? "Received into" : type === "Refund" ? "Refunded to" : "Paid from").selectOption({ label: e.from })
   }
   if (e.mode) await d.getByLabel("Payment mode (optional)").selectOption({ label: e.mode })
   if (e.note) await d.getByLabel("Note").fill(e.note)

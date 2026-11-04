@@ -1,12 +1,17 @@
 import { AMOUNT_ERROR_MESSAGES, isIsoDate, parseAmount } from "@fin-creador/domain";
 import { z } from "zod";
 
-// Form schema for income, expense and transfer entries (add and edit), shared by web and
-// mobile. Mirrors the database rules in migration 20261023120000; the database re-checks
-// everything (ownership, archived accounts, currencies, dates).
+// Form schema for income, expense, transfer and refund entries (add and edit), shared by web
+// and mobile. Mirrors the database rules in migrations 20261023120000 and 20261104120000; the
+// database re-checks everything (ownership, archived accounts, currencies, dates, refund links).
 
+/** Types a recurring rule may have (never a refund). */
 export const ENTRY_TYPES = ["expense", "income", "transfer"] as const;
 export type EntryTypeValue = (typeof ENTRY_TYPES)[number];
+
+/** Types an entry may have: the recurring ones and refunds (Sprint 9c). */
+export const TRANSACTION_TYPES = [...ENTRY_TYPES, "refund"] as const;
+export type TransactionTypeValue = (typeof TRANSACTION_TYPES)[number];
 
 /** Optional label for how a bank payment was made; the account is what moves the money. */
 export const PAYMENT_MODES = [
@@ -62,18 +67,20 @@ export function transactionFormSchema({
 }: {
   today: string;
   currency: string;
-  /** "card": a credit card (8b), allowed only for expenses. */
+  /** "card": a credit card (8b), allowed only for expenses and refunds. */
   accountKind: "bank" | "cash" | "other" | "card" | null;
 }) {
   return z
     .object({
       transactionId: text.pipe(z.union([z.literal(""), z.uuid({ message: "Entry not found" })])),
-      type: z.enum(ENTRY_TYPES, { message: "Choose a type" }),
+      type: z.enum(TRANSACTION_TYPES, { message: "Choose a type" }),
       amount: text,
       categoryId: text,
       accountId: z.uuid({ message: "Choose an account" }),
       counterAccountId: text,
       paymentMode: text,
+      /** Refunds only: the purchase it reverses ("Refund this"), or empty. */
+      refundOfId: text.pipe(z.union([z.literal(""), z.uuid({ message: "Purchase not found" })])),
       occurredOn: z
         .string()
         .trim()
@@ -90,7 +97,9 @@ export function transactionFormSchema({
       };
       const amount = parseAmount(v.amount, currency);
       if (!amount.ok) return fail("amount", AMOUNT_ERROR_MESSAGES[amount.error]);
-      if (accountKind === "card" && v.type !== "expense") return fail("accountId", "A card can only pay for expenses. Choose a bank, cash or other account");
+      if (accountKind === "card" && v.type !== "expense" && v.type !== "refund") {
+        return fail("accountId", "A card only takes purchases and refunds. Choose a bank, cash or other account");
+      }
 
       let categoryId: string | null = null;
       let counterAccountId: string | null = null;
@@ -120,6 +129,7 @@ export function transactionFormSchema({
         accountId: v.accountId,
         counterAccountId,
         paymentMode,
+        refundOfId: v.type === "refund" && v.refundOfId ? v.refundOfId : null,
         occurredOn: v.occurredOn,
         note: v.note || null,
         idempotencyKey: v.idempotencyKey,

@@ -8,8 +8,8 @@ import {
   recurringStatus,
   scheduleText,
 } from "@fin-creador/domain"
-import type { PaymentModeValue } from "@fin-creador/schemas"
-import type { EntryType, LedgerAccount, LedgerCategory, LedgerItem } from "../transactions/types"
+import type { EntryTypeValue, PaymentModeValue } from "@fin-creador/schemas"
+import type { LedgerAccount, LedgerCategory, LedgerItem } from "../transactions/types"
 
 // What the Recurring page and the Upcoming card show, computed from the rules and their
 // progress with packages/domain (decisions 2026-10-23 and 2026-10-24). Shared by web and mobile.
@@ -19,7 +19,8 @@ export const UPCOMING_DAYS = 30
 
 export type RecurringRule = {
   id: string
-  type: EntryType
+  /** Never a refund (recurring_rules_type). */
+  type: EntryTypeValue
   amountMinor: number
   currency: string
   accountId: string

@@ -175,7 +175,8 @@ export interface CategorySpend {
 
 /**
  * The largest `limit` categories by spending (ties by id, so the order is stable) and one
- * "Everything else" row (categoryId null) for the rest, if any. Zero rows are dropped.
+ * "Everything else" row (categoryId null) for the rest, if any. Rows at or below zero are
+ * dropped: a share of spending needs spending (refundedCategories lists the ones below zero).
  */
 export function topCategories(rows: readonly CategorySpend[], limit = 5): CategorySpend[] {
   const sorted = rows
@@ -184,4 +185,14 @@ export function topCategories(rows: readonly CategorySpend[], limit = 5): Catego
   if (sorted.length <= limit) return sorted;
   const rest = addMinor(...sorted.slice(limit).map((r) => r.expenseMinor));
   return [...sorted.slice(0, limit), { categoryId: null, expenseMinor: rest }];
+}
+
+/**
+ * Categories whose spending is below zero because refunds in the period were more than the
+ * purchases (a refund counts on its own date), most refunded first, ties by id.
+ */
+export function refundedCategories(rows: readonly CategorySpend[]): CategorySpend[] {
+  return rows
+    .filter((r) => r.expenseMinor < 0)
+    .sort((a, b) => a.expenseMinor - b.expenseMinor || String(a.categoryId).localeCompare(String(b.categoryId)));
 }

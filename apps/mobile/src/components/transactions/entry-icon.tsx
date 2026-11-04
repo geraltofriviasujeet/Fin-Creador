@@ -51,7 +51,7 @@ const ICONS: Record<string, LucideIcon> = {
 
 // The chip colour follows the type, so the icon is never the only signal (the amount sign
 // and the subtitle say it too).
-const CHIP = { expense: colors.peach, income: colors.mint, transfer: colors.blue } as const;
+const CHIP = { expense: colors.peach, income: colors.mint, transfer: colors.blue, refund: colors.mint } as const;
 
 export function EntryIcon({ entry, lookup }: { entry: LedgerItem; lookup: Lookup }) {
   const category = entry.categoryId ? lookup.categories.get(entry.categoryId) : undefined;

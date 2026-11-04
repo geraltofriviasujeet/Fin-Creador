@@ -6,7 +6,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(31);
+select plan(33);
 
 insert into auth.users (id, email) values
   ('1b000000-0000-4000-8000-000000000001', 'bc-asha@example.test'),
@@ -109,13 +109,21 @@ select is(
   6, 'every test user has it'
 );
 
--- ------------------------------------------------------------ functions and privileges (22-25)
+-- ------------------------------------------------------------ functions and privileges (22-27)
 select ok(not has_function_privilege('authenticated', 'public.system_category_id(uuid, text)', 'execute'),
   'signed-in users cannot call system_category_id');
 select ok(not has_function_privilege('anon', 'public.system_category_id(uuid, text)', 'execute'),
   'anon cannot call system_category_id');
 select set_config('request.jwt.claims', '{"sub": "1b000000-0000-4000-8000-000000000001", "role": "authenticated"}', true);
 set local role authenticated;
+select throws_ok(
+  $$ select public.system_category_id('1b000000-0000-4000-8000-000000000001', 'bank_charges') $$,
+  '42501', null, 'a signed-in user calling system_category_id for themselves is denied'
+);
+select throws_ok(
+  $$ select public.system_category_id('1b000000-0000-4000-8000-000000000002', 'bank_charges') $$,
+  '42501', null, 'and for another user''s id too'
+);
 select is(public.loan_category_id('bank_charges'), pg_temp.bank('1b000000-0000-4000-8000-000000000001'),
   'loan_category_id returns the caller''s category for the key');
 -- (Called first: a query does not see a row its own function call inserts.)
@@ -125,7 +133,7 @@ select is(
   'Loan fees & charges', 'loan_category_id still creates the loan categories'
 );
 
--- ------------------------------------------------------------ guard and RLS (26-31)
+-- ------------------------------------------------------------ guard and RLS (28-33)
 select throws_ok(
   $$ update public.categories set archived_at = now() where system_key = 'bank_charges' $$,
   'FC042', 'This category is used by the app and can''t be archived', 'the category cannot be archived (generic message)'

@@ -15,7 +15,8 @@ import { BANK_CHARGES_KEY, type ReviewCategory, lineErrors } from "./review"
 
 // Saving an imported card statement (Sprint 9a.5), as the signed-in user (RLS, grants and the
 // ledger triggers enforce ownership and the money rules). Each line is saved on its own through
-// record_transaction as an expense on the card, under a key recomputed here from the line as read
+// record_transaction as an expense on the card (a credit as a refund, linked to the purchase the
+// person kept, if any: the database checks the link, 9c), under a key recomputed here from the line as read
 // (never one sent by the client), so a cut-off import is finished by saving again and no key is
 // posted twice. The card, its account and the categories are read here, never taken from the
 // client. Dates are checked against the person's own today (user_local_today, profile time zone).
@@ -29,7 +30,7 @@ const INVALID = "These lines couldn't be checked. Read the statement again and t
 const SIGNED_OUT = "Sign in again; your file is still here."
 const UNAVAILABLE = "We couldn't reach your entries. Check your connection and try again."
 const CARD_NOT_FOUND = "We couldn't find this card. It may be archived."
-const NOT_SPENDING = "Not a purchase on the card"
+const NOT_SPENDING = "Not a purchase or refund on the card"
 
 type CardRow = { account_id: string; currency: string; tracking_started_on: string; archived_at: string | null }
 
@@ -84,14 +85,16 @@ export async function saveImportLines(supabase: UserClient, input: unknown): Pro
       results.push({ key, status: "failed", reason: firstError ?? "Enter an amount above zero" })
       continue
     }
+    const refund = line.original.kind === "refund"
     const { data, error } = await supabase.rpc("record_transaction", {
-      p_type: "expense",
+      p_type: refund ? "refund" : "expense",
       p_idempotency_key: key,
       p_amount_minor: amount.minor,
       p_occurred_on: line.date,
       p_account_id: card.account_id,
       p_category_id: line.categoryId,
       p_note: line.original.description,
+      p_refund_of_id: refund && line.refundOfId ? line.refundOfId : undefined,
     })
     if (error?.code === "FC007") results.push({ key, status: "already_saved" })
     else if (error || !data) results.push({ key, status: "failed", reason: ledgerErrorMessage(error).message })

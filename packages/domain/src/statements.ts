@@ -19,8 +19,8 @@ export const MAX_STATEMENT_LINES = 1_000;
 export type StatementDirection = "debit" | "credit";
 
 /**
- * purchase, fee, interest and tax are spending on the card; payment, refund and emi are not
- * imported (a refund voids the matching purchase, card EMIs are paid from the loan row).
+ * purchase, fee, interest and tax are spending on the card; a refund is a credit saved as a refund
+ * (Sprint 9c); payment and emi are not imported (card EMIs are paid from the loan row).
  */
 export type StatementLineKind = "purchase" | "fee" | "interest" | "tax" | "emi" | "payment" | "refund";
 
@@ -256,17 +256,17 @@ export function numberOccurrences<T extends Pick<StatementLine, "date" | "amount
   });
 }
 
-export type CardLineSkipReason = "payment" | "refund" | "emi" | "before_card" | "future";
+export type CardLineSkipReason = "payment" | "emi" | "before_card" | "future";
 
 /**
- * Whether a parsed card line can be imported: spending (purchase, fee, interest, tax) dated
- * from the day the card was added up to today. Skipped lines are listed to the person, not hidden.
+ * Whether a parsed card line can be imported: spending (purchase, fee, interest, tax) or a refund,
+ * dated from the day the card was added up to today. Skipped lines are listed to the person, not hidden.
  */
 export function cardLineDecision(
   line: Pick<StatementLine, "kind" | "date">,
   { cardAddedOn, today }: { cardAddedOn: IsoDate; today: IsoDate },
 ): { importable: true } | { importable: false; reason: CardLineSkipReason } {
-  if (line.kind === "payment" || line.kind === "refund" || line.kind === "emi") return { importable: false, reason: line.kind };
+  if (line.kind === "payment" || line.kind === "emi") return { importable: false, reason: line.kind };
   if (line.date < cardAddedOn) return { importable: false, reason: "before_card" };
   if (line.date > today) return { importable: false, reason: "future" };
   return { importable: true };

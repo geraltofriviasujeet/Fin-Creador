@@ -40,6 +40,9 @@ const TYPES = [
 
 const isType = (v: string): v is EntryType => v === "expense" || v === "income" || v === "transfer";
 
+// Refunds are added on the web for now (Sprint 9c); one opened here is edited with its own type.
+const REFUND_TYPE = { value: "refund", label: "Refund" } as const;
+
 /**
  * Add transaction (bottom sheet, design-spec §6) for expenses, income and transfers, or
  * Edit (with `id`): same fields and rules as the web form, saved through the shared writer.
@@ -118,7 +121,9 @@ function TransactionForm({
   const { today } = data;
   // Archived accounts and categories can't be chosen for new entries; an edit may keep its own.
   const accounts = data.accounts.filter((a) => !a.archived || a.id === editing?.accountId || a.id === editing?.counterAccountId);
-  const categories = data.categories.filter((c) => c.kind === type && (!c.archived || c.id === editing?.categoryId));
+  // A refund takes an expense category.
+  const categoryKind = type === "refund" ? "expense" : type;
+  const categories = data.categories.filter((c) => c.kind === categoryKind && (!c.archived || c.id === editing?.categoryId));
   const usable = (id: string | null | undefined) => (id && accounts.some((a) => a.id === id) ? id : "");
 
   // One key per opened form; kept on retry after a failure, so the entry is saved once.
@@ -170,7 +175,7 @@ function TransactionForm({
     <View style={styles.gap}>
       <Segmented
         label="Transaction type"
-        options={TYPES}
+        options={type === "refund" ? [...TYPES, REFUND_TYPE] : TYPES}
         value={type}
         onChange={(next) => {
           setCategoryId(""); // categories belong to one type
@@ -231,7 +236,7 @@ function TransactionForm({
         />
       ) : (
         <SelectField
-          label={type === "income" ? "Received into" : "Paid from"}
+          label={type === "income" ? "Received into" : type === "refund" ? "Refunded to" : "Paid from"}
           value={accountId}
           options={accountOptions()}
           onChange={(id) => {

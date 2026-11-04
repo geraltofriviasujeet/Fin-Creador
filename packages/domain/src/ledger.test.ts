@@ -40,9 +40,11 @@ describe("periodTotals", () => {
     expect(totals).toEqual({
       incomeMinor: 12_800_000,
       expenseMinor: 310_000,
+      refundMinor: 0,
       netMinor: 12_490_000,
       incomeCount: 1,
       expenseCount: 2,
+      refundCount: 0,
       transferCount: 1,
       otherCurrencyCount: 0,
     });
@@ -67,6 +69,20 @@ describe("periodTotals", () => {
   it("counts other currencies separately, never converted", () => {
     const totals = periodTotals([entry({ currency: "USD", amountMinor: 5_000 }), entry({})], october, "INR");
     expect(totals).toMatchObject({ expenseMinor: 100, otherCurrencyCount: 1 });
+  });
+
+  it("takes refunds off expenses, never adding them to income", () => {
+    const totals = periodTotals(
+      [entry({ type: "income", amountMinor: 1_000, categoryId: "s" }), entry({ amountMinor: 400 }), entry({ type: "refund", amountMinor: 150 })],
+      october,
+      "INR",
+    );
+    expect(totals).toMatchObject({ incomeMinor: 1_000, expenseMinor: 250, refundMinor: 150, netMinor: 750, expenseCount: 1, refundCount: 1 });
+  });
+
+  it("spending can be below zero when refunds are more than the purchases", () => {
+    const totals = periodTotals([entry({ amountMinor: 100 }), entry({ type: "refund", amountMinor: 600 })], october, "INR");
+    expect(totals).toMatchObject({ expenseMinor: -500, netMinor: 500 });
   });
 
   it("goes negative when spending exceeds income", () => {
@@ -113,6 +129,11 @@ describe("postedActivity (mirrors the account_balances view)", () => {
       ["cash", 20_000],
     ]);
     expect(holdings.totalAvailableMinor).toBe(50_000);
+  });
+
+  it("a refund raises its account, a card's too (lowering what is owed)", () => {
+    const activity = postedActivity(accounts, [entry({ amountMinor: 300 }), entry({ type: "refund", amountMinor: 120 })]);
+    expect(activity.get("hdfc")).toEqual({ inflowMinor: 120, outflowMinor: 300 });
   });
 
   it("checks each side of a transfer against its own account's opening date", () => {

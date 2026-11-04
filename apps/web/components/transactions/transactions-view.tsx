@@ -23,7 +23,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, money, rangeText, signedAmount } from "./display"
-import { AddEntryDialog, EditEntryDialog, HistoryDialog, VoidEntryDialog } from "./entry-modals"
+import { AddEntryDialog, EditEntryDialog, HistoryDialog, RefundEntryDialog, VoidEntryDialog } from "./entry-modals"
 import type { EntryType } from "./transaction-form"
 
 export const TRANSACTIONS_HEADER = {
@@ -61,6 +61,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
 
   const [editing, setEditing] = useState<LedgerItem | null>(open?.kind === "edit" ? open.entry : null)
   const [voiding, setVoiding] = useState<LedgerItem | null>(null)
+  const [refunding, setRefunding] = useState<LedgerItem | null>(null)
   const [historyOf, setHistoryOf] = useState<LedgerItem | null>(open?.kind === "history" ? open.entry : null)
 
   // Filter controls show the new choice at once while the page reloads for it (a new
@@ -76,7 +77,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
   // Opening and closing the Add dialog only changes the URL (no reload).
   const replaceUrl = (url: string) => window.history.replaceState(null, "", url)
   const addParam = params.get("add")
-  const addType: EntryType | null = addParam === "expense" || addParam === "income" || addParam === "transfer" ? addParam : null
+  const addType: EntryType | null = addParam === "expense" || addParam === "income" || addParam === "transfer" || addParam === "refund" ? addParam : null
   const closeAdd = () => replaceUrl(href({}))
   // Deep links (?edit= / ?history=) are dropped from the URL once their dialog closes.
   const closeDeepLink = () => (params.get("edit") || params.get("history")) && replaceUrl(href({}))
@@ -107,7 +108,13 @@ export function TransactionsView({ context, filters: loaded, range, first, total
   const clearHref = `${pathname}${filtersToQuery(readFilters(new URLSearchParams(), today))}`
   // The exact number of rows, when the totals give it (they never count voided entries,
   // and count other currencies only overall).
-  const typeCount = { all: totals.incomeCount + totals.expenseCount + totals.transferCount + totals.otherCurrencyCount, income: totals.incomeCount, expense: totals.expenseCount, transfer: totals.transferCount }[loaded.type]
+  const typeCount = {
+    all: totals.incomeCount + totals.expenseCount + totals.refundCount + totals.transferCount + totals.otherCurrencyCount,
+    income: totals.incomeCount,
+    expense: totals.expenseCount,
+    transfer: totals.transferCount,
+    refund: totals.refundCount,
+  }[loaded.type]
   const exactCount = !loaded.showVoided && (loaded.type === "all" || totals.otherCurrencyCount === 0) ? typeCount : null
   const formProps = { accounts: context.accounts, cardAccounts: context.cardAccounts, categories: context.categories, today }
 
@@ -137,7 +144,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
       )}
 
       <nav aria-label="Transaction type" className="mb-4">
-        <ul className="grid grid-cols-4 gap-1 rounded-xl border border-line bg-surface p-1 md:inline-flex">
+        <ul className="grid grid-cols-5 gap-1 rounded-xl border border-line bg-surface p-1 md:inline-flex">
           {TYPE_TABS.map((t) => {
             const active = t.value === f.type
             return (
@@ -148,7 +155,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
                   scroll={false}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex h-11 items-center justify-center rounded-lg px-2 text-sm md:min-w-24 md:px-4 font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                    "flex h-11 items-center justify-center rounded-lg px-1 text-xs md:text-sm md:min-w-24 md:px-4 font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring",
                     active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
                   )}
                 >
@@ -273,7 +280,11 @@ export function TransactionsView({ context, filters: loaded, range, first, total
           <StatCard
             label={`Expenses · ${label}`}
             value={money(totals.expenseMinor, currency)}
-            footer={`${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"}`}
+            footer={
+              totals.refundCount > 0
+                ? `${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"}, less ${money(totals.refundMinor, currency)} in ${totals.refundCount === 1 ? "1 refund" : `${totals.refundCount} refunds`}`
+                : `${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"}`
+            }
           />
           <StatCard
             label="Net savings"
@@ -357,6 +368,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
                         onEdit={() => setEditing(entry)}
                         onVoid={() => setVoiding(entry)}
                         onHistory={() => setHistoryOf(entry)}
+                        onRefund={() => setRefunding(entry)}
                       />
                     ))}
                   </ul>
@@ -400,6 +412,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         }}
       />
       <VoidEntryDialog entry={voiding} lookup={lookup} onClose={() => setVoiding(null)} />
+      <RefundEntryDialog purchase={refunding} {...formProps} onClose={() => setRefunding(null)} />
       <HistoryDialog
         entry={historyOf}
         lookup={lookup}
@@ -418,16 +431,20 @@ function Row({
   onEdit,
   onVoid,
   onHistory,
+  onRefund,
 }: {
   entry: LedgerItem
   lookup: Lookup
   onEdit: () => void
   onVoid: () => void
   onHistory: () => void
+  onRefund: () => void
 }) {
   const title = entryTitle(entry, lookup)
   // The list only has current versions; a voided one can't change any more.
   const canChange = !entry.voided
+  // A live purchase can be refunded (the database refuses entries that can't take one).
+  const canRefund = canChange && entry.type === "expense"
   const edited = Boolean(entry.replacesId)
   return (
     <li className={cn("flex items-center gap-3 border-b border-line px-5 py-3 last:border-b-0 md:gap-4 md:px-6", entry.voided && "bg-canvas/60")}>
@@ -450,7 +467,7 @@ function Row({
       <p
         className={cn(
           "shrink-0 text-right text-sm font-semibold tabular-nums",
-          entry.voided ? "text-muted-foreground line-through" : entry.type === "income" ? "text-success" : "text-ink"
+          entry.voided ? "text-muted-foreground line-through" : entry.type === "income" || entry.type === "refund" ? "text-success" : "text-ink"
         )}
       >
         {signedAmount(entry)}
@@ -466,6 +483,11 @@ function Row({
               Void
             </Button>
           </>
+        )}
+        {canRefund && (
+          <Button variant="ghost" size="sm" onClick={onRefund} aria-label={`Refund ${title}`}>
+            Refund
+          </Button>
         )}
         {edited && (
           <Button variant="ghost" size="sm" onClick={onHistory} aria-label={`History of ${title}`}>
@@ -490,6 +512,7 @@ function Row({
                     <MenuItem onClick={onVoid}>Void</MenuItem>
                   </>
                 )}
+                {canRefund && <MenuItem onClick={onRefund}>Refund this</MenuItem>}
                 {edited && <MenuItem onClick={onHistory}>History</MenuItem>}
               </Menu.Popup>
             </Menu.Positioner>

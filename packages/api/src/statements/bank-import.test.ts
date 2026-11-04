@@ -37,6 +37,7 @@ function fakeClient(s: { transactions?: Row[]; payments?: Row[]; balance?: numbe
       eq: (col: string, v: unknown) => ((rows = rows.filter((r) => r[col] === v)), builder),
       is: (col: string, v: unknown) => ((rows = rows.filter((r) => (r[col] ?? null) === v)), builder),
       in: (col: string, vs: unknown[]) => ((rows = rows.filter((r) => vs.includes(r[col]))), builder),
+      not: (col: string, _op: "is", v: unknown) => ((rows = rows.filter((r) => (r[col] ?? null) !== v)), builder),
       or: (filter: string) => {
         const ors = filter.split(",").map((f) => f.split(".eq."))
         rows = rows.filter((r) => ors.some(([col, v]) => r[col!] === v))
@@ -209,7 +210,7 @@ describe("loadBankImportMatches", () => {
       transactions: [
         // From B's import: B -> A on the 20th (a credit here).
         { type: "transfer", account_id: B, counter_account_id: A, occurred_on: "2026-10-20", amount_minor: 500_000, idempotency_key: "k-b", liability_payment_id: null, voided_at: null },
-        { type: "expense", account_id: A, counter_account_id: null, occurred_on: "2026-10-21", amount_minor: 178_400, idempotency_key: "k-hand", liability_payment_id: null, voided_at: null },
+        { id: "t-hand", type: "expense", account_id: A, counter_account_id: null, occurred_on: "2026-10-21", amount_minor: 178_400, idempotency_key: "k-hand", liability_payment_id: null, voided_at: null },
         // This statement's card payment: its ledger row has its own key, the payment has ours.
         { type: "transfer", account_id: A, counter_account_id: "card-acct", occurred_on: "2026-10-22", amount_minor: 233_400, idempotency_key: "k-random", liability_payment_id: "p1", voided_at: null },
         { type: "expense", account_id: B, counter_account_id: null, occurred_on: "2026-10-21", amount_minor: 1, idempotency_key: "k-other", liability_payment_id: null, voided_at: null },
@@ -225,6 +226,8 @@ describe("loadBankImportMatches", () => {
         entries: [{ date: "2026-10-21", amountMinor: 178_400, direction: "debit" }],
         transfers: [{ date: "2026-10-20", amountMinor: 500_000, direction: "credit" }],
         bookBalanceMinor: 1_234_500,
+        // The purchase from A can take a refund from this statement.
+        refundCandidates: [{ id: "t-hand", date: "2026-10-21", amountMinor: 178_400, leftMinor: 178_400 }],
       },
     })
   })

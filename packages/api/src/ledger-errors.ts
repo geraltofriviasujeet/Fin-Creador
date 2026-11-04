@@ -1,6 +1,6 @@
 // Maps database errors from accounts, categories, entries and recurring items (supabase/
 // migrations 20261022150000, 20261023120000, 20261024120000, 20261026180000, 20261027120000,
-// 20261028180000) to messages for web and mobile. Raw database messages are never shown.
+// 20261028180000, 20261104120000) to messages for web and mobile. Raw database messages are never shown.
 
 export type LedgerErrorLike = { code?: string | undefined; message?: string | undefined } | null | undefined
 
@@ -45,7 +45,11 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC031: { message: "The start date can't be in the future.", field: "startDate" },
   // A card purchase (or a recurring item on a card) dated before the card was added (8b).
   FC036: { message: "That's before you added this card: it's in the amount owed you entered then." },
-  FC049: { message: "Only purchases (expenses) can be recorded on a card.", field: "accountId" },
+  FC049: { message: "Only purchases and refunds can be recorded on a card.", field: "accountId" },
+  // Refunds (9c). FC055 (more than is left to refund) needs the currency: see the writers.
+  FC055: { message: "Refunds can't add up to more than the purchase.", field: "amount" },
+  FC056: { message: "That entry can't take a refund. Save the refund without linking it." },
+  FC057: { message: "A refund can't be dated before its purchase.", field: "occurredOn" },
 }
 
 /** `dateField` names the date input on the current form (occurredOn or openingBalanceDate). */

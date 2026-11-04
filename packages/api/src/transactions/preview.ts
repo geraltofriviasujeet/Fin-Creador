@@ -12,7 +12,7 @@ export function balancesWithout(accounts: readonly LedgerAccount[], editing: Led
     const a = accounts.find((x) => x.id === accountId)
     if (a && countsTowardBalance(editing.occurredOn, a.openingBalanceDate)) balances.set(a.id, addMinor(balances.get(a.id) ?? 0, delta))
   }
-  undo(editing.accountId, editing.type === "income" ? -editing.amountMinor : editing.amountMinor)
+  undo(editing.accountId, editing.type === "income" || editing.type === "refund" ? -editing.amountMinor : editing.amountMinor)
   if (editing.type === "transfer") undo(editing.counterAccountId, -editing.amountMinor)
   return balances
 }
@@ -44,7 +44,7 @@ export function previewDraft({
   balances: Map<string, number>
 }): DraftPreview {
   const sides = [
-    { a: account, delta: amountMinor === null ? 0 : type === "income" ? amountMinor : -amountMinor },
+    { a: account, delta: amountMinor === null ? 0 : type === "income" || type === "refund" ? amountMinor : -amountMinor },
     { a: type === "transfer" ? counter : undefined, delta: amountMinor ?? 0 },
   ]
   const moves: BalanceMove[] = []

@@ -1331,6 +1331,7 @@ export type Database = {
           occurrence_date: string | null
           payment_mode: string | null
           recurring_rule_id: string | null
+          refund_of_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -1354,6 +1355,7 @@ export type Database = {
           occurrence_date?: string | null
           payment_mode?: string | null
           recurring_rule_id?: string | null
+          refund_of_id?: string | null
           replaces_id?: string | null
           type: string
           user_id?: string
@@ -1377,6 +1379,7 @@ export type Database = {
           occurrence_date?: string | null
           payment_mode?: string | null
           recurring_rule_id?: string | null
+          refund_of_id?: string | null
           replaces_id?: string | null
           type?: string
           user_id?: string
@@ -1446,6 +1449,13 @@ export type Database = {
             columns: ["recurring_rule_id", "user_id"]
             isOneToOne: false
             referencedRelation: "recurring_rules"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "transactions_refund_of_owned"
+            columns: ["refund_of_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id", "user_id"]
           },
           {
@@ -1647,6 +1657,7 @@ export type Database = {
           occurrence_date: string | null
           payment_mode: string | null
           recurring_rule_id: string | null
+          refund_of_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -1998,6 +2009,7 @@ export type Database = {
           occurrence_date: string | null
           payment_mode: string | null
           recurring_rule_id: string | null
+          refund_of_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -2134,6 +2146,7 @@ export type Database = {
           occurrence_date: string | null
           payment_mode: string | null
           recurring_rule_id: string | null
+          refund_of_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -2280,6 +2293,7 @@ export type Database = {
           occurrence_date: string | null
           payment_mode: string | null
           recurring_rule_id: string | null
+          refund_of_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -2304,6 +2318,7 @@ export type Database = {
           p_note?: string
           p_occurred_on: string
           p_payment_mode?: string
+          p_refund_of_id?: string
           p_type: string
         }
         Returns: {
@@ -2322,6 +2337,7 @@ export type Database = {
           occurrence_date: string | null
           payment_mode: string | null
           recurring_rule_id: string | null
+          refund_of_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -2348,6 +2364,10 @@ export type Database = {
       recurring_month_match: {
         Args: { p_date: string; p_start: string; p_step: number }
         Returns: boolean
+      }
+      refund_check_link: {
+        Args: { p_refund: Database["public"]["Tables"]["transactions"]["Row"] }
+        Returns: undefined
       }
       repay_borrowing: {
         Args: {
@@ -2671,6 +2691,10 @@ export type Database = {
         Args: { p_statutory_due_id: string }
         Returns: undefined
       }
+      system_category_id: {
+        Args: { p_key: string; p_user_id: string }
+        Returns: string
+      }
       transaction_summary: {
         Args: {
           p_account_id?: string
@@ -2686,6 +2710,8 @@ export type Database = {
           expense_minor: number
           income_count: number
           income_minor: number
+          refund_count: number
+          refund_minor: number
           transfer_count: number
         }[]
       }
@@ -2714,6 +2740,7 @@ export type Database = {
           occurrence_date: string | null
           payment_mode: string | null
           recurring_rule_id: string | null
+          refund_of_id: string | null
           replaces_id: string | null
           type: string
           user_id: string
@@ -3022,6 +3049,7 @@ export type Database = {
           occurrence_date: string | null
           payment_mode: string | null
           recurring_rule_id: string | null
+          refund_of_id: string | null
           replaces_id: string | null
           type: string
           user_id: string

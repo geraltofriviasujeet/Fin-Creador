@@ -29,6 +29,17 @@ describe.each([true, false])("readStatementPdf: PNB text PDF (network column: %s
   })
 })
 
+it("a PNB statement with a refund: the credit is a refund line and the statement still checks itself", async () => {
+  const read = await readStatementPdf(lib, syntheticPdf(pnbPages(false, { refundMinor: 178_400 })))
+  expect(read.status).toBe("ok")
+  if (read.status !== "ok") return
+  const parsed = parseCardStatement(read.text, "Punjab National Bank")
+  expect(parsed.summary.totalMinor).toBe(55_000)
+  expect(parsed.lines.at(-1)).toMatchObject({ date: "2026-10-13", amountMinor: 178_400, direction: "credit", kind: "refund", description: "REFUND FRESH BASKET STORES" })
+  expect(parsed.issues).toEqual([])
+  expect(statementNeedsCheck(parsed)).toBe(false)
+})
+
 describe.each([
   ["details on the baseline, second line below", { date: 0, network: 2, line1: 0, line2: -10 }],
   ["date centred on two lines of details", { date: 0, network: -1.5, line1: 5, line2: -5 }],

@@ -22,12 +22,12 @@ export type ImportMatchesInput = z.infer<typeof importMatchesInputSchema>
 /** Lines per save call: the client sends a statement in chunks, each line saved on its own. */
 export const IMPORT_SAVE_CHUNK = 10
 
-/** A line exactly as the parser read it (its request key is derived from these values only). */
+/** A line exactly as the parser read it (its request key is derived from these values only): spending (debit) or a refund (credit). */
 const parsedLineSchema = z.object({
   date: isoDate,
   amountMinor: z.number().int().positive().max(MAX_AMOUNT_MINOR),
-  direction: z.literal("debit"),
-  kind: z.enum(["purchase", "fee", "interest", "tax"]),
+  direction: z.enum(["debit", "credit"]),
+  kind: z.enum(["purchase", "fee", "interest", "tax", "refund"]),
   description: z
     .string()
     .min(1)
@@ -35,9 +35,11 @@ const parsedLineSchema = z.object({
     .refine((v) => v === v.trim() && !hasDigitRun(v, 4), "No card or account numbers"),
   foreignCurrency: z.string().regex(/^[A-Z]{3}$/).nullable(),
   occurrence: z.number().int().min(0).max(MAX_STATEMENT_LINES),
-})
+}).refine((l) => (l.kind === "refund") === (l.direction === "credit"), "A refund is a credit; spending is a debit")
 
-/** Ticked lines to save: the line as read, and the date, amount and category as reviewed. */
+const optionalId = z.union([z.uuid(), z.literal("")])
+
+/** Ticked lines to save: the line as read, and the date, amount, category and refund link as reviewed. */
 export const importSaveInputSchema = z.object({
   cardId: z.uuid(),
   /** The statement date as read ("" when none was read): part of every line's key. */
@@ -49,6 +51,8 @@ export const importSaveInputSchema = z.object({
         date: z.string().max(10),
         amount: z.string().max(40),
         categoryId: z.uuid(),
+        /** Refunds only: the purchase it reverses, or "". */
+        refundOfId: optionalId.default(""),
       }),
     )
     .min(1)
@@ -91,8 +95,6 @@ const bankLineSchema = z.object({
   occurrence: z.number().int().min(0).max(MAX_BANK_STATEMENT_LINES),
 })
 
-const optionalId = z.union([z.uuid(), z.literal("")])
-
 /** Ticked bank lines to save: the line as read, and the date, amount, type and its target as reviewed. */
 export const bankImportSaveInputSchema = z.object({
   accountId: z.uuid(),
@@ -102,10 +104,12 @@ export const bankImportSaveInputSchema = z.object({
         original: bankLineSchema,
         date: z.string().max(10),
         amount: z.string().max(40),
-        type: z.enum(["expense", "income", "transfer", "card_payment"]),
+        type: z.enum(["expense", "income", "transfer", "card_payment", "refund"]),
         categoryId: optionalId,
         otherAccountId: optionalId,
         cardId: optionalId,
+        /** Refunds only: the purchase it reverses, or "". */
+        refundOfId: optionalId.default(""),
       }),
     )
     .min(1)
