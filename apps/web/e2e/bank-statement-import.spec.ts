@@ -87,7 +87,7 @@ test("label each line: expenses ticked, credits need a choice, transfer and card
   await tickOf(page, "SALARY").check()
 
   // The RAVI KUMAR credit: a refund can't be saved yet; it says so and has no tick.
-  const raviCredit = lines(page).filter({ hasText: "RAVI KUMAR" }).filter({ hasText: "Cr" })
+  const raviCredit = lines(page).filter({ hasText: "RAVI KUMAR" }).filter({ hasText: "₹1,200 Cr" })
   await raviCredit.getByRole("combobox", { name: /^What is / }).selectOption({ label: "Refund" })
   await expect(raviCredit).toContainText("Refunds can't be saved yet")
   await expect(raviCredit.getByRole("checkbox")).toHaveCount(0)
@@ -101,7 +101,7 @@ test("label each line: expenses ticked, credits need a choice, transfer and card
   await tickOf(page, "CARD PAYMENT").check()
 
   // Labelling one RAVI KUMAR debit offers the same on the other: unticked until the person ticks it.
-  const raviDebits = lines(page).filter({ hasText: "RAVI KUMAR" }).filter({ hasText: "Dr" })
+  const raviDebits = lines(page).filter({ hasText: "RAVI KUMAR" }).filter({ hasText: "₹649 Dr" })
   await raviDebits.nth(0).getByRole("combobox", { name: /^Category for / }).selectOption({ label: "Shopping" })
   await expect(raviDebits.nth(1).getByRole("combobox", { name: /^Category for / })).toHaveValue(/.+/)
   await expect(raviDebits.nth(1)).toContainText("Tick it to use it")
