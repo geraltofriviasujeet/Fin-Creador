@@ -22,7 +22,7 @@ import {
   offerPayeeLabel,
   setBankLineType,
 } from "@fin-creador/api"
-import { type BankLineSkipReason, parsePnbSavingsStatementText } from "@fin-creador/domain"
+import { type BankLineSkipReason, parseBankStatementCsv, parsePnbSavingsStatementText } from "@fin-creador/domain"
 import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { bankImportMatchesAction, saveBankImportLinesAction } from "@/app/(app)/income/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
@@ -45,7 +45,7 @@ import {
   useStatementReader,
 } from "./statement-shared"
 
-// Bank account statement import (Sprint 9b): read the PDF in the browser (PNB savings layout),
+// Bank account statement import (Sprint 9b): read the PDF (PNB savings layout) or a CSV in the browser,
 // then review it with the parts shared with card import. Each line gets a type: a debit starts
 // ticked as an expense; a credit starts unticked until the person says what it is. Transfers post
 // as transfers, card payments through the card payment path. Labelling a payee offers the same
@@ -76,6 +76,7 @@ export function BankStatementImport({ account, today, options }: { account: Bank
     onText: (): Promise<void> => review(),
     cannotRead: () => ({ step: "message", text: BANK_UNREADABLE, pnbOffer: false }),
     wrongPassword: PDF_READ_MESSAGES.wrong_password,
+    csv: true,
   })
   const { phase, setPhase, attemptRef } = reader
 
@@ -83,7 +84,7 @@ export function BankStatementImport({ account, today, options }: { account: Bank
     const read = reader.readRef.current
     if (read === null) return
     const id = ++attemptRef.current
-    const parse = parsePnbSavingsStatementText(read.text)
+    const parse = read.format === "csv" ? parseBankStatementCsv(read.text) : parsePnbSavingsStatementText(read.text)
     if (parse.lines.length === 0 && parse.issues.length === 0) return void setPhase({ step: "message", text: BANK_UNREADABLE, pnbOffer: false })
     setPhase({ step: "matching" })
     const result = await bankImportMatchesAction({
@@ -99,7 +100,7 @@ export function BankStatementImport({ account, today, options }: { account: Bank
 
   return (
     <div className="grid gap-4">
-      <StatementFileSection label={`Choose your ${account.institution} statement (PDF)`} reader={reader} onRetry={() => void review()} />
+      <StatementFileSection label={`Choose your ${account.institution} statement (PDF or CSV)`} reader={reader} onRetry={() => void review()} csv />
       {phase.step === "review" && (
         <BankReviewSection
           key={phase.review.lines.map((l) => l.key).join()}

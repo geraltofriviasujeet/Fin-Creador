@@ -27,8 +27,10 @@ export type FilePhase<R> =
   | { step: "message"; text: string; pnbOffer: boolean }
   | ({ step: "review" } & R)
 
-/** What a successful read gives the import: the statement's text and where its rows are. */
-export type StatementText = { text: string; pageRowCounts: number[]; rowLayouts: string[] }
+/** What a successful read gives the import: the statement's text, its format, and (PDF) where its rows are. */
+export type StatementText = { text: string; format: "pdf" | "csv"; pageRowCounts?: number[]; rowLayouts?: string[] }
+
+const isCsv = (file: File) => /\.csv$/i.test(file.name) || file.type === "text/csv"
 
 /**
  * The reading half of an import. `onText` turns the text into a review (or a message); it gets the
@@ -38,10 +40,13 @@ export function useStatementReader<R>({
   onText,
   cannotRead,
   wrongPassword,
+  csv = false,
 }: {
   onText: (read: StatementText) => Promise<void>
   cannotRead: () => FilePhase<R>
   wrongPassword: string
+  /** Also take CSV files (bank statements): read as text on this device, no password. */
+  csv?: boolean
 }) {
   const [phase, setPhase] = useState<FilePhase<R>>({ step: "choose" })
   const [password, setPassword] = useState("")
@@ -59,7 +64,7 @@ export function useStatementReader<R>({
       const result = await readStatementPdf(lib, new Uint8Array(await pdf.arrayBuffer()), pass)
       if (id !== attempt.current) return
       if (result.status === "ok") {
-        read.current = { text: result.text, pageRowCounts: result.pageRowCounts, rowLayouts: result.rowLayouts }
+        read.current = { text: result.text, format: "pdf", pageRowCounts: result.pageRowCounts, rowLayouts: result.rowLayouts }
         await onText(read.current)
       } else if (result.status === "needs_password") setPhase({ step: "password" })
       else if (result.status === "wrong_password") setPhase({ step: "password", message: wrongPassword })
@@ -69,6 +74,19 @@ export function useStatementReader<R>({
       if (id === attempt.current) setPhase(cannotRead())
     } finally {
       setPassword("")
+    }
+  }
+
+  const openCsv = async (picked: File) => {
+    const id = ++attempt.current
+    setPhase({ step: "reading" })
+    try {
+      const text = await picked.text()
+      if (id !== attempt.current) return
+      read.current = { text, format: "csv" }
+      await onText(read.current)
+    } catch {
+      if (id === attempt.current) setPhase(cannotRead())
     }
   }
 
@@ -83,10 +101,12 @@ export function useStatementReader<R>({
     setPassword("")
     setPhase({ step: "choose" })
     if (!picked) return
-    if (!/\.pdf$/i.test(picked.name) && picked.type !== "application/pdf") return setPhase({ step: "choose", message: "Choose a PDF file." })
+    const asCsv = csv && isCsv(picked)
+    if (!asCsv && !/\.pdf$/i.test(picked.name) && picked.type !== "application/pdf")
+      return setPhase({ step: "choose", message: csv ? "Choose a PDF or CSV file." : "Choose a PDF file." })
     if (picked.size > MAX_STATEMENT_PDF_BYTES) return setPhase({ step: "choose", message: PDF_READ_MESSAGES.too_large })
     file.current = picked
-    void open(picked)
+    void (asCsv ? openCsv(picked) : open(picked))
   }
 
   const openWithPassword = (e: React.FormEvent) => {
@@ -103,17 +123,20 @@ export function StatementFileSection<R>({
   reader,
   onRetry,
   messageExtra,
+  csv = false,
 }: {
   label: string
   reader: ReturnType<typeof useStatementReader<R>>
   onRetry: () => void
   messageExtra?: React.ReactNode
+  /** The picker also takes CSV files. */
+  csv?: boolean
 }) {
   const { phase, password, setPassword, choose, openWithPassword, busy } = reader
   return (
     <section aria-labelledby="pdf-heading" className="grid gap-3 rounded-2xl border border-line bg-surface p-4 md:p-5">
       <h2 id="pdf-heading" className="text-base font-semibold">
-        Statement PDF
+        {csv ? "Statement file" : "Statement PDF"}
       </h2>
       <div className="grid gap-1.5">
         <label htmlFor="statement-pdf" className="text-sm font-semibold text-ink">
@@ -122,15 +145,15 @@ export function StatementFileSection<R>({
         <input
           id="statement-pdf"
           type="file"
-          accept="application/pdf,.pdf"
+          accept={csv ? "application/pdf,.pdf,text/csv,.csv" : "application/pdf,.pdf"}
           aria-describedby="statement-pdf-hint"
           onChange={choose}
           disabled={busy}
           className="text-sm file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:font-semibold"
         />
         <p id="statement-pdf-hint" className="text-xs text-muted-foreground">
-          Read on this device only: the file and any password are never uploaded or saved. Text PDFs from your bank, up to{" "}
-          {MAX_STATEMENT_PDF_BYTES / 1024 / 1024} MB.
+          Read on this device only: the file and any password are never uploaded or saved. {csv ? "Text PDFs or CSV files" : "Text PDFs"} from your
+          bank, up to {MAX_STATEMENT_PDF_BYTES / 1024 / 1024} MB.
         </p>
       </div>
       {phase.step === "choose" && phase.message && <FormMessage tone="error">{phase.message}</FormMessage>}

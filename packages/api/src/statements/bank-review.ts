@@ -48,7 +48,7 @@ export const BANK_TYPE_LABELS: Record<BankStatementLine["direction"], Record<Ban
 
 /** A file with no column header or lines the bank reader can use. */
 export const BANK_UNREADABLE =
-  "We couldn't read this file as a bank statement. Right now we read Punjab National Bank savings account statements (the text PDF from the bank). Your file was read on this device only and wasn't saved or uploaded. You can still add entries by hand."
+  "We couldn't read this file as a bank statement. Right now we read Punjab National Bank savings account statements (the text PDF from the bank) and CSV files with a header row naming the date, description, amount (with a DR / CR column, or debit and credit columns) and balance. Your file was read on this device only and wasn't saved or uploaded. You can still add entries by hand."
 
 export const REFUND_NOTE = "Refunds can't be saved yet: this line is skipped. To undo the purchase, void or edit it on Transactions."
 

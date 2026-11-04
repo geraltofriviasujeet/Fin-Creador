@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_BANK_STATEMENT_LINES,
+  bankCsvColumns,
   bankLineDecision,
   bankStatementLineKey,
   bankStatementNeedsCheck,
+  csvRows,
   isBankHeaderRow,
+  parseBankStatementCsv,
   parsePnbSavingsStatementText,
 } from "./statement-bank";
 
@@ -104,5 +107,60 @@ describe("bank line decisions and keys", () => {
     expect(bankStatementLineKey("acct-1", line!)).toBe(key);
     expect(bankStatementLineKey("acct-2", line!)).not.toBe(key);
     expect(bankStatementLineKey("acct-1", { ...line!, balanceMinor: line!.balanceMinor + 1 })).not.toBe(key);
+  });
+});
+
+// Invented CSV exports (never a real statement).
+const CSV_TYPE = [
+  "Account Statement,,,,,,",
+  "Account No,0000111122223333,,,,,",
+  "Customer Name,EXAMPLE PERSON,,,,,",
+  ",,,,,,",
+  "Txn Date,Value Date,Cheque No,Description,Amount,Dr/Cr,Balance",
+  '28/10/2026,28/10/2026,,"UPI/DR/412345678904/RAVI KUMAR/SBIN/ravi9876543210@okaxis",649.00,DR,"65,384.00"',
+  '27/10/2026,27/10/2026,000123,"CHEQUE PAID, RENT",2334.00,DR,"66,033.00"',
+  '26/10/2026,26/10/2026,,"NEFT/SALARY OCT/EXAMPLE EMPLOYER",1200.00,CR,"68,367.00"',
+  ",,,,,,",
+  "Opening Balance,,,,,,\"67,167.00\"",
+  "Closing Balance,,,,,,\"65,384.00\"",
+].join("\r\n");
+
+describe("parseBankStatementCsv", () => {
+  it("finds the header by name, keeps nothing above it nor the value date or cheque number, reads quoted cells", () => {
+    const parsed = parseBankStatementCsv(CSV_TYPE);
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.lines.map((l) => [l.date, l.amountMinor, l.direction, l.balanceMinor, l.description])).toEqual([
+      ["2026-10-28", 64_900, "debit", 6_538_400, "RAVI KUMAR"],
+      ["2026-10-27", 233_400, "debit", 6_603_300, "CHEQUE PAID, RENT"],
+      ["2026-10-26", 120_000, "credit", 6_836_700, "NEFT/SALARY OCT/EXAMPLE EMPLOYER"],
+    ]);
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["balance_chain", "ok"], ["opening", "ok"], ["closing", "ok"]]);
+    const kept = JSON.stringify(parsed);
+    for (const secret of ["0000111122223333", "EXAMPLE PERSON", "000123", "412345678", "9876543210", "okaxis"]) expect(kept).not.toContain(secret);
+  });
+
+  it("reads separate debit and credit columns, oldest first, and checks the chain that way", () => {
+    const csv = [
+      "Date,Narration,Chq./Ref.No.,Withdrawal Amt.,Deposit Amt.,Closing Balance",
+      "22/10/2026,SALARY,REF1,,50000.00,74600.00",
+      "23/10/2026,FRESH BASKET,REF2,1784.00,,72816.00",
+      "24/10/2026,ATM CASH,REF3,2000.00,0.00,70816.00",
+    ].join("\n");
+    const parsed = parseBankStatementCsv(csv);
+    expect(parsed.lines.map((l) => [l.amountMinor, l.direction])).toEqual([[5_000_000, "credit"], [178_400, "debit"], [200_000, "debit"]]);
+    expect(parsed.checks[0]!.status).toBe("ok");
+    const broken = parseBankStatementCsv(csv.replace("70816.00", "70800.00"));
+    expect(broken.checks[0]).toMatchObject({ status: "mismatch", lines: [2] });
+  });
+
+  it("lists rows it can't read, and reads nothing without a header", () => {
+    const parsed = parseBankStatementCsv(["Date,Remarks,Amount,Type,Balance", "22/10/2026,GIFT,TWELVE,CR,100.00", "32/10/2026,X,1.00,DR,99.00"].join("\n"));
+    expect(parsed.issues.map((i) => [i.line, i.reason])).toEqual([[2, "bad_amount"], [3, "bad_date"]]);
+    expect(parseBankStatementCsv("a,b,c\n1,2,3").lines).toEqual([]);
+    expect(bankCsvColumns(["Date", "Remarks", "Amount", "Balance"])).toBeNull();
+  });
+
+  it("splits CSV by RFC 4180", () => {
+    expect(csvRows('a,"b, c","d ""e"""\r\n"line\nbreak",x')).toEqual([["a", "b, c", 'd "e"'], ["line break", "x"]]);
   });
 });

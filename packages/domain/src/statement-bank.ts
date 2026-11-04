@@ -216,3 +216,146 @@ export const BANK_STATEMENT_LINE_KEY_NAMESPACE = "5f0c3a2e-8b1d-4c7a-9e64-2d7b9a
 
 export const bankStatementLineKey = (accountId: string, line: BankStatementLine): string =>
   uuidV5(bankStatementLineKeySource(accountId, line), BANK_STATEMENT_LINE_KEY_NAMESPACE);
+
+// ---------------------------------------------------------------------------------------------
+// CSV (exact values, preferred over PDF). The column header row is the first row naming a date,
+// a description (Remarks / Narration / Particulars / Description / Details), a balance, and either
+// an amount with a type (DR / CR) column or separate debit and credit columns. Columns are found by
+// name; every other column (instrument, cheque or reference numbers, value date) is dropped, and
+// nothing above the header is kept. Rows may be in either date order.
+
+/** Splits CSV text into rows of cells (RFC 4180: quoted cells, "" inside quotes, commas and line breaks in quotes). */
+export function csvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"' && cell.trim() === "") {
+      cell = "";
+      quoted = true;
+    } else if (ch === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else cell += ch;
+  }
+  if (cell !== "" || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows.map((r) => r.map((c) => c.replace(/\s+/g, " ").trim()));
+}
+
+type CsvColumns = { date: number; description: number; balance: number } & ({ amount: number; type: number } | { debit: number; credit: number });
+
+const findColumn = (header: readonly string[], ...patterns: RegExp[]) => {
+  for (const pattern of patterns) {
+    const i = header.findIndex((h) => pattern.test(h));
+    if (i !== -1) return i;
+  }
+  return -1;
+};
+
+/** The columns of a bank CSV header row; null when it isn't one. */
+export function bankCsvColumns(header: readonly string[]): CsvColumns | null {
+  const h = header.map((c) => c.toLowerCase());
+  const date = findColumn(h, /^(txn|transaction|tran)\.? ?date$/, /^date$/, /^(posting|post) date$/);
+  const description = findColumn(h, /^(remarks?|narration|particulars|description|details|transaction (remarks|details|description))$/);
+  const balance = findColumn(h, /^(closing |running |available )?balance( \(.*\))?$/);
+  if (date === -1 || description === -1 || balance === -1) return null;
+  const amount = findColumn(h, /^(txn |transaction )?amount( \(.*\))?$/);
+  const type = findColumn(h, /^(type|dr ?\/ ?cr|cr ?\/ ?dr|debit ?\/ ?credit)$/);
+  if (amount !== -1 && type !== -1) return { date, description, balance, amount, type };
+  const debit = findColumn(h, /^(debit|withdrawals?|withdrawal amt\.?|debit amount)( \(.*\))?$/);
+  const credit = findColumn(h, /^(credit|deposits?|deposit amt\.?|credit amount)( \(.*\))?$/);
+  if (debit !== -1 && credit !== -1) return { date, description, balance, debit, credit };
+  return null;
+}
+
+export function parseBankStatementCsv(text: string): BankStatementParse {
+  const empty: BankStatementSummary = { from: null, to: null, openingMinor: null, closingMinor: null };
+  if (text.length > MAX_STATEMENT_TEXT_CHARS) return { summary: empty, lines: [], issues: [{ line: 0, reason: "too_long" }], checks: [] };
+  const rows = csvRows(text.replace(/^﻿/, ""));
+  let start = -1;
+  let columns: CsvColumns | null = null;
+  for (const [i, row] of rows.entries()) {
+    columns = bankCsvColumns(row);
+    if (columns) {
+      start = i;
+      break;
+    }
+  }
+  if (!columns) return { summary: empty, lines: [], issues: [], checks: [] };
+
+  const issues: StatementIssue[] = [];
+  const raw: Omit<BankStatementLine, "occurrence">[] = [];
+  let openingMinor: number | null = null;
+  let closingMinor: number | null = null;
+  for (let index = start + 1; index < rows.length; index++) {
+    const cells = rows[index]!;
+    const lineNumber = index + 1;
+    const joined = cells.filter((c) => c !== "").join(" ");
+    if (joined === "") continue;
+    const summary = SUMMARY.exec(joined);
+    if (summary) {
+      const value = parseStatementBalance(summary[2]!.replace(/^(?:₹|Rs\.?|INR)\s*/i, ""));
+      if (summary[1]!.toLowerCase() === "opening") openingMinor = value;
+      else closingMinor = value;
+      continue;
+    }
+    const dateText = cells[columns.date] ?? "";
+    if (!STARTS_WITH_DATE.test(dateText)) continue; // totals, notes, footers
+    const date = parseStatementDate(dateText);
+    let amount: { minor: number; direction: StatementDirection | null } | null;
+    if ("amount" in columns) amount = parseStatementAmountWithType(cells[columns.amount] ?? "", cells[columns.type] ?? "");
+    else {
+      const debit = (cells[columns.debit] ?? "").replace(/^-$/, "");
+      const credit = (cells[columns.credit] ?? "").replace(/^-$/, "");
+      const zero = (v: string) => v === "" || /^0+(\.0+)?$/.test(v);
+      amount =
+        !zero(debit) && zero(credit)
+          ? parseStatementAmountWithType(debit, "DR")
+          : zero(debit) && !zero(credit)
+            ? parseStatementAmountWithType(credit, "CR")
+            : null;
+    }
+    const balance = parseStatementBalance(cells[columns.balance] ?? "");
+    if (!date || !amount || amount.direction === null || balance === null) {
+      issues.push({ line: lineNumber, reason: date ? "bad_amount" : "bad_date", shape: statementRowShape(joined) });
+      continue;
+    }
+    if (raw.length >= MAX_BANK_STATEMENT_LINES) {
+      issues.push({ line: lineNumber, reason: "too_many_lines", shape: statementRowShape(joined) });
+      continue;
+    }
+    raw.push({
+      date,
+      amountMinor: amount.minor,
+      direction: amount.direction,
+      balanceMinor: balance,
+      description: cleanStatementDescription(cells[columns.description] ?? "").description,
+    });
+  }
+  const lines = numberOccurrences(raw);
+  const order = bankLineOrder(lines);
+  const dates = lines.map((l) => l.date).sort();
+  return {
+    summary: { from: dates[0] ?? null, to: dates[dates.length - 1] ?? null, openingMinor, closingMinor },
+    lines,
+    issues,
+    checks: bankChecks(lines, order, openingMinor, closingMinor),
+  };
+}

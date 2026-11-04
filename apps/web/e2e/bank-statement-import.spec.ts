@@ -13,7 +13,7 @@ const todayInIndia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ko
 const PNB = "Punjab National Bank ··4821"
 const SBI = "State Bank of India ··1111"
 
-const chooser = (page: Page) => page.getByLabel(/statement \(PDF\)$/)
+const chooser = (page: Page) => page.getByLabel(/statement \(PDF or CSV\)$/)
 const review = (page: Page) => page.getByRole("region", { name: "Review the statement" })
 const lines = (page: Page) => review(page).getByRole("list", { name: "Statement lines" }).getByRole("listitem")
 // A line by the start of its text (its description): option labels such as "Credit card payment" would match anywhere.
@@ -65,7 +65,7 @@ test("label each line: expenses ticked, credits need a choice, transfer and card
   await setUp(page, "Asha Rao")
   await addCard(page)
   await openImport(page, PNB)
-  await expect(page.getByText("Choose your Punjab National Bank statement (PDF)", { exact: true })).toBeVisible()
+  await expect(page.getByText("Choose your Punjab National Bank statement (PDF or CSV)", { exact: true })).toBeVisible()
   await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbSavingsPages({ rows: rowsEndingToday() }))))
   await expect(lines(page)).toHaveCount(7)
 
@@ -190,4 +190,38 @@ test("a broken balance chain needs a check and unticks nothing; a year of lines 
   await save.click()
   await dialog(page, "Save these lines?").getByRole("button", { name: "Save 260 lines" }).click()
   await expect(review(page)).toContainText("260 lines saved.", { timeout: 200_000 })
+})
+
+test("a CSV export: columns found by name, read and saved; the same file again is Already imported; a CSV that isn't a statement", async ({ page }) => {
+  const today = todayInIndia()
+  const d = (n: number) => isoDaysBefore(today, n).split("-").reverse().join("/")
+  await setUp(page, "Dev Mehta")
+  const csv = [
+    "Account No,0000111122223333,,,,",
+    "Customer Name,EXAMPLE PERSON,,,,",
+    "Date,Narration,Chq./Ref.No.,Withdrawal Amt.,Deposit Amt.,Closing Balance",
+    `${d(3)},FRESH BASKET,REF000111,1784.00,,22816.00`,
+    `${d(2)},"UPI/DR/412345678902/RAVI KUMAR/SBIN/ravi9876543210@okaxis",REF000112,649.00,,22167.00`,
+    `${d(1)},INTEREST CREDIT,REF000113,,33.00,22200.00`,
+  ].join("\r\n")
+  const file = (name: string, text: string) => ({ name, mimeType: "text/csv", buffer: Buffer.from(text) })
+
+  await openImport(page, PNB)
+  await chooser(page).setInputFiles(file("statement.csv", csv))
+  await expect(lines(page)).toHaveCount(3)
+  await expect(review(page)).not.toContainText("Check this statement")
+  for (const secret of ["EXAMPLE PERSON", "0000111122223333", "REF000111", "9876543210"]) await expect(page.getByText(secret)).toHaveCount(0)
+  await whatIs(page, "INTEREST CREDIT").selectOption({ label: "Income" })
+  await lineAt(page, "INTEREST CREDIT").getByRole("combobox", { name: /^Income source for / }).selectOption({ index: 1 })
+  await tickOf(page, "INTEREST CREDIT").check()
+  await review(page).getByRole("button", { name: "Save ticked lines" }).click()
+  await dialog(page, "Save these lines?").getByRole("button", { name: "Save 3 lines" }).click()
+  await expect(review(page)).toContainText("3 lines saved.")
+
+  await chooser(page).setInputFiles(file("statement.csv", csv))
+  await expect(lines(page).filter({ hasText: "Already imported" })).toHaveCount(3)
+
+  await chooser(page).setInputFiles(file("notes.csv", "Name,Amount\nLunch,100"))
+  await expect(page.getByText(/^We couldn't read this file as a bank statement\./)).toBeVisible()
+  await expect(review(page)).toHaveCount(0)
 })
