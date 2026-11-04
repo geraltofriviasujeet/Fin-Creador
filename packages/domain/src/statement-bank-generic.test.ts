@@ -325,6 +325,79 @@ describe("parseGenericBankStatement: PDF, date once per day", () => {
   });
 });
 
+describe("parseGenericBankStatement: PDF, a page's customer block and legal text", () => {
+  // Shapes from a real statement's "Copy layout" (no text or digits from it): the customer block printed
+  // above the table header on every page (pieces at x39, x61, x148, x317, x368, x430, some in the value
+  // date and withdrawal columns), two wide rows of legal text at the foot of each page, a text-only cell
+  // in the deposit column, and narration wrapped onto its own row.
+  const p = (str: string, x: number, y: number, width: number): PdfTextItem => ({ str, x, y, width, height: 8 });
+  const tableHeader = (y: number) => [
+    p("Date", 39, y, 20), p("Narration", 61, y, 40), p("Chq./Ref.No.", 230, y, 50), p("Value Dt", 317, y, 30),
+    p("Withdrawal Amt.", 368, y, 62), p("Deposit Amt.", 440, y, 50), p("Closing Balance", 500, y, 60),
+  ];
+  // One type size on a transaction row: 4.5 units a character.
+  const t = (str: string, x: number, y: number) => p(str, x, y, str.length * 4.5);
+  const line = (y: number, date: string, narration: string, ref: string, withdrawal: string | null, deposit: string | null, balance: string) => [
+    t(date, 39, y), t(narration, 85, y), t(ref, 230, y), t(date, 317, y),
+    ...(withdrawal ? [t(withdrawal, 380, y)] : []), ...(deposit ? [t(deposit, 450, y)] : []), t(balance, 505, y),
+  ];
+  const customerBlock = (top: number) => [
+    p("EXAMPLE BANK BRANCH KOLKATA EAST", 317, top, 120),
+    p("Address", 317, top - 14, 24), p(":", 368, top - 14, 20), p("EXAMPLE ROAD", 373, top - 22, 45),
+    p("MR", 39, top - 39, 11), p("EXAMPLE PERSON", 61, top - 39, 54), p("City", 317, top - 36, 12), p("KOLKATA 700001", 368, top - 36, 69), p("ABCDE", 373, top - 28, 63),
+    p("1 EXAMPLE ROAD EXAMPLE AREA", 39, top - 56, 109), p("State", 317, top - 58, 29), p("WEST BENGAL", 368, top - 58, 65),
+    p("NEAR EXAMPLE PARK KOLKATA", 39, top - 71, 125), p("Phone no.", 317, top - 70, 28), p("98765XXXXX", 368, top - 70, 18),
+    p("JOINT HOLDERS : EXAMPLE", 39, top - 86, 58), p("ABC", 148, top - 86, 50), p("Account No :50100012345678", 317, top - 86, 92),
+  ];
+  const legal = (y: number) => [p("Contents of this statement will be considered correct if no error is reported within 30 days of receipt of statement. The address on this statement is that on record with the Bank as at the day of requesting this statement.", 34, y, 511), p("State account branch GSTN: 19AAACE0000X1Z0. Registered office address: Example House, Example Road, Example City 400001", 34, y - 28, 384)];
+  const pages: PdfTextItem[][] = [
+    [
+      ...customerBlock(800),
+      ...tableHeader(690),
+      ...line(670, "01/10/26", "UPI-FRESH BASKET-FRESHBASKET", "0000412345678901", "1,784.00", null, "8,216.00"),
+      t("@OKHDFC-HDFC0000001-PAYMENT", 85, 652),
+      ...line(630, "02/10/26", "NEFT CR-EXAMPLE EMPLOYER", "N275260012345678", null, "50,000.00", "58,216.00"),
+      ...line(610, "03/10/26", "ATM WDL-EXAMPLE ROAD", "000000123456", "2,000.00", null, "56,216.00"),
+      ...legal(120),
+    ],
+    [
+      ...customerBlock(800),
+      ...tableHeader(690),
+      p("**Continued**", 439, 670, 62),
+      ...line(650, "04/10/26", "UPI-RAVI KUMAR-RAVI", "0000412345678902", "649.00", null, "55,567.00"),
+      ...line(630, "05/10/26", "INTEREST PAID TILL 30-SEP", "000000000000", null, "120.00", "55,687.00"),
+      p("STATEMENT SUMMARY", 34, 590, 80),
+      p("Opening Balance", 34, 570, 60), p("Dr Count", 120, 570, 35), p("Cr Count", 190, 570, 35), p("Debits", 260, 570, 30), p("Credits", 350, 570, 30), p("Closing Bal", 440, 570, 45),
+      p("10,000.00", 34, 556, 40), p("3", 120, 556, 5), p("2", 190, 556, 5), p("4,433.00", 260, 556, 40), p("50,120.00", 350, 556, 40), p("55,687.00", 440, 556, 40),
+      ...legal(120),
+    ],
+  ];
+
+  it("reads every line, joins the wrapped narration, and neither reports nor keeps the customer block or legal text", () => {
+    const parsed = parseGenericBankStatement(statementPages(pages).rows);
+    expect(read(parsed)).toEqual([
+      ["2026-10-01", 178_400, "debit", 821_600, "UPI-FRESH BASKET-FRESHBASKET @OKHDFC-HDFC-PAYMENT"],
+      ["2026-10-02", 5_000_000, "credit", 5_821_600, "NEFT CR-EXAMPLE EMPLOYER"],
+      ["2026-10-03", 200_000, "debit", 5_621_600, "ATM WDL-EXAMPLE ROAD"],
+      ["2026-10-04", 64_900, "debit", 5_556_700, "UPI-RAVI KUMAR-RAVI"],
+      ["2026-10-05", 12_000, "credit", 5_568_700, "INTEREST PAID TILL 30-SEP"],
+    ]);
+    expect(parsed?.issues).toEqual([]);
+    expect(parsed?.checks.map((c) => c.status)).toEqual(["ok", "ok"]);
+    const kept = JSON.stringify(parsed);
+    for (const secret of ["EXAMPLE PERSON", "EXAMPLE AREA", "WEST BENGAL", "50100012345678", "Contents of this statement", "GSTN", "Continued", "N275260012345678"]) {
+      expect(kept).not.toContain(secret);
+    }
+  });
+
+  it("a row with an amount or a date that can't be used is still reported", () => {
+    const broken = pages.map((page) => page.map((item) => (item.str === "649.00" ? { ...item, str: "649.0O" } : item)));
+    const parsed = parseGenericBankStatement(statementPages(broken).rows);
+    // The amount can't be used, so the totals fail and the file is not read; the row is not taken as narration.
+    expect(parsed).toBeNull();
+  });
+});
+
 describe("readBankStatement", () => {
   const pnb = [
     "Date Instrument ID Amount Type Balance Remarks",

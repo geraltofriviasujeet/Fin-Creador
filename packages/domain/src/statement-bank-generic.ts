@@ -6,8 +6,11 @@
 //   credit columns or one amount column (with or without a Dr / Cr type column). Nothing above it is
 //   kept. Value date, cheque, reference, instrument and serial columns are dropped; a PDF cell goes
 //   to the header it overlaps most (nearest when none).
-// - Repeated headers, page footers and totals are skipped; a row with no date and no amount continues
-//   the description above it. A row with no date but an amount and a balance takes the date of the
+// - Repeated headers, page footers and totals are skipped. A row with no date and no amount whose text
+//   sits in the description column only continues the description above it; any other row with no
+//   date and no amount (a page's customer block or legal text, text in an amount column) is skipped
+//   and ends that description. A row is unreadable only when it has an amount or a date that can't
+//   be used. A row with no date but an amount and a balance takes the date of the
 //   row above (statements that print the date once per day). Dates are day first, one format a file; dates that run out of order
 //   across the file mean the file was not read (a month-first file read day first).
 // - Direction: the column (debit / credit) or the Dr / Cr marker; else the balance movement.
@@ -148,6 +151,19 @@ function rowByRole(row: BankTableRow, columns: readonly Column[]): Record<Role, 
 }
 
 const isZero = (text: string) => text === "" || text === "-" || /^0+(?:\.0+)?$/.test(text);
+// What an amount cell holds when it holds an amount; text there (a page's customer block) is not one.
+const AMOUNT_SHAPED = /^[-+]?\s*(?:₹|rs\.?|inr)?\s*-?\d[\d,]*(?:\.\d+)?(?:\s*(?:dr|cr)\.?)?$/i;
+const hasAmountIn = (text: string) => !isZero(text) && AMOUNT_SHAPED.test(text);
+
+/** True when all of the row's text sits in the description column (a wrapped description line). */
+function onlyDescription(row: BankTableRow, columns: readonly Column[]): boolean {
+  return row.cells.every((cell, i) => {
+    if (cell === "") return true;
+    if (!row.spans) return columns[i]?.role === "description";
+    const span = row.spans[i]!;
+    return nearest(span, columns).role === "description" && columns.every((c) => c.role === "description" || c.role === "other" || overlap(span, c) <= 0);
+  });
+}
 
 /** An amount cell; the direction comes from a Dr / Cr marker only (a minus sign states none here). */
 function readAmount(text: string): { minor: number; direction: StatementDirection | null } | null {
@@ -242,14 +258,14 @@ export function parseGenericBankStatement(rows: readonly BankTableRow[]): BankSt
     let amount: { minor: number; direction: StatementDirection | null } | null = null;
     let hasAmount: boolean;
     if (columns.some((c) => c.role === "debit")) {
-      hasAmount = !isZero(cells.debit) || !isZero(cells.credit);
-      const debit = isZero(cells.debit) ? null : readAmount(cells.debit);
-      const credit = isZero(cells.credit) ? null : readAmount(cells.credit);
-      if (debit && isZero(cells.credit)) amount = { minor: debit.minor, direction: "debit" };
-      else if (credit && isZero(cells.debit)) amount = { minor: credit.minor, direction: "credit" };
+      hasAmount = hasAmountIn(cells.debit) || hasAmountIn(cells.credit);
+      const debit = hasAmountIn(cells.debit) ? readAmount(cells.debit) : null;
+      const credit = hasAmountIn(cells.credit) ? readAmount(cells.credit) : null;
+      if (debit && !hasAmountIn(cells.credit)) amount = { minor: debit.minor, direction: "debit" };
+      else if (credit && !hasAmountIn(cells.debit)) amount = { minor: credit.minor, direction: "credit" };
     } else {
-      hasAmount = !isZero(cells.amount);
-      const read = isZero(cells.amount) ? null : readAmount(cells.amount);
+      hasAmount = hasAmountIn(cells.amount);
+      const read = hasAmount ? readAmount(cells.amount) : null;
       const typed = cells.type === "" ? null : parseStatementDirection(cells.type);
       if (read && (cells.type === "" || typed) && !(typed && read.direction && typed !== read.direction)) amount = { minor: read.minor, direction: typed ?? read.direction };
     }
@@ -260,8 +276,11 @@ export function parseGenericBankStatement(rows: readonly BankTableRow[]): BankSt
       if (balance !== null && OPENING_ROW.test(description)) {
         if (raw.length === 0) openingMinor ??= balance;
       } else if (balance !== null && CLOSING_ROW.test(description)) closingMinor = balance;
-      else if (balance === null && open && cells.description !== "" && cells.date === "" && cells.type === "") open.remarks.push(cells.description);
-      else if (balance !== null && !CARRIED_ROW.test(description)) issues.push({ line, reason: "no_amount", shape: statementRowShape(text) });
+      else if (balance === null && open && onlyDescription(row, columns)) {
+        open.remarks.push(cells.description);
+        continue;
+      } else if (balance !== null && !CARRIED_ROW.test(description)) issues.push({ line, reason: "no_amount", shape: statementRowShape(text) });
+      open = null;
       continue;
     }
     open = null;
