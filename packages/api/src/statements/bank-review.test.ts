@@ -87,6 +87,24 @@ describe("buildBankReview", () => {
     ])
   })
 
+  it("matches count occurrences: N ledger transfers (or entries) mark only the first N identical lines", () => {
+    const twin = line("2026-10-25", 500_000, "debit", "IMPS/TRANSFER TO OWN ACCOUNT", 6_216_700, 1)
+    const twins: BankStatementParse = { ...parse, lines: [twin, ...LINES] }
+    const transfer = { date: "2026-10-25", amountMinor: 500_000, direction: "debit" as const }
+    const statusOf = (m: BankImportMatches) => {
+      const r = buildBankReview(twins, m, options, context)
+      return [0, 4].map((i) => [r.lines[i]!.status, r.lines[i]!.transferMatch, canTickBank(r.lines[i]!)])
+    }
+    expect(statusOf(none)).toEqual([["new", false, true], ["new", false, true]])
+    expect(statusOf({ ...none, transfers: [transfer] })).toEqual([["imported", true, false], ["new", false, true]])
+    expect(statusOf({ ...none, transfers: [transfer, transfer] })).toEqual([["imported", true, false], ["imported", true, false]])
+
+    const entry = { date: "2026-10-25", amountMinor: 500_000, direction: "debit" as const }
+    expect(statusOf({ ...none, entries: [entry] })).toEqual([["duplicate", false, true], ["new", false, true]])
+    expect(statusOf({ ...none, entries: [entry, entry] })).toEqual([["duplicate", false, true], ["duplicate", false, true]])
+    expect(statusOf({ ...none, transfers: [transfer], entries: [entry] })).toEqual([["imported", true, false], ["duplicate", false, true]])
+  })
+
   it("the closing balance warning is soft: shown when the app's balance differs, never a blocker", () => {
     const r = buildBankReview(parse, { ...none, bookBalanceMinor: 6_500_000 }, options, context)
     expect(r.balanceWarning).toBe(
