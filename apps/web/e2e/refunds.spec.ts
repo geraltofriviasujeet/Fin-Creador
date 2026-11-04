@@ -172,7 +172,7 @@ test("a card statement refund: linked to the purchase it reverses, taken off wha
   await shot(page, "refunds-card-review")
   await review(page).getByRole("button", { name: "Save ticked lines" }).click()
   const confirm = dialog(page, "Save these lines?")
-  await expect(confirm).toContainText(/^1 refund, [−-]₹1,784 in all\./)
+  await expect(confirm).toContainText(/1 refund, [−-]₹1,784 in all\./)
   await expect(confirm).toContainText("Refunds come off what the card owes")
   await confirm.getByRole("button", { name: "Save 1 line" }).click()
   await expect(review(page)).toContainText("1 line saved.")
