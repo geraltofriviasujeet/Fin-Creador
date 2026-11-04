@@ -562,6 +562,20 @@ describe("bankReadFailureText", () => {
     expect(out.join("\n")).not.toMatch(/SHOP|10\.00|2026/);
   });
 
+  it("newest first: a row that can't be read between a break and the row before it is named as the likely cause, and listed", () => {
+    // 40 rows of 10.00 out, newest first; row 37 (printed) has an amount the reader can't use, so the
+    // row printed above it doesn't follow from the one printed below it.
+    const rows = Array.from({ length: 40 }, (_, i) => {
+      const day = String(21 - Math.floor(i / 2)).padStart(2, "0");
+      return `${day}/10/2026,SHOP,${i === 35 ? "1O.00" : "10.00"},,${(1000 - 10 * (40 - i)).toFixed(2)}`;
+    });
+    const out = csv(["Date,Narration,Debit,Credit,Balance", ...rows]).split("\n");
+    expect(out).toContain("Row 36: date col1 c10 | text col2 c4 | amount col3 c5 | amount col5 c6 → flagged: balance doesn't follow (a row between it and the row before couldn't be read)");
+    expect(out[0]).toBe("Why: Header row at row 1. No opening and closing balance printed, and 1 row's balance doesn't follow from the row before.");
+    expect(out).toContain("Row 37: date col1 c10 | text col2 c4 | text col3 c5 | amount col5 c6 → unreadable: no amount");
+    expect(out).toContain("Row 38: date col1 c10 | text col2 c4 | amount col3 c5 | amount col5 c6 → line");
+  });
+
   it("for a PDF: page and row, and the masked layout of the first 30 rows plus the closest header further down", () => {
     const p = (str: string, x: number, y: number) => ({ str, x, y, width: str.length * 4.5, height: 10 });
     const top = Array.from({ length: 34 }, (_, i) => p(`EXAMPLE PERSON LINE ${i}`, 30, 800 - i * 20));

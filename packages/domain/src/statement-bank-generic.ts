@@ -424,7 +424,12 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
       const suspects = timeOrder.flatMap((r, k) => {
         if (!suspect.has(r)) return [];
         const before = k > 0 ? timeOrder[k - 1]! : null;
-        found.verdicts[r.line] = `flagged: balance doesn't follow (${chainHint(r, before?.balanceMinor ?? openingMinor, timeOrder[k + 1] ?? null, before)})`;
+        // A row that couldn't be read, printed between the two, is the likeliest cause.
+        const lo = Math.min(r.line, before?.line ?? r.line);
+        const hi = Math.max(r.line, before?.line ?? r.line);
+        const between = issues.some((i) => i.line > lo && i.line < hi);
+        const hint = between ? "a row between it and the row before couldn't be read" : chainHint(r, before?.balanceMinor ?? openingMinor, timeOrder[k + 1] ?? null, before);
+        found.verdicts[r.line] = `flagged: balance doesn't follow (${hint})`;
         return [{ line: r.line, before: before?.line ?? null }];
       });
       return { failure: { reason: "chain_broken", rows: suspect.size, suspects, ...found } };
@@ -625,11 +630,18 @@ export function bankReadFailureText(read: {
   if (failure.reason !== "no_header") {
     // The header row, then the rows under it with what became of each.
     const below = Array.from({ length: Math.min(rows.length - failure.header, BANK_FAILURE_ROWS_SHOWN) }, (_, i) => failure.header + 1 + i);
-    // Rows whose balance doesn't follow, and the row before each, wherever they are.
+    // Every row that couldn't be read, and each row whose balance doesn't follow with the row before it
+    // in time and every row printed between them, wherever they are.
+    const extra = Object.keys(failure.verdicts).map(Number).filter((line) => failure.verdicts[line] !== "line");
     if (failure.reason === "chain_broken") {
-      for (const { line, before } of failure.suspects) for (const l of [before, line]) if (l !== null && !below.includes(l)) below.push(l);
-      below.sort((a, b) => a - b);
+      for (const { line, before } of failure.suspects) {
+        const lo = Math.min(line, before ?? line);
+        const hi = Math.max(line, before ?? line);
+        for (let l = lo; l <= hi; l++) extra.push(l);
+      }
     }
+    for (const l of extra) if (l > failure.header && !below.includes(l)) below.push(l);
+    below.sort((a, b) => a - b);
     return [
       `Why: ${failureText(failure, at)}`,
       `${at1(failure.header)} (header): ${layout(failure.header)}`,
