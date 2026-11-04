@@ -16,7 +16,9 @@ const SBI = "State Bank of India ··1111"
 const chooser = (page: Page) => page.getByLabel(/statement \(PDF\)$/)
 const review = (page: Page) => page.getByRole("region", { name: "Review the statement" })
 const lines = (page: Page) => review(page).getByRole("list", { name: "Statement lines" }).getByRole("listitem")
-const lineAt = (page: Page, text: string, nth = 0) => lines(page).filter({ hasText: text }).nth(nth)
+// A line by the start of its text (its description): option labels such as "Credit card payment" would match anywhere.
+const startsWith = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`)
+const lineAt = (page: Page, text: string, nth = 0) => lines(page).filter({ hasText: startsWith(text) }).nth(nth)
 const holding = (page: Page, label: string) =>
   page.locator("[data-slot=card]").filter({ has: page.getByText("Where your money is", { exact: true }) }).getByRole("listitem").filter({ hasText: label })
 
@@ -76,18 +78,18 @@ test("label each line: expenses ticked, credits need a choice, transfer and card
   // Debits start ticked as expenses; the two credits need a choice and can't be ticked yet.
   await expect(tickOf(page, "FRESH BASKET")).toBeChecked()
   await expect(review(page)).toContainText("2 credits need a choice")
-  await expect(lineAt(page, "SALARY").getByRole("checkbox")).toHaveCount(0)
+  await expect(lineAt(page, "NEFT/SALARY").getByRole("checkbox")).toHaveCount(0)
   // The app's balance differs from the statement's closing: a soft warning, Save stays possible.
   await expect(review(page)).toContainText("This doesn't stop Save.")
   // Card payment is offered on debits only.
-  await expect(whatIs(page, "SALARY").locator("option", { hasText: "Credit card payment" })).toHaveCount(0)
+  await expect(whatIs(page, "NEFT/SALARY").locator("option", { hasText: "Credit card payment" })).toHaveCount(0)
 
-  await whatIs(page, "SALARY").selectOption({ label: "Income" })
-  await lineAt(page, "SALARY").getByRole("combobox", { name: /^Income source for / }).selectOption({ label: "Salary" })
-  await tickOf(page, "SALARY").check()
+  await whatIs(page, "NEFT/SALARY").selectOption({ label: "Income" })
+  await lineAt(page, "NEFT/SALARY").getByRole("combobox", { name: /^Income source for / }).selectOption({ label: "Salary" })
+  await tickOf(page, "NEFT/SALARY").check()
 
   // The RAVI KUMAR credit: a refund can't be saved yet; it says so and has no tick.
-  const raviCredit = lines(page).filter({ hasText: "RAVI KUMAR" }).filter({ hasText: "₹1,200 Cr" })
+  const raviCredit = lines(page).filter({ hasText: startsWith("RAVI KUMAR") }).filter({ hasText: "₹1,200 Cr" })
   await raviCredit.getByRole("combobox", { name: /^What is / }).selectOption({ label: "Refund" })
   await expect(raviCredit).toContainText("Refunds can't be saved yet")
   await expect(raviCredit.getByRole("checkbox")).toHaveCount(0)
@@ -101,7 +103,7 @@ test("label each line: expenses ticked, credits need a choice, transfer and card
   await tickOf(page, "CARD PAYMENT").check()
 
   // Labelling one RAVI KUMAR debit offers the same on the other: unticked until the person ticks it.
-  const raviDebits = lines(page).filter({ hasText: "RAVI KUMAR" }).filter({ hasText: "₹649 Dr" })
+  const raviDebits = lines(page).filter({ hasText: startsWith("RAVI KUMAR") }).filter({ hasText: "₹649 Dr" })
   await raviDebits.nth(0).getByRole("combobox", { name: /^Category for / }).selectOption({ label: "Shopping" })
   await expect(raviDebits.nth(1).getByRole("combobox", { name: /^Category for / })).toHaveValue(/.+/)
   await expect(raviDebits.nth(1)).toContainText("Tick it to use it")
