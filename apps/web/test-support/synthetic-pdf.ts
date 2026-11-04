@@ -462,3 +462,66 @@ export function pnbSavingsPages(
   pages.forEach((page, i) => page.push([{ x: 40, text: `Date: 30/10/2026 Page ${i + 1}` }]))
   return pages
 }
+
+/** Lines for separateColumnsPages, oldest first, the newest on `end`; remarks at most two short pieces. */
+export function separateColumnsDefaultRows(end = "2026-10-28"): SavingsRow[] {
+  const on = (days: number) => isoDaysBefore(end, days)
+  return [
+    { date: on(6), amountMinor: 5_000_000, direction: "CR", remarks: ["NEFT CR-EXAMPLE EMPLOYER", "SALARY OCT"], instrument: "N27526001" },
+    { date: on(5), amountMinor: 178_400, direction: "DR", remarks: ["UPI-FRESH BASKET"], instrument: "REF000111" },
+    { date: on(4), amountMinor: 64_900, direction: "DR", remarks: ["UPI-RAVI KUMAR"], instrument: "REF000112" },
+    { date: on(3), amountMinor: 500_000, direction: "DR", remarks: ["IMPS-OWN ACCOUNT"], instrument: "REF000113" },
+    { date: on(2), amountMinor: 120_000, direction: "CR", remarks: ["UPI-RAVI KUMAR REFUND"], instrument: "REF000114" },
+    { date: on(1), amountMinor: 233_400, direction: "DR", remarks: ["CARD PAYMENT"], instrument: "REF000115" },
+    { date: on(0), amountMinor: 64_900, direction: "DR", remarks: ["UPI-RAVI KUMAR"], instrument: "REF000116" },
+  ]
+}
+
+/**
+ * A savings statement from a bank with no reader of its own (Sprint 9d; invented layout, person,
+ * account number and values): a header block that must never be kept, then Date, Narration,
+ * Chq./Ref.No., Value Dt, Withdrawal Amt., Deposit Amt., Closing Balance; lines oldest first with
+ * DD/MM/YY dates and one of the two amount cells empty, a narration wrapped onto a second row,
+ * 30 lines a page with the header repeated and a "Page n of m" footer, and the summary printed
+ * as a row of labels with its values below. `breakChainAt`: the balance printed on that line
+ * (index oldest first) is ₹1 off.
+ */
+export function separateColumnsPages(options: { rows?: SavingsRow[]; openingMinor?: number; breakChainAt?: number } = {}): SyntheticPage[] {
+  const rows = options.rows ?? separateColumnsDefaultRows()
+  const opening = options.openingMinor ?? 2_500_000
+  const shortDate = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`
+  const xs = [30, 85, 235, 300, 350, 430, 505]
+  const header = columns(xs, [["Date", "Narration", "Chq./Ref.No.", "Value Dt", "Withdrawal Amt.", "Deposit Amt.", "Closing Balance"]])
+  let balance = opening
+  let debits = 0
+  let credits = 0
+  const lineRows = rows.flatMap((row, i): SyntheticPage => {
+    balance += row.direction === "CR" ? row.amountMinor : -row.amountMinor
+    if (row.direction === "CR") credits += row.amountMinor
+    else debits += row.amountMinor
+    const printed = balance + (i === options.breakChainAt ? 100 : 0)
+    const debit = row.direction === "DR" ? rupees(row.amountMinor) : ""
+    const credit = row.direction === "CR" ? rupees(row.amountMinor) : ""
+    return [
+      columns(xs, [[shortDate(row.date), row.remarks[0] ?? "", row.instrument ?? "", shortDate(row.date), debit, credit, rupees(printed)]])[0]!,
+      ...row.remarks.slice(1).map((piece) => [{ x: 85, text: piece }]),
+    ]
+  })
+  const pages: SyntheticPage[] = []
+  for (let i = 0; i < Math.max(1, lineRows.length); i += 30) pages.push([...header, ...lineRows.slice(i, i + 30)])
+  pages[0]!.unshift(
+    [{ x: 30, text: "EXAMPLE BANK LIMITED" }],
+    [{ x: 30, text: "Account No" }, { x: 160, text: "50100012345678" }],
+    [{ x: 30, text: "Customer Name" }, { x: 160, text: "EXAMPLE PERSON" }],
+    [],
+  )
+  const dr = rows.filter((r) => r.direction === "DR").length
+  pages[pages.length - 1]!.push(
+    [],
+    [{ x: 30, text: "STATEMENT SUMMARY" }],
+    columns([30, 120, 190, 260, 350, 440], [["Opening Balance", "Dr Count", "Cr Count", "Debits", "Credits", "Closing Bal"]])[0]!,
+    columns([30, 120, 190, 260, 350, 440], [[rupees(opening), String(dr), String(rows.length - dr), rupees(debits), rupees(credits), rupees(balance)]])[0]!,
+  )
+  pages.forEach((page, i) => page.push([], [{ x: 280, text: `Page ${i + 1} of ${pages.length}` }]))
+  return pages
+}

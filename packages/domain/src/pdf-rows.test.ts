@@ -105,6 +105,34 @@ describe("rowLayout: a masked layout for rows the reader can't use", () => {
     for (const secret of ["FRESH", "SEP", "2026", "4021", "1234", "1784", "Total"]) expect(rowLayouts.join("\n")).not.toContain(secret);
     expect(rowLayouts[1]).toBe("text x40 w70 c14 dy0");
   });
+
+  it("is only kinds and geometry: each piece's numbers are its x, width, characters and offset, never its text", () => {
+    // Synthetic pieces whose digits differ from their geometry, so any leaked digit shows.
+    const pages = [
+      [
+        item("07/03/2026", 33, 700, 41, 9),
+        item("NEFT/987654321098/A ROY", 88, 700, 97, 9),
+        item("Chq 556677", 88, 689, 44, 8),
+        item("UPI/ravi@okbank/314159", 210, 700, 93, 9),
+        item("2,71,828.18 Cr", 455, 700, 58, 9),
+        item("161803", 520, 700, 23, 9),
+      ],
+      [item("Page 9 of 12", 270, 40, 51, 7), item("A/c 001122334455", 33, 760, 69, 9), item("₹ 4,242.42", 470, 760, 39, 9)],
+    ];
+    const { rowLayouts } = statementPages(pages);
+    const pieces = pages.flat();
+    const segments = rowLayouts.flatMap((layout) => layout.split(" | "));
+    expect(segments).toHaveLength(pieces.length);
+    for (const segment of segments) {
+      const m = /^(date|amount|number|text) x(\d+) w(\d+) c(\d+) dy(\d+)$/.exec(segment);
+      expect(m, segment).not.toBeNull();
+      const [, , x, w, c] = m!.map(Number);
+      expect(pieces.some((p) => Math.round(p.x) === x && Math.round(p.width) === w && p.str.replace(/\s+/g, " ").trim().length === c), segment).toBe(true);
+    }
+    const all = rowLayouts.join("\n");
+    for (const secret of ["987654321098", "556677", "ravi", "okbank", "314159", "271828", "161803", "001122334455", "4242", "ROY", "Page"])
+      expect(all).not.toContain(secret);
+  });
 });
 
 describe("pageRows: small print beside a row", () => {

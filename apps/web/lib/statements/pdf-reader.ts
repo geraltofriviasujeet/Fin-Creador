@@ -3,6 +3,7 @@
 // only passed to pdf.js for this one read (never kept, logged or sent). Text PDFs only, no OCR.
 // pdf.js is passed in (the bundled browser module on web, the Node build in tests).
 import {
+  type BankTableRow,
   MAX_STATEMENT_PDF_BYTES,
   MAX_STATEMENT_PDF_PAGES,
   type PdfTextItem,
@@ -31,7 +32,7 @@ type PdfDocument = {
 }
 
 export type PdfReadResult =
-  | { status: "ok"; text: string; pages: number; pageRowCounts: number[]; rowLayouts: string[] }
+  | { status: "ok"; text: string; pages: number; pageRowCounts: number[]; rowLayouts: string[]; rows: BankTableRow[] }
   | { status: "needs_password" }
   | { status: "wrong_password" }
   | { status: "no_text" }
@@ -94,9 +95,9 @@ export async function readStatementPdf(lib: PdfLib, data: Uint8Array, password?:
         })),
       )
     }
-    const { text, pageRowCounts, rowLayouts } = statementPages(pages)
+    const { text, pageRowCounts, rowLayouts, rows } = statementPages(pages)
     if (text.trim() === "") return { status: "no_text" }
-    return { status: "ok", text, pages: doc.numPages, pageRowCounts, rowLayouts }
+    return { status: "ok", text, pages: doc.numPages, pageRowCounts, rowLayouts, rows }
   } catch {
     return { status: "unreadable" }
   } finally {

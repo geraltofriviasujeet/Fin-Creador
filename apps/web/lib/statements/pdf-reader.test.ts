@@ -3,8 +3,8 @@
 // no text, and the caps. Never a real statement.
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs"
 import { describe, expect, it } from "vitest"
-import { MAX_STATEMENT_PDF_BYTES, MAX_STATEMENT_PDF_PAGES, bankStatementNeedsCheck, parseCardStatement, parsePnbSavingsStatementText, statementNeedsCheck, statementVerifiesItself } from "@fin-creador/domain"
-import { columns, genericStatementPages, pnbRealLayoutPages, pnbSavingsPages, pnbStatementPages as pnbPages, savingsDefaultRows, syntheticPdf } from "../../test-support/synthetic-pdf"
+import { MAX_STATEMENT_PDF_BYTES, MAX_STATEMENT_PDF_PAGES, bankStatementNeedsCheck, parseCardStatement, parsePnbSavingsStatementText, readBankStatement, statementNeedsCheck, statementVerifiesItself } from "@fin-creador/domain"
+import { columns, genericStatementPages, pnbRealLayoutPages, pnbSavingsPages, pnbStatementPages as pnbPages, savingsDefaultRows, separateColumnsDefaultRows, separateColumnsPages, syntheticPdf } from "../../test-support/synthetic-pdf"
 import { type PdfLib, readStatementPdf } from "./pdf-reader"
 
 const lib = pdfjs as unknown as PdfLib
@@ -172,6 +172,45 @@ describe("readStatementPdf: PNB savings account statement", () => {
     expect(parsed.issues).toEqual([])
     expect(parsed.lines).toHaveLength(rows.length)
     expect(bankStatementNeedsCheck(parsed)).toBe(false)
+  })
+})
+
+describe("readStatementPdf: another bank's savings statement (generic reader)", () => {
+  it("reads the table by structure: separate debit and credit columns, wrapped narration, the summary below, nothing above the header", async () => {
+    const read = await readStatementPdf(lib, syntheticPdf(separateColumnsPages()))
+    if (read.status !== "ok") throw new Error(read.status)
+    const result = readBankStatement({ format: "pdf", text: read.text, rows: read.rows })
+    expect(result?.reader).toBe("generic")
+    expect(result?.parse.lines.map((l) => [l.date, l.amountMinor, l.direction, l.balanceMinor, l.description])).toEqual([
+      ["2026-10-22", 5_000_000, "credit", 7_500_000, "NEFT CR-EXAMPLE EMPLOYER SALARY OCT"],
+      ["2026-10-23", 178_400, "debit", 7_321_600, "UPI-FRESH BASKET"],
+      ["2026-10-24", 64_900, "debit", 7_256_700, "UPI-RAVI KUMAR"],
+      ["2026-10-25", 500_000, "debit", 6_756_700, "IMPS-OWN ACCOUNT"],
+      ["2026-10-26", 120_000, "credit", 6_876_700, "UPI-RAVI KUMAR REFUND"],
+      ["2026-10-27", 233_400, "debit", 6_643_300, "CARD PAYMENT"],
+      ["2026-10-28", 64_900, "debit", 6_578_400, "UPI-RAVI KUMAR"],
+    ])
+    expect(result?.parse.summary).toEqual({ from: "2026-10-22", to: "2026-10-28", openingMinor: 2_500_000, closingMinor: 6_578_400 })
+    expect(result?.parse.issues).toEqual([])
+    expect(bankStatementNeedsCheck(result!.parse)).toBe(false)
+    expect(JSON.stringify(result)).not.toMatch(/EXAMPLE BANK|50100012345678|EXAMPLE PERSON|REF0001|N27526001/)
+  })
+
+  it("a year over many pages reads in full; a misprinted balance flags its rows and needs the check", async () => {
+    const rows = Array.from({ length: 40 }, (_, week) => separateColumnsDefaultRows(`2026-${String(1 + Math.floor(week / 4)).padStart(2, "0")}-${String(8 + (week % 4) * 7).padStart(2, "0")}`)).flat()
+    const year = await readStatementPdf(lib, syntheticPdf(separateColumnsPages({ rows, openingMinor: 50_000_000 })))
+    if (year.status !== "ok") throw new Error(year.status)
+    expect(year.pages).toBeGreaterThan(5)
+    const full = readBankStatement({ format: "pdf", text: year.text, rows: year.rows })
+    expect(full?.parse.lines).toHaveLength(rows.length)
+    expect(full?.parse.issues).toEqual([])
+
+    const broken = await readStatementPdf(lib, syntheticPdf(separateColumnsPages({ breakChainAt: 3 })))
+    if (broken.status !== "ok") throw new Error(broken.status)
+    const flagged = readBankStatement({ format: "pdf", text: broken.text, rows: broken.rows })
+    expect(flagged?.parse.lines).toHaveLength(5)
+    expect(flagged?.parse.issues.map((i) => i.reason)).toEqual(["balance_mismatch", "balance_mismatch"])
+    expect(bankStatementNeedsCheck(flagged!.parse)).toBe(true)
   })
 })
 

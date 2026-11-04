@@ -4,6 +4,7 @@ import { useState } from "react"
 import {
   BANK_LINE_TYPES,
   BANK_TYPE_LABELS,
+  BANK_GENERIC_NOTE,
   BANK_UNREADABLE,
   type BankImportAccount,
   type BankImportOptions,
@@ -28,7 +29,7 @@ import {
   reviewPage,
   setBankLineType,
 } from "@fin-creador/api"
-import { type BankLineSkipReason, parseAmount, parseBankStatementCsv, parsePnbSavingsStatementText } from "@fin-creador/domain"
+import { type BankLineSkipReason, type BankStatementReader, bankReadFailureText, parseAmount, readBankStatement } from "@fin-creador/domain"
 import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { bankImportMatchesAction, saveBankImportLinesAction } from "@/app/(app)/income/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
@@ -51,14 +52,15 @@ import {
   useStatementReader,
 } from "./statement-shared"
 
-// Bank account statement import (Sprint 9b): read the PDF (PNB savings layout) or a CSV in the browser,
+// Bank account statement import (Sprint 9b): read the PDF or a CSV in the browser (PNB savings layout
+// and CSV by name first, any other bank's table by structure since Sprint 9d: readBankStatement),
 // then review it with the parts shared with card import. Each line gets a type: a debit starts
 // ticked as an expense; a credit starts unticked until the person says what it is. Transfers post
 // as transfers, card payments through the card payment path. Labelling a payee offers the same
 // label on its other lines in this file (in memory only, a tick still needed). Long statements are
 // shown 100 lines a page, with filters; Save sends the ticked lines in chunks, each saved on its own.
 
-type BankReviewPhase = { review: BankReview }
+type BankReviewPhase = { review: BankReview; reader: BankStatementReader }
 type Context = { accountId: string; openingBalanceDate: string; today: string; currency: string }
 
 const PAGE = 100
@@ -89,8 +91,9 @@ export function BankStatementImport({ account, today, options }: { account: Bank
     const read = reader.readRef.current
     if (read === null) return
     const id = ++attemptRef.current
-    const parse = read.format === "csv" ? parseBankStatementCsv(read.text) : parsePnbSavingsStatementText(read.text)
-    if (parse.lines.length === 0 && parse.issues.length === 0) return void setPhase({ step: "message", text: BANK_UNREADABLE, pnbOffer: false })
+    const statement = readBankStatement(read)
+    if (statement === null) return void setPhase({ step: "message", text: BANK_UNREADABLE, pnbOffer: false, layout: bankReadFailureText(read) })
+    const { parse, reader: readBy } = statement
     setPhase({ step: "matching" })
     const result = await bankImportMatchesAction({
       accountId: account.id,
@@ -100,7 +103,7 @@ export function BankStatementImport({ account, today, options }: { account: Bank
     }).catch(() => null)
     if (id !== attemptRef.current) return
     if (!result?.ok) return void setPhase({ step: "match_failed" })
-    setPhase({ step: "review", review: buildBankReview(parse, result.matches, options, context, read.pageRowCounts, read.rowLayouts) })
+    setPhase({ step: "review", reader: readBy, review: buildBankReview(parse, result.matches, options, context, read.pageRowCounts, read.rowLayouts) })
   }
 
   return (
@@ -113,13 +116,26 @@ export function BankStatementImport({ account, today, options }: { account: Bank
           options={options}
           context={context}
           initial={phase.review}
+          generic={phase.reader === "generic"}
         />
       )}
     </div>
   )
 }
 
-function BankReviewSection({ account, options, context, initial }: { account: BankImportAccount; options: BankImportOptions; context: Context; initial: BankReview }) {
+function BankReviewSection({
+  account,
+  options,
+  context,
+  initial,
+  generic,
+}: {
+  account: BankImportAccount
+  options: BankImportOptions
+  context: Context
+  initial: BankReview
+  generic: boolean
+}) {
   const [lines, setLines] = useState(initial.lines)
   const [checkConfirmed, setCheckConfirmed] = useState(false)
   const [bulkCategory, setBulkCategory] = useState("")
@@ -200,6 +216,7 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
         Review the statement
       </h2>
 
+      {generic && <FormMessage tone="info">{BANK_GENERIC_NOTE}</FormMessage>}
       <CheckAlert reasons={reasons} confirmed={checkConfirmed} onConfirm={setCheckConfirmed} />
       {initial.balanceWarning && <FormMessage tone="info">{initial.balanceWarning}</FormMessage>}
       <SkippedNotice count={totals.skipped.count} totalMinor={totals.skipped.totalMinor} reasons={totals.skipped.reasons} currency={c} />
