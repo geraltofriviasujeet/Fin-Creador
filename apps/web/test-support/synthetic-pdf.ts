@@ -4,8 +4,8 @@
 // RC4), or with no text at all (only a drawn shape, as a scanned page has). Test use only.
 import { createHash } from "node:crypto"
 
-/** A cell at x on its row; `dy` moves it up (+) or down (-) from the row's baseline. */
-export type SyntheticCell = { x: number; text: string; dy?: number }
+/** A cell at x on its row; `dy` moves it up (+) or down (-) from the row's baseline; `size` in points (default 9). */
+export type SyntheticCell = { x: number; text: string; dy?: number; size?: number }
 export type SyntheticRow = SyntheticCell[]
 export type SyntheticPage = SyntheticRow[]
 
@@ -80,8 +80,12 @@ const escape = (text: string) => text.replace(/[\\()]/g, (c) => `\\${c}`)
 function contentStream(page: SyntheticPage, noText: boolean): string {
   if (noText) return "0.8 0.8 0.8 rg 40 500 500 250 re f 0 0 0 rg 60 700 300 12 re f\n"
   const lines = ["BT", "/F1 9 Tf"]
+  let size = 9
   page.forEach((row, r) => {
-    for (const cell of row) lines.push(`1 0 0 1 ${cell.x} ${800 - r * 14 + (cell.dy ?? 0)} Tm (${escape(cell.text)}) Tj`)
+    for (const cell of row) {
+      if ((cell.size ?? 9) !== size) lines.push(`/F1 ${(size = cell.size ?? 9)} Tf`)
+      lines.push(`1 0 0 1 ${cell.x} ${800 - r * 14 + (cell.dy ?? 0)} Tm (${escape(cell.text)}) Tj`)
+    }
   })
   lines.push("ET")
   return `${lines.join("\n")}\n`
@@ -268,8 +272,16 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
  * order), details as printed and an amount with no marker for a debit and Cr for a credit; then
  * label-only totals, a Total Invoice Value drawn far right, stray "0" values over an advert, a
  * chart legend and legal text. 2 debits (₹1,784 and ₹500.64) and a ₹1,500 Cr payment; bill ₹2,284.64.
+ *
+ * `smallPrint` adds two rows in the exact shapes of two rows of the owner's real statement (from
+ * its masked "Copy layout"; invented text): table cells at x 20 / 80 / 130 / 200 / ~355 in ~6.8pt
+ * type, a ₹5,046.64 debit and a ₹1,500.00 payment with its Cr as a piece of its own, each with
+ * ~1.8pt small print beside it (x ~424 and ~560) a few points off its baseline. Bill ₹5,831.28.
  */
-export function pnbRealLayoutPages(options: { invoiceDate?: string; lineDate?: string } = {}): SyntheticPage[] {
+export function pnbRealLayoutPages(options: { invoiceDate?: string; lineDate?: string; smallPrint?: boolean } = {}): SyntheticPage[] {
+  const small = options.smallPrint === true
+  const purchases = small ? "7331.28" : "2284.64"
+  const totalDue = small ? "5,831.28" : "2,284.64"
   const invoiceIso = options.invoiceDate ?? "2026-09-20"
   const invoice = pnbDate(invoiceIso)
   const due = pnbDate(pnbDueDate(invoiceIso))
@@ -282,13 +294,13 @@ export function pnbRealLayoutPages(options: { invoiceDate?: string; lineDate?: s
       boxed("Card No", "5555 XXXX XXXX 0042"),
       boxed("Invoice Date", invoice),
       boxed("Payment Due Date", due),
-      boxed("Total Amount Due", "2,284.64"),
-      boxed("Total Amount Due for Month", "2,284.64"),
-      boxed("Minimum Amount Due", "114.23"),
+      boxed("Total Amount Due", totalDue),
+      boxed("Total Amount Due for Month", totalDue),
+      boxed("Minimum Amount Due", small ? "291.56" : "114.23"),
       [],
       ...columns([40, 140, 260, 340], [
         ["Previous Balance", "Purchases and other charges", "Cash Advances", "Payments and Other Credits / Shadow Credits"],
-        ["1500", "2284.64", "0", "1500"],
+        ["1500", purchases, "0", small ? "3000" : "1500"],
       ]),
       [],
       ...columns([40, 110, 180, 260, 520], [["Transaction Date", "Post Date", "Network/Last 4 Digit", "Trnx Details", "Amount in Rs"]]),
@@ -307,13 +319,31 @@ export function pnbRealLayoutPages(options: { invoiceDate?: string; lineDate?: s
         { x: 180, text: "0042" }, { x: 205, text: "RUPAY -" },
         { x: 260, text: "CITYFUEL POINT HOWRAH IN" }, { x: 520, text: "500.64" },
       ],
+      ...(small
+        ? [
+            [],
+            [
+              { x: 20, text: on("2026-09-08"), size: 6.8 }, { x: 80, text: on("2026-09-09"), size: 6.8 },
+              { x: 130, text: "RUPAY - 0042", size: 6.8 }, { x: 200, text: "SKYLINE TRAVELS ONLINE BOOKINGS IND", size: 6.8 },
+              { x: 357, text: "5046.64", size: 6.8 },
+              { x: 424, text: "POINTS EARNED", dy: -4, size: 1.8 }, { x: 425, text: "POINTS CREDIT", dy: -7, size: 1.8 },
+              { x: 562, text: "POINTS OPENED", dy: -4, size: 1.8 }, { x: 562, text: "POINTS EXPIRE", dy: -7, size: 1.8 },
+            ],
+            [
+              { x: 20, text: on("2026-09-10"), dy: -3, size: 6.8 }, { x: 80, text: on("2026-09-10"), dy: -3, size: 6.8 },
+              { x: 130, text: "RUPAY - 0042", dy: -3, size: 6.8 }, { x: 200, text: "PAYMENT RECEIVED THANKYOU", dy: -3, size: 6.8 },
+              { x: 354, text: "1,500.00", dy: -3, size: 6.8 }, { x: 392, text: "Cr", dy: -3, size: 6.8 },
+              { x: 421, text: "REWARD POINTS BALANCE", size: 1.8 }, { x: 558, text: "REDEEM AT THE STORE", size: 1.8 },
+            ],
+          ]
+        : []),
       [],
       [{ x: 40, text: "Total Purchase" }],
       [{ x: 40, text: "Total Taxable Value" }],
       [{ x: 40, text: "Total GST" }],
       [{ x: 40, text: "Total Charges Reversed" }],
       [{ x: 40, text: "Total GST Reversed" }],
-      [{ x: 40, text: "Total Invoice Value" }, { x: 540, text: "2,284.64", dy: 1 }],
+      [{ x: 40, text: "Total Invoice Value" }, { x: 540, text: small ? "7,331.28" : "2,284.64", dy: 1 }],
       [],
       [{ x: 300, text: "0" }, { x: 360, text: "0" }],
       [{ x: 300, text: "SPEND MORE, EARN MORE REWARDS" }],

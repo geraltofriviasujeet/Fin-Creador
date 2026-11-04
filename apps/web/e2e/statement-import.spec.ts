@@ -400,6 +400,20 @@ test("a statement date that can't be read is left empty and blocks Save until en
   await expect(save).toBeEnabled()
 })
 
+test("the real PNB layout with small print beside two rows: both rows read, checks pass", async ({ page }) => {
+  const today = todayInIndia()
+  await setUp(page, "Neha Kapoor")
+  await openImport(page, PNB_CARD)
+  await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbRealLayoutPages({ invoiceDate: today, lineDate: today, smallPrint: true }))))
+  await expect(lines(page)).toHaveCount(5)
+  await expect(tick(page, "SKYLINE TRAVELS ONLINE BOOKINGS IND")).toBeChecked()
+  await expect(lineFor(page, "PAYMENT RECEIVED THANKYOU")).toContainText("Skipped: payment")
+  await expect(review(page)).not.toContainText("could not be read")
+  await expect(review(page)).not.toContainText("Check this statement")
+  await expect(review(page)).not.toContainText("POINTS")
+  await expect(review(page).getByText(/^Ticked:/)).toHaveText("Ticked: ₹7,331.28 (3 lines) · Bill total: ₹5,831.28")
+})
+
 test("the real PNB layout: 3 lines (the Cr payment skipped), nothing unreadable, dates from their labels, checks pass", async ({ page }) => {
   const today = todayInIndia()
   await setUp(page, "Kiran Joshi")

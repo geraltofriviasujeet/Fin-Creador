@@ -106,3 +106,23 @@ describe("rowLayout: a masked layout for rows the reader can't use", () => {
     expect(rowLayouts[1]).toBe("text x40 w70 c14 dy0");
   });
 });
+
+describe("pageRows: small print beside a row", () => {
+  // Shapes from a real statement's masked layout: ~6.8pt cells, ~1.8pt small print a few points off.
+  const cell = (str: string, x: number, y: number, size = 6.8) => item(str, x, y, str.length * size * 0.55, size);
+  it("never joins a row, on its baseline or as a fragment, and a short Cr stays on its own row", () => {
+    const rows = pageRows([
+      cell("08-SEP-2026", 20, 700), cell("SKYLINE TRAVELS", 200, 700), cell("5046.64", 357, 700),
+      cell("POINTS EARNED", 424, 696, 1.8), cell("POINTS CREDIT", 425, 693, 1.8),
+      cell("REWARD POINTS BALANCE", 421, 690, 1.8),
+      cell("10-SEP-2026", 20, 687), cell("PAYMENT RECEIVED", 200, 687), cell("1,500.00", 354, 687), cell("Cr", 392, 687),
+    ]).map(rowText);
+    expect(rows).toContain("08-SEP-2026 SKYLINE TRAVELS 5046.64");
+    expect(rows).toContain("10-SEP-2026 PAYMENT RECEIVED 1,500.00 Cr");
+    expect(rows.filter((r) => /POINTS/.test(r))).toHaveLength(3);
+  });
+
+  it("joins pieces of the same size, and short pieces whatever their size", () => {
+    expect(pageRows([cell("08-SEP-2026", 20, 700), cell("FUEL", 200, 700, 9), cell("Dr", 300, 700, 4)]).map(rowText)).toEqual(["08-SEP-2026 FUEL Dr"]);
+  });
+});

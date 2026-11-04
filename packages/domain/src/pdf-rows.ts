@@ -6,8 +6,10 @@
 // about one and a half line heights) is a fragment of that row and is merged into the nearer one.
 // Within a row, pieces whose x ranges overlap form a column, read top line first; columns are read
 // left to right, and a gap wider than about a character starts a new cell. A piece drawn twice at
-// the same place (overprinted text) is read once. Pure, so any client that can list a page's text
-// pieces (pdf.js on web) gets the same rows.
+// the same place (overprinted text) is read once. Small print (a piece of 3+ characters whose
+// width per character is under half, or over twice, a row's) never joins that row, on its baseline
+// or as a fragment: it forms rows of its own, so it can't land after a line's amount. Pure, so any
+// client that can list a page's text pieces (pdf.js on web) gets the same rows.
 import { parseStatementDate } from "./statements";
 
 /** Largest statement PDF read (bytes), and the most pages. */
@@ -33,15 +35,31 @@ export interface PdfRow {
 const clean = (text: string) => text.replace(/\s+/g, " ").trim();
 
 type Piece = PdfTextItem;
-type Band = { y: number; height: number; pieces: Piece[] };
+/** The band's type size, as width per character of its first piece of 3+ characters; null until one. */
+type Band = { y: number; height: number; advance: number | null; pieces: Piece[] };
 
-/** Pieces on one baseline (within half a line height), top to bottom. */
+/** Width per character, a measure of type size; null for pieces too short to tell (1–2 characters). */
+function advance(piece: Piece): number | null {
+  const chars = clean(piece.str).length;
+  return chars >= 3 && piece.width > 0 ? piece.width / chars : null;
+}
+
+/** Same type size within a factor of 2 (or one side can't tell). */
+const sameSize = (a: number | null, b: number | null) => a === null || b === null || Math.max(a, b) <= 2 * Math.min(a, b);
+
+/** Pieces on one baseline (within half a line height) and of the same type size, top to bottom. */
 function baselines(pieces: readonly Piece[]): Band[] {
   const bands: Band[] = [];
   for (const piece of [...pieces].sort((a, b) => b.y - a.y || a.x - b.x)) {
-    const band = bands.find((r) => Math.abs(r.y - piece.y) <= Math.max(r.height, piece.height) / 2);
-    if (band) band.pieces.push(piece);
-    else bands.push({ y: piece.y, height: piece.height, pieces: [piece] });
+    const size = advance(piece);
+    // The nearest such baseline: a short piece ("Cr") sits on its own row's, not on small print's beside it.
+    const band = bands
+      .filter((r) => Math.abs(r.y - piece.y) <= Math.max(r.height, piece.height) / 2 && sameSize(r.advance, size))
+      .sort((a, b) => Math.abs(a.y - piece.y) - Math.abs(b.y - piece.y))[0];
+    if (band) {
+      band.pieces.push(piece);
+      band.advance ??= size;
+    } else bands.push({ y: piece.y, height: piece.height, advance: size, pieces: [piece] });
   }
   return bands.sort((a, b) => b.y - a.y);
 }
@@ -53,7 +71,13 @@ const distance = (a: Band, b: Band) => Math.min(...a.pieces.flatMap((p) => b.pie
 function mergeFragments(bands: Band[]): Band[] {
   const h = (band: Band) => band.height;
   const hosts = (band: Band) =>
-    bands.filter((other) => other !== band && distance(band, other) <= 1.6 * Math.max(h(band), h(other)) && leftOf(other) < leftOf(band) - h(band));
+    bands.filter(
+      (other) =>
+        other !== band &&
+        sameSize(band.advance, other.advance) &&
+        distance(band, other) <= 1.6 * Math.max(h(band), h(other)) &&
+        leftOf(other) < leftOf(band) - h(band),
+    );
   const fragment = new Set(bands.filter((band) => hosts(band).length > 0));
   for (const band of fragment) {
     const host = hosts(band)

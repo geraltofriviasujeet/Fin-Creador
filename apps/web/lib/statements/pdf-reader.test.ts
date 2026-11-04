@@ -84,6 +84,23 @@ describe("readStatementPdf: PNB real layout (boxed values, no Dr marker, split n
   })
 })
 
+describe("readStatementPdf: PNB real layout with small print beside two rows (shapes from the owner's Copy layout)", () => {
+  it("reads both rows (a debit, and a payment whose Cr is a piece of its own), with the small print in rows of its own", async () => {
+    const read = await readStatementPdf(lib, syntheticPdf(pnbRealLayoutPages({ smallPrint: true })))
+    expect(read.status).toBe("ok")
+    if (read.status !== "ok") return
+    const parsed = parseCardStatement(read.text, "Punjab National Bank")
+    expect(parsed.issues).toEqual([])
+    expect(parsed.lines.map((l) => [l.date, l.amountMinor, l.direction, l.kind, l.description]).slice(3)).toEqual([
+      ["2026-09-08", 504_664, "debit", "purchase", "SKYLINE TRAVELS ONLINE BOOKINGS IND"],
+      ["2026-09-10", 150_000, "credit", "payment", "PAYMENT RECEIVED THANKYOU"],
+    ])
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["summary", "ok"], ["purchases", "ok"], ["invoice_total", "ok"]])
+    expect(statementNeedsCheck(parsed)).toBe(false)
+    expect(JSON.stringify(parsed.lines)).not.toMatch(/POINTS|REDEEM/)
+  })
+})
+
 describe("readStatementPdf: another bank's statement and the general reader", () => {
   it("verifies itself when its summary and debit lines add up, and not when they don't", async () => {
     for (const [balanced, verifies] of [[true, true], [false, false]] as const) {
