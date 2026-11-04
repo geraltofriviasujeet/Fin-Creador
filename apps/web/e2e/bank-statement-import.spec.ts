@@ -168,7 +168,16 @@ test("a broken balance chain needs a check and unticks nothing; a year of lines 
   const today = todayInIndia()
   await setUp(page, "Chitra Nair")
   await openImport(page, PNB)
+  // Sprint 9d: with the opening and closing printed, the totals still reconcile, so the generic reader
+  // takes over and flags the two rows around the misprinted balance; the other five are offered.
   await chooser(page).setInputFiles(pdf("broken.pdf", syntheticPdf(pnbSavingsPages({ rows: savingsDefaultRows(today), breakChainAt: 3 }))))
+  await expect(lines(page)).toHaveCount(5)
+  await expect(review(page).getByRole("alert").first()).toContainText("Check this statement")
+  await expect(review(page)).toContainText("Some rows' balances don't follow")
+  await expect(review(page)).toContainText("2 rows could not be read")
+  // Without them the generic reader can't settle it, so the PNB reader's result stays: every line, a check.
+  await chooser(page).setInputFiles(pdf("broken.pdf", syntheticPdf(pnbSavingsPages({ rows: savingsDefaultRows(today), breakChainAt: 3, summary: false }))))
+  await expect(lines(page)).toHaveCount(7)
   await expect(review(page).getByRole("alert")).toContainText("Check this statement")
   await expect(review(page).getByRole("alert")).toContainText("The balances don't follow line by line")
   await expect(tickOf(page, "FRESH BASKET")).toBeChecked()
