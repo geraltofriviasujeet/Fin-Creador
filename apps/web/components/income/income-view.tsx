@@ -270,6 +270,14 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
                           >
                             {account.kind === "cash" ? "Update amount" : "Edit"}
                           </Menu.Item>
+                          {account.kind === "bank" && (
+                            <Menu.Item
+                              className="flex h-10 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
+                              onClick={() => router.push(`/income/import?account=${encodeURIComponent(account.id)}`)}
+                            >
+                              Import statement
+                            </Menu.Item>
+                          )}
                           <Menu.Item
                             className="flex h-10 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
                             onClick={() => show({ type: "archive", account })}

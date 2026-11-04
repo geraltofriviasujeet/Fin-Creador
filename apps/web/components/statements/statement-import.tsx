@@ -1,7 +1,7 @@
 "use client"
 
 import type * as React from "react"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import {
   type ImportCard,
   type LineSaveResult,
@@ -20,27 +20,29 @@ import {
   saveBlockers,
   STATEMENT_DATE_MISSING,
   statementDatesWarning,
-  unreadableLayoutText,
   unsupportedIssuerMessage,
 } from "@fin-creador/api"
-import {
-  type CardLineSkipReason,
-  type CardStatementParse,
-  MAX_STATEMENT_PDF_BYTES,
-  minorToGroupedInputString,
-  parseCardStatement,
-} from "@fin-creador/domain"
+import { type CardLineSkipReason, type CardStatementParse, minorToGroupedInputString, parseCardStatement } from "@fin-creador/domain"
 import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { importMatchesAction, importStatementAction, saveImportLinesAction } from "@/app/(app)/loans-liabilities/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
-import { loadPdfjs } from "@/lib/statements/load-pdfjs"
-import { PDF_READ_MESSAGES, readStatementPdf } from "@/lib/statements/pdf-reader"
+import { PDF_READ_MESSAGES } from "@/lib/statements/pdf-reader"
+import {
+  CheckAlert,
+  LineHead,
+  type SaveOutcome,
+  SkippedNotice,
+  StatementFileSection,
+  UnreadableNotice,
+  saveInChunks,
+  savedOutcome,
+  useStatementReader,
+} from "./statement-shared"
 
 // Card statement import (Sprint 9a.3 and 9a.4): read the PDF in the browser, then review it: a
 // tick and an editable date, amount and category per line. The file and its password never
@@ -51,15 +53,7 @@ import { PDF_READ_MESSAGES, readStatementPdf } from "@/lib/statements/pdf-reader
 
 const PNB = "Punjab National Bank"
 
-type Phase =
-  | { step: "choose"; message?: string }
-  | { step: "reading" }
-  | { step: "password"; message?: string }
-  | { step: "matching" }
-  | { step: "match_failed" }
-  /** No review and no Save: the file can't be read, or the issuer isn't supported yet. */
-  | { step: "message"; text: string; pnbOffer: boolean }
-  | { step: "review"; review: Review; asPnb: boolean; pnbOffer: boolean; general: boolean }
+type CardReviewPhase = { review: Review; asPnb: boolean; pnbOffer: boolean; general: boolean }
 
 type Context = { cardId: string; cardAddedOn: string; today: string; currency: string }
 
@@ -71,38 +65,34 @@ const SKIP_TEXT: Record<CardLineSkipReason, string> = {
   future: "Skipped: future date",
 }
 
-const MAX_UNREADABLE_SHOWN = 10
-
 function dateRange(parse: CardStatementParse, fallback: string): { from: string; to: string } {
   const dates = parse.lines.map((l) => l.date).sort()
   return { from: dates[0] ?? fallback, to: dates.at(-1) ?? fallback }
 }
 
 export function StatementImport({ card, today, categories }: { card: ImportCard; today: string; categories: ReviewCategory[] }) {
-  const [phase, setPhase] = useState<Phase>({ step: "choose" })
-  const [password, setPassword] = useState("")
-  const file = useRef<File | null>(null)
-  // The statement's text, for reading it again with the other parser; it never leaves this page.
-  const text = useRef<string | null>(null)
-  const pageRowCounts = useRef<number[] | undefined>(undefined)
-  // Each text line's masked layout (no statement text), for the "Copy layout" diagnostic.
-  const rowLayouts = useRef<string[] | undefined>(undefined)
-  // Each pick (and each read or parser switch) gets a number; a result for an older one is dropped.
-  const attempt = useRef(0)
   const issuerIsPnb = card.issuer === PNB
   const context: Context = { cardId: card.id, cardAddedOn: card.trackingStartedOn, today, currency: card.currency }
 
   /** A file this card's reader can't use: the PNB message, or that the issuer isn't supported yet. */
-  const cannotRead = (pnbOffer = false): Phase => ({ step: "message", text: issuerIsPnb ? UNREADABLE_FILE : unsupportedIssuerMessage(card.issuer), pnbOffer })
+  const cannotRead = (pnbOffer = false) => ({ step: "message" as const, text: issuerIsPnb ? UNREADABLE_FILE : unsupportedIssuerMessage(card.issuer), pnbOffer })
 
-  const review = async (asPnb: boolean) => {
-    if (text.current === null) return
-    const id = ++attempt.current
-    const parse = parseCardStatement(text.current, asPnb ? PNB : card.issuer)
-    const pnbOffer = !issuerIsPnb && /Punjab National Bank/i.test(text.current)
+  const reader: ReturnType<typeof useStatementReader<CardReviewPhase>> = useStatementReader<CardReviewPhase>({
+    onText: (): Promise<void> => review(issuerIsPnb),
+    cannotRead: () => cannotRead(),
+    wrongPassword: issuerIsPnb ? UNREADABLE_FILE : PDF_READ_MESSAGES.wrong_password,
+  })
+  const { phase, setPhase, attemptRef } = reader
+
+  async function review(asPnb: boolean): Promise<void> {
+    const read = reader.readRef.current
+    if (read === null) return
+    const id = ++attemptRef.current
+    const parse = parseCardStatement(read.text, asPnb ? PNB : card.issuer)
+    const pnbOffer = !issuerIsPnb && /Punjab National Bank/i.test(read.text)
     const outcome = importOutcome(parse, asPnb)
-    if (outcome === "unreadable") return setPhase({ step: "message", text: UNREADABLE_FILE, pnbOffer: false })
-    if (outcome === "unsupported") return setPhase(cannotRead(pnbOffer))
+    if (outcome === "unreadable") return void setPhase({ step: "message", text: UNREADABLE_FILE, pnbOffer: false })
+    if (outcome === "unsupported") return void setPhase(cannotRead(pnbOffer))
     setPhase({ step: "matching" })
     const result = await importMatchesAction({
       cardId: card.id,
@@ -110,140 +100,33 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
       ...dateRange(parse, today),
       statementDate: parse.summary.statementDate,
     }).catch(() => null)
-    if (id !== attempt.current) return
-    if (!result?.ok) return setPhase({ step: "match_failed" })
+    if (id !== attemptRef.current) return
+    if (!result?.ok) return void setPhase({ step: "match_failed" })
     setPhase({
       step: "review",
-      review: buildReview(parse, result.matches, categories, context, pageRowCounts.current, rowLayouts.current),
+      review: buildReview(parse, result.matches, categories, context, read.pageRowCounts, read.rowLayouts),
       asPnb,
       pnbOffer,
       general: outcome === "general",
     })
   }
 
-  const read = async (pdf: File, pass?: string) => {
-    const id = ++attempt.current
-    setPhase({ step: "reading" })
-    try {
-      const lib = await loadPdfjs()
-      const result = await readStatementPdf(lib, new Uint8Array(await pdf.arrayBuffer()), pass)
-      if (id !== attempt.current) return
-      if (result.status === "ok") {
-        text.current = result.text
-        pageRowCounts.current = result.pageRowCounts
-        rowLayouts.current = result.rowLayouts
-        await review(issuerIsPnb)
-      } else if (result.status === "needs_password") setPhase({ step: "password" })
-      else if (result.status === "wrong_password")
-        setPhase({ step: "password", message: issuerIsPnb ? UNREADABLE_FILE : PDF_READ_MESSAGES.wrong_password })
-      else if (result.status === "no_text" || result.status === "unreadable") setPhase(cannotRead())
-      else setPhase({ step: "choose", message: PDF_READ_MESSAGES[result.status] })
-    } catch {
-      if (id === attempt.current) setPhase(cannotRead())
-    } finally {
-      setPassword("")
-    }
-  }
-
-  const choose = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = e.target.files?.[0] ?? null
-    e.target.value = ""
-    // A new pick (or a cleared input) drops everything from the previous file at once: its review
-    // (lines, notices, ticks, statement fields, any open confirm), its text and the password.
-    attempt.current++
-    text.current = null
-    file.current = null
-    pageRowCounts.current = undefined
-    rowLayouts.current = undefined
-    setPassword("")
-    setPhase({ step: "choose" })
-    if (!picked) return
-    if (!/\.pdf$/i.test(picked.name) && picked.type !== "application/pdf") return setPhase({ step: "choose", message: "Choose a PDF file." })
-    if (picked.size > MAX_STATEMENT_PDF_BYTES) return setPhase({ step: "choose", message: PDF_READ_MESSAGES.too_large })
-    file.current = picked
-    void read(picked)
-  }
-
-  const openWithPassword = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (file.current && password !== "") void read(file.current, password)
-  }
-
-  const busy = phase.step === "reading" || phase.step === "matching"
-
   return (
     <div className="grid gap-4">
-      <section aria-labelledby="pdf-heading" className="grid gap-3 rounded-2xl border border-line bg-surface p-4 md:p-5">
-        <h2 id="pdf-heading" className="text-base font-semibold">
-          Statement PDF
-        </h2>
-        <div className="grid gap-1.5">
-          <label htmlFor="statement-pdf" className="text-sm font-semibold text-ink">
-            Choose your {card.issuer} statement (PDF)
-          </label>
-          <input
-            id="statement-pdf"
-            type="file"
-            accept="application/pdf,.pdf"
-            aria-describedby="statement-pdf-hint"
-            onChange={choose}
-            disabled={busy}
-            className="text-sm file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:font-semibold"
-          />
-          <p id="statement-pdf-hint" className="text-xs text-muted-foreground">
-            Read on this device only: the file and any password are never uploaded or saved. Text PDFs from your bank, up to{" "}
-            {MAX_STATEMENT_PDF_BYTES / 1024 / 1024} MB.
-          </p>
-        </div>
-        {phase.step === "choose" && phase.message && <FormMessage tone="error">{phase.message}</FormMessage>}
-        {phase.step === "reading" && <FormMessage tone="info">Reading the statement…</FormMessage>}
-        {phase.step === "matching" && <FormMessage tone="info">Checking it against your entries…</FormMessage>}
-        {phase.step === "message" && (
-          <FormMessage tone="error">
-            {phase.text}
-            {phase.pnbOffer && (
-              <>
-                {" "}
-                This looks like a Punjab National Bank statement.{" "}
-                <button type="button" className="font-semibold underline underline-offset-4" onClick={() => void review(true)}>
-                  Read it as a PNB statement
-                </button>
-              </>
-            )}
-          </FormMessage>
-        )}
-        {phase.step === "match_failed" && (
-          <FormMessage tone="error">
-            We couldn&apos;t check this statement against your entries. Check your connection.{" "}
-            <button type="button" className="font-semibold underline underline-offset-4" onClick={() => void review(issuerIsPnb)}>
-              Try again
+      <StatementFileSection
+        label={`Choose your ${card.issuer} statement (PDF)`}
+        reader={reader}
+        onRetry={() => void review(issuerIsPnb)}
+        messageExtra={
+          <>
+            {" "}
+            This looks like a Punjab National Bank statement.{" "}
+            <button type="button" className="font-semibold underline underline-offset-4" onClick={() => void review(true)}>
+              Read it as a PNB statement
             </button>
-          </FormMessage>
-        )}
-        {phase.step === "password" && (
-          <form onSubmit={openWithPassword} className="grid gap-3 md:max-w-sm" autoComplete="off">
-            {phase.message ? (
-              <FormMessage tone="error">{phase.message}</FormMessage>
-            ) : (
-              <FormMessage tone="info">This PDF is protected. Enter the password your bank gave for it.</FormMessage>
-            )}
-            <TextField
-              name="pdf-password"
-              type="password"
-              label="PDF password"
-              hint="Used once to open the file, then cleared. Never saved or sent."
-              autoComplete="off"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <div>
-              <Button type="submit" disabled={password === ""}>
-                Open PDF
-              </Button>
-            </div>
-          </form>
-        )}
-      </section>
+          </>
+        }
+      />
 
       {phase.step === "review" && (
         <StatementReview
@@ -262,20 +145,6 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
     </div>
   )
 }
-
-const STATUS_BADGE: Partial<Record<ReviewLine["status"], { text: string; tone: "info" | "neutral" }>> = {
-  duplicate: { text: "Possible duplicate", tone: "info" },
-  imported: { text: "Already imported", tone: "neutral" },
-  deleted: { text: "Already imported (deleted)", tone: "neutral" },
-}
-
-const RESULT_BADGE: Record<Exclude<LineSaveResult["status"], "failed">, { text: string; tone: "positive" | "neutral" }> = {
-  saved: { text: "Saved", tone: "positive" },
-  already_saved: { text: "Already imported", tone: "neutral" },
-  deleted: { text: "Already imported (deleted)", tone: "neutral" },
-}
-
-type Outcome = { tone: "success" | "error" | "info"; text: string }
 
 function StatementReview({
   card,
@@ -299,7 +168,6 @@ function StatementReview({
   const [lines, setLines] = useState(initial.lines)
   const [checkConfirmed, setCheckConfirmed] = useState(false)
   const [bulkCategory, setBulkCategory] = useState("")
-  const [layoutCopied, setLayoutCopied] = useState<"copied" | "failed" | null>(null)
   const s = initial.statement
   const c = card.currency
   const symbol = c === "INR" ? "₹" : c
@@ -313,7 +181,7 @@ function StatementReview({
   const [confirming, setConfirming] = useState(false)
   const [saving, setSaving] = useState(false)
   const [results, setResults] = useState<Record<string, LineSaveResult>>({})
-  const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null)
   const [statementDone, setStatementDone] = useState(s.exists)
   const review: Review = { ...initial, lines }
   const totals = reviewTotals(review, c)
@@ -332,46 +200,33 @@ function StatementReview({
     setSaving(true)
     setOutcome(null)
     const ticked = lines.filter((l) => l.ticked)
-    const done: LineSaveResult[] = []
-    let stopped: string | null = null
-    for (let i = 0; i < ticked.length; i += IMPORT_SAVE_CHUNK) {
-      const chunk = ticked.slice(i, i + IMPORT_SAVE_CHUNK)
-      const result = await saveImportLinesAction({
-        cardId: card.id,
-        statementDate: s.statementDate ?? "",
-        lines: chunk.map((l) => ({ original: l.original, date: l.date, amount: l.amount, categoryId: l.categoryId })),
-      }).catch(() => null)
-      if (!result?.ok) {
-        stopped = result?.message ?? "We couldn't reach the server. Check your connection."
-        break
-      }
-      done.push(...result.results)
-      const byKey = new Map(result.results.map((r) => [r.key, r]))
-      setResults((prev) => ({ ...prev, ...Object.fromEntries(byKey) }))
-      setLines((ls) =>
-        ls.map((l) => {
-          const r = byKey.get(l.key)
-          if (!r || r.status === "failed") return l
-          return { ...l, ticked: false, status: r.status === "deleted" ? "deleted" : "imported" }
+    const { done, stopped } = await saveInChunks(
+      ticked,
+      IMPORT_SAVE_CHUNK,
+      (chunk) =>
+        saveImportLinesAction({
+          cardId: card.id,
+          statementDate: s.statementDate ?? "",
+          lines: chunk.map((l) => ({ original: l.original, date: l.date, amount: l.amount, categoryId: l.categoryId })),
         }),
-      )
-    }
-    const saved = done.filter((r) => r.status === "saved").length
-    const settled = done.filter((r) => r.status !== "failed").length
-    const lineText = (n: number) => (n === 1 ? "1 line" : `${n} lines`)
-    if (settled < ticked.length) {
-      setOutcome({
-        tone: "error",
-        text: `Saved ${lineText(saved)} of ${ticked.length}. ${lineText(ticked.length - settled)} not saved: check them and press Save again to finish.${stopped ? ` ${stopped}` : ""}`,
-      })
+      (chunkResults) => {
+        const byKey = new Map(chunkResults.map((r) => [r.key, r]))
+        setResults((prev) => ({ ...prev, ...Object.fromEntries(byKey) }))
+        setLines((ls) =>
+          ls.map((l) => {
+            const r = byKey.get(l.key)
+            if (!r || r.status === "failed") return l
+            return { ...l, ticked: false, status: r.status === "deleted" ? "deleted" : "imported" }
+          }),
+        )
+      },
+    )
+    const first = savedOutcome(ticked.length, done, stopped)
+    if (first.tone === "error") {
+      setOutcome(first)
     } else {
-      let text =
-        ticked.length === 0
-          ? ""
-          : saved === ticked.length
-            ? `${lineText(saved)} saved.`
-            : `${lineText(saved)} saved; ${lineText(ticked.length - saved)} were already imported.`
-      let tone: Outcome["tone"] = "success"
+      let text = first.text
+      let tone: SaveOutcome["tone"] = "success"
       if (statement.enter && !statementDone) {
         const st = await importStatementAction({
           cardId: card.id,
@@ -409,68 +264,9 @@ function StatementReview({
         </FormMessage>
       )}
 
-      {reasons.length > 0 && (
-        <div role="alert" className="grid gap-2 rounded-xl bg-chip-peach px-3 py-2.5 text-sm text-danger">
-          <p className="font-semibold">Check this statement</p>
-          <ul className="grid list-disc gap-1 pl-5">
-            {reasons.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-          <label className="flex items-start gap-2 font-semibold text-ink">
-            <input type="checkbox" className="mt-0.5 size-4 accent-(--color-ink)" checked={checkConfirmed} onChange={(e) => setCheckConfirmed(e.target.checked)} />
-            I have compared these lines with my PDF
-          </label>
-        </div>
-      )}
-
-      {totals.skipped.count > 0 && (
-        <FormMessage tone="info">
-          {totals.skipped.count === 1 ? "1 line is skipped" : `${totals.skipped.count} lines are skipped`} ({money(totals.skipped.totalMinor, c)}):{" "}
-          {totals.skipped.reasons.join(", ")}. Each is marked below.
-        </FormMessage>
-      )}
-      {initial.unreadableRows > 0 && (
-        <FormMessage tone="error">
-          {initial.unreadableRows === 1 ? "1 row could not be read" : `${initial.unreadableRows} rows could not be read`}. Compare the lines with your PDF.
-          {initial.unreadable.length > 0 && (
-            <ul aria-label="Rows that could not be read" className="mt-1 list-disc pl-5">
-              {initial.unreadable.slice(0, MAX_UNREADABLE_SHOWN).map((u, i) => (
-                <li key={i}>
-                  {u.page === null ? `Row ${u.row}` : `Page ${u.page}, row ${u.row}`}
-                  {u.shape && `: ${u.shape}`}
-                </li>
-              ))}
-              {initial.unreadable.length > MAX_UNREADABLE_SHOWN && <li>and {initial.unreadable.length - MAX_UNREADABLE_SHOWN} more</li>}
-            </ul>
-          )}
-          {initial.unreadable.length > 0 && (
-            <span className="mt-2 flex flex-wrap items-center gap-2">
-              {/* For support: where each unreadable piece sits, never its text or digits. */}
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  void navigator.clipboard
-                    .writeText(unreadableLayoutText(initial.unreadable))
-                    .then(() => setLayoutCopied("copied"))
-                    .catch(() => setLayoutCopied("failed"))
-                }
-              >
-                Copy layout
-              </Button>
-              <span role="status" className="text-sm">
-                {layoutCopied === "copied"
-                  ? "Layout copied: positions and sizes only, no text or numbers from your statement."
-                  : layoutCopied === "failed"
-                    ? "Couldn't copy. Allow clipboard access and try again."
-                    : ""}
-              </span>
-            </span>
-          )}
-        </FormMessage>
-      )}
+      <CheckAlert reasons={reasons} confirmed={checkConfirmed} onConfirm={setCheckConfirmed} />
+      <SkippedNotice count={totals.skipped.count} totalMinor={totals.skipped.totalMinor} reasons={totals.skipped.reasons} currency={c} />
+      <UnreadableNotice count={initial.unreadableRows} rows={initial.unreadable} />
 
       <div className="flex flex-wrap items-end gap-2">
         <div className="grid gap-1.5">
@@ -633,38 +429,23 @@ function ReviewRow({
   const tickable = canTick(line)
   const errors = line.ticked ? lineErrors(line, categories, context) : {}
   const name = `${original.description}, ${fullDate(original.date)}`
-  const badge = result && result.status !== "failed" ? RESULT_BADGE[result.status] : STATUS_BADGE[line.status]
 
   return (
     <li className="grid gap-2 rounded-xl border border-line px-3 py-2.5">
-      <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-        {tickable ? (
-          <input
-            type="checkbox"
-            aria-label={`Import ${name}`}
-            className="mt-0.5 size-4 accent-(--color-ink)"
-            checked={line.ticked}
-            onChange={(e) => onChange({ ticked: e.target.checked })}
-          />
-        ) : (
-          <span aria-hidden="true" className="mt-0.5 size-4" />
-        )}
-        <span className="min-w-0 flex-1 text-sm font-semibold break-words">{original.description}</span>
-        <span className="text-sm font-semibold tabular-nums">
-          {money(original.amountMinor, context.currency)} {original.direction === "credit" ? "Cr" : "Dr"}
-        </span>
-        <span className="basis-full pl-7 text-xs text-muted-foreground">
-          {fullDate(original.date)}
-          {line.status === "skipped" && line.skipReason && ` · ${SKIP_TEXT[line.skipReason]}`}
-          {original.foreignCurrency && ` · paid in ${original.foreignCurrency}`}
-        </span>
-        {badge && (
-          <span className="pl-7">
-            <Badge tone={badge.tone}>{badge.text}</Badge>
-          </span>
-        )}
-        {result?.status === "failed" && <span className="basis-full pl-7 text-xs font-semibold text-danger">Not saved: {result.reason}</span>}
-      </div>
+      <LineHead
+        name={name}
+        description={original.description}
+        amountMinor={original.amountMinor}
+        direction={original.direction}
+        date={original.date}
+        currency={context.currency}
+        notes={[line.status === "skipped" && line.skipReason && SKIP_TEXT[line.skipReason], original.foreignCurrency && `paid in ${original.foreignCurrency}`]}
+        status={line.status}
+        result={result}
+        tickable={tickable}
+        ticked={line.ticked}
+        onTick={(ticked) => onChange({ ticked })}
+      />
       {tickable && line.ticked && (
         <div className="grid gap-2 pl-7 md:grid-cols-[10rem_9rem_1fr]">
           <div className="grid gap-1">

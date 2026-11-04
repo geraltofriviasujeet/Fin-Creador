@@ -53,13 +53,17 @@ export const dialog = (page: Page, title: string) => page.getByRole("dialog", { 
 export const toast = (page: Page, text: string) => page.getByRole("region", { name: "Notifications" }).getByText(text)
 
 /** Adds a bank account on the Income page (the page must be open). */
-export async function addBank(page: Page, { bank, last4, opening, type = "Savings account" }: { bank: string; last4: string; opening: string; type?: string }) {
+export async function addBank(
+  page: Page,
+  { bank, last4, opening, type = "Savings account", asOf }: { bank: string; last4: string; opening: string; type?: string; asOf?: string },
+) {
   await page.getByRole("button", { name: "Add bank account" }).first().click()
   const d = dialog(page, "Add bank account")
   await d.getByLabel("Bank name").selectOption(bank)
   await d.getByLabel("Account type").selectOption({ label: type })
   await d.getByLabel("Last 4 digits").fill(last4)
   await d.getByLabel("Opening balance").fill(opening)
+  if (asOf) await d.getByLabel("As of").fill(asOf)
   await d.getByRole("button", { name: "Add account" }).click()
   await expect(toast(page, "Account added.")).toBeVisible()
   await expect(d).toBeHidden()
