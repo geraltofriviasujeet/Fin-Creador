@@ -214,12 +214,21 @@ const sign = (direction: StatementDirection, minor: number) => (direction === "c
  */
 export type BankReadFailure =
   | { reason: "no_header"; closest: { line: number; missing: HeaderNeed[] } | null }
-  | { reason: "no_lines"; header: number }
-  | { reason: "dates_out_of_order"; header: number }
-  | { reason: "totals_failed"; header: number }
-  | { reason: "closing_mismatch"; header: number }
-  | { reason: "chain_broken"; header: number; rows: number }
-  | { reason: "nothing_kept"; header: number };
+  | ({ reason: "no_lines" | "dates_out_of_order" | "totals_failed" | "closing_mismatch" | "nothing_kept" } & AfterHeader)
+  | ({ reason: "chain_broken"; rows: number } & AfterHeader);
+
+/** The header row's line, and what became of each row below it that wasn't skipped ("line" or why not). */
+type AfterHeader = { header: number; verdicts: Record<number, string> };
+
+const ISSUE_TEXT: Record<StatementIssue["reason"], string> = {
+  no_amount: "unreadable: no amount",
+  bad_date: "unreadable: no date or date not read",
+  bad_amount: "unreadable: amount not read",
+  no_description: "unreadable: no description",
+  too_many_lines: "unreadable: too many lines",
+  too_long: "unreadable: file too long",
+  balance_mismatch: "flagged: balance doesn't follow",
+};
 
 /** Reads a bank statement's table by structure; null when it can't be read or doesn't add up. */
 export function parseGenericBankStatement(rows: readonly BankTableRow[]): BankStatementParse | null {
@@ -244,6 +253,8 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
   }
   if (!columns) return { failure: { reason: "no_header", closest } };
   const header = start + 1;
+  // Rows printed without a date that were reported; dropped when the totals reconcile (they can't be a missed line).
+  const dateless = new Set<number>();
 
   const issues: StatementIssue[] = [];
   const raw: Raw[] = [];
@@ -260,7 +271,8 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
     const text = row.cells.join(" ").replace(/\s+/g, " ").trim();
     const pending = labels;
     labels = null;
-    if (text === "" || isStatementPageFooter(text) || FURNITURE.test(text) || bankTableColumns(row)) {
+    // A lone number of up to 4 digits is a page number.
+    if (text === "" || isStatementPageFooter(text) || FURNITURE.test(text) || /^\d{1,4}$/.test(text) || bankTableColumns(row)) {
       open = null;
       continue;
     }
@@ -312,6 +324,11 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
     }
     const balance = cells.balance === "" ? null : parseStatementBalance(cells.balance);
 
+    // A total row ("TRANSACTION TOTAL", "Total") is never a line.
+    if (!dateMatch && /(?<![a-z])totals?(?![a-z])/i.test(text)) {
+      open = null;
+      continue;
+    }
     if (!dateMatch && !hasAmount) {
       // A balance-only row: the opening or closing balance, or a page's carried-forward balance.
       if (balance !== null && OPENING_ROW.test(text)) {
@@ -320,7 +337,10 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
       else if (balance === null && open && onlyDescription(row, columns)) {
         open.remarks.push(cells.description);
         continue;
-      } else if (balance !== null && !CARRIED_ROW.test(text)) issues.push({ line, reason: "no_amount", shape: statementRowShape(text) });
+      } else if (balance !== null && !CARRIED_ROW.test(text)) {
+        issues.push({ line, reason: "no_amount", shape: statementRowShape(text) });
+        dateless.add(line);
+      }
       open = null;
       continue;
     }
@@ -338,6 +358,7 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
     if (!date || format !== dateFormat) {
       dateAbove = null;
       issues.push({ line, reason: "bad_date", shape: statementRowShape(text) });
+      if (!dateMatch) dateless.add(line);
       continue;
     }
     dateAbove = date;
@@ -352,12 +373,18 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
     open = { line, shape: statementRowShape(text), date, amountMinor: amount.minor, stated: amount.direction, balanceMinor: balance, remarks: description === "" ? [] : [description] };
     raw.push(open);
   }
-  if (raw.length === 0) return { failure: { reason: "no_lines", header } };
+  const after = (): AfterHeader => {
+    const verdicts: Record<number, string> = {};
+    for (const i of issues) verdicts[i.line] = ISSUE_TEXT[i.reason];
+    for (const r of raw) verdicts[r.line] = "line";
+    return { header, verdicts };
+  };
+  if (raw.length === 0) return { failure: { reason: "no_lines", ...after() } };
 
   // Day first, in date order either way; out of order means the dates were not read right.
   const ascending = raw.every((r, i) => i === 0 || r.date >= raw[i - 1]!.date);
   const descending = raw.every((r, i) => i === 0 || r.date <= raw[i - 1]!.date);
-  if (!ascending && !descending) return { failure: { reason: "dates_out_of_order", header } };
+  if (!ascending && !descending) return { failure: { reason: "dates_out_of_order", ...after() } };
   const orders = ascending && descending ? [false, true] : [descending];
   const chains = orders.map((newestFirst) => chainCheck(newestFirst ? [...raw].reverse() : raw, openingMinor));
   const chosen = chains.reduce((best, c) => (c.suspect.size < best.suspect.size ? c : best));
@@ -387,11 +414,13 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
     } else if (conflicts.size > 0 && total(asBalance) === closingMinor) {
       flagged = new Set([...suspect, ...conflicts]);
       direction = asBalance;
-    } else return { failure: { reason: "totals_failed", header } };
+    } else return { failure: { reason: "totals_failed", ...after() } };
+    // Every line is accounted for, so a row printed without a date that couldn't be read isn't one.
+    for (let k = issues.length - 1; k >= 0; k--) if (dateless.has(issues[k]!.line)) issues.splice(k, 1);
     totals = { name: "totals", status: "ok", foundMinor: closingMinor, expectedMinor: closingMinor };
   } else {
-    if (suspect.size > 0) return { failure: { reason: "chain_broken", header, rows: suspect.size } };
-    if (closingMinor !== null && timeOrder[timeOrder.length - 1]!.balanceMinor !== closingMinor) return { failure: { reason: "closing_mismatch", header } };
+    if (suspect.size > 0) return { failure: { reason: "chain_broken", rows: suspect.size, ...after() } };
+    if (closingMinor !== null && timeOrder[timeOrder.length - 1]!.balanceMinor !== closingMinor) return { failure: { reason: "closing_mismatch", ...after() } };
     // No endpoints to settle a disagreement: a row whose marker and balance disagree is flagged.
     flagged = new Set([...conflicts, ...raw.filter((r) => !asStated(r))]);
     direction = asStated;
@@ -399,7 +428,7 @@ export function readGenericBankStatement(rows: readonly BankTableRow[]): { parse
   }
 
   const kept = raw.filter((r) => !flagged.has(r));
-  if (kept.length === 0) return { failure: { reason: "nothing_kept", header } };
+  if (kept.length === 0) return { failure: { reason: "nothing_kept", ...after() } };
   for (const r of raw) if (flagged.has(r)) issues.push({ line: r.line, reason: "balance_mismatch", shape: r.shape });
   issues.sort((a, b) => a.line - b.line);
   const lines: BankStatementLine[] = numberOccurrences(
@@ -544,9 +573,10 @@ export const BANK_FAILURE_ROWS_SHOWN = 30;
 
 /**
  * The "Copy layout" text for a file no reader could read (readBankStatement gave null): why the
- * generic reader gave up, then the masked layout of the first rows (PDF: rowLayout per piece, kind,
- * x, width, characters, dy; CSV: per cell, kind, column and characters) and of the closest header
- * row when it is further down. Never any text or digits from the statement.
+ * generic reader gave up, then masked layouts (PDF: rowLayout per piece, kind, x, width, characters,
+ * dy; CSV: per cell, kind, column and characters). With no header: the first rows and the closest
+ * header row when it is further down. With a header: that row and the rows under it, each with what
+ * became of it. Never any text or digits from the statement.
  */
 export function bankReadFailureText(read: {
   format: "pdf" | "csv";
@@ -568,8 +598,17 @@ export function bankReadFailureText(read: {
     const shown = cells.flatMap((cell, i) => (cell === "" ? [] : [`${pieceKind(cell)} col${i + 1} c${cell.length}`]));
     return shown.length > 0 ? shown.join(" | ") : "empty";
   };
-  const shown = Array.from({ length: Math.min(rows.length, BANK_FAILURE_ROWS_SHOWN) }, (_, i) => i + 1);
-  if (failure.reason === "no_header" && failure.closest && failure.closest.line > BANK_FAILURE_ROWS_SHOWN) shown.push(failure.closest.line);
   const at1 = (line: number) => at(line).replace(/^./, (c) => c.toUpperCase());
+  if (failure.reason !== "no_header") {
+    // The header row, then the rows under it with what became of each.
+    const below = Array.from({ length: Math.min(rows.length - failure.header, BANK_FAILURE_ROWS_SHOWN) }, (_, i) => failure.header + 1 + i);
+    return [
+      `Why: ${failureText(failure, at)}`,
+      `${at1(failure.header)} (header): ${layout(failure.header)}`,
+      ...below.map((line) => `${at1(line)}: ${layout(line)} → ${failure.verdicts[line] ?? "skipped"}`),
+    ].join("\n");
+  }
+  const shown = Array.from({ length: Math.min(rows.length, BANK_FAILURE_ROWS_SHOWN) }, (_, i) => i + 1);
+  if (failure.closest && failure.closest.line > BANK_FAILURE_ROWS_SHOWN) shown.push(failure.closest.line);
   return [`Why: ${failureText(failure, at)}`, ...shown.map((line) => `${at1(line)}: ${layout(line)}`)].join("\n");
 }

@@ -447,7 +447,12 @@ describe("parseGenericBankStatement: shapes from real statements' Copy layout", 
         ...line(660, "01-10-2026", "UPI/P2M/412345678901/FRESH", "BASKET/PAYMENT", "1,784.00", null, "8,216.00", "123"),
         ...line(638, "02-10-2026", "NEFT/N275260012345678/EXAMPLE", "EMPLOYER/SALARY", null, "50,000.00", "58,216.00", "123"),
         ...line(616, "03-10-2026", "ATM-CASH/EXAMPLE ROAD", "KOLKATA", "2,000.00", null, "56,216.00", "4567"),
-        p("CLOSING BALANCE", 132, 590), { ...p("56,216.00", 483, 590), width: 47 },
+        // Shapes of rows that were reported: "text x132 c17 | amount x337 | amount x394" (a total row),
+        // "number x294 c1" (a page number) and "number x39 c1 | text x76 c28 | amount x453" (no date).
+        p("TRANSACTION TOTAL", 132, 590), p("3,784.00", 337, 590), p("50,000.00", 394, 590),
+        p("CLOSING BALANCE", 132, 570), { ...p("56,216.00", 483, 570), width: 47 },
+        p("4", 294, 540),
+        p("1", 39, 520), p("UNLESS NOTIFIED WITHIN DAYS", 76, 520), p("56,216.00", 453, 520),
       ],
     ];
     const { rows, rowLayouts } = statementPages(pages);
@@ -459,6 +464,7 @@ describe("parseGenericBankStatement: shapes from real statements' Copy layout", 
       ["2026-10-03", 200_000, "debit", 5_621_600, "ATM-CASH/EXAMPLE ROAD KOLKATA"],
     ]);
     expect(parsed?.summary.openingMinor).toBe(1_000_000);
+    // The total row and the page number are skipped; the undated row isn't reported once the totals reconcile.
     expect(parsed?.issues).toEqual([]);
     expect(JSON.stringify(parsed)).not.toMatch(/4567|50100012345678|Axis/);
   });
@@ -526,6 +532,19 @@ describe("bankReadFailureText", () => {
     );
     expect(csv([head, "10/05/2026,SHOP,100.00,,900.00", "10/12/2026,TEA,10.00,,890.00", "11/02/2026,FUEL,10.00,,880.00"]).split("\n")[0]).toBe(
       "Why: Header row at row 1. The dates run out of order when read day first.",
+    );
+  });
+
+  it("after a header: that row and the rows under it, each with what became of it", () => {
+    const text = csv(["Example Bank", "Date,Narration,Debit,Credit,Balance", "31/02/2026,SHOP,100.00,,900.00", "a note,,,,", ",TEA,10.00,,"]);
+    expect(text).toBe(
+      [
+        "Why: Header row at row 2, but no row below it was read as a line.",
+        "Row 2 (header): text col1 c4 | text col2 c9 | text col3 c5 | text col4 c6 | text col5 c7",
+        "Row 3: number col1 c10 | text col2 c4 | amount col3 c6 | amount col5 c6 → unreadable: no date or date not read",
+        "Row 4: text col1 c6 → skipped",
+        "Row 5: text col2 c3 | amount col3 c5 → unreadable: no date or date not read",
+      ].join("\n"),
     );
   });
 
