@@ -124,7 +124,9 @@ export function TimeChart({
           >
             {asLine
               ? series.map((s) => {
-                  const points = buckets.map((b, i) => `${i * 10 + 5},${y(value(b, s))}`).join(" ")
+                  // Spending below zero (refunds more than the purchases) is drawn at zero; the
+                  // hover titles and the table give the real figure.
+                  const points = buckets.map((b, i) => `${i * 10 + 5},${y(Math.max(value(b, s), 0))}`).join(" ")
                   return (
                     <g key={s}>
                       {series.length === 1 && <polygon points={`5,100 ${points} ${n * 10 - 5},100`} className={SERIES[s].area} />}
@@ -204,7 +206,7 @@ export function TimeChart({
           </thead>
           <tbody>
             {buckets
-              .filter((b) => series.some((s) => value(b, s) > 0))
+              .filter((b) => series.some((s) => value(b, s) !== 0))
               .map((b) => {
                 const part = partialBucket(b.start, range, size)
                 return (

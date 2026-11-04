@@ -7,7 +7,7 @@ function row(id: string, createdAt: string, occurredOn = "2026-10-20"): LedgerRo
     id, created_at: createdAt, occurred_on: occurredOn, account_id: "acc", amount_minor: 100, category_id: "cat",
     counter_account_id: null, currency: "INR", idempotency_key: id, note: null, payment_mode: null,
     replaces_id: null, type: "expense", user_id: "u", void_idempotency_key: null, void_reason: null, voided_at: null,
-    recurring_rule_id: null, occurrence_date: null, due_payment_id: null, liability_payment_id: null,
+    recurring_rule_id: null, occurrence_date: null, due_payment_id: null, liability_payment_id: null, refund_of_id: null,
   }
 }
 
@@ -87,15 +87,16 @@ describe("loadTransactionTotals", () => {
     const client = {
       rpc: async () => ({
         data: [
-          { currency: "INR", income_minor: 500000, expense_minor: 24500, income_count: 1, expense_count: 3, transfer_count: 1 },
-          { currency: "USD", income_minor: 0, expense_minor: 300, income_count: 0, expense_count: 1, transfer_count: 0 },
+          { currency: "INR", income_minor: 500000, expense_minor: 24500, refund_minor: 500, income_count: 1, expense_count: 3, refund_count: 1, transfer_count: 1 },
+          { currency: "USD", income_minor: 0, expense_minor: -300, refund_minor: 600, income_count: 0, expense_count: 1, refund_count: 1, transfer_count: 0 },
         ],
         error: null,
       }),
     } as unknown as UserClient
     expect(await loadTransactionTotals(client, filters, "INR")).toEqual({
       ok: true,
-      totals: { incomeMinor: 500000, expenseMinor: 24500, netMinor: 475500, incomeCount: 1, expenseCount: 3, transferCount: 1, otherCurrencyCount: 1 },
+      // expense_minor is already net of refunds (transaction_summary); refunds in other currencies count as entries there.
+      totals: { incomeMinor: 500000, expenseMinor: 24500, refundMinor: 500, netMinor: 475500, incomeCount: 1, expenseCount: 3, refundCount: 1, transferCount: 1, otherCurrencyCount: 2 },
     })
   })
 })

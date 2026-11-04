@@ -9,6 +9,7 @@ import {
   fillBuckets,
   isIsoDate,
   monthRange,
+  refundedCategories,
   topCategories,
 } from "@fin-creador/domain"
 import type { UserClient } from "../income/client"
@@ -99,6 +100,8 @@ export type DashboardBreakdown = {
   buckets: BucketTotals[]
   /** Top 5 expense categories plus "Everything else" (categoryId null), profile currency. */
   categories: CategorySpend[]
+  /** Categories below zero (refunds more than the spending), most refunded first. */
+  refunded: CategorySpend[]
   /** Other currencies with income or expenses in the range: noted, never summed. */
   otherCurrencies: string[]
 }
@@ -123,6 +126,8 @@ type BreakdownRow = {
   expense_minor: number
 }
 
+const categoryRows = (rows: CategorySpend[]) => ({ categories: topCategories(rows), refunded: refundedCategories(rows) })
+
 export function buildBreakdown(rows: readonly BreakdownRow[], range: DateRange, currency: string): DashboardBreakdown {
   const same = rows.filter((r) => r.currency === currency)
   return {
@@ -132,9 +137,7 @@ export function buildBreakdown(rows: readonly BreakdownRow[], range: DateRange, 
         .filter((r) => r.kind !== "category" && r.bucket_start)
         .map((r) => ({ start: r.bucket_start as string, incomeMinor: r.income_minor, expenseMinor: r.expense_minor })),
     ),
-    categories: topCategories(
-      same.filter((r) => r.kind === "category").map((r) => ({ categoryId: r.category_id, expenseMinor: r.expense_minor })),
-    ),
+    ...categoryRows(same.filter((r) => r.kind === "category").map((r) => ({ categoryId: r.category_id, expenseMinor: r.expense_minor }))),
     otherCurrencies: [...new Set(rows.filter((r) => r.currency !== currency).map((r) => r.currency))].sort(),
   }
 }

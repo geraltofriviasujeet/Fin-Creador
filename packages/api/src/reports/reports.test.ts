@@ -88,6 +88,7 @@ describe("exportTransactionsCsv", () => {
         entry("t1", { note: '=HYPERLINK("http://example.test","x")' }),
         entry("t2", { type: "transfer", amount_minor: 5_00, account_id: BANK, counter_account_id: CASH, category_id: null, payment_mode: null, note: "-ATM" }),
         entry("t3", { voided_at: "2026-10-02T00:00:00Z" }),
+        entry("t4", { type: "refund", amount_minor: 2_00, payment_mode: null, note: "Returned" }),
       ],
     }
     const r = await exportTransactionsCsv(fakeClient(rows).client, { from: "2026-10-01", to: "2026-10-31" })
@@ -98,8 +99,10 @@ describe("exportTransactionsCsv", () => {
     expect(lines.slice(1)).toEqual([
       `2026-10-01,Expense,1250.50,INR,'=HDFC Savings,,Food & dining,UPI,"'=HYPERLINK(""http://example.test"",""x"")",`,
       "2026-10-01,Transfer,5.00,INR,'=HDFC Savings,Cash in hand,,,'-ATM,",
+      // A refund: its own type, a positive amount (the type gives the direction), in its expense category.
+      "2026-10-01,Refund,2.00,INR,'=HDFC Savings,,Food & dining,,Returned,",
     ])
-    expect([r.filename, r.rowCount]).toEqual(["fincreador-transactions-2026-10-01-to-2026-10-31.csv", 2])
+    expect([r.filename, r.rowCount]).toEqual(["fincreador-transactions-2026-10-01-to-2026-10-31.csv", 3])
   })
 
   it("with voided entries: marked Yes, and an edit's old version never shows", async () => {

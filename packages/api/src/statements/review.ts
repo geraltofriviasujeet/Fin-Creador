@@ -15,6 +15,7 @@ import {
   statementLineKey,
   statementVerifiesItself,
 } from "@fin-creador/domain"
+import { type RefundCandidate, suggestRefundLinks } from "./refunds"
 
 // The review of an imported card statement (Sprint 9a.4), shared by web and mobile: one row per
 // line read, with a tick and the date, amount and category the person may change. Pure: built
@@ -22,11 +23,14 @@ import {
 //
 // - Request keys come from the line exactly as read (statementLineKey), never from edits, so the
 //   same statement imported again maps to the same keys.
-// - Skipped (payments, refunds, card EMIs, lines before the card was added or in the future) are
-//   listed, never tickable. A key already in the ledger is "Already imported", never tickable; one
+// - Skipped (payments, card EMIs, lines before the card was added or in the future) are
+//   listed, never tickable. Refunds (credits, Sprint 9c) are saved as refunds on the card: linked to
+//   a purchase when one has exactly the refund left (its category comes with it, ticked), else
+//   unticked until the person picks a category (a link stays optional). A key already in the ledger is "Already imported", never tickable; one
 //   whose entry was deleted (voided, no newer version) is "Already imported (deleted)", never tickable.
-// - A line with the same date and amount as an existing entry on the card is a "Possible
-//   duplicate" and starts unticked (each existing entry marks one line).
+// - A line with the same date, amount and direction as an existing entry on the card (a purchase
+//   for a debit, a refund for a credit) is a "Possible duplicate" and starts unticked (each
+//   existing entry marks one line).
 // - Fee, interest and tax lines default to the system category Bank charges & interest; other
 //   lines to Other expenses. Nothing is ever unticked by the app after the person ticks it.
 
@@ -41,8 +45,10 @@ export type ImportMatches = {
   importedKeys: string[]
   /** Request keys whose ledger row was deleted (voided, no newer version): never imported again. */
   deletedKeys: string[]
-  /** Current expense entries on the card in the statement's date range, other than this statement's lines. */
-  cardEntries: { date: IsoDate; amountMinor: number }[]
+  /** Current purchases and refunds on the card in the statement's date range, other than this statement's lines. */
+  cardEntries: { date: IsoDate; amountMinor: number; direction: "debit" | "credit" }[]
+  /** Purchases on the card a refund line may be linked to (loadRefundCandidates). */
+  refundCandidates: RefundCandidate[]
   /** Enter statement already holds a statement for this card and date. */
   statementExists: boolean
 }
@@ -60,10 +66,17 @@ export type ReviewLine = {
   date: string
   amount: string
   categoryId: string
+  /** Refunds only: the purchase it reverses ("" for none). */
+  refundOfId: string
 }
+
+/** A credit on the card: saved as a refund. */
+export const isRefundLine = (line: Pick<ReviewLine, "original">): boolean => line.original.kind === "refund"
 
 export type Review = {
   lines: ReviewLine[]
+  /** For refund lines: the card purchases they may be linked to. */
+  refundCandidates: RefundCandidate[]
   statement: CardStatementSummary & { exists: boolean }
   checks: StatementCheck[]
   unreadableRows: number
@@ -108,9 +121,13 @@ export function buildReview(
   const deleted = new Set(matches.deletedKeys)
   const existing = new Map<string, number>()
   for (const entry of matches.cardEntries) {
-    const k = `${entry.date}|${entry.amountMinor}`
+    const k = `${entry.date}|${entry.amountMinor}|${entry.direction}`
     existing.set(k, (existing.get(k) ?? 0) + 1)
   }
+  const refunds = parse.lines.map((line, i) => ({ line, i })).filter(({ line }) => line.kind === "refund")
+  const suggested = suggestRefundLinks(refunds.map(({ line }) => line), matches.refundCandidates)
+  const linkOf = new Map(refunds.map(({ i }, k) => [i, suggested[k] ?? null]))
+  const candidates = new Map(matches.refundCandidates.map((c) => [c.id, c]))
 
   const lines = parse.lines.map((line, i): ReviewLine => {
     const key = keys[i]!
@@ -120,11 +137,28 @@ export function buildReview(
     else if (imported.has(key)) status = "imported"
     else if (deleted.has(key)) status = "deleted"
     else {
-      const k = `${line.date}|${line.amountMinor}`
+      const k = `${line.date}|${line.amountMinor}|${line.direction}`
       const left = existing.get(k) ?? 0
       if (left > 0) {
         status = "duplicate"
         existing.set(k, left - 1)
+      }
+    }
+    const open = status === "new" || status === "duplicate"
+    if (line.kind === "refund") {
+      const link = open ? (linkOf.get(i) ?? null) : null
+      const category = link ? (candidates.get(link)?.categoryId ?? "") : ""
+      const categoryId = categories.some((c) => c.id === category) ? category : ""
+      return {
+        key,
+        original: line,
+        status,
+        skipReason: null,
+        ticked: status === "new" && categoryId !== "",
+        date: line.date,
+        amount: minorToGroupedInputString(line.amountMinor, context.currency),
+        categoryId,
+        refundOfId: link ?? "",
       }
     }
     return {
@@ -135,12 +169,14 @@ export function buildReview(
       ticked: status === "new",
       date: line.date,
       amount: minorToGroupedInputString(line.amountMinor, context.currency),
-      categoryId: status === "new" || status === "duplicate" ? defaultCategory(line, categories) : "",
+      categoryId: open ? defaultCategory(line, categories) : "",
+      refundOfId: "",
     }
   })
 
   return {
     lines,
+    refundCandidates: matches.refundCandidates,
     statement: { ...parse.summary, exists: matches.statementExists },
     checks: parse.checks,
     unreadableRows: parse.issues.length,
@@ -175,7 +211,6 @@ export function lineErrors(
 
 const SKIP_LABELS: Record<CardLineSkipReason, string> = {
   payment: "payments",
-  refund: "refunds",
   emi: "card EMIs",
   before_card: "before you added the card",
   future: "future dates",
@@ -183,6 +218,9 @@ const SKIP_LABELS: Record<CardLineSkipReason, string> = {
 
 export type ReviewTotals = {
   ticked: number
+  /** Ticked refunds (among `ticked`). */
+  tickedRefunds: number
+  /** What the ticked lines add to what the card owes: purchases − refunds (may be below zero). */
   tickedMinor: number
   skipped: { count: number; totalMinor: number; reasons: string[] }
 }
@@ -190,16 +228,20 @@ export type ReviewTotals = {
 export function reviewTotals(review: Pick<Review, "lines">, currency: string): ReviewTotals {
   let tickedMinor = 0
   let ticked = 0
+  let tickedRefunds = 0
   for (const line of review.lines) {
     if (!line.ticked) continue
     const amount = parseAmount(line.amount, currency)
+    const refund = isRefundLine(line)
     ticked += 1
-    if (amount.ok) tickedMinor = addMinor(tickedMinor, amount.minor)
+    if (refund) tickedRefunds += 1
+    if (amount.ok) tickedMinor = addMinor(tickedMinor, refund ? -amount.minor : amount.minor)
   }
   const skippedLines = review.lines.filter((l) => l.status === "skipped")
   const reasons = [...new Set(skippedLines.map((l) => l.skipReason!))].map((r) => SKIP_LABELS[r])
   return {
     ticked,
+    tickedRefunds,
     tickedMinor,
     skipped: { count: skippedLines.length, totalMinor: addMinor(...skippedLines.map((l) => l.original.amountMinor)), reasons },
   }

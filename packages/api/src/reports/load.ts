@@ -41,7 +41,7 @@ export async function loadCashFlow(supabase: UserClient, months: readonly IsoDat
   const other = new Set<string>()
   const monthly = results.map((r, i) => {
     const rows = r.data ?? []
-    for (const row of rows) if (row.currency !== currency && (row.income_minor > 0 || row.expense_minor > 0)) other.add(row.currency)
+    for (const row of rows) if (row.currency !== currency && (row.income_minor !== 0 || row.expense_minor !== 0)) other.add(row.currency)
     const same = rows.filter((row) => row.currency === currency)
     const buckets = same.filter((row) => row.kind !== "category")
     return {

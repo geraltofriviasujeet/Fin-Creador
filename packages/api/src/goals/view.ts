@@ -110,7 +110,9 @@ export function buildGoalsView(data: GoalsData): GoalsView {
   for (const [categoryId, budget] of current) {
     const category = categories.get(categoryId)
     if (!category) continue
-    const spentMinor = data.spending.get(categoryId) ?? 0
+    // Spending is net of refunds (dashboard_breakdown); refunds larger than the month's purchases
+    // count as nothing spent, never below zero.
+    const spentMinor = Math.max(data.spending.get(categoryId) ?? 0, 0)
     const status = budget.currency === currency ? budgetStatus(spentMinor, budget.amountMinor) : null
     budgets.push({ category, budget, spentMinor, status })
   }

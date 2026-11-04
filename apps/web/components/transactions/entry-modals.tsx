@@ -34,6 +34,7 @@ function draftInput(draft: Draft, accounts: LedgerAccount[], requestKey: string,
     paymentMode: draft.paymentMode ?? "",
     occurredOn: draft.occurredOn,
     note: draft.note ?? "",
+    refundOfId: draft.refundOfId ?? "",
     idempotencyKey: requestKey,
   }
 }
@@ -66,6 +67,38 @@ export function AddEntryDialog({
             {...data}
             lastExpenseAccountId={lastExpenseAccountId}
             onTypeChange={onTypeChange}
+            onSave={async (draft, key) => {
+              const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key)))
+              if (result.status === "success") {
+                onClose()
+                toast.success(result.message)
+              }
+              return toSaveResult(result)
+            }}
+          />
+        </DialogContent>
+      )}
+    </Dialog>
+  )
+}
+
+/**
+ * "Refund this" on an expense: a refund linked to it, starting from its amount, account and
+ * category, dated today (any of them can change; the database caps linked refunds at the purchase).
+ */
+export function RefundEntryDialog({ purchase, onClose, ...data }: FormProps & { purchase: LedgerItem | null; onClose: () => void }) {
+  return (
+    <Dialog open={purchase !== null} onOpenChange={(open) => !open && onClose()}>
+      {purchase && (
+        <DialogContent eyebrow="New transaction" title="Refund this purchase" description="The refund is added back to the account and lowers this category's spending.">
+          <TransactionForm
+            mode={{
+              kind: "add",
+              type: "refund",
+              refundOf: purchase,
+              prefill: { ...purchase, occurredOn: data.today, paymentMode: null, counterAccountId: null },
+            }}
+            {...data}
             onSave={async (draft, key) => {
               const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key)))
               if (result.status === "success") {

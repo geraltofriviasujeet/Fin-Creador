@@ -7,6 +7,7 @@ import {
   type LineSaveResult,
   type Review,
   type ReviewCategory,
+  type RefundCandidate,
   type ReviewLine,
   GENERAL_READER_NOTE,
   UNREADABLE_FILE,
@@ -14,7 +15,10 @@ import {
   canTick,
   checkReasons,
   importOutcome,
+  isRefundLine,
   lineErrors,
+  refundCandidateLabel,
+  refundOptions,
   reviewKeys,
   reviewTotals,
   saveBlockers,
@@ -22,7 +26,7 @@ import {
   statementDatesWarning,
   unsupportedIssuerMessage,
 } from "@fin-creador/api"
-import { type CardLineSkipReason, type CardStatementParse, minorToGroupedInputString, parseCardStatement } from "@fin-creador/domain"
+import { type CardLineSkipReason, type CardStatementParse, minorToGroupedInputString, parseAmount, parseCardStatement } from "@fin-creador/domain"
 import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { importMatchesAction, importStatementAction, saveImportLinesAction } from "@/app/(app)/loans-liabilities/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
@@ -59,7 +63,6 @@ type Context = { cardId: string; cardAddedOn: string; today: string; currency: s
 
 const SKIP_TEXT: Record<CardLineSkipReason, string> = {
   payment: "Skipped: payment",
-  refund: "Skipped: refund (void the purchase instead)",
   emi: "Skipped: card EMI (paid from the loan)",
   before_card: "Skipped: before you added the card",
   future: "Skipped: future date",
@@ -207,7 +210,7 @@ function StatementReview({
         saveImportLinesAction({
           cardId: card.id,
           statementDate: s.statementDate ?? "",
-          lines: chunk.map((l) => ({ original: l.original, date: l.date, amount: l.amount, categoryId: l.categoryId })),
+          lines: chunk.map((l) => ({ original: l.original, date: l.date, amount: l.amount, categoryId: l.categoryId, refundOfId: l.refundOfId })),
         }),
       (chunkResults) => {
         const byKey = new Map(chunkResults.map((r) => [r.key, r]))
@@ -292,13 +295,22 @@ function StatementReview({
       ) : (
         <ul aria-label="Statement lines" className="grid gap-2">
           {lines.map((line, i) => (
-            <ReviewRow key={line.key} line={line} result={results[line.key]} categories={categories} context={context} onChange={(patch) => update(i, patch)} />
+            <ReviewRow
+              key={line.key}
+              line={line}
+              result={results[line.key]}
+              categories={categories}
+              candidates={initial.refundCandidates}
+              context={context}
+              onChange={(patch) => update(i, patch)}
+            />
           ))}
         </ul>
       )}
 
       <p className="text-sm font-semibold tabular-nums" aria-live="polite">
-        Ticked: {money(totals.tickedMinor, c)} ({totals.ticked === 1 ? "1 line" : `${totals.ticked} lines`}) · Bill total:{" "}
+        Ticked: {money(totals.tickedMinor, c)} ({totals.ticked === 1 ? "1 line" : `${totals.ticked} lines`}
+        {totals.tickedRefunds > 0 && `, refunds taken off`}) · Bill total:{" "}
         {s.totalMinor === null ? "not found" : money(s.totalMinor, c)}
       </p>
 
@@ -367,7 +379,10 @@ function StatementReview({
       </div>
 
       <Dialog open={confirming} onOpenChange={setConfirming}>
-        <DialogContent eyebrow={card.name} title={tickedLines.length === 0 ? "Enter this statement?" : "Save these purchases?"}>
+        <DialogContent
+          eyebrow={card.name}
+          title={tickedLines.length === 0 ? "Enter this statement?" : totals.tickedRefunds > 0 ? "Save these lines?" : "Save these purchases?"}
+        >
           {tickedLines.length === 0 ? (
             <div className="grid gap-3 text-sm">
               <p className="font-semibold">No lines are saved: only the statement is entered.</p>
@@ -385,10 +400,15 @@ function StatementReview({
           ) : (
             <div className="grid gap-3 text-sm">
               <p className="font-semibold">
-                {tickedLines.length === 1 ? "1 purchase" : `${tickedLines.length} purchases`}, {money(totals.tickedMinor, c)} in all.
+                {[tickedLines.length > totals.tickedRefunds && countText(tickedLines.length - totals.tickedRefunds, "purchase"), totals.tickedRefunds > 0 && countText(totals.tickedRefunds, "refund")]
+                  .filter(Boolean)
+                  .join(" and ")}
+                , {money(totals.tickedMinor, c)} in all.
               </p>
               <p>
-                These are purchases already made on the card. No money moves from any bank account: they are added to what the card owes.
+                {tickedLines.length > totals.tickedRefunds &&
+                  "These are purchases already made on the card. No money moves from any bank account: they are added to what the card owes. "}
+                {totals.tickedRefunds > 0 && "Refunds come off what the card owes and lower their category's spending."}
               </p>
               {s.exists ? (
                 <p>A statement for this date is already entered: only the lines are saved.</p>
@@ -412,16 +432,20 @@ function StatementReview({
   )
 }
 
+const countText = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`
+
 function ReviewRow({
   line,
   result,
   categories,
+  candidates,
   context,
   onChange,
 }: {
   line: ReviewLine
   result: LineSaveResult | undefined
   categories: ReviewCategory[]
+  candidates: RefundCandidate[]
   context: Context
   onChange: (patch: Partial<ReviewLine>) => void
 }) {
@@ -429,6 +453,7 @@ function ReviewRow({
   const tickable = canTick(line)
   const errors = line.ticked ? lineErrors(line, categories, context) : {}
   const name = `${original.description}, ${fullDate(original.date)}`
+  const refund = isRefundLine(line)
 
   return (
     <li className="grid gap-2 rounded-xl border border-line px-3 py-2.5">
@@ -439,7 +464,11 @@ function ReviewRow({
         direction={original.direction}
         date={original.date}
         currency={context.currency}
-        notes={[line.status === "skipped" && line.skipReason && SKIP_TEXT[line.skipReason], original.foreignCurrency && `paid in ${original.foreignCurrency}`]}
+        notes={[
+          refund && "Refund",
+          line.status === "skipped" && line.skipReason && SKIP_TEXT[line.skipReason],
+          original.foreignCurrency && `paid in ${original.foreignCurrency}`,
+        ]}
         status={line.status}
         result={result}
         tickable={tickable}
@@ -486,8 +515,58 @@ function ReviewRow({
             </NativeSelect>
             {errors.categoryId && <span className="text-xs text-danger">{errors.categoryId}</span>}
           </div>
+          {refund && (
+            <RefundOfSelect
+              name={name}
+              line={line}
+              candidates={candidates}
+              categories={categories}
+              currency={context.currency}
+              onChange={(refundOfId) => {
+                // Linking takes the purchase's category when none is chosen yet.
+                const category = candidates.find((c) => c.id === refundOfId)?.categoryId
+                onChange({ refundOfId, ...(line.categoryId === "" && category && categories.some((cat) => cat.id === category) ? { categoryId: category } : {}) })
+              }}
+            />
+          )}
         </div>
       )}
+      {tickable && !line.ticked && refund && line.categoryId === "" && (
+        <p className="pl-7 text-xs text-muted-foreground">Tick it, then choose the category it refunds.</p>
+      )}
     </li>
+  )
+}
+
+/** "Refund of": the card purchase this refund reverses, or none (it still counts). */
+function RefundOfSelect({
+  name,
+  line,
+  candidates,
+  categories,
+  currency,
+  onChange,
+}: {
+  name: string
+  line: ReviewLine
+  candidates: RefundCandidate[]
+  categories: ReviewCategory[]
+  currency: string
+  onChange: (refundOfId: string) => void
+}) {
+  const amount = parseAmount(line.amount, currency)
+  const options = refundOptions({ date: line.date, amountMinor: amount.ok ? amount.minor : null }, candidates, line.refundOfId)
+  const categoryName = (id: string | null) => categories.find((c) => c.id === id)?.name ?? null
+  return (
+    <div className="grid gap-1 md:col-span-3">
+      <NativeSelect aria-label={`Refund of, for ${name}`} value={line.refundOfId} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not linked to a purchase</option>
+        {options.map((c) => (
+          <option key={c.id} value={c.id}>
+            Refund of {refundCandidateLabel(c, categoryName, currency)}
+          </option>
+        ))}
+      </NativeSelect>
+    </div>
   )
 }

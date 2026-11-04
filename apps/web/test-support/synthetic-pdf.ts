@@ -190,6 +190,8 @@ export type PnbStatementOptions = {
   headerDate?: string
   /** A dated row with no amount on page 2 ("MYSTERY MERCHANT"), which the reader can't use. */
   unreadableRow?: boolean
+  /** A refund on page 2 ("REFUND FRESH BASKET STORES", Cr), in minor units: counted in the payments and credits box and off the amount due. */
+  refundMinor?: number
 }
 
 const rupees = (minor: number) => (minor / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -204,12 +206,15 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
   const due = pnbDate(pnbDueDate(options.invoiceDate ?? "2026-10-15"))
   const extra = options.extraPurchases ?? 0
   const purchases = rupees(233_400 + extra * 10_000)
+  const refund = options.refundMinor ?? 0
+  // The amount due: the previous ₹1,500 is paid, so purchases less any refund.
+  const owed = rupees(233_400 + extra * 10_000 - refund)
   const on = (iso: string) => pnbDate(options.lineDate ?? iso)
-  const amounts = columns([40, 160, 320], [["Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"], [purchases, purchases, "116.70"]])
+  const amounts = columns([40, 160, 320], [["Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"], [owed, owed, "116.70"]])
   const dates: Record<NonNullable<PnbStatementOptions["dateLayout"]>, SyntheticPage> = {
     "label-row": columns([40, 120, 220, 320, 450], [
       ["Invoice Date", "Payment Due Date", "Total Amount Due", "Total Amount Due for Month", "Minimum Amount Due"],
-      [invoice, due, purchases, purchases, "116.70"],
+      [invoice, due, owed, owed, "116.70"],
     ]),
     beside: [...columns([40, 130], [["Invoice Date", invoice], ["Payment Due Date", due]]), ...amounts],
     "next-row": [...columns([40], [["Invoice Date"], [invoice], ["Payment Due Date"], [due]]), ...amounts],
@@ -222,7 +227,7 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
     ...dates[options.dateLayout ?? "label-row"],
     ...columns([40, 140, 260, 340, 500], [
       ["Previous Balance", "Purchases and other charges", "Cash Advances", "Payments and Other Credits / Shadow Credits", ""],
-      ["1,500.00", purchases, "0.00", "1,500.00", ""],
+      ["1,500.00", purchases, "0.00", rupees(150_000 + refund), ""],
     ]),
   ]
   const xs = network ? [40, 110, 180, 260, 520] : [40, 110, 180, 520]
@@ -257,6 +262,7 @@ export function pnbStatementPages(network: boolean, options: PnbStatementOptions
       [on("2026-10-10"), on("2026-10-10"), ...net, "IGST @18% ON LATE PAYMENT FEE", "50.00 Dr"],
       ...Array.from({ length: extra }, (_, i) => [on("2026-10-11"), on("2026-10-11"), ...net, `SHOP ${i + 1}`, "100.00 Dr"]),
       ...(options.unreadableRow ? [[on("2026-10-12"), on("2026-10-12"), ...net, "MYSTERY MERCHANT", ""]] : []),
+      ...(refund > 0 ? [[on("2026-10-13"), on("2026-10-13"), ...net, "REFUND FRESH BASKET STORES", `${(refund / 100).toFixed(2)} Cr`]] : []),
     ]),
     ...columns([40, 200], [["Total GST", "50.00"], ["Total Invoice Value", options.invoiceTotal ?? purchases], ["End of Statement", ""]]),
     ...columns([40], [[`Date: ${invoice} Page 2`]]),

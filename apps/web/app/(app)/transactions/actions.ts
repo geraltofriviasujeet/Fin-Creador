@@ -13,7 +13,7 @@ import {
   saveTransaction,
   voidTransaction,
 } from "@fin-creador/api"
-import { ENTRY_TYPES } from "@fin-creador/schemas"
+import { TRANSACTION_TYPES } from "@fin-creador/schemas"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 
@@ -30,7 +30,7 @@ async function client() {
 
 const ENTRY_FIELDS = [
   "transactionId", "type", "amount", "categoryId", "accountId", "counterAccountId",
-  "paymentMode", "occurredOn", "note", "idempotencyKey",
+  "paymentMode", "refundOfId", "occurredOn", "note", "idempotencyKey",
 ] as const
 
 /** Only the known fields, as strings (server actions take any value a client sends). */
@@ -60,7 +60,7 @@ const pageRequest = z.object({
   filters: z.object({
     from: isoDate,
     to: isoDate,
-    type: z.enum(ENTRY_TYPES).nullable().optional(),
+    type: z.enum(TRANSACTION_TYPES).nullable().optional(),
     categoryId: z.uuid().nullable().optional(),
     accountId: z.uuid().nullable().optional(),
     query: z.string().max(100).nullable().optional(),

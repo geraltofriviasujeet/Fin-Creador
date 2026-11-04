@@ -1,7 +1,6 @@
 import type { Frequency } from "@fin-creador/domain"
-import type { PaymentModeValue } from "@fin-creador/schemas"
+import type { EntryTypeValue, PaymentModeValue } from "@fin-creador/schemas"
 import type { UserClient } from "../income/client"
-import type { EntryType } from "../transactions/types"
 import type { RecurringProgress, RecurringRule } from "./view"
 
 export type RecurringData = { rules: RecurringRule[]; progress: Map<string, RecurringProgress> }
@@ -19,7 +18,7 @@ export async function loadRecurringData(supabase: UserClient): Promise<{ ok: tru
 
   const rules: RecurringRule[] = rulesRes.data.map((r) => ({
     id: r.id,
-    type: r.type as EntryType,
+    type: r.type as EntryTypeValue,
     amountMinor: r.amount_minor,
     currency: r.currency,
     accountId: r.account_id,

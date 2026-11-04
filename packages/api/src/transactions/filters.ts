@@ -10,6 +10,7 @@ export const TYPE_TABS = [
   { value: "expense", label: "Expenses" },
   { value: "income", label: "Income" },
   { value: "transfer", label: "Transfers" },
+  { value: "refund", label: "Refunds" },
 ] as const
 export type TypeTab = (typeof TYPE_TABS)[number]["value"]
 

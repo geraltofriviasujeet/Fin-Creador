@@ -1,7 +1,10 @@
 // The ledger across all entry types (CLAUDE.md §5).
 //   Period income   = eligible income entries dated in the period.
-//   Period expenses = eligible expense entries dated in the period.
-//   Net cash flow   = period income − period expenses. Transfers are neither.
+//   Period expenses = eligible expense entries dated in the period, minus eligible refunds
+//                     dated in it (a refund counts on its own date, so a period's spending
+//                     can be below zero; Sprint 9c).
+//   Net cash flow   = period income − period expenses. Transfers are neither; a refund is
+//                     not income.
 //   Eligible: not voided and in the profile currency (other currencies are counted
 //   separately, never converted).
 // Entries are never edited in place: an edit voids the old version and adds a new one that
@@ -11,7 +14,7 @@ import { ratioToBasisPoints } from "./format";
 import { countsTowardBalance } from "./holdings";
 import { addMinor } from "./money";
 
-export type EntryType = "income" | "expense" | "transfer";
+export type EntryType = "income" | "expense" | "transfer" | "refund";
 
 export interface LedgerEntry {
   id: string;
@@ -20,24 +23,30 @@ export interface LedgerEntry {
   amountMinor: number;
   currency: string;
   occurredOn: IsoDate;
-  /** Income: the account it went into. Expense and transfer: the account it left. */
+  /** Income and refund: the account it went into. Expense and transfer: the account it left. */
   accountId: string;
   /** Transfer only: the account it went into. */
   counterAccountId: string | null;
-  /** Income and expense only. */
+  /** Income, expense and refund (an expense category) only. */
   categoryId: string | null;
   voided: boolean;
   /** The earlier version this entry replaced (an edit), if any. */
   replacesId?: string | null;
+  /** Refunds only: the purchase (expense) it reverses, if linked. */
+  refundOfId?: string | null;
 }
 
 export interface PeriodTotals {
   incomeMinor: number;
+  /** Expenses − refunds; below zero when refunds were more than the spending. */
   expenseMinor: number;
+  /** The refunds taken off expenseMinor. */
+  refundMinor: number;
   /** Income − expenses; negative when more went out than came in. */
   netMinor: number;
   incomeCount: number;
   expenseCount: number;
+  refundCount: number;
   transferCount: number;
   /** Entries in the period in another currency: listed, not totalled. */
   otherCurrencyCount: number;
@@ -48,14 +57,18 @@ export function periodTotals(entries: readonly LedgerEntry[], range: DateRange, 
   const same = inPeriod.filter((e) => e.currency === currency);
   const income = same.filter((e) => e.type === "income");
   const expense = same.filter((e) => e.type === "expense");
+  const refund = same.filter((e) => e.type === "refund");
   const incomeMinor = addMinor(...income.map((e) => e.amountMinor));
-  const expenseMinor = addMinor(...expense.map((e) => e.amountMinor));
+  const refundMinor = addMinor(...refund.map((e) => e.amountMinor));
+  const expenseMinor = addMinor(...expense.map((e) => e.amountMinor), -refundMinor);
   return {
     incomeMinor,
     expenseMinor,
+    refundMinor,
     netMinor: addMinor(incomeMinor, -expenseMinor),
     incomeCount: income.length,
     expenseCount: expense.length,
+    refundCount: refund.length,
     transferCount: same.filter((e) => e.type === "transfer").length,
     otherCurrencyCount: inPeriod.length - same.length,
   };
@@ -92,7 +105,7 @@ export function postedActivity(
   };
   for (const e of entries) {
     if (e.voided) continue;
-    if (e.type === "income") post(e.accountId, e.occurredOn, e.amountMinor, "inflowMinor");
+    if (e.type === "income" || e.type === "refund") post(e.accountId, e.occurredOn, e.amountMinor, "inflowMinor");
     else post(e.accountId, e.occurredOn, e.amountMinor, "outflowMinor");
     if (e.type === "transfer") post(e.counterAccountId, e.occurredOn, e.amountMinor, "inflowMinor");
   }

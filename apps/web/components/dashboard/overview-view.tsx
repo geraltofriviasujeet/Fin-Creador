@@ -97,8 +97,9 @@ export function OverviewView({ context, name, period, range, comparison, totals,
   const savingsRate = savingsRateBasisPoints(totals)
   const prevSavingsRate = prevTotals ? savingsRateBasisPoints(prevTotals) : null
   const vs = comparison?.label ?? ""
-  const hasSpending = breakdown.buckets.some((b) => b.expenseMinor > 0)
-  const hasActivity = breakdown.buckets.some((b) => b.expenseMinor > 0 || b.incomeMinor > 0)
+  // Spending is net of refunds and may be below zero (a refunded day): still shown, drawn at zero.
+  const hasSpending = breakdown.buckets.some((b) => b.expenseMinor !== 0)
+  const hasActivity = breakdown.buckets.some((b) => b.expenseMinor !== 0 || b.incomeMinor > 0)
 
   return (
     <>
@@ -152,6 +153,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           footer={
             <FooterLink href={transactionsHref(range, { type: "expense" })}>
               {totals.expenseCount} {totals.expenseCount === 1 ? "expense" : "expenses"}
+              {totals.refundCount > 0 && `, less ${money(totals.refundMinor, currency)} refunded`}
             </FooterLink>
           }
         />
@@ -447,7 +449,7 @@ function CategoryCard({
         Top five {PERIOD_PHRASE[period]}
       </CardHeading>
       {breakdown.categories.length === 0 ? (
-        <EmptyPanel>No spending recorded {PERIOD_PHRASE[period]}.</EmptyPanel>
+        breakdown.refunded.length === 0 && <EmptyPanel>No spending recorded {PERIOD_PHRASE[period]}.</EmptyPanel>
       ) : charts.categories === "pie" ? (
         <CategoryPie categories={breakdown.categories} range={range} currency={currency} lookup={lookup} />
       ) : (
@@ -482,6 +484,18 @@ function CategoryCard({
             )
           })}
         </ul>
+      )}
+      {breakdown.refunded.length > 0 && (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Refunds were more than the spending in{" "}
+          {breakdown.refunded.map((c, i) => (
+            <span key={c.categoryId ?? "rest"}>
+              {i > 0 && (i === breakdown.refunded.length - 1 ? " and " : ", ")}
+              {c.categoryId ? (lookup.categories.get(c.categoryId)?.name ?? "a category") : "a category"} ({money(c.expenseMinor, currency)})
+            </span>
+          ))}
+          , so {breakdown.refunded.length === 1 ? "it isn’t" : "they aren’t"} in the shares above.
+        </p>
       )}
     </Card>
   )

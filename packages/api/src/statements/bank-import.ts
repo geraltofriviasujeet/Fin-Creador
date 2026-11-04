@@ -6,11 +6,13 @@ import { accountLabel } from "../income/load"
 import { ledgerErrorMessage } from "../ledger-errors"
 import { type BankImportAccount, type BankImportMatches, type BankImportOptions, bankLineErrors } from "./bank-review"
 import { existingKeys } from "./matches"
+import { loadRefundCandidates } from "./refunds"
 import type { ImportSaveResult, LineSaveResult } from "./save"
 
 // Bank account statement import (Sprint 9b), as the signed-in user (RLS, grants and the ledger
 // triggers enforce ownership and the money rules). Each ticked line is saved on its own under a
-// key recomputed here from the line as read: an expense or income through record_transaction, a
+// key recomputed here from the line as read: an expense, income or refund (9c, with the purchase
+// link the person kept, checked by the database) through record_transaction, a
 // transfer between two own accounts as one transfer (never income or expense), a card payment
 // through pay_card (the card payment path). Accounts, cards and categories are read here, never
 // taken from the client. Results carry a reason only; nothing is logged.
@@ -68,21 +70,22 @@ export async function loadBankImportMatches(supabase: UserClient, input: unknown
   if (account.error) return { ok: false, reason: "unavailable" }
   if (!account.data || account.data.kind !== "bank") return { ok: false, reason: "not_found" }
 
-  const [entryKeys, paymentKeys, rows, balances] = await Promise.all([
+  const [entryKeys, paymentKeys, rows, balances, candidates] = await Promise.all([
     existingKeys(supabase, keys),
     existingKeys(supabase, keys, "liability_payments"),
     supabase
       .from("transactions")
       .select("type, account_id, occurred_on, amount_minor, idempotency_key, liability_payment_id")
       .or(`account_id.eq.${accountId},counter_account_id.eq.${accountId}`)
-      .in("type", ["income", "expense", "transfer"])
+      .in("type", ["income", "expense", "refund", "transfer"])
       .is("voided_at", null)
       .gte("occurred_on", from)
       .lte("occurred_on", to)
       .limit(MAX_ENTRIES),
     supabase.rpc("account_balances_at", { p_dates: [to] }),
+    loadRefundCandidates(supabase, accountId, from, to),
   ])
-  if (!entryKeys || !paymentKeys || rows.error) return { ok: false, reason: "unavailable" }
+  if (!entryKeys || !paymentKeys || rows.error || !candidates) return { ok: false, reason: "unavailable" }
 
   // This statement's own lines: saved under its keys, or (card payments) under a payment with its key.
   const own = new Set(keys)
@@ -102,11 +105,12 @@ export async function loadBankImportMatches(supabase: UserClient, input: unknown
       deletedKeys: [...state].filter(([, s]) => s === "deleted").map(([k]) => k),
       entries: others
         .filter((t) => t.type !== "transfer" && t.account_id === accountId)
-        .map((t) => ({ date: t.occurred_on, amountMinor: t.amount_minor, direction: t.type === "income" ? ("credit" as const) : ("debit" as const) })),
+        .map((t) => ({ date: t.occurred_on, amountMinor: t.amount_minor, direction: t.type === "expense" ? ("debit" as const) : ("credit" as const) })),
       transfers: others
         .filter((t) => t.type === "transfer")
         .map((t) => ({ date: t.occurred_on, amountMinor: t.amount_minor, direction: t.account_id === accountId ? ("debit" as const) : ("credit" as const) })),
       bookBalanceMinor: book,
+      refundCandidates: candidates,
     },
   }
 }
@@ -179,6 +183,7 @@ export async function saveBankImportLines(supabase: UserClient, input: unknown):
             p_counter_account_id: line.type === "transfer" ? (debit ? line.otherAccountId : accountId) : undefined,
             p_category_id: line.type === "transfer" ? undefined : line.categoryId,
             p_note: note ?? undefined,
+            p_refund_of_id: line.type === "refund" && line.refundOfId ? line.refundOfId : undefined,
           })
     if (error?.code === "FC007") results.push({ key, status: "already_saved" })
     else if (error || !data) results.push({ key, status: "failed", reason: ledgerErrorMessage(error).message })

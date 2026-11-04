@@ -61,7 +61,7 @@ export type ExportResult =
 
 export const EXPORT_HEADER = ["Date", "Type", "Amount", "Currency", "Account", "To account", "Category", "Payment mode", "Note", "Voided"] as const
 
-const TYPE_WORD: Record<string, string> = { income: "Income", expense: "Expense", transfer: "Transfer" }
+const TYPE_WORD: Record<string, string> = { income: "Income", expense: "Expense", transfer: "Transfer", refund: "Refund" }
 
 /** No personal details: only the dates. */
 export const exportFilename = (from: IsoDate, to: IsoDate) => `fincreador-transactions-${from}-to-${to}.csv`

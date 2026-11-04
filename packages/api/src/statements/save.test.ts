@@ -139,7 +139,7 @@ describe("saveImportLines", () => {
       "Before you added the card",
       "Enter an amount above zero",
       "Choose a category",
-      "Not a purchase on the card",
+      "Not a purchase or refund on the card",
     ])
     expect(rpcs).toEqual([])
   })

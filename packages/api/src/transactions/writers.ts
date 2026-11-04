@@ -1,22 +1,29 @@
+import { formatMoney } from "@fin-creador/domain"
 import { firstFieldErrors, transactionFormSchema, voidFormSchema } from "@fin-creador/schemas"
 import { ledgerErrorMessage } from "../ledger-errors"
 import { TODAY_UNAVAILABLE, type UserClient, userToday } from "../income/client"
 import type { WriteResult } from "../income/types"
 import type { FormInput } from "../income/writers"
 
-// Writes for income, expense and transfer entries, shared by web and mobile. Each one
+// Writes for income, expense, transfer and refund entries, shared by web and mobile. Each one
 // validates with the shared schema, writes through a database function as the signed-in
 // user (RLS, column grants and triggers enforce ownership and the money rules) under the
 // form's request key, so a retry saves once.
 
 const FIX_FIELDS = "Please fix the highlighted fields."
 const SIGNED_OUT = "Your session has ended. Please sign in again."
-const NOUN = { income: "Income", expense: "Expense", transfer: "Transfer" } as const
+const NOUN = { income: "Income", expense: "Expense", transfer: "Transfer", refund: "Refund" } as const
 
-function dbError(error: { code?: string; message?: string }): WriteResult {
+function dbError(error: { code?: string; message?: string; details?: string }, currency = "INR"): WriteResult {
   // FC006's shared message names the income form's source field; here it is categoryId.
   if (error.code === "FC006") {
     return { status: "error", message: FIX_FIELDS, fieldErrors: { categoryId: "That category can't be used. Choose another." } }
+  }
+  // A linked refund over what is left of its purchase: the detail is what is left (minor units).
+  const left = error.code === "FC055" && /^\d+$/.test(error.details ?? "") ? Number(error.details) : null
+  if (left !== null) {
+    const message = left === 0 ? "This purchase is already fully refunded." : `Only ${formatMoney(left, { currency })} is left to refund on this purchase.`
+    return { status: "error", message: FIX_FIELDS, fieldErrors: { amount: message } }
   }
   const m = ledgerErrorMessage(error, { dateField: "occurredOn" })
   return m.field ? { status: "error", message: FIX_FIELDS, fieldErrors: { [m.field]: m.message } } : { status: "error", message: m.message }
@@ -54,10 +61,11 @@ export async function saveTransaction(supabase: UserClient, input: FormInput): P
     p_note: t.note ?? undefined,
     p_payment_mode: t.paymentMode ?? undefined,
   }
+  // An edit keeps a refund's link (the database moves or clears it, never the form).
   const { error } = t.transactionId
     ? await supabase.rpc("edit_transaction", { p_transaction_id: t.transactionId, ...details })
-    : await supabase.rpc("record_transaction", { p_type: t.type, ...details })
-  if (error) return dbError(error)
+    : await supabase.rpc("record_transaction", { p_type: t.type, ...details, p_refund_of_id: t.refundOfId ?? undefined })
+  if (error) return dbError(error, account.currency)
   return { status: "success", message: t.transactionId ? "Changes saved." : `${NOUN[t.type]} saved.` }
 }
 

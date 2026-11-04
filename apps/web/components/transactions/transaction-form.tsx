@@ -10,7 +10,7 @@ import { newRequestKey } from "@/components/income/format"
 import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
-import { fullDate, money } from "./display"
+import { fullDate, money, signedAmount } from "./display"
 
 export type EntryType = LedgerItem["type"]
 
@@ -23,6 +23,8 @@ export type Draft = {
   categoryId: string | null
   paymentMode: PaymentModeValue | null
   note: string | null
+  /** Refunds only: the purchase it reverses ("Refund this"), else null. */
+  refundOfId: string | null
 }
 
 export type Prefill = Pick<LedgerItem, "amountMinor" | "currency" | "occurredOn" | "accountId" | "counterAccountId" | "categoryId" | "paymentMode" | "note">
@@ -33,6 +35,7 @@ const TYPES: { value: EntryType; label: string }[] = [
   { value: "expense", label: "Expense" },
   { value: "income", label: "Income" },
   { value: "transfer", label: "Transfer" },
+  { value: "refund", label: "Refund" },
 ]
 
 type Props = {
@@ -45,6 +48,8 @@ type Props = {
         prefill?: Prefill
         /** Type and category are fixed (they come from a recurring rule). */
         locked?: boolean
+        /** "Refund this": the purchase the refund reverses (type refund, fixed). */
+        refundOf?: LedgerItem
       }
     | { kind: "edit"; entry: LedgerItem }
   accounts: LedgerAccount[]
@@ -63,6 +68,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
   // Every account the form may meet; pickers below choose which ones each field offers.
   const accounts = [...moneyAccounts, ...cardAccounts]
   const locked = mode.kind === "add" && Boolean(mode.locked)
+  const refundOf = mode.kind === "add" ? (mode.refundOf ?? null) : null
   const start: Prefill | null = editing ?? (mode.kind === "add" ? (mode.prefill ?? null) : null)
   const [type, setType] = useState<EntryType>(editing?.type ?? (mode.kind === "add" ? mode.type : "expense"))
   // One key per opened form; a retry after a failure reuses it, so the entry is saved once.
@@ -87,9 +93,11 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
   // one it already has.
   const usable = (a: LedgerAccount) => !a.archived || a.id === editing?.accountId || a.id === editing?.counterAccountId
   const usableAccounts = moneyAccounts.filter(usable)
-  // A card is offered only as the account an expense is paid from.
-  const paidFromAccounts = type === "expense" ? [...usableAccounts, ...cardAccounts.filter(usable)] : usableAccounts
-  const kindCategories = categories.filter((c) => c.kind === type && (!c.archived || c.id === editing?.categoryId))
+  // A card is offered only as the account an expense is paid from, or a refund comes back to.
+  const paidFromAccounts = type === "expense" || type === "refund" ? [...usableAccounts, ...cardAccounts.filter(usable)] : usableAccounts
+  // A refund takes an expense category (it lowers that category's spending).
+  const categoryKind = type === "refund" ? "expense" : type
+  const kindCategories = categories.filter((c) => c.kind === categoryKind && (!c.archived || c.id === editing?.categoryId))
   const account = accounts.find((a) => a.id === accountId)
   const counter = accounts.find((a) => a.id === counterAccountId)
   const currency = account?.currency ?? "INR"
@@ -107,7 +115,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
   const limitWarning = cardLimitWarning(moves.find((m) => m.account.kind === "card"))
 
   const noun = type === "income" ? "income" : type
-  const accountLabel = type === "income" ? "Received into" : type === "transfer" ? "From" : "Paid from"
+  const accountLabel = type === "income" ? "Received into" : type === "transfer" ? "From" : type === "refund" ? "Refunded to" : "Paid from"
 
   function validate(): Draft | null {
     const next: Record<string, string> = {}
@@ -117,7 +125,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
     else if (occurredOn > today) next.occurredOn = "The date can't be in the future"
     else if (occurredOn < "1970-01-01") next.occurredOn = "Choose a later date"
     if (!accountId) next.accountId = type === "income" ? "Choose where it was received" : "Choose an account"
-    else if (account?.kind === "card" && type !== "expense") next.accountId = "A card can only pay for expenses"
+    else if (account?.kind === "card" && type !== "expense" && type !== "refund") next.accountId = "A card only takes purchases and refunds"
     if (type === "transfer") {
       if (!counterAccountId) next.counterAccountId = "Choose an account"
       else if (counterAccountId === accountId) next.counterAccountId = "Choose a different account"
@@ -138,6 +146,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
       categoryId: type === "transfer" ? null : categoryId,
       paymentMode: type === "expense" && account?.kind === "bank" && paymentMode ? (paymentMode as PaymentModeValue) : null,
       note: note.trim() || null,
+      refundOfId: type === "refund" ? (refundOf?.id ?? null) : null,
     }
     if (
       editing &&
@@ -172,7 +181,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
 
   return (
     <form onSubmit={submit} noValidate className="grid gap-5">
-      <div role="radiogroup" aria-label="Transaction type" className="grid grid-cols-3 gap-1 rounded-xl bg-canvas p-1">
+      <div role="radiogroup" aria-label="Transaction type" className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1 md:grid-cols-4">
         {TYPES.map((t) => {
           const checked = t.value === type
           return (
@@ -181,7 +190,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
               type="button"
               role="radio"
               aria-checked={checked}
-              disabled={(Boolean(editing) || locked) && !checked}
+              disabled={(Boolean(editing) || locked || Boolean(refundOf)) && !checked}
               onClick={() => {
                 setType(t.value)
                 setErrors({})
@@ -206,6 +215,20 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
       )}
 
       {formError && <FormMessage tone="error">{formError}</FormMessage>}
+
+      {refundOf && (
+        <FormMessage tone="info">
+          Refund of {refundOf.note ?? "a purchase"} ({signedAmount(refundOf)} on {fullDate(refundOf.occurredOn)}). Change the amount for a part refund.
+        </FormMessage>
+      )}
+      {editing?.type === "refund" && editing.refundOfId && (
+        <p className="-mt-2 text-xs text-muted-foreground">Linked to the purchase it refunds. The link stays when you save.</p>
+      )}
+      {type === "refund" && !refundOf && !editing && (
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Money back for a purchase: it lowers the category&apos;s spending and isn&apos;t income. To link it to the purchase, use Refund this on that expense.
+        </p>
+      )}
 
       <AmountField
         name="amount"
@@ -299,7 +322,9 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
         <FormMessage key={a.id} tone="info">
           {type === "transfer" ? "This transfer" : `This ${noun}`} is before the opening balance date of {a.label} (
           {fullDate(a.openingBalanceDate)}), so it doesn&apos;t change that balance
-          {type === "transfer" ? "." : `. It still counts as ${type === "expense" ? "an expense" : "income"} on ${fullDate(occurredOn)}.`}
+          {type === "transfer"
+            ? "."
+            : `. It still counts as ${type === "expense" ? "an expense" : type === "refund" ? "a refund" : "income"} on ${fullDate(occurredOn)}.`}
         </FormMessage>
       ))}
 
@@ -308,8 +333,8 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
           {moves.map((m) =>
             m.account.kind === "card" ? (
               <p key={m.account.id} className="tabular-nums">
-                <span className="font-semibold text-ink">{m.account.label}</span>: owed {money(Math.max(-m.before, 0), m.account.currency)} →{" "}
-                <span className="font-semibold text-ink">{money(Math.max(-m.after, 0), m.account.currency)}</span>
+                <span className="font-semibold text-ink">{m.account.label}</span>: {cardPosition(m.before, m.account.currency)} →{" "}
+                <span className="font-semibold text-ink">{cardPosition(m.after, m.account.currency)}</span>
               </p>
             ) : (
               <p key={m.account.id} className="tabular-nums">
@@ -350,6 +375,10 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
     </form>
   )
 }
+
+/** A card's balance as words: "owed ₹500", or "in credit ₹200" after refunds larger than what was owed. */
+const cardPosition = (balanceMinor: number, currency: string) =>
+  balanceMinor > 0 ? `in credit ${money(balanceMinor, currency)}` : `owed ${money(-balanceMinor, currency)}`
 
 function AccountSelect({
   name,
