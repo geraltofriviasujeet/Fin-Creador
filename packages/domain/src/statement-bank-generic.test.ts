@@ -426,6 +426,74 @@ describe("parseGenericBankStatement: an opening balance row with another piece b
   });
 });
 
+describe("parseGenericBankStatement: shapes from real statements' Copy layout", () => {
+  const p = (str: string, x: number, y: number, height = 9) => ({ str, x, y, width: str.length * 4.3, height });
+
+  it("a branch code printed close after the balance is split off, and two-line particulars are read with their date", () => {
+    // Header: Tran Date, Chq No, Particulars, Debit, Credit, Balance, Init. / Br (one line lower). Each line:
+    // particulars on two lines, the date, amounts and branch code on the lower one (dy9), the branch code
+    // 8 units after the balance, so the PDF reader puts both in one cell.
+    const line = (y: number, date: string, first: string, second: string, debit: string | null, credit: string | null, balance: string, branch: string) => [
+      p(first, 132, y), p(date, 39, y - 9), p(second, 132, y - 9),
+      ...(debit ? [p(debit, 346, y - 9)] : []), ...(credit ? [p(credit, 408, y - 9)] : []),
+      { ...p(balance, 488, y - 9), width: 43 }, p(branch, 539, y - 9),
+    ];
+    const pages: PdfTextItem[][] = [
+      [
+        p("Statement of Axis Account No :50100012345678", 38, 800),
+        p("Tran Date", 40, 700), p("Chq No", 92, 700), p("Particulars", 203, 700), p("Debit", 339, 700), p("Credit", 400, 700), p("Balance", 473, 700),
+        p("Init.", 538, 700), p("Br", 541, 691),
+        p("OPENING BALANCE", 132, 680), { ...p("10,000.00", 483, 680), width: 47 },
+        ...line(660, "01-10-2026", "UPI/P2M/412345678901/FRESH", "BASKET/PAYMENT", "1,784.00", null, "8,216.00", "123"),
+        ...line(638, "02-10-2026", "NEFT/N275260012345678/EXAMPLE", "EMPLOYER/SALARY", null, "50,000.00", "58,216.00", "123"),
+        ...line(616, "03-10-2026", "ATM-CASH/EXAMPLE ROAD", "KOLKATA", "2,000.00", null, "56,216.00", "4567"),
+        p("CLOSING BALANCE", 132, 590), { ...p("56,216.00", 483, 590), width: 47 },
+      ],
+    ];
+    const { rows, rowLayouts } = statementPages(pages);
+    expect(rowLayouts[3]).toMatch(/^date x39 w43 c10 dy9 \| text x132 w\d+ c26 dy0 \| text x132 w\d+ c14 dy9 \| amount x346 w34 c8 dy9 \| amount x488 w43 c8 dy9 \| number x539 w13 c3 dy9$/);
+    const parsed = parseGenericBankStatement(rows);
+    expect(read(parsed)).toEqual([
+      ["2026-10-01", 178_400, "debit", 821_600, "UPI/P2M//FRESH BASKET/PAYMENT"],
+      ["2026-10-02", 5_000_000, "credit", 5_821_600, "NEFT/N/EXAMPLE EMPLOYER/SALARY"],
+      ["2026-10-03", 200_000, "debit", 5_621_600, "ATM-CASH/EXAMPLE ROAD KOLKATA"],
+    ]);
+    expect(parsed?.summary.openingMinor).toBe(1_000_000);
+    expect(parsed?.issues).toEqual([]);
+    expect(JSON.stringify(parsed)).not.toMatch(/4567|50100012345678|Axis/);
+  });
+
+  it("finds the header naming Transaction Reference as the description, with Credit before Debit, after summary pages", () => {
+    const header = (y: number) => [
+      p("Date", 25, y), p("Transaction Reference", 126, y), p("Ref.No./Chq.No.", 297, y), p("Credit", 397, y), p("Debit", 468, y), p("Balance", 532, y),
+    ];
+    const line = (y: number, date: string, reference: string, ref: string, credit: string | null, debit: string | null, balance: string) => [
+      p(date, 12, y), p(reference, 126, y), p(ref, 297, y), ...(credit ? [p(credit, 397, y)] : []), ...(debit ? [p(debit, 468, y)] : []), p(balance, 532, y),
+    ];
+    const pages: PdfTextItem[][] = [
+      [p("Account Summary", 30, 800), p("Opening Balance", 35, 760), p("Debits", 145, 760), p("Credits", 265, 760), p("Closing Balance", 500, 760)],
+      [p("Account Details", 10, 800), p("Name EXAMPLE PERSON", 10, 780)],
+      [
+        ...header(700),
+        p("Opening Balance", 126, 680), p("10,000.00", 532, 680),
+        ...line(660, "01 Oct 2026", "UPI/DR/FRESH BASKET", "412345678901", null, "1,784.00", "8,216.00"),
+        ...line(640, "02 Oct 2026", "NEFT/EXAMPLE EMPLOYER", "N27526001", "50,000.00", null, "58,216.00"),
+        ...line(620, "03 Oct 2026", "ATM WDL/EXAMPLE ROAD", "123456", null, "2,000.00", "56,216.00"),
+        p("Closing Balance", 126, 600), p("56,216.00", 532, 600),
+      ],
+    ];
+    expect(roles(["Date", "Transaction Reference", "Ref.No./Chq.No.", "Credit", "Debit", "Balance"])).toEqual(["date", "description", "other", "credit", "debit", "balance"]);
+    const parsed = parseGenericBankStatement(statementPages(pages).rows);
+    expect(read(parsed)).toEqual([
+      ["2026-10-01", 178_400, "debit", 821_600, "UPI/DR/FRESH BASKET"],
+      ["2026-10-02", 5_000_000, "credit", 5_821_600, "NEFT/EXAMPLE EMPLOYER"],
+      ["2026-10-03", 200_000, "debit", 5_621_600, "ATM WDL/EXAMPLE ROAD"],
+    ]);
+    expect(parsed?.checks.map((c) => c.status)).toEqual(["ok", "ok"]);
+    expect(JSON.stringify(parsed)).not.toMatch(/412345678901|N27526001|EXAMPLE PERSON/);
+  });
+});
+
 describe("bankReadFailureText", () => {
   const csv = (lines: string[]) => bankReadFailureText({ format: "csv", text: lines.join("\n") });
 

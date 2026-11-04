@@ -68,7 +68,8 @@ const HEADER_NAMES: [HeaderName, string][] = [
   ["credit", String.raw`(?:deposits?|credits?)(?: (?:amt|amount))?\.?`],
   ["balance", String.raw`(?:closing |running |available )?(?:balance|bal)\.?`],
   ["amount", String.raw`(?:txn |transaction )?(?:amount|amt)\.?`],
-  ["description", String.raw`(?:transaction |txn )?(?:narration|particulars|description|remarks?|details)`],
+  // "Transaction Reference" is a description column; "Ref" / "Reference" alone is a reference number.
+  ["description", String.raw`(?:transaction |txn )?(?:narration|particulars|description|remarks?|details)|transaction reference`],
   ["date", String.raw`date`],
   ["other", String.raw`chq|cheque|ref(?:erence)?|instrument(?: id)?|utr|s\.? ?no|sr\.? ?no|serial|init\.? ?br|branch`],
 ];
@@ -128,13 +129,16 @@ const DATE_AT_START = new RegExp(String.raw`^(?:${STATEMENT_DATE_SOURCE})(?=\s|$
 const MARKER = /^(?:dr|cr)\.?$/i;
 const NUMBERISH = /^[-+]?(?:₹|rs\.?|inr)?[\d,./-]*\d[\d,./-]*$/i;
 
-/** A PDF cell made only of dates, amounts and markers, spread over several columns: split by word. */
+/**
+ * A PDF cell made only of dates, amounts and markers, spread over several columns (a dropped one
+ * included, such as a branch code printed close after the balance): split by word.
+ */
 function splitCell(cell: string, span: readonly [number, number], columns: readonly Column[]): { text: string; span: [number, number] }[] {
   const words: { text: string; at: number }[] = [];
   const re = /\S+/g;
   for (let m = re.exec(cell); m; m = re.exec(cell)) words.push({ text: m[0], at: m.index });
   const structured = words.every((w) => NUMBERISH.test(w.text) || MARKER.test(w.text) || /^[a-z]{3,9},?$/i.test(w.text));
-  const touched = columns.filter((c) => c.role !== "other" && c.role !== "description" && overlap(span, c) > 0);
+  const touched = columns.filter((c) => c.role !== "description" && overlap(span, c) > 0);
   if (words.length < 2 || !structured || touched.length < 2) return [{ text: cell, span: [span[0], span[1]] }];
   const per = (span[1] - span[0]) / Math.max(cell.length, 1);
   const parts: { text: string; span: [number, number] }[] = [];
