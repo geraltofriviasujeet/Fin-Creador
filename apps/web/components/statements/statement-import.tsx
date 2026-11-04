@@ -179,7 +179,7 @@ export function StatementImport({ card, today, categories }: { card: ImportCard;
         </h2>
         <div className="grid gap-1.5">
           <label htmlFor="statement-pdf" className="text-sm font-semibold text-ink">
-            Choose your {card.name} statement (PDF)
+            Choose your {card.issuer} statement (PDF)
           </label>
           <input
             id="statement-pdf"

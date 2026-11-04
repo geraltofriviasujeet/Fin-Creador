@@ -55,6 +55,9 @@ const tick = (page: Page, text: string) => review(page).getByRole("checkbox", { 
 test("a PNB card: text PDF, password-protected PDF and a scanned PDF", async ({ page }) => {
   await setUp(page, "Asha Rao")
   await openImport(page, PNB_CARD)
+  // The file picker names the issuer only, never the card's own name.
+  await expect(page.getByText("Choose your Punjab National Bank statement (PDF)", { exact: true })).toBeVisible()
+  await expect(page.getByText(`Choose your ${PNB_CARD} statement (PDF)`)).toHaveCount(0)
 
   // A text PDF dated before the card was added: read, every line listed and skipped.
   await chooser(page).setInputFiles(pdf("statement.pdf", syntheticPdf(pnbStatementPages(true))))
