@@ -24,7 +24,8 @@ export type FilePhase<R> =
   | { step: "matching" }
   | { step: "match_failed" }
   /** No review and no Save: the file can't be read, or its issuer isn't supported yet. */
-  | { step: "message"; text: string; pnbOffer: boolean }
+  /** `layout`: why no reader could read it and the masked layout of its first rows (Copy layout). */
+  | { step: "message"; text: string; pnbOffer: boolean; layout?: string }
   | ({ step: "review" } & R)
 
 /** What a successful read gives the import: the statement's text, its format, and (PDF) where its rows are. */
@@ -163,6 +164,7 @@ export function StatementFileSection<R>({
         <FormMessage tone="error">
           {phase.text}
           {phase.pnbOffer && messageExtra}
+          {phase.layout && <CopyLayout text={phase.layout} />}
         </FormMessage>
       )}
       {phase.step === "match_failed" && (
@@ -232,7 +234,6 @@ const MAX_UNREADABLE_SHOWN = 10
 
 /** Rows the reader couldn't use: where each is and its masked shape, and Copy layout (no text or digits). */
 export function UnreadableNotice({ count, rows }: { count: number; rows: UnreadableRow[] }) {
-  const [copied, setCopied] = useState<"copied" | "failed" | null>(null)
   if (count === 0) return null
   return (
     <FormMessage tone="error">
@@ -248,32 +249,37 @@ export function UnreadableNotice({ count, rows }: { count: number; rows: Unreada
           {rows.length > MAX_UNREADABLE_SHOWN && <li>and {rows.length - MAX_UNREADABLE_SHOWN} more</li>}
         </ul>
       )}
-      {rows.length > 0 && (
-        <span className="mt-2 flex flex-wrap items-center gap-2">
-          {/* For support: where each unreadable piece sits, never its text or digits. */}
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              void navigator.clipboard
-                .writeText(unreadableLayoutText(rows))
-                .then(() => setCopied("copied"))
-                .catch(() => setCopied("failed"))
-            }
-          >
-            Copy layout
-          </Button>
-          <span role="status" className="text-sm">
-            {copied === "copied"
-              ? "Layout copied: positions and sizes only, no text or numbers from your statement."
-              : copied === "failed"
-                ? "Couldn't copy. Allow clipboard access and try again."
-                : ""}
-          </span>
-        </span>
-      )}
+      {rows.length > 0 && <CopyLayout text={unreadableLayoutText(rows)} />}
     </FormMessage>
+  )
+}
+
+/** For support: copies where pieces sit (masked layout text), never the statement's text or digits. */
+function CopyLayout({ text }: { text: string }) {
+  const [copied, setCopied] = useState<"copied" | "failed" | null>(null)
+  return (
+    <span className="mt-2 flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={() =>
+          void navigator.clipboard
+            .writeText(text)
+            .then(() => setCopied("copied"))
+            .catch(() => setCopied("failed"))
+        }
+      >
+        Copy layout
+      </Button>
+      <span role="status" className="text-sm">
+        {copied === "copied"
+          ? "Layout copied: positions and sizes only, no text or numbers from your statement."
+          : copied === "failed"
+            ? "Couldn't copy. Allow clipboard access and try again."
+            : ""}
+      </span>
+    </span>
   )
 }
 

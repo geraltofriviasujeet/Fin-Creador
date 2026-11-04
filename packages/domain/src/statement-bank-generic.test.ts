@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type PdfTextItem, statementPages } from "./pdf-rows";
 import { bankStatementNeedsCheck, csvRows } from "./statement-bank";
-import { type BankTableRow, bankTableColumns, parseGenericBankStatement, readBankStatement } from "./statement-bank-generic";
+import { type BankTableRow, bankReadFailureText, bankTableColumns, parseGenericBankStatement, readBankStatement } from "./statement-bank-generic";
 
 // Invented statements only: banks, people, numbers and handles are made up.
 const rowsOf = (text: string): BankTableRow[] => csvRows(text).map((cells) => ({ cells }));
@@ -395,6 +395,83 @@ describe("parseGenericBankStatement: PDF, a page's customer block and legal text
     const parsed = parseGenericBankStatement(statementPages(broken).rows);
     // The amount can't be used, so the totals fail and the file is not read; the row is not taken as narration.
     expect(parsed).toBeNull();
+  });
+});
+
+describe("parseGenericBankStatement: an opening balance row with another piece before its label", () => {
+  // Shape from a real statement's "Copy layout": "text x107 w167 c25 dy16 | text x306 w92 c15 dy0 |
+  // amount x546 w37 c6 dy0", a 15-character label in the description column, the balance alone at the
+  // right, and a 25-character note below it starting further left (so the PDF reader joins them).
+  const p = (str: string, x: number, y: number, width = str.length * 6.2) => ({ str, x, y, width, height: 10 });
+  const pages: PdfTextItem[][] = [
+    [
+      p("Txn Date", 34, 700, 30), p("Value Date", 70, 700, 30), p("Description", 110, 700, 45), p("Cheque No.", 360, 700, 40),
+      p("Branch Code", 410, 700, 45), p("Debit", 460, 700, 25), p("Credit", 500, 700, 30), p("Balance", 546, 700, 35),
+      // The note lands in the description column ahead of the label, which sits under Cheque No.
+      p("Opening Balance", 306, 680, 92), p("900.00", 546, 680, 37), p("STATEMENT FROM 01-10-2026", 107, 664, 167),
+      p("02-10-2026", 34, 640), p("UPI/RAVI KUMAR", 110, 640), p("100.00", 460, 640), p("800.00", 546, 640),
+      p("03-10-2026", 34, 620), p("ATM CASH", 110, 620), p("50.00", 460, 620), p("750.00", 546, 620),
+      p("Closing Balance", 306, 600, 92), p("750.00", 546, 600, 37),
+    ],
+  ];
+
+  it("is read as the opening balance, not listed as unreadable, and the totals reconcile", () => {
+    const { rows, rowLayouts } = statementPages(pages);
+    expect(rowLayouts[1]).toBe("text x107 w167 c25 dy16 | text x306 w92 c15 dy0 | amount x546 w37 c6 dy0");
+    const parsed = parseGenericBankStatement(rows);
+    expect(parsed?.summary.openingMinor).toBe(90_000);
+    expect(parsed?.issues).toEqual([]);
+    expect(read(parsed)?.map((l) => l.slice(0, 3))).toEqual([["2026-10-02", 10_000, "debit"], ["2026-10-03", 5_000, "debit"]]);
+    expect(parsed?.checks.map((c) => [c.name, c.status])).toEqual([["balance_chain", "ok"], ["totals", "ok"]]);
+  });
+});
+
+describe("bankReadFailureText", () => {
+  const csv = (lines: string[]) => bankReadFailureText({ format: "csv", text: lines.join("\n") });
+
+  it("says no header row was found, and lists each row's cells by kind, column and characters only", () => {
+    const text = csv(["Name,Amount", "Lunch,100", "Account No,50100012345678"]);
+    expect(text).toBe(
+      [
+        "Why: No header row found: no row names a date, a description, a balance and amounts.",
+        "Row 1: text col1 c4 | text col2 c6",
+        "Row 2: text col1 c5 | number col2 c3",
+        "Row 3: text col1 c10 | number col2 c14",
+      ].join("\n"),
+    );
+  });
+
+  it("names the closest header row and the column it lacks", () => {
+    expect(csv(["Date,Narration,Debit,Credit", "01/10/2026,SHOP,100.00,"]).split("\n")[0]).toBe("Why: No header row found. Closest: row 1, missing the balance column.");
+    expect(csv(["Date,Narration,Balance", "01/10/2026,SHOP,900.00"]).split("\n")[0]).toBe(
+      "Why: No header row found. Closest: row 1, missing the debit and credit columns or an amount column.",
+    );
+  });
+
+  it("says when reconciliation failed, or the balances don't follow without printed endpoints", () => {
+    const head = "Date,Narration,Debit,Credit,Balance";
+    expect(csv([head, "Opening Balance,,,,1000.00", "01/10/2026,SHOP,100.00,,900.00", "03/10/2026,CASHBACK,,300.00,1000.00", "Closing Balance,,,,1000.00"]).split("\n")[0]).toBe(
+      "Why: Header row at row 1. Reconciliation failed: opening + credits − debits is not the closing balance.",
+    );
+    expect(csv([head, "01/10/2026,SHOP,100.00,,900.00", "02/10/2026,TEA,10.00,,800.00", "03/10/2026,FUEL,10.00,,790.00"]).split("\n")[0]).toBe(
+      "Why: Header row at row 1. No opening and closing balance printed, and 1 row's balance doesn't follow from the row before.",
+    );
+    expect(csv([head, "10/05/2026,SHOP,100.00,,900.00", "10/12/2026,TEA,10.00,,890.00", "11/02/2026,FUEL,10.00,,880.00"]).split("\n")[0]).toBe(
+      "Why: Header row at row 1. The dates run out of order when read day first.",
+    );
+  });
+
+  it("for a PDF: page and row, and the masked layout of the first 30 rows plus the closest header further down", () => {
+    const p = (str: string, x: number, y: number) => ({ str, x, y, width: str.length * 4.5, height: 10 });
+    const top = Array.from({ length: 34 }, (_, i) => p(`EXAMPLE PERSON LINE ${i}`, 30, 800 - i * 20));
+    const header = [p("Txn Date", 30, 100), p("Description", 120, 100), p("Debit", 300, 100), p("Credit", 360, 100)];
+    const { text, rows, rowLayouts, pageRowCounts } = statementPages([top, header]);
+    const out = bankReadFailureText({ format: "pdf", text, rows, rowLayouts, pageRowCounts }).split("\n");
+    expect(out[0]).toBe("Why: No header row found. Closest: page 2, row 1, missing the balance column.");
+    expect(out).toHaveLength(1 + 30 + 1);
+    expect(out[1]).toBe("Page 1, row 1: text x30 w95 c21 dy0");
+    expect(out[31]).toBe("Page 2, row 1: text x30 w36 c8 dy0 | text x120 w50 c11 dy0 | text x300 w23 c5 dy0 | text x360 w27 c6 dy0");
+    expect(out.join("\n")).not.toMatch(/EXAMPLE|PERSON|Txn|Debit/);
   });
 });
 

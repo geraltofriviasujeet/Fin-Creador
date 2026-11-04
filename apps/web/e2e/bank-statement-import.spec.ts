@@ -236,6 +236,8 @@ test("a CSV export: columns found by name, read and saved; the same file again i
 
   await chooser(page).setInputFiles(file("notes.csv", "Name,Amount\nLunch,100"))
   await expect(page.getByText(/^We couldn't read this file as a bank statement\./)).toBeVisible()
+  // Sprint 9d: why it gave up and the masked layout of its first rows, for support.
+  await expect(page.getByRole("button", { name: "Copy layout" })).toBeVisible()
   await expect(review(page)).toHaveCount(0)
 })
 

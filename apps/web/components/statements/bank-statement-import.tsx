@@ -29,7 +29,7 @@ import {
   reviewPage,
   setBankLineType,
 } from "@fin-creador/api"
-import { type BankLineSkipReason, type BankStatementReader, parseAmount, readBankStatement } from "@fin-creador/domain"
+import { type BankLineSkipReason, type BankStatementReader, bankReadFailureText, parseAmount, readBankStatement } from "@fin-creador/domain"
 import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { bankImportMatchesAction, saveBankImportLinesAction } from "@/app/(app)/income/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
@@ -92,7 +92,7 @@ export function BankStatementImport({ account, today, options }: { account: Bank
     if (read === null) return
     const id = ++attemptRef.current
     const statement = readBankStatement(read)
-    if (statement === null) return void setPhase({ step: "message", text: BANK_UNREADABLE, pnbOffer: false })
+    if (statement === null) return void setPhase({ step: "message", text: BANK_UNREADABLE, pnbOffer: false, layout: bankReadFailureText(read) })
     const { parse, reader: readBy } = statement
     setPhase({ step: "matching" })
     const result = await bankImportMatchesAction({
