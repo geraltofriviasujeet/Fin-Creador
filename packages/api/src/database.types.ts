@@ -2691,6 +2691,10 @@ export type Database = {
         Args: { p_statutory_due_id: string }
         Returns: undefined
       }
+      system_category_id: {
+        Args: { p_key: string; p_user_id: string }
+        Returns: string
+      }
       transaction_summary: {
         Args: {
           p_account_id?: string
