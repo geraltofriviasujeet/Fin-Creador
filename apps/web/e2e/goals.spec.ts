@@ -161,7 +161,7 @@ test("budgets: warning at 80%, over at 100%, on the page and the Overview", asyn
   await dialog(page, "Set a budget").getByLabel("Monthly budget").fill("2,000")
   await dialog(page, "Set a budget").getByRole("button", { name: "Save budget" }).click()
   await expect(toast(page, "Budget saved.")).toBeVisible()
-  for (const [name, amount, date] of [["Wedding gift", "25,000", ""], ["Emergency fund", "1,50,000", "2027-09-30"]]) {
+  for (const [name, amount, date] of [["Wedding gift", "25,000", ""], ["Emergency fund", "1,50,000", `${new Date().getUTCFullYear() + 1}-09-30`]]) {
     const plan = await openPlan(page)
     await plan.getByRole("radio", { name: "Other" }).click()
     await plan.getByLabel("Name", { exact: true }).fill(name!)

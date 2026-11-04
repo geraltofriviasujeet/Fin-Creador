@@ -16,6 +16,14 @@ insert into auth.users (id, email) values
 -- Helpers (SECURITY INVOKER: RLS applies to whoever calls them).
 create function public.t_today() returns date language sql stable set search_path = ''
   as $$ select public.user_local_today((select auth.uid())) $$;
+-- A date at least two years ahead, so "starts later" stays after today whenever the test runs:
+-- p_month/p_day in the first leap (or common) year from two years on, plus p_years_after.
+create function public.t_ahead(p_leap boolean, p_month integer, p_day integer, p_years_after integer default 0)
+  returns date language sql stable set search_path = ''
+  as $$ select pg_catalog.make_date(y + p_years_after, p_month, p_day)
+        from pg_catalog.generate_series(extract(year from public.t_today())::integer + 2,
+                                        extract(year from public.t_today())::integer + 9) as y
+        where (y % 4 = 0 and (y % 100 <> 0 or y % 400 = 0)) = p_leap order by y limit 1 $$;
 create function public.t_acct(p_name text) returns uuid language sql stable set search_path = ''
   as $$ select a.id from public.accounts as a where a.name = p_name and a.kind in ('bank', 'cash', 'other') $$;
 create function public.t_borrow(p_key uuid) returns uuid language sql stable set search_path = ''
@@ -68,7 +76,7 @@ begin
 exception when insufficient_privilege then
   return -1;
 end $$;
-grant execute on function public.t_today(), public.t_acct(text), public.t_borrow(uuid), public.t_bal(uuid), public.t_lp(uuid),
+grant execute on function public.t_today(), public.t_ahead(boolean, integer, integer, integer), public.t_acct(text), public.t_borrow(uuid), public.t_bal(uuid), public.t_lp(uuid),
   public.t_total(), public.t_sum_all(), public.t_items(uuid), public.t_left(uuid), public.t_ents(uuid, boolean),
   public.t_refused(text), public.t_rows(text), public.t_digits() to authenticated;
 grant execute on function public.t_rows(text) to anon;
@@ -342,19 +350,19 @@ select ok(not public.t_refused(format('select public.create_borrowing(gen_random
   'borrowing reason: single digits split by letters are allowed');
 -- Loans: lender and nickname refuse a run of 4 (new rows).
 select lives_ok($$ select public.create_loan('d5000000-0000-4000-8000-000000000001', 'home', 'Leap Bank 123', 2000000, 300000, 1200, 'floating', 3,
-                      'starts_later', 300000, 3, date '2032-01-31', 44424, 44424, p_nickname => 'Plan 123') $$,
+                      'starts_later', 300000, 3, public.t_ahead(true, 1, 31), 44424, 44424, p_nickname => 'Plan 123') $$,
   'a loan with 3 digits in a row in the lender and nickname is allowed');
 select is((select count(*)::int from public.t_digits() as v where not public.t_refused(format(
     'select public.create_loan(gen_random_uuid(), %L, %L, 2000000, 300000, 1200, %L, 3, %L, 300000, 3, date %L, 44424, 44424)',
-    'home', 'Leap ' || repeat(d, 4), 'floating', 'starts_later', '2032-01-31'))),
+    'home', 'Leap ' || repeat(d, 4), 'floating', 'starts_later', public.t_ahead(true, 1, 31)))),
   0, 'loan lender: a run of 4 in any script is refused');
 select is((select count(*)::int from public.t_digits() as v where not public.t_refused(format(
     'select public.create_loan(gen_random_uuid(), %L, %L, 2000000, 300000, 1200, %L, 3, %L, 300000, 3, date %L, 44424, 44424, p_nickname => %L)',
-    'home', 'Leap Bank', 'floating', 'starts_later', '2032-01-31', 'Plan ' || repeat(d, 4)))),
+    'home', 'Leap Bank', 'floating', 'starts_later', public.t_ahead(true, 1, 31), 'Plan ' || repeat(d, 4)))),
   0, 'loan nickname: a run of 4 in any script is refused');
 select ok(public.t_refused(format(
     'select public.create_loan(gen_random_uuid(), %L, %L, 2000000, 300000, 1200, %L, 3, %L, 300000, 3, date %L, 44424, 44424)',
-    'home', 'Leap 1' || chr(65298) || chr(2409) || chr(1636), 'floating', 'starts_later', '2032-01-31')),
+    'home', 'Leap 1' || chr(65298) || chr(2409) || chr(1636), 'floating', 'starts_later', public.t_ahead(true, 1, 31))),
   'loan lender: a mixed-script run of 4 is refused');
 
 -- ============================================================ 3: RLS isolation (as B)

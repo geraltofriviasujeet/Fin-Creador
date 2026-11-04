@@ -17,6 +17,14 @@ create function public.t_today() returns date language sql stable set search_pat
   as $$ select public.user_local_today((select auth.uid())) $$;
 create function public.t_month_start() returns date language sql stable set search_path = ''
   as $$ select pg_catalog.make_date(extract(year from public.t_today())::integer, extract(month from public.t_today())::integer, 1) $$;
+-- A date at least two years ahead, so "starts later" stays after today whenever the test runs:
+-- p_month/p_day in the first leap (or common) year from two years on, plus p_years_after.
+create function public.t_ahead(p_leap boolean, p_month integer, p_day integer, p_years_after integer default 0)
+  returns date language sql stable set search_path = ''
+  as $$ select pg_catalog.make_date(y + p_years_after, p_month, p_day)
+        from pg_catalog.generate_series(extract(year from public.t_today())::integer + 2,
+                                        extract(year from public.t_today())::integer + 9) as y
+        where (y % 4 = 0 and (y % 100 <> 0 or y % 400 = 0)) = p_leap order by y limit 1 $$;
 create function public.t_loan(p_key uuid) returns uuid language sql stable set search_path = ''
   as $$ select l.id from public.loans as l where l.idempotency_key = p_key $$;
 create function public.t_loan_account(p_key uuid) returns uuid language sql stable set search_path = ''
@@ -79,7 +87,7 @@ create function public.t_create(
         p_start_mode, p_outstanding, p_months, p_first, p_emi, p_emi,
         p_nickname => p_nickname, p_before_tracking_on => p_before, p_moratorium_months => p_moratorium,
         p_moratorium_interest => p_mor_interest, p_capitalised_minor => p_capitalised, p_moratorium_interest_minor => p_mor_monthly) $$;
-grant execute on function public.t_today(), public.t_month_start(), public.t_loan(uuid), public.t_loan_account(uuid),
+grant execute on function public.t_today(), public.t_month_start(), public.t_ahead(boolean, integer, integer, integer), public.t_loan(uuid), public.t_loan_account(uuid),
   public.t_due(uuid, integer, text), public.t_acct(text), public.t_pay(uuid), public.t_bal(uuid), public.t_parts(uuid),
   public.t_total(), public.t_cap(uuid), public.t_orphans(),
   public.t_try_pay(uuid, uuid, uuid, bigint, bigint, bigint, boolean),
@@ -191,35 +199,35 @@ select is(public.t_total(), 960576::bigint, '... and restores nothing twice');
 select is(public.t_orphans(), 0::bigint, 'after the void no entry disagrees with its payment');
 
 -- ------------------------------------------------------------ 8: starts later, moratorium, month-end
--- L2: capitalised interest. First EMI on 31 Jan 2030, 4 EMIs of 100,000; 30,000 added with the first EMI paid.
+-- L2: capitalised interest. First EMI on 31 Jan of a common year two or more years ahead, 4 EMIs of 100,000; 30,000 added with the first EMI paid.
 select lives_ok(
   $$ select public.t_create('a1000000-0000-4000-8000-000000000002', 'QA Study', 'QA Study loan', 'starts_later', 1000000, 4,
-       date '2030-01-31', null, 2, 'capitalise', 30000, 0, p_emi => 100000) $$,
+       public.t_ahead(false, 1, 31), null, 2, 'capitalise', 30000, 0, p_emi => 100000) $$,
   'A adds L2: starts later, interest added when EMIs start');
 select results_eq(
   $$ select seq, due_date from public.due_items where loan_id = public.t_loan('a1000000-0000-4000-8000-000000000002') and kind = 'loan_emi' order by seq $$,
-  $$ values (1, date '2030-01-31'), (2, date '2030-02-28'), (3, date '2030-03-31'), (4, date '2030-04-30') $$,
+  $$ values (1, public.t_ahead(false, 1, 31)), (2, public.t_ahead(false, 2, 28)), (3, public.t_ahead(false, 3, 31)), (4, public.t_ahead(false, 4, 30)) $$,
   'EMI dates clamp to the month end but count from the first date (31 Jan, 28 Feb, 31 Mar, 30 Apr)');
 select is((select count(*)::int from public.due_items where loan_id = public.t_loan('a1000000-0000-4000-8000-000000000002') and kind = 'loan_interest'), 0,
   'capitalised interest has no monthly items');
 -- L3: interest paid monthly for 2 months before the first EMI.
 select lives_ok(
   $$ select public.t_create('a1000000-0000-4000-8000-000000000003', 'QA Study', 'QA Monthly', 'starts_later', 1000000, 4,
-       date '2030-01-31', null, 2, 'pay_monthly', 0, 10000, p_emi => 100000) $$,
+       public.t_ahead(false, 1, 31), null, 2, 'pay_monthly', 0, 10000, p_emi => 100000) $$,
   'A adds L3: starts later, interest paid monthly');
 select results_eq(
   $$ select seq, due_date, amount_due_minor, status from public.due_items
      where loan_id = public.t_loan('a1000000-0000-4000-8000-000000000003') and kind = 'loan_interest' order by seq $$,
-  $$ values (1, date '2029-11-30', 10000::bigint, 'pending'::text), (2, date '2029-12-31', 10000::bigint, 'pending'::text) $$,
-  'the two interest-only months are one and two months before the first EMI (30 Nov, 31 Dec 2029)');
--- L4: a leap year: 31 Jan, 29 Feb, 31 Mar 2032.
+  $$ values (1, public.t_ahead(false, 11, 30, -1), 10000::bigint, 'pending'::text), (2, public.t_ahead(false, 12, 31, -1), 10000::bigint, 'pending'::text) $$,
+  'the two interest-only months are one and two months before the first EMI (30 Nov, 31 Dec of the year before)');
+-- L4: a leap year two or more years ahead: 31 Jan, 29 Feb, 31 Mar.
 select lives_ok(
-  $$ select public.t_create('a1000000-0000-4000-8000-000000000004', 'QA Leap', null, 'starts_later', 300000, 3, date '2032-01-31', null) $$,
+  $$ select public.t_create('a1000000-0000-4000-8000-000000000004', 'QA Leap', null, 'starts_later', 300000, 3, public.t_ahead(true, 1, 31), null) $$,
   'A adds L4 whose second EMI falls in a leap February');
 select results_eq(
   $$ select due_date from public.due_items where loan_id = public.t_loan('a1000000-0000-4000-8000-000000000004') order by seq $$,
-  $$ values (date '2032-01-31'), (date '2032-02-29'), (date '2032-03-31') $$,
-  'the second EMI is 29 Feb 2032');
+  $$ values (public.t_ahead(true, 1, 31)), (public.t_ahead(true, 2, 29)), (public.t_ahead(true, 3, 31)) $$,
+  'the second EMI is 29 Feb of the leap year');
 select is(public.t_total(), 960576::bigint, 'three more loans change nothing in Total available');
 
 -- L2 EMI 1: principal 90,000 + interest 10,000 from the bank; the 30,000 is added to the loan.

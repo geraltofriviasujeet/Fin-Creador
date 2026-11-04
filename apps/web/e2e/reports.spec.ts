@@ -13,6 +13,8 @@ const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${n
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 const todayInIndia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+/** 1 January of last year: a range that stays under the export's 10-year limit. */
+const lastYearStart = () => `${Number(todayInIndia().slice(0, 4)) - 1}-01-01`
 const thisMonth = () => {
   const [y, m] = todayInIndia().split("-").map(Number) as [number, number]
   return `${MONTHS[m - 1]} ${y}`
@@ -201,7 +203,7 @@ test("CSV export: injection neutralised, Amount numeric, voided left out by defa
   expect(all).not.toContain("other-user-secret")
 
   // Another user's account id: RLS leaves nothing, so the form says so and nothing downloads.
-  const foreign = await page.request.get(`/reports/export?from=2026-01-01&to=${todayInIndia()}&account=${otherAccount.data!.id}`)
+  const foreign = await page.request.get(`/reports/export?from=${lastYearStart()}&to=${todayInIndia()}&account=${otherAccount.data!.id}`)
   expect(foreign.status()).toBe(200)
   expect(foreign.headers()["x-row-count"]).toBe("0")
   expect(await foreign.text()).not.toContain("other-user-secret")
@@ -216,7 +218,7 @@ test("CSV export: injection neutralised, Amount numeric, voided left out by defa
   await exportCard.getByRole("button", { name: "Download CSV" }).click()
   await expect(exportCard.getByText("No entries match this range and filter")).toBeVisible()
   // Signed out: sent to sign in (the route itself answers 401 too), never a file.
-  const anon = await (await browser.newContext({ baseURL })).request.get(`/reports/export?from=2026-01-01&to=${todayInIndia()}`, { maxRedirects: 0 })
+  const anon = await (await browser.newContext({ baseURL })).request.get(`/reports/export?from=${lastYearStart()}&to=${todayInIndia()}`, { maxRedirects: 0 })
   expect(anon.status()).toBe(307)
   expect(anon.headers()["location"]).toContain("/sign-in")
   await page.close()
