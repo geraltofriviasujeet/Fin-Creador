@@ -3,8 +3,8 @@
 // no text, and the caps. Never a real statement.
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs"
 import { describe, expect, it } from "vitest"
-import { MAX_STATEMENT_PDF_BYTES, MAX_STATEMENT_PDF_PAGES, parseCardStatement, statementNeedsCheck, statementVerifiesItself } from "@fin-creador/domain"
-import { columns, genericStatementPages, pnbRealLayoutPages, pnbStatementPages as pnbPages, syntheticPdf } from "../../test-support/synthetic-pdf"
+import { MAX_STATEMENT_PDF_BYTES, MAX_STATEMENT_PDF_PAGES, bankStatementNeedsCheck, parseCardStatement, parsePnbSavingsStatementText, statementNeedsCheck, statementVerifiesItself } from "@fin-creador/domain"
+import { columns, genericStatementPages, pnbRealLayoutPages, pnbSavingsPages, pnbStatementPages as pnbPages, savingsDefaultRows, syntheticPdf } from "../../test-support/synthetic-pdf"
 import { type PdfLib, readStatementPdf } from "./pdf-reader"
 
 const lib = pdfjs as unknown as PdfLib
@@ -125,6 +125,42 @@ describe("readStatementPdf: masked row layouts for rows the reader can't use", (
     const layout = read.rowLayouts[parsed.issues[0]!.line - 1]!
     expect(layout).toMatch(/^date x\d+ w\d+ c11 dy0 \| date x\d+ w\d+ c11 dy0 \| text .* \| text x\d+ w\d+ c16 dy0$/)
     expect(read.rowLayouts.join("\n")).not.toMatch(/MYSTERY|OCT|RUPAY|0042|1784/)
+  })
+})
+
+describe("readStatementPdf: PNB savings account statement", () => {
+  it("reads every line with its balance, joins wrapped remarks, keeps the UPI payee only, and nothing above the header", async () => {
+    const read = await readStatementPdf(lib, syntheticPdf(pnbSavingsPages()))
+    expect(read.status).toBe("ok")
+    if (read.status !== "ok") return
+    const parsed = parsePnbSavingsStatementText(read.text)
+    expect(parsed.issues).toEqual([])
+    expect(parsed.lines.map((l) => [l.date, l.amountMinor, l.direction, l.description])).toEqual([
+      ["2026-10-28", 64_900, "debit", "RAVI KUMAR"],
+      ["2026-10-27", 233_400, "debit", "CARD PAYMENT PNB RUPAY"],
+      ["2026-10-26", 120_000, "credit", "RAVI KUMAR"],
+      ["2026-10-25", 500_000, "debit", "IMPS/TRANSFER TO OWN ACCOUNT"],
+      ["2026-10-24", 64_900, "debit", "RAVI KUMAR"],
+      ["2026-10-23", 178_400, "debit", "FRESH BASKET"],
+      ["2026-10-22", 5_000_000, "credit", "NEFT/SALARY OCT/EXAMPLE EMPLOYER PVT LTD"],
+    ])
+    expect(parsed.checks.map((c) => [c.name, c.status])).toEqual([["balance_chain", "ok"], ["opening", "ok"], ["closing", "ok"]])
+    expect(JSON.stringify(parsed)).not.toMatch(/0000111122223333|EXAMPLE PERSON|EXAMPLE ROAD|N123456789|412345678|9876543210|okaxis|SBIN/)
+  })
+
+  it("a broken chain needs a check; a year of lines over many pages reads in full", async () => {
+    const broken = await readStatementPdf(lib, syntheticPdf(pnbSavingsPages({ breakChainAt: 3 })))
+    if (broken.status !== "ok") throw new Error(broken.status)
+    expect(bankStatementNeedsCheck(parsePnbSavingsStatementText(broken.text))).toBe(true)
+
+    const rows = Array.from({ length: 52 }, (_, week) => savingsDefaultRows(`2026-${String(1 + Math.floor(week / 5)).padStart(2, "0")}-${String(1 + (week % 5) * 5 + 6).padStart(2, "0")}`)).flat()
+    const year = await readStatementPdf(lib, syntheticPdf(pnbSavingsPages({ rows })))
+    if (year.status !== "ok") throw new Error(year.status)
+    expect(year.pages).toBeGreaterThan(5)
+    const parsed = parsePnbSavingsStatementText(year.text)
+    expect(parsed.issues).toEqual([])
+    expect(parsed.lines).toHaveLength(rows.length)
+    expect(bankStatementNeedsCheck(parsed)).toBe(false)
   })
 })
 

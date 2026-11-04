@@ -385,3 +385,74 @@ export function genericStatementPages(options: { statementDate?: string; lineDat
     ),
   ]
 }
+
+/** One line of a synthetic bank statement; `remarks` is printed one piece per row (a wrapped cell). */
+export type SavingsRow = { date: string; amountMinor: number; direction: "DR" | "CR"; remarks: string[]; instrument?: string }
+
+const plain = (minor: number) => `${Math.trunc(minor / 100)}.${String(Math.abs(minor) % 100).padStart(2, "0")}`
+
+/** ISO date `days` before `iso`. */
+export const isoDaysBefore = (iso: string, days: number) => {
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number]
+  return new Date(Date.UTC(y, m - 1, d - days)).toISOString().slice(0, 10)
+}
+
+/**
+ * Seven lines of an invented savings account, oldest first, the newest on `end`: salary (CR),
+ * a UPI purchase, a UPI payment to a person with its remarks wrapped over two rows, a transfer to
+ * another own account, a UPI credit from the same person, a card payment, and the same person paid
+ * again. Opening ₹25,000.00; closing ₹65,384.00.
+ */
+export function savingsDefaultRows(end = "2026-10-28"): SavingsRow[] {
+  const on = (days: number) => isoDaysBefore(end, days)
+  return [
+    { date: on(6), amountMinor: 5_000_000, direction: "CR", remarks: ["NEFT/SALARY OCT/EXAMPLE EMPLOYER PVT LTD"], instrument: "N123456789" },
+    { date: on(5), amountMinor: 178_400, direction: "DR", remarks: ["UPI/DR/412345678901/FRESH BASKET/HDFC/freshbasket@okhdfc"] },
+    { date: on(4), amountMinor: 64_900, direction: "DR", remarks: ["UPI/DR/412345678902/RAVI KUMAR/SBIN/", "ravi9876543210@okaxis"] },
+    { date: on(3), amountMinor: 500_000, direction: "DR", remarks: ["IMPS/TRANSFER TO OWN ACCOUNT"] },
+    { date: on(2), amountMinor: 120_000, direction: "CR", remarks: ["UPI/CR/412345678903/RAVI KUMAR/SBIN/ravi9876543210@okaxis"] },
+    { date: on(1), amountMinor: 233_400, direction: "DR", remarks: ["CARD PAYMENT PNB RUPAY"] },
+    { date: on(0), amountMinor: 64_900, direction: "DR", remarks: ["UPI/DR/412345678904/RAVI KUMAR/SBIN/ravi9876543210@okaxis"] },
+  ]
+}
+
+/**
+ * A PNB savings account statement (layout from the owner's description; invented person, account
+ * number, address and values): a header block that must never be kept, the column header row
+ * (Date, Instrument ID, Amount, Type, Balance, Remarks), lines newest first with amounts printed
+ * without commas and balances with them, remarks wrapped one piece per row, then the opening and
+ * closing balances and a page footer. 50 lines a page; the column header repeats on each page.
+ * `breakChainAt`: the balance printed on that line (index oldest first) is ₹1 off. `summary: false`
+ * leaves out the opening and closing balances.
+ */
+export function pnbSavingsPages(
+  options: { rows?: SavingsRow[]; openingMinor?: number; breakChainAt?: number; summary?: boolean } = {},
+): SyntheticPage[] {
+  const rows = options.rows ?? savingsDefaultRows()
+  const opening = options.openingMinor ?? 2_500_000
+  let balance = opening
+  const printed = rows.map((row, i) => {
+    balance += row.direction === "CR" ? row.amountMinor : -row.amountMinor
+    return { row, balance: balance + (i === options.breakChainAt ? 100 : 0) }
+  })
+  const xs = [40, 100, 180, 240, 280, 360]
+  const header = columns(xs, [["Date", "Instrument ID", "Amount", "Type", "Balance", "Remarks"]])
+  const lineRows = printed.reverse().flatMap(({ row, balance: b }): SyntheticPage => [
+    columns(xs, [[slashDate(row.date), row.instrument ?? "", plain(row.amountMinor), row.direction, rupees(b), row.remarks[0] ?? ""]])[0]!,
+    ...row.remarks.slice(1).map((piece) => [{ x: 360, text: piece }]),
+  ])
+  const pages: SyntheticPage[] = []
+  for (let i = 0; i < Math.max(1, lineRows.length); i += 50) pages.push([...header, ...lineRows.slice(i, i + 50)])
+  pages[0]!.unshift(
+    [{ x: 40, text: "PUNJAB NATIONAL BANK" }],
+    [{ x: 40, text: "Account Statement" }],
+    [{ x: 40, text: "Account No" }, { x: 160, text: "0000111122223333" }],
+    [{ x: 40, text: "Customer Name" }, { x: 160, text: "EXAMPLE PERSON" }],
+    [{ x: 40, text: "Address" }, { x: 160, text: "1 EXAMPLE ROAD, KOLKATA 700001" }],
+    [],
+  )
+  const last = pages[pages.length - 1]!
+  if (options.summary !== false) last.push([], [{ x: 40, text: "Opening Balance" }, { x: 180, text: rupees(opening) }], [{ x: 40, text: "Closing Balance" }, { x: 180, text: rupees(balance) }])
+  pages.forEach((page, i) => page.push([{ x: 40, text: `Date: 30/10/2026 Page ${i + 1}` }]))
+  return pages
+}
