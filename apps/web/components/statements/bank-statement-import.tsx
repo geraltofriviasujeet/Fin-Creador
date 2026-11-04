@@ -7,6 +7,7 @@ import {
   BANK_UNREADABLE,
   type BankImportAccount,
   type BankImportOptions,
+  type BankLineFilter,
   type BankLineType,
   type BankReview,
   type BankReviewLine,
@@ -14,12 +15,14 @@ import {
   REFUND_NOTE,
   bankCheckReasons,
   bankLineErrors,
+  bankLinesShown,
   bankReviewKeys,
   bankReviewTotals,
   bankSaveBlockers,
   buildBankReview,
   canTickBank,
   offerPayeeLabel,
+  reviewPage,
   setBankLineType,
 } from "@fin-creador/api"
 import { type BankLineSkipReason, parseBankStatementCsv, parsePnbSavingsStatementText } from "@fin-creador/domain"
@@ -62,8 +65,7 @@ const SKIP_TEXT: Record<BankLineSkipReason, string> = {
   future: "Skipped: future date",
 }
 
-type Filter = "all" | "choice" | "ticked" | "duplicates"
-const FILTERS: { value: Filter; label: string }[] = [
+const FILTERS: { value: BankLineFilter; label: string }[] = [
   { value: "all", label: "All lines" },
   { value: "choice", label: "Need a choice" },
   { value: "ticked", label: "Ticked" },
@@ -118,7 +120,7 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
   const [lines, setLines] = useState(initial.lines)
   const [checkConfirmed, setCheckConfirmed] = useState(false)
   const [bulkCategory, setBulkCategory] = useState("")
-  const [filter, setFilter] = useState<Filter>("all")
+  const [filter, setFilter] = useState<BankLineFilter>("all")
   const [page, setPage] = useState(0)
   const [confirming, setConfirming] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -141,20 +143,9 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
     if (bulkCategory) setLines((ls) => ls.map((l) => (l.ticked && l.type === "expense" ? { ...l, categoryId: bulkCategory } : l)))
   }
 
-  const shown = lines
-    .map((line, index) => ({ line, index }))
-    .filter(({ line }) =>
-      filter === "all"
-        ? true
-        : filter === "ticked"
-          ? line.ticked
-          : filter === "duplicates"
-            ? line.status === "duplicate"
-            : (line.status === "new" || line.status === "duplicate") && (line.type === "" || line.suggested),
-    )
-  const pages = Math.max(1, Math.ceil(shown.length / PAGE))
-  const current = Math.min(page, pages - 1)
-  const pageLines = shown.slice(current * PAGE, (current + 1) * PAGE)
+  const shown = bankLinesShown(lines, filter)
+  const { current, pages, from, to } = reviewPage(shown.length, page, PAGE)
+  const pageLines = shown.slice(from, to)
 
   const save = async () => {
     setConfirming(false)
@@ -277,7 +268,7 @@ function BankReviewSection({ account, options, context, initial }: { account: Ba
             Previous
           </Button>
           <span className="tabular-nums">
-            Lines {current * PAGE + 1}–{Math.min((current + 1) * PAGE, shown.length)} of {shown.length}
+            Lines {from + 1}–{to} of {shown.length}
           </span>
           <Button variant="secondary" size="sm" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}>
             Next

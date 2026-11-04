@@ -58,10 +58,19 @@ function fakeClient(s: { transactions?: Row[]; payments?: Row[]; balance?: numbe
       if (fn === "user_local_today") return { data: "2026-10-30", error: null }
       if (fn === "account_balances_at") return { data: [{ as_of: "2026-10-28", account_id: A, balance_minor: s.balance ?? 0 }], error: null }
       rpcs.push({ fn, args })
-      return { data: { id: `row-${rpcs.length}`, voided_at: null }, error: null }
+      // One row per request key, as transactions_idempotency_unique: a resent key gets the row
+      // already there, or FC007 when it was used for a different entry.
+      await Promise.resolve()
+      const table = fn === "pay_card" ? tables.liability_payments! : tables.transactions!
+      const { p_idempotency_key: key, ...entry } = args
+      const found = table.find((r) => r.idempotency_key === key)
+      if (found) return JSON.stringify(found.entry) === JSON.stringify(entry) ? { data: found, error: null } : { data: null, error: { code: "FC007", message: "" } }
+      const row = { id: `row-${rpcs.length}`, idempotency_key: key, voided_at: null, replaces_id: null, entry }
+      table.push(row)
+      return { data: row, error: null }
     },
   }
-  return { client: client as unknown as UserClient, rpcs }
+  return { client: client as unknown as UserClient, rpcs, tables }
 }
 
 const original = (over: Partial<BankStatementLine> = {}): BankStatementLine => ({
@@ -128,6 +137,67 @@ describe("saveBankImportLines", () => {
     })
     expect(result.ok && result.results.map((r) => r.status)).toEqual(["already_saved", "deleted"])
     expect(rpcs).toEqual([])
+  })
+})
+
+describe("saveBankImportLines: two tabs and an account archived mid-import", () => {
+  const ticked = [
+    line({ description: "FRESH BASKET" }, { type: "expense", categoryId: GROCERIES }),
+    line({}, { type: "transfer", otherAccountId: B }),
+    line({ description: "CARD PAYMENT" }, { type: "card_payment", cardId: CARD }),
+    line({ direction: "credit", description: "SALARY" }, { type: "income", categoryId: SALARY }),
+  ]
+
+  it("two tabs saving the same lines at once post each line once; neither tab reports a failure", async () => {
+    const { client, rpcs, tables } = fakeClient()
+    const [one, two] = await Promise.all([saveBankImportLines(client, { accountId: A, lines: ticked }), saveBankImportLines(client, { accountId: A, lines: ticked })])
+    expect(rpcs).toHaveLength(8) // both tabs got past the ledger check: the key alone kept it to one row
+    expect(tables.transactions).toHaveLength(3)
+    expect(tables.liability_payments).toHaveLength(1)
+    for (const r of [one, two]) expect(r.ok && r.results.every((x) => x.status === "saved" || x.status === "already_saved")).toBe(true)
+  })
+
+  it("two tabs labelling the same line differently: the first posts, the other is told it's already imported", async () => {
+    const { client, tables } = fakeClient()
+    const asExpense = line({ description: "NEFT/OWN" }, { type: "expense", categoryId: GROCERIES })
+    const asTransfer = line({ description: "NEFT/OWN" }, { type: "transfer", otherAccountId: B })
+    const [one, two] = await Promise.all([
+      saveBankImportLines(client, { accountId: A, lines: [asExpense] }),
+      saveBankImportLines(client, { accountId: A, lines: [asTransfer] }),
+    ])
+    expect(tables.transactions).toHaveLength(1)
+    expect([one, two].map((r) => r.ok && r.results[0]!.status)).toEqual(["saved", "already_saved"])
+  })
+
+  it("a later save after the line was saved once reports Already imported and posts nothing", async () => {
+    const { client, rpcs } = fakeClient()
+    await saveBankImportLines(client, { accountId: A, lines: ticked })
+    const again = await saveBankImportLines(client, { accountId: A, lines: ticked })
+    expect(again.ok && again.results.map((r) => r.status)).toEqual(Array(4).fill("already_saved"))
+    expect(rpcs).toHaveLength(4)
+  })
+
+  it("the account archived between chunks: the next chunk is refused as a whole and nothing more is posted", async () => {
+    const { client, rpcs, tables } = fakeClient()
+    const first = await saveBankImportLines(client, { accountId: A, lines: ticked.slice(0, 2) })
+    expect(first.ok && first.results.map((r) => r.status)).toEqual(["saved", "saved"])
+    tables.accounts!.find((a) => a.id === A)!.archived_at = "2026-10-30T10:00:00Z"
+    const next = await saveBankImportLines(client, { accountId: A, lines: ticked.slice(2) })
+    expect(next).toEqual({ ok: false, message: "We couldn't find this account. It may be archived." })
+    expect(rpcs).toHaveLength(2)
+  })
+
+  it("the other account of a transfer archived mid-import: that line fails on its own, the rest save", async () => {
+    const { client, rpcs, tables } = fakeClient()
+    tables.accounts!.find((a) => a.id === B)!.archived_at = "2026-10-30T10:00:00Z"
+    const r = await saveBankImportLines(client, { accountId: A, lines: ticked })
+    expect(r.ok && r.results.map((x) => [x.status, x.reason])).toEqual([
+      ["saved", undefined],
+      ["failed", "Choose the other account"],
+      ["saved", undefined],
+      ["saved", undefined],
+    ])
+    expect(rpcs.map((x) => x.args.p_type ?? x.fn)).toEqual(["expense", "pay_card", "income"])
   })
 })
 

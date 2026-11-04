@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest"
-import { type BankStatementLine, type BankStatementParse, bankStatementLineKey } from "@fin-creador/domain"
+import { type BankStatementLine, type BankStatementParse, bankStatementLineKey, parseBankStatementCsv } from "@fin-creador/domain"
 import {
   type BankImportMatches,
   type BankImportOptions,
   REFUND_NOTE,
   bankCheckReasons,
   bankLineErrors,
+  bankLinesShown,
   bankReviewTotals,
   bankSaveBlockers,
   buildBankReview,
   canTickBank,
   offerPayeeLabel,
+  reviewPage,
   setBankLineType,
   statementClosingMinor,
 } from "./bank-review"
@@ -108,7 +110,7 @@ describe("buildBankReview", () => {
   it("the closing balance warning is soft: shown when the app's balance differs, never a blocker", () => {
     const r = buildBankReview(parse, { ...none, bookBalanceMinor: 6_500_000 }, options, context)
     expect(r.balanceWarning).toBe(
-      "In FinCreador this account's balance at the end of the statement (28 Oct 2026) is ₹65,000; the statement's closing balance is ₹65,384. Lines not saved yet, or entries added by hand, can explain it. This doesn't stop Save.",
+      "Your FinCreador balance differs from the bank's: on 28 Oct 2026 FinCreador shows ₹65,000 for this account, and the statement ends at ₹65,384. Lines not saved yet, or entries added by hand, can explain it. This doesn't stop Save.",
     )
     expect(buildBankReview(parse, { ...none, bookBalanceMinor: 6_538_400 }, options, context).balanceWarning).toBeNull()
     expect(bankSaveBlockers(r, options, context, false)).toEqual([])
@@ -155,5 +157,81 @@ describe("types, payee labels and errors", () => {
     expect(bankSaveBlockers(broken, options, context, false)).toEqual(["check_not_confirmed"])
     expect(bankSaveBlockers(broken, options, context, true)).toEqual([])
     expect(broken.lines.filter((l) => l.ticked)).toHaveLength(5) // a failed check unticks nothing
+  })
+})
+
+describe("the statement's own figures and the app's balance are worded apart", () => {
+  it("a mismatch in the statement's own Opening or Closing Balance says the statement doesn't add up; the app warning names FinCreador", () => {
+    const own = bankCheckReasons(
+      [
+        { name: "opening", status: "mismatch", foundMinor: 100, expectedMinor: 200 },
+        { name: "closing", status: "mismatch", foundMinor: 300, expectedMinor: 400 },
+      ],
+      LINES,
+      "INR",
+    )
+    for (const reason of own) {
+      expect(reason).toMatch(/^The statement doesn't add up: its lines (start from|end at) .+, but its own (Opening|Closing) Balance is /)
+      expect(reason).not.toMatch(/FinCreador/)
+    }
+    const warning = buildBankReview(parse, { ...none, bookBalanceMinor: 6_500_000 }, options, context).balanceWarning!
+    expect(warning).toMatch(/^Your FinCreador balance differs from the bank's/)
+    expect(warning).not.toMatch(/doesn't add up|Closing Balance/)
+  })
+})
+
+describe("a 1,200-line statement: filters and pages", () => {
+  // An invented year of lines, oldest first, separate withdrawal and deposit columns, balances with
+  // thousand commas: every 4th line a salary-style credit, every 10th a repeat payee credit.
+  const N = 1_200
+  const rows = ["Date,Narration,Ref No,Withdrawal Amt.,Deposit Amt.,Closing Balance"]
+  let balance = 10_000_000
+  const day = (i: number) => {
+    const d = new Date(Date.UTC(2025, 10, 1) + Math.floor(i / 4) * 86_400_000)
+    return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`
+  }
+  const rupees = (minor: number) => (minor / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })
+  for (let i = 0; i < N; i++) {
+    const credit = i % 4 === 0
+    const amount = 10_000 + (i % 7) * 1_550
+    balance += credit ? amount : -amount
+    const payee = credit ? (i % 20 === 0 ? "UPI/CR/EXAMPLE FRIEND" : `NEFT/CR/PAYER ${i}`) : `UPI/DR/SHOP ${i % 50}`
+    rows.push(`${day(i)},"${payee}",REF${i},${credit ? "" : rupees(amount)},${credit ? rupees(amount) : ""},"${rupees(balance)}"`)
+  }
+  const parsed = parseBankStatementCsv(rows.join("\n"))
+  const ctx = { ...context, openingBalanceDate: "2025-01-01", today: "2026-10-30" }
+  const credits = N / 4
+
+  it("reads every line with the balance chain holding", () => {
+    expect(parsed.lines).toHaveLength(N)
+    expect(parsed.issues).toEqual([])
+    expect(parsed.checks.find((c) => c.name === "balance_chain")!.status).toBe("ok")
+  })
+
+  it("All, Need a choice, Ticked and Possible duplicates show the right lines, and pages cover them 100 at a time", () => {
+    const dup = parsed.lines[5]!
+    const r = buildBankReview(parsed, { ...none, entries: [{ date: dup.date, amountMinor: dup.amountMinor, direction: dup.direction }] }, options, ctx)
+    expect(bankLinesShown(r.lines, "all")).toHaveLength(N)
+    expect(bankLinesShown(r.lines, "choice")).toHaveLength(credits)
+    expect(bankLinesShown(r.lines, "choice").every(({ line }) => line.original.direction === "credit")).toBe(true)
+    expect(bankLinesShown(r.lines, "ticked")).toHaveLength(N - credits - 1) // the duplicate starts unticked
+    expect(bankLinesShown(r.lines, "duplicates").map(({ index }) => index)).toEqual([5])
+
+    // Labelling one repeat payee offers the label on its other lines: they stay in Need a choice (suggested, unticked).
+    const friend = r.lines.findIndex((l) => l.original.description === "UPI/CR/EXAMPLE FRIEND")
+    const labelled = offerPayeeLabel(r.lines.map((l, i) => (i === friend ? { ...setBankLineType(l, "income", options), categoryId: "i1", ticked: true } : l)), friend)
+    const repeats = r.lines.filter((l) => l.original.description === "UPI/CR/EXAMPLE FRIEND").length
+    expect(labelled.filter((l) => l.suggested)).toHaveLength(repeats - 1)
+    expect(bankLinesShown(labelled, "choice")).toHaveLength(credits - 1)
+    expect(bankLinesShown(labelled, "ticked")).toHaveLength(N - credits)
+
+    // Each shown line keeps its place in the review, so a change on page 7 lands on the right line.
+    const choice = bankLinesShown(labelled, "choice")
+    expect(choice.every(({ line, index }) => labelled[index] === line)).toBe(true)
+
+    expect(reviewPage(N, 0, 100)).toEqual({ current: 0, pages: 12, from: 0, to: 100 })
+    expect(reviewPage(N, 11, 100)).toEqual({ current: 11, pages: 12, from: 1_100, to: 1_200 })
+    expect(reviewPage(credits - 1, 5, 100)).toEqual({ current: 2, pages: 3, from: 200, to: 299 }) // a narrower filter keeps the page in range
+    expect(reviewPage(0, 3, 100)).toEqual({ current: 0, pages: 1, from: 0, to: 0 })
   })
 })

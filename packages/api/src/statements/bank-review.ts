@@ -215,7 +215,7 @@ export function balanceWarning(parse: Pick<BankStatementParse, "summary" | "line
   const closing = statementClosingMinor(parse)
   if (closing === null || bookMinor === null || closing === bookMinor || parse.summary.to === null) return null
   const money = (m: number) => formatMoney(m, { currency })
-  return `In FinCreador this account's balance at the end of the statement (${fullDate(parse.summary.to)}) is ${money(bookMinor)}; the statement's closing balance is ${money(closing)}. Lines not saved yet, or entries added by hand, can explain it. This doesn't stop Save.`
+  return `Your FinCreador balance differs from the bank's: on ${fullDate(parse.summary.to)} FinCreador shows ${money(bookMinor)} for this account, and the statement ends at ${money(closing)}. Lines not saved yet, or entries added by hand, can explain it. This doesn't stop Save.`
 }
 
 export const canTickBank = (line: Pick<BankReviewLine, "status" | "type">): boolean =>
@@ -251,6 +251,30 @@ export function offerPayeeLabel(lines: readonly BankReviewLine[], from: number):
       ? line
       : { ...line, type: source.type, categoryId: source.categoryId, otherAccountId: source.otherAccountId, cardId: source.cardId, ticked: false, suggested: true },
   )
+}
+
+export type BankLineFilter = "all" | "choice" | "ticked" | "duplicates"
+
+/** The lines a review filter shows, with their index in the review: Need a choice is open lines with no type or a suggested one. */
+export function bankLinesShown(lines: readonly BankReviewLine[], filter: BankLineFilter): { line: BankReviewLine; index: number }[] {
+  return lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) =>
+      filter === "all"
+        ? true
+        : filter === "ticked"
+          ? line.ticked
+          : filter === "duplicates"
+            ? line.status === "duplicate"
+            : (line.status === "new" || line.status === "duplicate") && (line.type === "" || line.suggested),
+    )
+}
+
+/** Page `page` (kept in range) of `count` items, `size` a page: its bounds and the number of pages. */
+export function reviewPage(count: number, page: number, size: number): { current: number; pages: number; from: number; to: number } {
+  const pages = Math.max(1, Math.ceil(count / size))
+  const current = Math.min(Math.max(0, page), pages - 1)
+  return { current, pages, from: current * size, to: Math.min((current + 1) * size, count) }
 }
 
 export type BankLineErrors = { date?: string; amount?: string; type?: string; target?: string }
@@ -324,8 +348,8 @@ export function bankCheckReasons(checks: readonly BankStatementCheck[], lines: r
         return `The balances don't follow line by line${at}: each balance should be the one before it plus a credit or minus a debit. A line may not have been read.`
       }
       return c.name === "opening"
-        ? `The lines start from ${money(c.foundMinor)}, but the statement's Opening Balance is ${money(c.expectedMinor)}. A line may not have been read.`
-        : `The lines end at ${money(c.foundMinor)}, but the statement's Closing Balance is ${money(c.expectedMinor)}. A line may not have been read.`
+        ? `The statement doesn't add up: its lines start from ${money(c.foundMinor)}, but its own Opening Balance is ${money(c.expectedMinor)}. A line may not have been read.`
+        : `The statement doesn't add up: its lines end at ${money(c.foundMinor)}, but its own Closing Balance is ${money(c.expectedMinor)}. A line may not have been read.`
     })
 }
 
