@@ -77,7 +77,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Fonts (next/font variables set in app/layout.tsx) */
+  /* Fonts (self-hosted faces imported in app/layout.tsx; variables set in :root below) */
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-manrope), var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
 
@@ -144,6 +144,31 @@
   --sidebar-accent-foreground: var(--fc-color-nav-text);
   --sidebar-border: var(--fc-color-accent-deep);
   --sidebar-ring: var(--fc-color-accent);
+}
+
+/* Metric-matched Arial fallbacks while the web fonts load, so text doesn't shift on swap
+   (the values next/font computed for these two fonts). */
+@font-face {
+  font-family: "DM Sans Fallback";
+  src: local("Arial");
+  ascent-override: 94.9%;
+  descent-override: 29.66%;
+  line-gap-override: 0%;
+  size-adjust: 104.53%;
+}
+
+@font-face {
+  font-family: "Manrope Fallback";
+  src: local("Arial");
+  ascent-override: 103.31%;
+  descent-override: 29.07%;
+  line-gap-override: 0%;
+  size-adjust: 103.19%;
+}
+
+:root {
+  --font-dm-sans: "DM Sans Variable", "DM Sans Fallback";
+  --font-manrope: "Manrope Variable", "Manrope Fallback";
 }
 
 /* Dark surfaces (sidebar, balance card, toast): lime focus ring stays visible. */

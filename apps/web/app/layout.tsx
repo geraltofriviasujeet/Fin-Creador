@@ -1,24 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Manrope } from "next/font/google";
 import { colors } from "@fin-creador/design-tokens";
 import { Suspense } from "react";
 import { NoticeToast } from "@/components/notice-toast";
 import { ToastProvider } from "@/components/ui/toast";
+// Fonts are bundled from npm (Fontsource, SIL OFL 1.1): nothing is fetched from Google at dev,
+// build or run time. Each subset loads only when the page uses it; latin-ext carries ₹ (U+20B9).
+import "@fontsource-variable/dm-sans";
+import "@fontsource-variable/manrope";
 import "./globals.css";
-
-// Self-hosted at build time by next/font (no runtime requests to Google).
-// latin-ext covers the ₹ sign (U+20B9).
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin", "latin-ext"],
-  weight: ["600", "700"],
-});
-
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700"],
-});
 
 export const metadata: Metadata = {
   title: { default: "FinCreador", template: "%s · FinCreador" },
@@ -32,7 +21,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en-IN" className={`${manrope.variable} ${dmSans.variable}`}>
+    <html lang="en-IN">
       <body>
         <ToastProvider>
           {children}
