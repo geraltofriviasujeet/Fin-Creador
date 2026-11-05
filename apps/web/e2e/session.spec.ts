@@ -41,14 +41,18 @@ test("warns a minute before, then signs out for real and says why", async ({ pag
 
 test("activity in one tab keeps every tab signed in; they sign out together", async ({ context, page }) => {
   await signUpConfirmed(page, "Two Tabs", uniqueEmail("idle-tabs"))
-  // One fake clock for the whole context (page.clock is the context's clock).
-  await context.clock.install()
+  // A fixed fake time shared by every tab (timers keep running): fast-forwarding gave each
+  // page's clock a different start, so the tabs disagreed by more than the warning minute.
+  const start = Date.now()
+  const at = (ms: number) => context.clock.setFixedTime(new Date(start + ms))
+  const MIN = 60_000
+  await at(0)
   await page.goto("/")
   const other = await context.newPage()
   await other.goto("/income")
 
-  // Mid-way through the warning minute: each page's fake clock starts a few seconds apart.
-  await context.clock.fastForward("01:59:30")
+  // 1 h 59 min 30 s with no activity: both tabs warn.
+  await at(119.5 * MIN)
   await expect(warning(page)).toBeVisible()
   await expect(warning(other)).toBeVisible()
 
@@ -57,7 +61,7 @@ test("activity in one tab keeps every tab signed in; they sign out together", as
   await expect(warning(page)).toBeHidden()
 
   // Two more idle hours: both tabs end up on the sign-in page with the reason.
-  await context.clock.fastForward("02:00:05")
+  await at(119.5 * MIN + 120 * MIN + 5_000)
   await expect(page).toHaveURL(/\/sign-in\?reason=idle/)
   await expect(other).toHaveURL(/\/sign-in\?reason=idle/)
   expect(await authCookies(page)).toHaveLength(0)
