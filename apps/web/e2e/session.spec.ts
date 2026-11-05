@@ -51,18 +51,23 @@ test("activity in one tab keeps every tab signed in; they sign out together", as
   const other = await context.newPage()
   await other.goto("/income")
 
-  // 1 h 59 min 30 s with no activity: both tabs warn.
+  // 1 h 59 min 30 s with no activity: both tabs warn. Chrome throttles timers in a hidden
+  // tab; the guard also checks when a tab comes to the front, as when a person switches tabs.
   await at(119.5 * MIN)
+  await page.bringToFront()
   await expect(warning(page)).toBeVisible()
+  await other.bringToFront()
   await expect(warning(other)).toBeVisible()
 
-  // Staying signed in from the second tab closes the warning in the first.
+  // Staying signed in from the second tab keeps the first signed in too (shared activity).
   await warning(other).getByRole("button", { name: "Stay signed in" }).click()
+  await page.bringToFront()
   await expect(warning(page)).toBeHidden()
 
   // Two more idle hours: both tabs end up on the sign-in page with the reason.
   await at(119.5 * MIN + 120 * MIN + 5_000)
   await expect(page).toHaveURL(/\/sign-in\?reason=idle/)
+  await other.bringToFront()
   await expect(other).toHaveURL(/\/sign-in\?reason=idle/)
   expect(await authCookies(page)).toHaveLength(0)
 })
