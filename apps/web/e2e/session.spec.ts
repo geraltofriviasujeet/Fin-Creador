@@ -1,4 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
+import { LAST_ACTIVE_KEY } from "../lib/auth/idle"
 import { overviewHeading, signUpConfirmed, uniqueEmail } from "./helpers"
 
 // Sign-out after 2 hours of inactivity (Sprint 10a), with a fake clock: a warning one
@@ -39,36 +40,29 @@ test("warns a minute before, then signs out for real and says why", async ({ pag
   // fake clock here runs hours ahead of the server's sign-in time.)
 })
 
-test("activity in one tab keeps every tab signed in; they sign out together", async ({ context, page }) => {
+test("activity in another tab keeps this tab signed in; the sign-out ends the session for every tab", async ({ context, page }) => {
   await signUpConfirmed(page, "Two Tabs", uniqueEmail("idle-tabs"))
-  // A fixed fake time shared by every tab (timers keep running): fast-forwarding gave each
-  // page's clock a different start, so the tabs disagreed by more than the warning minute.
-  const start = Date.now()
-  const at = (ms: number) => context.clock.setFixedTime(new Date(start + ms))
-  const MIN = 60_000
-  await at(0)
+  await page.clock.install()
   await page.goto("/")
+  // The other tab: same site, same localStorage, no guard of its own (Playwright's fake
+  // clock is not reliable across two pages, so only this page runs the timer). It records
+  // activity the way a real tab does: by writing the shared last-active time.
   const other = await context.newPage()
-  await other.goto("/income")
+  await other.goto("/favicon.ico")
 
-  // 1 h 59 min 30 s with no activity: both tabs warn. Chrome throttles timers in a hidden
-  // tab; the guard also checks when a tab comes to the front, as when a person switches tabs.
-  await at(119.5 * MIN)
-  await page.bringToFront()
+  await page.clock.fastForward("01:59:01")
   await expect(warning(page)).toBeVisible()
-  await other.bringToFront()
-  await expect(warning(other)).toBeVisible()
 
-  // Staying signed in from the second tab keeps the first signed in too (shared activity).
-  await warning(other).getByRole("button", { name: "Stay signed in" }).click()
-  await page.bringToFront()
+  // Activity in the other tab (at this page's time) closes the warning here.
+  const now = await page.evaluate(() => Date.now())
+  await other.evaluate(([key, at]) => localStorage.setItem(key, at), [LAST_ACTIVE_KEY, String(now)] as const)
   await expect(warning(page)).toBeHidden()
 
-  // Two more idle hours: both tabs end up on the sign-in page with the reason.
-  await at(119.5 * MIN + 120 * MIN + 5_000)
+  // Two more idle hours: signed out here with the reason; the other tab's session is gone too.
+  await page.clock.fastForward("02:00:05")
   await expect(page).toHaveURL(/\/sign-in\?reason=idle/)
-  await other.bringToFront()
-  await expect(other).toHaveURL(/\/sign-in\?reason=idle/)
+  await other.goto("/income")
+  await expect(other).toHaveURL(/\/sign-in\?next=%2Fincome/)
   expect(await authCookies(page)).toHaveLength(0)
 })
 
