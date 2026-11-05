@@ -47,7 +47,8 @@ test("activity in one tab keeps every tab signed in; they sign out together", as
   const other = await context.newPage()
   await other.goto("/income")
 
-  await context.clock.fastForward("01:59:01")
+  // Mid-way through the warning minute: each page's fake clock starts a few seconds apart.
+  await context.clock.fastForward("01:59:30")
   await expect(warning(page)).toBeVisible()
   await expect(warning(other)).toBeVisible()
 
