@@ -34,7 +34,7 @@ test("turn Roma on, ask what I spent this month, see figures from my records, tu
   await page.getByRole("button", { name: "Turn Roma on" }).click()
   await expect(page.getByRole("status").getByText("Roma is on.")).toBeVisible()
 
-  await page.getByRole("link", { name: "Roma", exact: true }).first().click()
+  await page.getByRole("link", { name: "Ask Roma", exact: true }).first().click()
   await expect(page).toHaveURL(/\/roma$/)
   await page.getByLabel("Your question").fill("What did I spend this month?")
   await page.getByRole("button", { name: "Ask Roma" }).click()
