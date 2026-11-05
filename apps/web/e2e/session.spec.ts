@@ -42,15 +42,16 @@ test("warns a minute before, then signs out for real and says why", async ({ pag
 
 test("activity in another tab keeps this tab signed in; the sign-out ends the session for every tab", async ({ context, page }) => {
   await signUpConfirmed(page, "Two Tabs", uniqueEmail("idle-tabs"))
-  await page.clock.install()
-  await page.goto("/")
   // The other tab: same site, same localStorage, no guard of its own (Playwright's fake
   // clock is not reliable across two pages, so only this page runs the timer). It records
-  // activity the way a real tab does: by writing the shared last-active time.
+  // activity the way a real tab does: by writing the shared last-active time. Opened before
+  // the clock is installed; the timed tab stays in front (Chrome throttles hidden tabs).
   const other = await context.newPage()
   await other.goto("/favicon.ico")
-  // The timed tab in front: Chrome throttles a hidden tab's timers.
   await page.bringToFront()
+  await page.clock.install()
+  await page.goto("/")
+  await expect(overviewHeading(page)).toBeVisible()
 
   await page.clock.fastForward("01:59:01")
   await expect(warning(page)).toBeVisible()
