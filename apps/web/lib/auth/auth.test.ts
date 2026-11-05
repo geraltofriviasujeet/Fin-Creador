@@ -110,6 +110,13 @@ describe("route rules", () => {
     expect(decideRoute("/auth/callback", "?code=x", true)).toBeNull()
   })
 
+  it("never redirects the JSON API: its handlers answer 401 themselves", () => {
+    expect(routeKind("/api/ai/chat")).toBe("api")
+    expect(decideRoute("/api/ai/chat", "", false)).toBeNull()
+    expect(decideRoute("/api/ai/chat", "", true)).toBeNull()
+    expect(routeKind("/apiary")).toBe("protected")
+  })
+
   it("lets signed-in users into the app", () => {
     expect(decideRoute("/settings", "", true)).toBeNull()
   })

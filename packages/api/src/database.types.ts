@@ -1074,6 +1074,8 @@ export type Database = {
           display_name: string | null
           id: string
           phone: string | null
+          roma_descriptions_ok_at: string | null
+          roma_enabled: boolean
           time_zone: string
           updated_at: string
         }
@@ -1085,6 +1087,8 @@ export type Database = {
           display_name?: string | null
           id: string
           phone?: string | null
+          roma_descriptions_ok_at?: string | null
+          roma_enabled?: boolean
           time_zone?: string
           updated_at?: string
         }
@@ -1096,6 +1100,8 @@ export type Database = {
           display_name?: string | null
           id?: string
           phone?: string | null
+          roma_descriptions_ok_at?: string | null
+          roma_enabled?: boolean
           time_zone?: string
           updated_at?: string
         }
@@ -1244,6 +1250,78 @@ export type Database = {
             referencedColumns: ["id", "user_id"]
           },
         ]
+      }
+      roma_settings: {
+        Row: {
+          enabled: boolean
+          id: boolean
+          monthly_budget_usd: number
+          reserve_usd: number
+          updated_at: string
+          user_daily_requests: number
+          user_monthly_budget_usd: number
+        }
+        Insert: {
+          enabled?: boolean
+          id?: boolean
+          monthly_budget_usd?: number
+          reserve_usd?: number
+          updated_at?: string
+          user_daily_requests?: number
+          user_monthly_budget_usd?: number
+        }
+        Update: {
+          enabled?: boolean
+          id?: boolean
+          monthly_budget_usd?: number
+          reserve_usd?: number
+          updated_at?: string
+          user_daily_requests?: number
+          user_monthly_budget_usd?: number
+        }
+        Relationships: []
+      }
+      roma_usage: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          provider: string
+          reserved_usd: number
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          input_tokens?: number | null
+          model: string
+          output_tokens?: number | null
+          provider: string
+          reserved_usd: number
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          provider?: string
+          reserved_usd?: number
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       statutory_dues: {
         Row: {
@@ -2443,6 +2521,27 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      roma_begin_request: {
+        Args: { p_model: string; p_provider: string }
+        Returns: {
+          outcome: string
+          request_id: string
+        }[]
+      }
+      roma_counted_usd: {
+        Args: { p_row: Database["public"]["Tables"]["roma_usage"]["Row"] }
+        Returns: number
+      }
+      roma_release_request: { Args: { p_request_id: string }; Returns: boolean }
+      roma_settle_request: {
+        Args: {
+          p_cost_usd: number
+          p_input_tokens: number
+          p_output_tokens: number
+          p_request_id: string
+        }
+        Returns: boolean
       }
       search_instruments: {
         Args: { p_limit?: number; p_query: string }

@@ -38,6 +38,8 @@ export default defineConfig({
       // The production build must already exist (`next build` with the local Supabase env).
       command: `npx next start -p ${PORT}`,
       url: `${BASE_URL}/sign-in`,
+      // Roma on the mock provider (e2e/roma.spec.ts): no key, nothing paid is ever called.
+      env: { LLM_ENABLED: "true", LLM_PROVIDER: "mock" },
       // Never attach to a server that is already running (it might use the hosted project).
       reuseExistingServer: false,
       timeout: 60_000,

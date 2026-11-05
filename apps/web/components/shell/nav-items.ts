@@ -5,6 +5,7 @@ import {
   Goal,
   Landmark,
   LayoutGrid,
+  MessageCircleQuestionMark,
   Repeat,
   Wallet,
   type LucideIcon,
@@ -24,7 +25,7 @@ export type NavItem = {
 }
 
 // Order follows design-spec §4 (Goals holds planned expenses and monthly budgets, Sprint 6; Loans & Liabilities after Investments, Sprint 8a; Reports after it, Sprint 8c). Flip `available` when a page ships.
-// A phone fits five tabs: four here and "More" (Income, Recurring, Liabilities, Reports).
+// A phone fits five tabs: four here and "More" (Income, Recurring, Liabilities, Reports, Roma).
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: "overview", label: "Overview", href: "/", icon: LayoutGrid, available: true, inTabBar: true },
   { key: "income", label: "Income", href: "/income", icon: ArrowDownToLine, available: true, inTabBar: false },
@@ -51,6 +52,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
     inTabBar: false,
   },
   { key: "reports", label: "Reports", href: "/reports", icon: ChartColumn, available: true, inTabBar: false },
+  // Sprint 10: the assistant, under "More" on phones.
+  { key: "roma", label: "Roma", href: "/roma", icon: MessageCircleQuestionMark, available: true, inTabBar: false },
 ]
 
 

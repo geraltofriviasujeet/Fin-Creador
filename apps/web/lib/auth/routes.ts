@@ -12,6 +12,12 @@ export const RECOVERY_PAGE = "/update-password"
 const PUBLIC_PREFIXES = ["/auth/"]
 
 /**
+ * JSON endpoints (Roma's POST /api/ai/chat): never redirected to the sign-in page. Each
+ * handler checks the user itself and answers a signed-out caller with 401 JSON.
+ */
+const API_PREFIXES = ["/api/"]
+
+/**
  * Pages whose server actions answer a signed-out caller themselves instead of being redirected
  * to sign-in, so the page keeps what's on screen (the statement import's review). Opt-in: every
  * other protected page and action still redirects. Those actions check the user and run under
@@ -23,12 +29,13 @@ export function answersSignedOutAction(pathname: string, method: string, isServe
   return method === "POST" && isServerAction && SIGNED_OUT_ACTION_PAGES.some((p) => pathname === p)
 }
 
-export type RouteKind = "auth" | "recovery" | "public" | "protected"
+export type RouteKind = "auth" | "recovery" | "public" | "api" | "protected"
 
 export function routeKind(pathname: string): RouteKind {
   if (AUTH_PAGES.some((p) => pathname === p)) return "auth"
   if (pathname === RECOVERY_PAGE) return "recovery"
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return "public"
+  if (API_PREFIXES.some((p) => pathname.startsWith(p))) return "api"
   return "protected"
 }
 
