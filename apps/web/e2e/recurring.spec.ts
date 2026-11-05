@@ -109,7 +109,7 @@ test("a recurring expense is due, confirmed through the Add dialog, and costed",
   await expect(panel(page, /^Coming in 30 days/)).toContainText("Streaming")
   await page.screenshot({ path: "e2e-screenshots/recurring-page.png", fullPage: true })
 
-  // The entry is a normal expense; the Upcoming card on Money in & out links to Recurring.
+  // The entry is a normal expense; the Upcoming card on Transactions links to Recurring.
   await page.goto(ledgerSince(40))
   await expect(ledgerRow(page, "Streaming")).toContainText("699")
   await expect(page.getByRole("heading", { name: "Upcoming" })).toBeVisible()

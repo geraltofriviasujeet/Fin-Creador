@@ -7,8 +7,8 @@ import { cn } from "cn"
 import { buttonVariants } from "@/components/ui/button"
 
 // Topbar add actions: "Add expense" is the primary action (fast daily entry); the menu
-// beside it holds the other three. Every one is a real link to the add dialog on Money in
-// & out (?add=), so it works from any page and with the keyboard.
+// beside it holds the other three. Every one is a real link to the add dialog on Transactions
+// (?add=), so it works from any page and with the keyboard.
 
 const href = (type: "expense" | "income" | "transfer" | "refund") => `/transactions?add=${type}`
 
@@ -48,6 +48,7 @@ export function AddMenu() {
               {MORE.map((m) => (
                 <Menu.LinkItem
                   key={m.type}
+                  closeOnClick
                   render={<Link href={href(m.type)} />}
                   className="flex h-11 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
                 >

@@ -31,7 +31,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: "recurring", label: "Recurring", href: "/recurring", icon: Repeat, available: true, inTabBar: false },
   {
     key: "transactions",
-    label: "Money in & out",
+    label: "Transactions",
     tabLabel: "Activity",
     href: "/transactions",
     icon: Wallet,

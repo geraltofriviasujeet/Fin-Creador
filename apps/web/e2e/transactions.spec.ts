@@ -200,7 +200,7 @@ test("income is edited from the Income page, once, with its history", async ({ p
 
 test("the topbar: Add expense first, then a menu for income, transfer and refund", async ({ page }) => {
   await newUserWithBank(page, "tx-menu")
-  await expect(page.getByRole("heading", { level: 1, name: "Money in & out" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Transactions" })).toBeVisible()
   for (const [item, type] of [["Add income", "income"], ["Transfer", "transfer"], ["Refund", "refund"]] as const) {
     await page.getByRole("button", { name: "More ways to add" }).click()
     await page.getByRole("menuitem", { name: item }).click()

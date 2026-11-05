@@ -7,7 +7,7 @@ import { FormMessage } from "@/components/ui/field"
 import { TRANSACTIONS_HEADER, TransactionsSkeleton, TransactionsView } from "@/components/transactions/transactions-view"
 import { createClient } from "@/lib/supabase/server"
 
-export const metadata: Metadata = { title: "Money in & out" }
+export const metadata: Metadata = { title: "Transactions" }
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 

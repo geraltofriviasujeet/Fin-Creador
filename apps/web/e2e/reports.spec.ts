@@ -147,10 +147,10 @@ test("a month equals the Overview's; the trend's last point plus investments equ
   await page.getByRole("navigation", { name: "Range" }).getByRole("link", { name: "Custom" }).click()
   await expect(page.getByLabel("From month")).toBeVisible()
 
-  // Each month opens on Money in & out.
+  // Each month opens on Transactions.
   await monthRow(page, month).getByRole("link", { name: month }).click()
   await expect(page).toHaveURL(/\/transactions\?period=custom&from=\d{4}-\d{2}-01&to=\d{4}-\d{2}-\d{2}/)
-  await expect(page.getByRole("heading", { level: 1, name: "Money in & out" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Transactions" })).toBeVisible()
 })
 
 test("CSV export: injection neutralised, Amount numeric, voided left out by default, another user's rows absent", async ({ browser, baseURL }) => {

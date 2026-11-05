@@ -48,11 +48,12 @@ test("first run shows empty states, never sample data", async ({ page }) => {
   await expectCard(stat(page, "Income this year"), "₹0")
   await expectCard(stat(page, "Money in banks"), "₹0", "Add a bank account")
   await expect(stat(page, "Income this month")).toHaveCount(0)
-  await expect(page.getByText("Rental income", { exact: true })).toHaveCount(0)
+  await expect(page.getByRole("main").getByText("Rental income", { exact: true })).toHaveCount(0)
   await expect(page.getByText("No income recorded yet")).toBeVisible()
   await expect(page.getByText("Add your first account")).toBeVisible()
-  // Total available would only repeat Money in banks here.
-  await expect(page.getByText("Total available")).toHaveCount(0)
+  // Total available would only repeat Money in banks here. (Scoped to the card: Next keeps
+  // the Overview's DOM hidden after a soft navigation, and it mentions Total available.)
+  await expect(card(page, "Where your money is")).not.toContainText("Total available")
   await expect(page.getByText("Ananya")).toHaveCount(0)
   await shots(page, "01-income-empty")
 })
@@ -78,7 +79,7 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "2,48,600" })
   await addBank(page, { bank: "ICICI Bank", last4: "0934", opening: "1,76,250", type: "Current account" })
   await expectCard(stat(page, "Money in banks"), "₹4,24,850", "2 accounts")
-  await expect(page.getByText("Total available")).toHaveCount(0) // banks only: the same figure
+  await expect(card(page, "Where your money is")).not.toContainText("Total available") // banks only: the same figure
 
   // "2 accounts" opens the bank accounts with their balances.
   await stat(page, "Money in banks").getByRole("button", { name: "2 accounts" }).click()
@@ -107,7 +108,8 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   await expect(toast(page, "Income saved.")).toBeVisible()
   await addIncome(page, { amount: "32,000", source: "Rental income", into: "ICICI Bank ··0934" })
   await expectCard(stat(page, "Income this year"), "₹1,60,000", "January – December")
-  await expectCard(card(page, "Rental income"), "₹32,000 this year", "₹32,000 this month")
+  // The rental card comes first; "Income by source" also lists a "Rental income" source.
+  await expectCard(card(page, "Rental income").first(), "₹32,000 this year", "₹32,000 this month")
   await expect(holding(page, "HDFC Bank ··4821")).toContainText("₹3,76,600")
   await expectCard(card(page, "Where your money is"), "₹6,05,650")
 

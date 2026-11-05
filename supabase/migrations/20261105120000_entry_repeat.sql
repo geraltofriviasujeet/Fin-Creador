@@ -43,6 +43,10 @@ begin
   if p_frequency is null or p_frequency not in ('monthly', 'yearly') then
     raise exception 'Repeat every month or every year' using errcode = '22023';
   end if;
+  -- Checked here so a future date gets the date message, not "not a due date" (FC019).
+  if p_occurred_on > public.user_local_today((select auth.uid())) then
+    raise exception 'Date cannot be in the future' using errcode = 'FC003';
+  end if;
 
   v_rule := public.create_recurring_rule(
     p_idempotency_key, p_type, p_amount_minor, p_frequency, p_occurred_on, p_account_id,

@@ -42,7 +42,8 @@ test("Income and Overview read well at 375px", async ({ page }) => {
   // Income: three main cards, then the smaller rental card.
   await page.goto("/income")
   await expectStacked(page.getByRole("region", { name: "Summary" }).locator("[data-slot=card]"), 3)
-  await expect(page.getByText("Rental income", { exact: true })).toBeVisible()
+  // The rental card (the sources list also has a "Rental income" row).
+  await expect(page.getByText("Rental income", { exact: true }).first()).toBeVisible()
   await expectNoSideScroll(page)
   await page.screenshot({ path: `${SHOTS}/phone-375-income.png`, fullPage: true })
 

@@ -28,7 +28,7 @@ import type { EntryType } from "./transaction-form"
 
 export const TRANSACTIONS_HEADER = {
   eyebrow: "Money activity",
-  title: "Money in & out",
+  title: "Transactions",
   description: "See every rupee coming in and going out.",
 }
 
@@ -534,7 +534,7 @@ function MenuItem({ onClick, children }: { onClick: () => void; children: React.
 
 export function TransactionsSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading money in and out">
+    <div aria-busy="true" aria-label="Loading transactions">
       <PageHeader {...TRANSACTIONS_HEADER} />
       <div className="mb-4 h-13 w-full max-w-md rounded-xl bg-surface" />
       <Card className="mb-6 grid gap-4">

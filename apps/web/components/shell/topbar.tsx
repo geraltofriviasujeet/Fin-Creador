@@ -10,7 +10,7 @@ import { Bell, type BellReminders } from "@/components/shell/bell"
 
 /**
  * Sticky topbar (design-spec §4–5). "Add expense" (with a menu for income, transfer and
- * refund) opens the add dialog on Money in & out, and search is a plain GET to it (?q=).
+ * refund) opens the add dialog on Transactions, and search is a plain GET to it (?q=).
  * The bell lists in-app reminders (Sprint 8a: EMIs due soon); its dot shows only when
  * something is due.
  */
