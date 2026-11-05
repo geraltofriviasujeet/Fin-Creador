@@ -32,7 +32,7 @@ test("turn Roma on, ask what I spent this month, see figures from my records, tu
 
   await page.goto("/settings")
   await page.getByRole("button", { name: "Turn Roma on" }).click()
-  await expect(page.getByText("Roma is on.")).toBeVisible()
+  await expect(page.getByRole("status").getByText("Roma is on.")).toBeVisible()
 
   await page.getByRole("link", { name: "Roma", exact: true }).first().click()
   await expect(page).toHaveURL(/\/roma$/)
@@ -47,7 +47,7 @@ test("turn Roma on, ask what I spent this month, see figures from my records, tu
 
   await page.goto("/settings")
   await page.getByRole("button", { name: "Turn Roma off" }).click()
-  await expect(page.getByText("Roma is off.")).toBeVisible()
+  await expect(page.getByRole("status").getByText("Roma is off.")).toBeVisible()
   await page.goto("/roma")
   await expect(page.getByText("Roma is off", { exact: true })).toBeVisible()
 })
