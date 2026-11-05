@@ -5,6 +5,8 @@
 
 export const IDLE_LIMIT_MS = 2 * 60 * 60 * 1000
 export const IDLE_WARNING_MS = 60 * 1000
+/** The shortest limit the server's IDLE_LIMIT_MS may set (the E2E run uses 20 seconds). */
+export const MIN_IDLE_LIMIT_MS = 10 * 1000
 /** localStorage key holding the last activity time (epoch ms) across tabs. */
 export const LAST_ACTIVE_KEY = "fc:last-active"
 /** Activity is written at most this often, so scrolling doesn't write on every event. */
@@ -47,11 +49,35 @@ export function lastActiveStore(storage: () => SharedStorage) {
   }
 }
 
-/** Where `now` falls: active, in the last minute (warning, with time left) or past the limit. */
-export function idlePhase(lastActive: number, now: number): IdlePhase {
-  const left = lastActive + IDLE_LIMIT_MS - now
+/**
+ * The limit from the server's environment (read at request time, never from the browser).
+ * IDLE_LIMIT_MS may only shorten it, within [10 s, 2 h], and never on a Vercel production
+ * deployment: there it is always 2 hours. Unset or junk: 2 hours.
+ */
+export function idleLimitFromEnv(env: Readonly<Record<string, string | undefined>>): number {
+  if (env.VERCEL_ENV === "production") return IDLE_LIMIT_MS
+  const raw = env.IDLE_LIMIT_MS
+  const ms = raw !== undefined && /^\d{1,10}$/.test(raw) ? Number(raw) : Number.NaN
+  return ms >= MIN_IDLE_LIMIT_MS && ms <= IDLE_LIMIT_MS ? ms : IDLE_LIMIT_MS
+}
+
+/** The warning shows for the last minute, or the last half of a shorter limit. */
+export function warningMs(limitMs: number): number {
+  return Math.min(IDLE_WARNING_MS, Math.floor(limitMs / 2))
+}
+
+/** "2 hours", "30 minutes", "20 seconds": the limit as the warning and sign-in page say it. */
+export function idleLimitText(limitMs: number): string {
+  const [n, unit] =
+    limitMs % 3_600_000 === 0 ? [limitMs / 3_600_000, "hour"] : limitMs % 60_000 === 0 ? [limitMs / 60_000, "minute"] : [Math.round(limitMs / 1000), "second"]
+  return `${n} ${unit}${n === 1 ? "" : "s"}`
+}
+
+/** Where `now` falls: active, in the warning (with time left) or past the limit. */
+export function idlePhase(lastActive: number, now: number, limitMs = IDLE_LIMIT_MS): IdlePhase {
+  const left = lastActive + limitMs - now
   if (left <= 0) return { phase: "expired" }
-  if (left <= IDLE_WARNING_MS) return { phase: "warning", msLeft: left }
+  if (left <= warningMs(limitMs)) return { phase: "warning", msLeft: left }
   return { phase: "active" }
 }
 

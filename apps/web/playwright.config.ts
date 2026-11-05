@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test"
+import { IDLE_LIMIT_MS, IDLE_PORT } from "./e2e/idle-server"
 
 // End-to-end tests for the web auth and profile flows. They run in CI against a throwaway
 // local Supabase (with the Mailpit test inbox), never against the hosted project:
@@ -32,12 +33,22 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 }, channel: "chrome" },
     },
   ],
-  webServer: {
-    // The production build must already exist (`next build` with the local Supabase env).
-    command: `npx next start -p ${PORT}`,
-    url: `${BASE_URL}/sign-in`,
-    // Never attach to a server that is already running (it might use the hosted project).
-    reuseExistingServer: false,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      // The production build must already exist (`next build` with the local Supabase env).
+      command: `npx next start -p ${PORT}`,
+      url: `${BASE_URL}/sign-in`,
+      // Never attach to a server that is already running (it might use the hosted project).
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+    {
+      // The short idle limit for e2e/session.spec.ts (see e2e/idle-server.ts).
+      command: `npx next start -p ${IDLE_PORT}`,
+      url: `http://localhost:${IDLE_PORT}/sign-in`,
+      env: { IDLE_LIMIT_MS: String(IDLE_LIMIT_MS) },
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+  ],
 })

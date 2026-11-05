@@ -4,7 +4,7 @@ import { resendConfirmationAction, signInAction, signInWithGoogleAction } from "
 import { AuthCard, AuthLink } from "@/components/auth/auth-card"
 import { GoogleButton, OrDivider, SignInForm } from "@/components/auth/auth-forms"
 import { FormMessage } from "@/components/ui/field"
-import { IDLE_REASON } from "@/lib/auth/idle"
+import { IDLE_REASON, idleLimitFromEnv, idleLimitText } from "@/lib/auth/idle"
 
 export const metadata: Metadata = { title: "Sign in" }
 
@@ -36,7 +36,7 @@ async function SignedOutReason({ searchParams }: { searchParams: SearchParams })
   if ((await searchParams).reason !== IDLE_REASON) return null
   return (
     <div className="mb-5">
-      <FormMessage tone="info">You were signed out after 2 hours of inactivity, to keep your money private. Sign in again to continue.</FormMessage>
+      <FormMessage tone="info">You were signed out after {idleLimitText(idleLimitFromEnv(process.env))} of inactivity, to keep your money private. Sign in again to continue.</FormMessage>
     </div>
   )
 }

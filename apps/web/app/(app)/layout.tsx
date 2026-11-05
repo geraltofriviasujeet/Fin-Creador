@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { loadBellReminders } from "@fin-creador/api"
 import { AppShell } from "@/components/shell/app-shell"
 import { IdleGuard } from "@/components/shell/idle-guard"
+import { idleLimitFromEnv } from "@/lib/auth/idle"
 import { createClient } from "@/lib/supabase/server"
 
 // Every page in this group needs a signed-in user. proxy.ts redirects first; this
@@ -37,7 +38,7 @@ async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
         {children}
       </AppShell>
       {/* Signs out after 2 hours without activity (across tabs), with a warning first. */}
-      <IdleGuard signedInAt={data.user.last_sign_in_at ?? null} />
+      <IdleGuard signedInAt={data.user.last_sign_in_at ?? null} limitMs={idleLimitFromEnv(process.env)} />
     </>
   )
 }

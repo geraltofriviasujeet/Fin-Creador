@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest"
-import { IDLE_LIMIT_MS, IDLE_WARNING_MS, LAST_ACTIVE_KEY, type SharedStorage, countdownText, idlePhase, lastActiveAt, lastActiveStore } from "./idle"
+import {
+  IDLE_LIMIT_MS,
+  IDLE_WARNING_MS,
+  LAST_ACTIVE_KEY,
+  type SharedStorage,
+  countdownText,
+  idleLimitFromEnv,
+  idleLimitText,
+  idlePhase,
+  lastActiveAt,
+  lastActiveStore,
+  warningMs,
+} from "./idle"
 
 const T = Date.parse("2026-11-05T10:00:00Z")
 
@@ -98,5 +110,35 @@ describe("lastActiveStore: every tab shares one clock", () => {
     blocked.write(T)
     expect(blocked.read()).toBe(String(T))
     expect(idlePhase(lastActiveAt(blocked.read(), null), T + IDLE_LIMIT_MS)).toEqual({ phase: "expired" })
+  })
+})
+
+describe("idleLimitFromEnv", () => {
+  it("is 2 hours by default, warning for the last minute", () => {
+    expect(IDLE_LIMIT_MS).toBe(7_200_000)
+    expect(idleLimitFromEnv({})).toBe(IDLE_LIMIT_MS)
+    expect(warningMs(IDLE_LIMIT_MS)).toBe(60_000)
+    expect(idleLimitText(IDLE_LIMIT_MS)).toBe("2 hours")
+  })
+
+  it("is always 2 hours on a production deployment, whatever IDLE_LIMIT_MS says", () => {
+    expect(idleLimitFromEnv({ VERCEL_ENV: "production", IDLE_LIMIT_MS: "20000" })).toBe(IDLE_LIMIT_MS)
+  })
+
+  it("may only shorten it, to 10 seconds at least; junk is ignored", () => {
+    expect(idleLimitFromEnv({ IDLE_LIMIT_MS: "20000" })).toBe(20_000)
+    expect(idleLimitFromEnv({ IDLE_LIMIT_MS: "9999" })).toBe(IDLE_LIMIT_MS)
+    expect(idleLimitFromEnv({ IDLE_LIMIT_MS: String(IDLE_LIMIT_MS + 1) })).toBe(IDLE_LIMIT_MS)
+    for (const junk of ["", "20s", "-20000", "2e4", " 20000"]) expect(idleLimitFromEnv({ IDLE_LIMIT_MS: junk })).toBe(IDLE_LIMIT_MS)
+  })
+
+  it("a short limit warns for its last half, and is said in seconds", () => {
+    expect(warningMs(20_000)).toBe(10_000)
+    expect(idlePhase(T, T + 9_999, 20_000)).toEqual({ phase: "active" })
+    expect(idlePhase(T, T + 10_000, 20_000)).toEqual({ phase: "warning", msLeft: 10_000 })
+    expect(idlePhase(T, T + 20_000, 20_000)).toEqual({ phase: "expired" })
+    expect(idleLimitText(20_000)).toBe("20 seconds")
+    expect(idleLimitText(30 * 60_000)).toBe("30 minutes")
+    expect(idleLimitText(3_600_000)).toBe("1 hour")
   })
 })

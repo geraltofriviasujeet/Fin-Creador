@@ -9,12 +9,13 @@ import {
   LAST_ACTIVE_KEY,
   type IdlePhase,
   countdownText,
+  idleLimitText,
   idlePhase,
   lastActiveAt,
   lastActiveStore,
 } from "@/lib/auth/idle"
 
-// Signs out after 2 hours without activity in any tab of this browser (Sprint 10a), with a
+// Signs out after 2 hours (the server's limit) without activity in any tab of this browser (Sprint 10a), with a
 // warning one minute before. Activity (pointer, key, wheel, scroll, touch) is written to
 // localStorage, so every open tab shares one clock: activity or "Stay signed in" in one tab
 // keeps them all signed in, and they all sign out together. A tab coming back after sleep
@@ -25,8 +26,11 @@ const ACTIVITY_EVENTS = ["pointerdown", "keydown", "wheel", "touchstart", "scrol
 
 const store = lastActiveStore(() => window.localStorage)
 
-/** `signedInAt`: the session's sign-in time, so a fresh sign-in is never treated as idle. */
-export function IdleGuard({ signedInAt }: { signedInAt: string | null }) {
+/**
+ * `signedInAt`: the session's sign-in time, so a fresh sign-in is never treated as idle.
+ * `limitMs`: the server's idle limit (idleLimitFromEnv; 2 hours in production).
+ */
+export function IdleGuard({ signedInAt, limitMs }: { signedInAt: string | null; limitMs: number }) {
   const [phase, setPhase] = useState<IdlePhase>({ phase: "active" })
   const lastWrite = useRef(0)
   const signingOut = useRef(false)
@@ -52,7 +56,7 @@ export function IdleGuard({ signedInAt }: { signedInAt: string | null }) {
     form.submit()
   }, [])
 
-  const evaluate = useCallback(() => idlePhase(lastActiveAt(store.read(), signedInAt), Date.now()), [signedInAt])
+  const evaluate = useCallback(() => idlePhase(lastActiveAt(store.read(), signedInAt), Date.now(), limitMs), [signedInAt, limitMs])
 
   const check = useCallback(() => {
     const next = evaluate()
@@ -111,8 +115,8 @@ export function IdleGuard({ signedInAt }: { signedInAt: string | null }) {
             <AlertDialog.Title className="font-heading text-xl font-semibold">Still there?</AlertDialog.Title>
             <AlertDialog.Description className="mt-2 text-sm text-muted-foreground">
               For your security, you&apos;ll be signed out in{" "}
-              <span className="font-semibold text-ink tabular-nums">{warning ? countdownText(phase.msLeft) : "1:00"}</span> after 2 hours
-              without activity.
+              <span className="font-semibold text-ink tabular-nums">{warning ? countdownText(phase.msLeft) : "1:00"}</span> after{" "}
+              {idleLimitText(limitMs)} without activity.
             </AlertDialog.Description>
             <div className="mt-5 flex flex-col-reverse gap-3 md:flex-row md:justify-end">
               <Button type="button" variant="secondary" size="lg" onClick={signOut}>

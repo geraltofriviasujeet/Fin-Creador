@@ -1,42 +1,44 @@
 import { type Page, expect, test } from "@playwright/test"
+import { IDLE_LIMIT_MS, IDLE_PORT } from "./idle-server"
 import { overviewHeading, signUpConfirmed, uniqueEmail } from "./helpers"
 
-// Sign-out after 2 hours of inactivity (Sprint 10a), with a fake clock: a warning one
-// minute before, and the sign-out really ends the session (the cookies are gone and the app
-// sends you to sign in). Tabs sharing one clock is unit-tested in lib/auth/idle.test.ts.
+// Sign-out after inactivity (Sprint 10a), in real time: this test uses the second server,
+// whose IDLE_LIMIT_MS is 20 seconds (playwright.config.ts), so the warning shows for the last
+// 10. It checks the warning, that "Stay signed in" restarts the limit, and that the sign-out
+// really ends the session (the cookies are gone and the app sends you to sign in). The
+// 2-hour default and tabs sharing one clock are unit-tested in lib/auth/idle.test.ts.
 
+const IDLE = `http://localhost:${IDLE_PORT}`
+const WARN_MS = IDLE_LIMIT_MS / 2
 const warning = (page: Page) => page.getByRole("alertdialog", { name: "Still there?" })
 const authCookies = async (page: Page) => (await page.context().cookies()).filter((c) => c.name.startsWith("sb-"))
 
-test("warns a minute before, then signs out for real and says why", async ({ page }) => {
+test("warns before the limit, then signs out for real and says why", async ({ page }) => {
+  test.setTimeout(90_000)
   await signUpConfirmed(page, "Idle Person", uniqueEmail("idle"))
-  await page.clock.install()
-  await page.goto("/")
+  await page.goto(`${IDLE}/`)
   await expect(overviewHeading(page)).toBeVisible()
   expect(await authCookies(page)).not.toHaveLength(0)
 
-  // 1 h 59 min with no activity: the warning, with a countdown.
-  await page.clock.fastForward("01:59:01")
-  await expect(warning(page)).toBeVisible()
-  await expect(warning(page)).toContainText(/signed out in 0:\d\d/)
+  // No activity: the warning, with a countdown, once the last 10 seconds start.
+  await expect(warning(page)).toBeVisible({ timeout: IDLE_LIMIT_MS })
+  await expect(warning(page)).toContainText(/signed out in 0:\d\d after 20 seconds without activity/)
 
-  // "Stay signed in" resets the two hours.
+  // "Stay signed in" restarts the limit: the warning comes back no sooner than 10 s later.
   await warning(page).getByRole("button", { name: "Stay signed in" }).click()
   await expect(warning(page)).toBeHidden()
-  await page.clock.fastForward("01:00:00")
-  await expect(warning(page)).toBeHidden()
+  const stayedAt = Date.now()
+  await expect(warning(page)).toBeVisible({ timeout: IDLE_LIMIT_MS })
+  expect(Date.now() - stayedAt).toBeGreaterThanOrEqual(IDLE_LIMIT_MS - WARN_MS - 1_000)
 
-  // Ignored again until two hours pass: signed out, with the reason on the sign-in page.
-  await page.clock.fastForward("01:00:05")
-  await expect(page).toHaveURL(/\/sign-in\?reason=idle/)
-  await expect(page.getByText("You were signed out after 2 hours of inactivity")).toBeVisible()
+  // Ignored again: signed out, with the reason on the sign-in page.
+  await expect(page).toHaveURL(/\/sign-in\?reason=idle/, { timeout: WARN_MS + 5_000 })
+  await expect(page.getByText("You were signed out after 20 seconds of inactivity")).toBeVisible()
 
   // The session is really over: no auth cookies, and the app asks to sign in.
   expect(await authCookies(page)).toHaveLength(0)
-  await page.goto("/income")
+  await page.goto(`${IDLE}/income`)
   await expect(page).toHaveURL(/\/sign-in\?next=%2Fincome/)
-  // (A fresh sign-in starting a new two hours is unit-tested in lib/auth/idle.test.ts: the
-  // fake clock here runs hours ahead of the server's sign-in time.)
 })
 
 test("the sign-out route refuses posts from another site", async ({ page, request }) => {
