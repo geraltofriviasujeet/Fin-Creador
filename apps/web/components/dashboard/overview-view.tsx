@@ -61,7 +61,8 @@ export type OverviewViewProps = {
   range: DateRange
   comparison: Comparison | null
   totals: TransactionTotals
-  prevTotals: TransactionTotals | null
+  /** This month, for the four cards (they don't follow the charts' period). */
+  month: { range: DateRange; comparison: Comparison | null; totals: TransactionTotals; prevTotals: TransactionTotals | null }
   breakdown: DashboardBreakdown
   recent: LedgerItem[]
   charts: ChartChoices
@@ -89,14 +90,16 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, prevTotals, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
   const otherAccounts = holdings.rows.filter((r) => !r.inTotal).length
-  const savingsRate = savingsRateBasisPoints(totals)
-  const prevSavingsRate = prevTotals ? savingsRateBasisPoints(prevTotals) : null
-  const vs = comparison?.label ?? ""
+  // The four cards: this month only (Money left is today's Total available).
+  const m = month.totals
+  const savingsRate = savingsRateBasisPoints(m)
+  const prevSavingsRate = month.prevTotals ? savingsRateBasisPoints(month.prevTotals) : null
+  const vs = month.comparison?.label ?? ""
   // Spending is net of refunds and may be below zero (a refunded day): still shown, drawn at zero.
   const hasSpending = breakdown.buckets.some((b) => b.expenseMinor !== 0)
   const hasActivity = breakdown.buckets.some((b) => b.expenseMinor !== 0 || b.incomeMinor > 0)
@@ -106,19 +109,17 @@ export function OverviewView({ context, name, period, range, comparison, totals,
       <PageHeader
         eyebrow={longDate(today)}
         title={greeting(name, timeZone)}
-        description={`Here’s how your money is looking ${PERIOD_PHRASE[period]}.`}
-        actions={<PeriodSwitcher period={period} charts={charts} />}
+        description="Here’s your money this month."
       />
-
-      {period === "custom" && <CustomRangeForm range={range} today={today} charts={charts} />}
 
       {!context.hasEntries && <FirstRun hasAccounts={holdings.rows.length > 0} />}
 
-      <section aria-label={`Summary ${PERIOD_PHRASE[period]}`} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Four cards only, always this month; one per row on phones. */}
+      <section aria-label="Summary this month" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           tone="deep"
           icon={<Wallet aria-hidden="true" className="size-5" />}
-          label="Total balance"
+          label="Money left"
           value={money(holdings.totalAvailableMinor, currency)}
           footer={
             holdings.rows.length === 0 ? (
@@ -135,25 +136,25 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         <SummaryCard
           icon={<ArrowDownToLine aria-hidden="true" className="size-5" />}
           chip="bg-chip-mint"
-          label="Income"
-          value={money(totals.incomeMinor, currency)}
-          change={<Change bp={prevTotals ? changeBasisPoints(totals.incomeMinor, prevTotals.incomeMinor) : null} upIsGood vs={vs} />}
+          label="Income this month"
+          value={money(m.incomeMinor, currency)}
+          change={<Change bp={month.prevTotals ? changeBasisPoints(m.incomeMinor, month.prevTotals.incomeMinor) : null} upIsGood vs={vs} />}
           footer={
-            <FooterLink href={transactionsHref(range, { type: "income" })}>
-              {totals.incomeCount} income {totals.incomeCount === 1 ? "entry" : "entries"}
+            <FooterLink href={transactionsHref(month.range, { type: "income" })}>
+              {m.incomeCount} income {m.incomeCount === 1 ? "entry" : "entries"}
             </FooterLink>
           }
         />
         <SummaryCard
           icon={<ArrowUpFromLine aria-hidden="true" className="size-5" />}
           chip="bg-chip-peach"
-          label="Expenses"
-          value={money(totals.expenseMinor, currency)}
-          change={<Change bp={prevTotals ? changeBasisPoints(totals.expenseMinor, prevTotals.expenseMinor) : null} upIsGood={false} vs={vs} />}
+          label="Spent this month"
+          value={money(m.expenseMinor, currency)}
+          change={<Change bp={month.prevTotals ? changeBasisPoints(m.expenseMinor, month.prevTotals.expenseMinor) : null} upIsGood={false} vs={vs} />}
           footer={
-            <FooterLink href={transactionsHref(range, { type: "expense" })}>
-              {totals.expenseCount} {totals.expenseCount === 1 ? "expense" : "expenses"}
-              {totals.refundCount > 0 && `, less ${money(totals.refundMinor, currency)} refunded`}
+            <FooterLink href={transactionsHref(month.range, { type: "expense" })}>
+              {m.expenseCount} {m.expenseCount === 1 ? "expense" : "expenses"}
+              {m.refundCount > 0 && `, less ${money(m.refundMinor, currency)} refunded`}
             </FooterLink>
           }
         />
@@ -165,22 +166,37 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           change={<Change bp={pointsChange(savingsRate, prevSavingsRate)} points upIsGood vs={vs} />}
           footer={
             <span>
-              {savingsRate === null ? "No income in this period · " : ""}
+              {savingsRate === null ? "No income this month · " : ""}
               Net cash flow{" "}
-              <span className={cn("font-semibold tabular-nums", totals.netMinor < 0 ? "text-danger" : "text-ink")}>
-                {formatMoney(totals.netMinor, { currency, signed: true })}
+              <span className={cn("font-semibold tabular-nums", m.netMinor < 0 ? "text-danger" : "text-ink")}>
+                {formatMoney(m.netMinor, { currency, signed: true })}
               </span>
             </span>
           }
         />
       </section>
-      <p className="mt-3 mb-4 text-xs text-muted-foreground">
-        {rangeText(range)}
-        {comparison && `, compared with ${rangeText(comparison.previous)}`}. Transfers between your accounts aren’t income or expenses; voided entries never count.
-        {totals.otherCurrencyCount > 0 &&
-          ` ${totals.otherCurrencyCount} ${totals.otherCurrencyCount === 1 ? "entry" : "entries"} in other currencies (${breakdown.otherCurrencies.join(", ")}) aren’t included.`}
-        {otherAccounts > 0 && ` ${otherAccounts} ${otherAccounts === 1 ? "account" : "accounts"} in other currencies aren’t in the total balance.`}
+      <p className="mt-3 mb-8 text-xs text-muted-foreground">
+        {rangeText(month.range)}
+        {month.comparison && `, compared with ${rangeText(month.comparison.previous)}`}. Transfers between your accounts aren’t income or expenses; voided entries never count.
+        {m.otherCurrencyCount > 0 && ` ${m.otherCurrencyCount} ${m.otherCurrencyCount === 1 ? "entry" : "entries"} in other currencies aren’t included.`}
+        {otherAccounts > 0 && ` ${otherAccounts} ${otherAccounts === 1 ? "account" : "accounts"} in other currencies aren’t in Money left.`}
       </p>
+
+      {/* Everything else sits below the cards; the period choice now applies to the charts only. */}
+      <section aria-labelledby="charts-title" className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 id="charts-title" className="font-heading text-xl font-semibold">
+            Charts
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {rangeText(range)}
+            {comparison && `, compared with ${rangeText(comparison.previous)}`}
+            {totals.otherCurrencyCount > 0 && `. Other currencies (${breakdown.otherCurrencies.join(", ")}) aren’t included`}
+          </p>
+        </div>
+        <PeriodSwitcher period={period} charts={charts} />
+      </section>
+      {period === "custom" && <CustomRangeForm range={range} today={today} charts={charts} />}
 
       <div className="grid gap-4 lg:grid-cols-[1.75fr_1fr]">
         <Card aria-labelledby="spending-title">
@@ -506,7 +522,7 @@ function RecentCard({ recent, lookup, today }: { recent: LedgerItem[]; lookup: L
     <Card aria-labelledby="recent-title" className="px-0 md:px-0">
       <div className="flex items-start justify-between gap-3 px-5 md:px-6">
         <div>
-          <CardTitle id="recent-title">Recent transactions</CardTitle>
+          <CardTitle id="recent-title">Recent activity</CardTitle>
           <CardDescription className="mt-1">Your latest entries, any date</CardDescription>
         </div>
         <Link href="/transactions" className="flex min-h-10 items-center gap-1 text-sm font-semibold text-success underline-offset-4 hover:underline">
@@ -515,7 +531,7 @@ function RecentCard({ recent, lookup, today }: { recent: LedgerItem[]; lookup: L
         </Link>
       </div>
       {recent.length === 0 ? (
-        <p className="px-5 pt-4 text-sm text-muted-foreground md:px-6">No entries yet. Use “Add transaction” to record your first one.</p>
+        <p className="px-5 pt-4 text-sm text-muted-foreground md:px-6">No entries yet. Use “Add expense” to record your first one.</p>
       ) : (
         <ul className="mt-4 border-t border-line">
           {recent.map((e) => (

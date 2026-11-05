@@ -65,11 +65,14 @@ export async function saveSourceAction(_prev: FormState, formData: FormData): Pr
   return toState(await saveSource(await client(), input), input)
 }
 
-const INCOME_FIELDS = ["amount", "sourceId", "accountId", "occurredOn", "note", "idempotencyKey"] as const
+const INCOME_FIELDS = ["amount", "sourceId", "accountId", "occurredOn", "note", "repeat", "idempotencyKey"] as const
 
 export async function recordIncomeAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const input = readFields(formData, INCOME_FIELDS)
-  return toState(await recordIncome(await client(), input), input)
+  const state = toState(await recordIncome(await client(), input), input)
+  // A repeat also creates a recurring rule.
+  if (state.status === "success" && input.repeat && input.repeat !== "once") revalidatePath("/recurring")
+  return state
 }
 
 export async function updateCashOnHandAction(_prev: FormState, formData: FormData): Promise<FormState> {

@@ -266,7 +266,7 @@ function BankReviewSection({
       </div>
 
       {lines.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No transactions were found in this statement.</p>
+        <p className="text-sm text-muted-foreground">Nothing was found in this statement.</p>
       ) : shown.length === 0 ? (
         <p className="text-sm text-muted-foreground">No lines to show here.</p>
       ) : (

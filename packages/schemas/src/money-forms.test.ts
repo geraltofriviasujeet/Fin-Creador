@@ -80,9 +80,13 @@ describe("incomeFormSchema", () => {
       accountId: valid.accountId,
       occurredOn: today,
       note: "October salary",
+      repeat: null,
       idempotencyKey: valid.idempotencyKey,
     });
     expect(schema.parse({ ...valid, note: "" }).note).toBeNull();
+    expect(schema.parse({ ...valid, repeat: "once" }).repeat).toBeNull();
+    expect(schema.parse({ ...valid, repeat: "yearly" }).repeat).toBe("yearly");
+    expect(schema.safeParse({ ...valid, repeat: "weekly" }).success).toBe(false);
   });
 
   it.each([

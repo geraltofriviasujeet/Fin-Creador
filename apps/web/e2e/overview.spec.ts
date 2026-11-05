@@ -22,17 +22,19 @@ test("first run: empty states and no invented figures", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Nothing recorded yet" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Go to Income" })).toBeVisible()
 
-  await expect(card(page, "Total balance")).toContainText("₹0")
-  await expect(card(page, "Income")).toContainText("₹0")
+  // Four cards only, in this order, always this month.
+  await expect(summary(page).locator("[data-slot=card]").getByRole("heading")).toHaveText(["Money left", "Income this month", "Spent this month", "Savings rate"])
+  await expect(card(page, "Money left")).toContainText("₹0")
+  await expect(card(page, "Income this month")).toContainText("₹0")
   await expect(card(page, "Savings rate")).toContainText("—")
-  await expect(card(page, "Savings rate")).toContainText("No income in this period")
+  await expect(card(page, "Savings rate")).toContainText("No income this month")
   await expect(panel(page, "Spending overview")).toContainText("No spending recorded this month.")
   await expect(panel(page, "Spending by category")).toContainText("No spending recorded this month.")
   await expect(panel(page, "Income vs expenses")).toContainText("No income or expenses recorded this month.")
   await expect(page.getByRole("main").getByRole("img")).toHaveCount(0) // no chart without data
   await expect(panel(page, "Monthly budget")).toContainText("Set a budget")
   await expect(panel(page, "Your goals")).toContainText("Plan an expense")
-  await expect(panel(page, "Recent transactions")).toContainText("No entries yet")
+  await expect(panel(page, "Recent activity")).toContainText("No entries yet")
   await shot(page, "overview-empty")
 })
 
@@ -49,15 +51,15 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await page.goto("/")
   await expect(page.getByRole("heading", { name: "Nothing recorded yet" })).toBeHidden()
   // 10,000 + 500 − 250 − 400 + 5,000; the transfer moves money without changing the total.
-  await expect(card(page, "Total balance")).toContainText("₹14,850")
-  await expect(card(page, "Income")).toContainText("₹5,000")
-  await expect(card(page, "Income")).toContainText("1 income entry")
-  await expect(card(page, "Expenses")).toContainText("₹650")
-  await expect(card(page, "Expenses")).toContainText("2 expenses")
+  await expect(card(page, "Money left")).toContainText("₹14,850")
+  await expect(card(page, "Income this month")).toContainText("₹5,000")
+  await expect(card(page, "Income this month")).toContainText("1 income entry")
+  await expect(card(page, "Spent this month")).toContainText("₹650")
+  await expect(card(page, "Spent this month")).toContainText("2 expenses")
   await expect(card(page, "Savings rate")).toContainText("87%")
   await expect(card(page, "Savings rate")).toContainText("+₹4,350")
   // Nothing last month: changes show "—", never infinity.
-  await expect(card(page, "Income")).toContainText("vs same days last month (nothing to compare)")
+  await expect(card(page, "Income this month")).toContainText("vs same days last month (nothing to compare)")
 
   const categories = panel(page, "Spending by category").getByRole("list", { name: "Categories" }).getByRole("listitem")
   await expect(categories).toHaveCount(2)
@@ -69,7 +71,7 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await expect(spending.getByRole("img")).toHaveAttribute("aria-label", /₹650 in total/)
   await spending.getByText("Show as a table").click()
   await expect(spending.getByRole("table")).toContainText("₹650")
-  await expect(panel(page, "Recent transactions").getByRole("listitem")).toHaveCount(4)
+  await expect(panel(page, "Recent activity").getByRole("listitem")).toHaveCount(4)
   await shot(page, "overview-month")
   await page.setViewportSize({ width: 375, height: 812 })
   await shot(page, "overview-month-mobile")
@@ -100,14 +102,15 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await page.goto("/")
   await page.getByRole("navigation", { name: "Period" }).getByRole("link", { name: "Year" }).click()
   await expect(page).toHaveURL(/\?period=year/)
-  await expect(card(page, "Expenses")).toContainText("₹650")
-  await expect(card(page, "Expenses")).toContainText("vs same days last year")
+  // The period applies to the charts only; the cards stay on this month.
+  await expect(card(page, "Spent this month")).toContainText("₹650")
+  await expect(card(page, "Spent this month")).toContainText("vs same days last month")
   await expect(panel(page, "Spending overview")).toContainText("by month")
   await shot(page, "overview-year")
 
   await page.getByRole("navigation", { name: "Period" }).getByRole("link", { name: "Week" }).click()
   await expect(page).toHaveURL(/\?period=week/)
-  await expect(card(page, "Income")).toContainText("₹5,000")
+  await expect(card(page, "Income this month")).toContainText("₹5,000")
 
   // A custom range over 62 days is charted by month; a partial first month is labelled.
   const today = todayInIndia()
@@ -118,8 +121,8 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await page.getByLabel("To", { exact: true }).fill(today)
   await page.getByRole("button", { name: "Show range" }).click()
   await expect(page).toHaveURL(new RegExp(`period=custom&from=${start}&to=${today}`))
-  await expect(card(page, "Expenses")).toContainText("₹650")
-  await expect(card(page, "Expenses")).toContainText(/vs previous \d+ days/)
+  await expect(card(page, "Spent this month")).toContainText("₹650")
+  await expect(card(page, "Spent this month")).toContainText("vs same days last month")
   await expect(panel(page, "Spending overview")).toContainText("* Partial month:")
   await shot(page, "overview-custom")
 
@@ -127,6 +130,6 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await signOut(page)
   await signUpConfirmed(page, "Chitra Nair", uniqueEmail("overview-other"))
   await expect(page.getByRole("heading", { name: "Nothing recorded yet" })).toBeVisible()
-  await expect(card(page, "Expenses")).toContainText("₹0")
-  await expect(panel(page, "Recent transactions")).toContainText("No entries yet")
+  await expect(card(page, "Spent this month")).toContainText("₹0")
+  await expect(panel(page, "Recent activity")).toContainText("No entries yet")
 })

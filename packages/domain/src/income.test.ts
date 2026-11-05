@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { monthRange, previousMonthRange, yearRange } from "./dates";
-import { type IncomeEntry, type IncomeSource, incomeBySource, incomeTrendBasisPoints, rentalIncome, sumIncome } from "./income";
+import { type IncomeEntry, type IncomeSource, type SourceRateRule, incomeBySource, incomeTrendBasisPoints, rentalIncome, sourceRates, sumIncome } from "./income";
 
 const today = "2026-10-22";
 const periods = { month: monthRange(today), previousMonth: previousMonthRange(today), year: yearRange(today) };
@@ -113,5 +113,50 @@ describe("rentalIncome", () => {
       yearMinor: 3_200_000,
       hasRentSource: true,
     });
+  });
+});
+
+describe("sourceRates", () => {
+  const today = "2026-11-05";
+  const rule = (over: Partial<SourceRateRule> = {}): SourceRateRule => ({
+    type: "income",
+    categoryId: "salary",
+    amountMinor: 5_000_000,
+    currency: "INR",
+    frequency: "monthly",
+    endDate: null,
+    archived: false,
+    ...over,
+  });
+
+  it("takes the rate from the source's recurring rule, at its current amount", () => {
+    expect(sourceRates([rule()], today).get("salary")).toEqual([{ amountMinor: 5_000_000, currency: "INR", frequency: "monthly" }]);
+  });
+
+  it("a source without a rule has no rate (totals only)", () => {
+    expect(sourceRates([rule()], today).has("rent")).toBe(false);
+    expect(sourceRates([], today).size).toBe(0);
+  });
+
+  it("several rules give one rate each, largest first", () => {
+    const rates = sourceRates([rule({ amountMinor: 100_000, frequency: "yearly" }), rule({ amountMinor: 900_000 })], today).get("salary");
+    expect(rates?.map((r) => [r.amountMinor, r.frequency])).toEqual([
+      [900_000, "monthly"],
+      [100_000, "yearly"],
+    ]);
+  });
+
+  it("ignores archived and ended rules, expense and transfer rules, and rules without a source", () => {
+    const rates = sourceRates(
+      [
+        rule({ archived: true }),
+        rule({ endDate: "2026-11-04" }),
+        rule({ type: "expense" }),
+        rule({ type: "transfer", categoryId: null }),
+      ],
+      today,
+    );
+    expect(rates.size).toBe(0);
+    expect(sourceRates([rule({ endDate: today })], today).get("salary")).toHaveLength(1);
   });
 });

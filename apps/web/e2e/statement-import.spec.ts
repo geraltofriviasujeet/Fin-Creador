@@ -298,6 +298,8 @@ test("an imported line edited, then its edited version deleted, stays blocked as
   await edit.getByLabel("Amount").fill("1,800")
   await edit.getByRole("button", { name: "Save changes" }).click()
   await expect(toast(page, "Changes saved.")).toBeVisible()
+  // Void the edited version: wait until the list shows it, not the one it replaced.
+  await expect(page.getByRole("listitem").filter({ hasText: "FRESH BASKET STORES BENGAL" })).toContainText("1,800")
   await page.getByRole("button", { name: "Void FRESH BASKET STORES BENGAL" }).click()
   await dialog(page, "Void this expense?").getByRole("button", { name: "Void expense" }).click()
   await expect(toast(page, "Expense voided.")).toBeVisible()

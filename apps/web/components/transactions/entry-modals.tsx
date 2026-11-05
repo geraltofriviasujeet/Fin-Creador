@@ -35,6 +35,7 @@ function draftInput(draft: Draft, accounts: LedgerAccount[], requestKey: string,
     occurredOn: draft.occurredOn,
     note: draft.note ?? "",
     refundOfId: draft.refundOfId ?? "",
+    repeat: draft.repeat,
     idempotencyKey: requestKey,
   }
 }
@@ -61,7 +62,7 @@ export function AddEntryDialog({
   return (
     <Dialog open={type !== null} onOpenChange={(open) => !open && onClose()}>
       {type && (
-        <DialogContent eyebrow="New transaction" title={`Add ${TYPE_NOUN[type]}`}>
+        <DialogContent title={`Add ${TYPE_NOUN[type]}`}>
           <TransactionForm
             mode={{ kind: "add", type }}
             {...data}
@@ -90,7 +91,7 @@ export function RefundEntryDialog({ purchase, onClose, ...data }: FormProps & { 
   return (
     <Dialog open={purchase !== null} onOpenChange={(open) => !open && onClose()}>
       {purchase && (
-        <DialogContent eyebrow="New transaction" title="Refund this purchase" description="The refund is added back to the account and lowers this category's spending.">
+        <DialogContent title="Refund this purchase" description="The refund is added back to the account and lowers this category's spending.">
           <TransactionForm
             mode={{
               kind: "add",
@@ -118,7 +119,7 @@ export function EditEntryDialog({ entry, onClose, ...data }: FormProps & { entry
   return (
     <Dialog open={entry !== null} onOpenChange={(open) => !open && onClose()}>
       {entry && (
-        <DialogContent eyebrow="Edit transaction" title={`Edit ${TYPE_NOUN[entry.type]}`} description="Saving keeps the current version in History.">
+        <DialogContent title={`Edit ${TYPE_NOUN[entry.type]}`} description="Saving keeps the current version in History.">
           <TransactionForm
             mode={{ kind: "edit", entry }}
             {...data}
@@ -141,7 +142,7 @@ export function VoidEntryDialog({ entry, lookup, onClose }: { entry: LedgerItem 
   return (
     <Dialog open={entry !== null} onOpenChange={(open) => !open && onClose()}>
       {entry && (
-        <DialogContent eyebrow="Void transaction" title={`Void this ${TYPE_NOUN[entry.type]}?`}>
+        <DialogContent title={`Void this ${TYPE_NOUN[entry.type]}?`}>
           <VoidForm
             entry={entry}
             lookup={lookup}
@@ -150,6 +151,10 @@ export function VoidEntryDialog({ entry, lookup, onClose }: { entry: LedgerItem 
               if (result.status === "success") {
                 onClose()
                 toast.success(result.message, "It stays in your history and no longer counts.")
+              } else if (result.stale) {
+                // The action refreshed the list: close, so the latest version can be voided.
+                onClose()
+                toast.info(result.message)
               }
               return toSaveResult(result)
             }}

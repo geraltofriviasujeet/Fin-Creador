@@ -341,7 +341,7 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
           <DialogContent
             eyebrow="Investments"
             title={`Delete this holding permanently?`}
-            description={`${recordName(open.item)}. The record is removed for good. This can't be undone. Your accounts and transactions don't change.`}
+            description={`${recordName(open.item)}. The record is removed for good. This can't be undone. Your accounts and their history don't change.`}
           >
             <ConfirmAction label="Delete permanently" pendingLabel="Deleting…" destructive action={() => deleteHoldingAction({ holdingId: open.item.id })} onDone={close} />
           </DialogContent>
@@ -370,7 +370,7 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
           <DialogContent
             eyebrow="Investments"
             title="Delete this fixed deposit permanently?"
-            description={`${depositName(open.deposit)}. The record is removed for good. This can't be undone. Your accounts and transactions don't change.`}
+            description={`${depositName(open.deposit)}. The record is removed for good. This can't be undone. Your accounts and their history don't change.`}
           >
             <ConfirmAction label="Delete permanently" pendingLabel="Deleting…" destructive action={() => deleteFixedDepositAction({ depositId: open.deposit.id })} onDone={close} />
           </DialogContent>

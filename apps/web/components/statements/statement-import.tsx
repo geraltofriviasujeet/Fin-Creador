@@ -291,7 +291,7 @@ function StatementReview({
       </div>
 
       {lines.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No transactions were found in this statement.</p>
+        <p className="text-sm text-muted-foreground">Nothing was found in this statement.</p>
       ) : (
         <ul aria-label="Statement lines" className="grid gap-2">
           {lines.map((line, i) => (

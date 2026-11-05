@@ -21,7 +21,7 @@ const tile = (page: Page, label: string) =>
   page.getByRole("region", { name: "Recurring cost in INR" }).locator("[data-slot=card]").filter({ hasText: new RegExp(`^${label}`) })
 // Ledger rows only (the Upcoming card lists recurring items too).
 const ledgerRow = (page: Page, text: string) =>
-  page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: "All transactions" }) }).locator("li").filter({ hasText: text })
+  page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: "Everything" }) }).locator("li").filter({ hasText: text })
 
 type Rule = { type?: "Expense" | "Income" | "Transfer"; amount: string; category?: string; from: string; to?: string; frequency?: string; start: string; note: string }
 
@@ -52,6 +52,39 @@ async function newUser(page: Page, label: string) {
   await page.getByRole("link", { name: "Recurring", exact: true }).first().click()
   await expect(page.getByRole("heading", { name: "Recurring", level: 1 })).toBeVisible()
 }
+
+test("'Repeat this?' on a back-dated expense saves it once and makes the later dates due", async ({ page }) => {
+  await newUser(page, "rec-repeat")
+  await page.getByRole("link", { name: "Add expense" }).first().click()
+  const d = dialog(page, "Add expense")
+  await expect(d.getByRole("radio", { name: "Just once" })).toBeChecked()
+  await d.getByLabel("Amount").fill("1,200")
+  await d.getByLabel("Category").selectOption({ label: "Health" })
+  await d.getByLabel("Paid from").selectOption({ label: "HDFC Bank ··4821" })
+  await d.getByLabel("Date").fill(daysAgo(40))
+  await d.getByLabel("Note").fill("Gym")
+  await d.getByText("Every month", { exact: true }).click()
+  await expect(d).toContainText("will show on Recurring for you to confirm or skip")
+  await d.getByRole("button", { name: "Save expense" }).click()
+  await expect(toast(page, "Expense saved. It repeats every month.")).toBeVisible()
+
+  // The entry is the rule's first date (handled); the month after it is due, not posted.
+  await page.goto("/recurring")
+  await expect(panel(page, /^Due/)).toContainText("Gym")
+  await expect(panel(page, /^Due/).getByRole("button", { name: /^Confirm/ })).toHaveCount(1)
+  await page.goto(ledgerSince(45))
+  await expect(ledgerRow(page, "Gym")).toHaveCount(1)
+
+  // Confirming the due date adds the second entry; the recurring confirm can't repeat again.
+  await page.goto("/recurring")
+  await panel(page, /^Due/).getByRole("button", { name: /^Confirm/ }).click()
+  const confirm = dialog(page, "Add expense")
+  await expect(confirm.getByText("Repeat this?")).toHaveCount(0)
+  await confirm.getByRole("button", { name: "Save expense" }).click()
+  await expect(panel(page, /^Due/)).toContainText("Nothing is due.")
+  await page.goto(ledgerSince(45))
+  await expect(ledgerRow(page, "Gym")).toHaveCount(2)
+})
 
 test("a recurring expense is due, confirmed through the Add dialog, and costed", async ({ page }) => {
   await newUser(page, "rec-flow")

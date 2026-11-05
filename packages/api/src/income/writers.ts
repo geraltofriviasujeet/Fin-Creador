@@ -14,6 +14,7 @@ export type FormInput = Record<string, string | undefined>
 
 const FIX_FIELDS = "Please fix the highlighted fields."
 const SIGNED_OUT = "Your session has ended. Please sign in again."
+const REPEAT_WORDS = { monthly: "every month", yearly: "every year" } as const
 
 function check<S extends z.ZodType>(schema: S, input: FormInput) {
   const result = schema.safeParse(input)
@@ -106,16 +107,20 @@ export async function recordIncome(supabase: UserClient, input: FormInput): Prom
   if (!account) return { status: "error", message: FIX_FIELDS, fieldErrors: { accountId: "Choose where it was received" } }
 
   const i = v.data
-  const { error } = await supabase.rpc("record_income", {
+  const details = {
     p_account_id: i.accountId,
     p_category_id: i.sourceId,
     p_amount_minor: i.amountMinor,
     p_occurred_on: i.occurredOn,
     p_idempotency_key: i.idempotencyKey,
     p_note: i.note ?? undefined,
-  })
+  }
+  // "Repeat this?": the entry is the first occurrence of a new recurring rule (one call).
+  const { error } = i.repeat
+    ? await supabase.rpc("record_entry_with_repeat", { p_type: "income", p_frequency: i.repeat, ...details })
+    : await supabase.rpc("record_income", details)
   if (error) return dbError(error, "occurredOn")
-  return { status: "success", message: "Income saved." }
+  return { status: "success", message: i.repeat ? `Income saved. It repeats ${REPEAT_WORDS[i.repeat]}.` : "Income saved." }
 }
 
 /**

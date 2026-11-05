@@ -171,6 +171,33 @@ describe("writes", () => {
     ])
   })
 
+  it("'Every month' creates the recurring rule and this entry as its first occurrence, in one call", async () => {
+    const { client, calls } = fakeClient()
+    expect(await recordIncome(client, { ...income, repeat: "monthly" })).toEqual({ status: "success", message: "Income saved. It repeats every month." })
+    expect(writes(calls)).toEqual([
+      {
+        kind: "rpc",
+        target: "record_entry_with_repeat",
+        payload: {
+          p_type: "income",
+          p_frequency: "monthly",
+          p_account_id: income.accountId,
+          p_category_id: income.sourceId,
+          p_amount_minor: 12_800_000,
+          p_occurred_on: "2026-10-22",
+          p_idempotency_key: KEY,
+          p_note: "October",
+        },
+      },
+    ])
+  })
+
+  it("'Just once' records plain income", async () => {
+    const { client, calls } = fakeClient()
+    await recordIncome(client, { ...income, repeat: "once" })
+    expect(writes(calls)[0]).toMatchObject({ target: "record_income" })
+  })
+
   it("a double submit sends the same request key both times (the database records it once)", async () => {
     const { client, calls } = fakeClient()
     await Promise.all([recordIncome(client, income), recordIncome(client, income)])

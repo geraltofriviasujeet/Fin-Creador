@@ -24,15 +24,15 @@ async function newUserWithBank(page: Page, label: string, opening = "10,000") {
 test("expenses and transfers: validation, totals and balances follow the money rules", async ({ page }) => {
   await signUpConfirmed(page, "Asha Rao", uniqueEmail("tx-flow"))
   await page.goto("/transactions")
-  await expect(page.getByText("No transactions yet")).toBeVisible()
+  await expect(page.getByText("Nothing recorded yet")).toBeVisible()
   await expect(page.getByRole("link", { name: "Go to Income" })).toBeVisible()
 
   await page.goto("/income")
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
   await addCash(page, "500")
 
-  // The topbar's Add transaction is a real link to Add expense.
-  await page.getByRole("link", { name: "Add transaction" }).first().click()
+  // The topbar's Add expense is a real link to the add dialog.
+  await page.getByRole("link", { name: "Add expense" }).first().click()
   await expect(page).toHaveURL(/\/transactions\?add=expense/)
   const d = dialog(page, "Add expense")
   await d.getByLabel("Amount").fill("250")
@@ -111,7 +111,7 @@ test("edit keeps the history; void stops counting and stays visible on request",
 
 test("a double-submitted entry is saved once, and a stale edit is refused", async ({ page, context }) => {
   await newUserWithBank(page, "tx-double")
-  await page.getByRole("link", { name: "Add transaction" }).first().click()
+  await page.getByRole("link", { name: "Add expense" }).first().click()
   const d = dialog(page, "Add expense")
   await d.getByLabel("Amount").fill("80")
   await d.getByLabel("Category").selectOption({ label: "Food & dining" })
@@ -152,7 +152,7 @@ test("search treats symbols as text; filters narrow the list and the totals", as
   await addEntry(page, { amount: "1,200", category: "Shopping", from: "HDFC Bank ··4821", note: "Shoes 50% off" })
   await addEntry(page, { amount: "400", category: "Transport", from: "HDFC Bank ··4821", note: "Bus pass" })
 
-  const search = page.getByRole("searchbox", { name: "Search transactions" }).last()
+  const search = page.getByRole("searchbox", { name: "Search" }).last()
   await search.fill("%")
   await search.press("Enter")
   await expect(page).toHaveURL(/q=%25/)
@@ -180,7 +180,7 @@ test("income is edited from the Income page, once, with its history", async ({ p
   await addEntry(page, { type: "Income", amount: "50,000", category: "Salary", from: "HDFC Bank ··4821" })
 
   await page.goto("/income")
-  const sources = page.locator("[data-slot=card]").filter({ has: page.getByText("Income sources", { exact: true }) })
+  const sources = page.locator("[data-slot=card]").filter({ has: page.getByText("Income by source", { exact: true }) })
   await sources.getByRole("button", { name: /Salary/ }).click()
   await dialog(page, "Salary").getByRole("link", { name: "Edit" }).click()
   await expect(page).toHaveURL(/\/transactions\?edit=/)
@@ -196,6 +196,23 @@ test("income is edited from the Income page, once, with its history", async ({ p
   await expect(entries.getByText("Edited")).toHaveCount(1)
   await entries.getByRole("link", { name: "History" }).click()
   await expect(dialog(page, "Salary").getByText("Version 2")).toBeVisible()
+})
+
+test("the topbar: Add expense first, then a menu for income, transfer and refund", async ({ page }) => {
+  await newUserWithBank(page, "tx-menu")
+  await expect(page.getByRole("heading", { level: 1, name: "Transactions" })).toBeVisible()
+  for (const [item, type] of [["Add income", "income"], ["Transfer", "transfer"], ["Refund", "refund"]] as const) {
+    await page.getByRole("button", { name: "More ways to add" }).click()
+    await page.getByRole("menuitem", { name: item }).click()
+    await expect(page).toHaveURL(new RegExp(`add=${type}`))
+    await expect(dialog(page, `Add ${type}`)).toBeVisible()
+    await page.keyboard.press("Escape")
+  }
+  // Only income and expenses can repeat from the add form.
+  await page.getByRole("link", { name: "Add expense" }).first().click()
+  await expect(dialog(page, "Add expense").getByText("Repeat this?")).toBeVisible()
+  await dialog(page, "Add expense").getByRole("radio", { name: "Transfer" }).click()
+  await expect(dialog(page, "Add transfer").getByText("Repeat this?")).toHaveCount(0)
 })
 
 test("the removed prototype is not in the production build", async ({ page }) => {
@@ -216,7 +233,7 @@ test("another user sees none of this user's entries", async ({ browser, baseURL 
   const second = await newPage()
   await signUpConfirmed(second, "Stranger", uniqueEmail("tx-stranger"))
   await second.goto("/transactions?q=Private")
-  await expect(second.getByText("No transactions yet")).toBeVisible()
+  await expect(second.getByText("Nothing recorded yet")).toBeVisible()
   await expect(second.getByText("Private rent")).toHaveCount(0)
   await second.close()
 })

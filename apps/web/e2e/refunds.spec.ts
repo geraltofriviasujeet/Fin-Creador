@@ -67,7 +67,7 @@ test("Refund this: part refunds, the cap, an unlinked refund; a category below z
   // Spending nets the refunds: 1,000 + 300 − 1,000.
   await expect(statCard(page, /^Expenses/)).toContainText("₹300")
   await expect(statCard(page, /^Expenses/)).toContainText("2 expenses, less ₹1,000 in 2 refunds")
-  await page.getByRole("navigation", { name: "Transaction type" }).getByRole("link", { name: "Refunds" }).click()
+  await page.getByRole("navigation", { name: "Type" }).getByRole("link", { name: "Refunds" }).click()
   await expect(page).toHaveURL(/type=refund/)
   await expect(page.getByRole("main").getByText("Refund · Shopping")).toHaveCount(2)
 
@@ -75,10 +75,10 @@ test("Refund this: part refunds, the cap, an unlinked refund; a category below z
   await page.goto("/transactions")
   await addEntry(page, { type: "Refund", amount: "500", category: "Shopping", from: HDFC, note: "Store credit" })
 
-  // Overview: Expenses −200 (1,300 − 1,500), Shopping listed apart from the shares, charts still draw.
+  // Overview: Spent this month −200 (1,300 − 1,500), Shopping listed apart from the shares, charts still draw.
   await page.goto("/")
-  await expect(summaryCard(page, "Expenses")).toContainText(minus("₹200"))
-  await expect(summaryCard(page, "Expenses")).toContainText("2 expenses, less ₹1,500 refunded")
+  await expect(summaryCard(page, "Spent this month")).toContainText(minus("₹200"))
+  await expect(summaryCard(page, "Spent this month")).toContainText("2 expenses, less ₹1,500 refunded")
   const categories = panel(page, "Spending by category")
   await expect(categories).toContainText("Groceries")
   await expect(categories).toContainText(/Refunds were more than the spending in Shopping \([−-]₹500\), so it isn’t in the shares above\./)

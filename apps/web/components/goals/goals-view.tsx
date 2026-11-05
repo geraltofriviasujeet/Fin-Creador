@@ -202,7 +202,7 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
           </DialogContent>
         )}
         {open?.kind === "delete" && (
-          <DialogContent eyebrow="Goals" title={`Delete ${open.item.goal.name} permanently?`} description="The goal and its answers are removed for good. This can't be undone. Your accounts and transactions don't change.">
+          <DialogContent eyebrow="Goals" title={`Delete ${open.item.goal.name} permanently?`} description="The goal and its answers are removed for good. This can't be undone. Your accounts and their history don't change.">
             <DeleteForm item={open.item} onDone={close} />
           </DialogContent>
         )}

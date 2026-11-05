@@ -35,7 +35,10 @@ export type IncomePageData = {
   entries: IncomeEntryItem[]
 }
 
-/** Result of a save, without UI concerns (web adds echoed values; mobile shows it in a sheet). */
+/**
+ * Result of a save, without UI concerns (web adds echoed values; mobile shows it in a sheet).
+ * `stale`: the entry was replaced by an edit, so the client should show the latest version.
+ */
 export type WriteResult =
   | { status: "success"; message: string }
-  | { status: "error"; message: string; fieldErrors?: Record<string, string> }
+  | { status: "error"; message: string; fieldErrors?: Record<string, string>; stale?: boolean }

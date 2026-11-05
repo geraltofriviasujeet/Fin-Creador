@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { UserClient } from "../income/client"
-import { saveTransaction, voidTransaction } from "./writers"
+import { STALE_VOID, saveTransaction, voidTransaction } from "./writers"
 
 // Stand-in for the signed-in user's client: records every RPC and answers from the scenario.
 type Scenario = {
@@ -46,6 +46,39 @@ describe("saveTransaction", () => {
         },
       },
     ])
+  })
+
+  it.each([
+    ["monthly", "every month"],
+    ["yearly", "every year"],
+  ])("a %s repeat creates the rule and its first entry in one call", async (repeat, words) => {
+    const { client, rpcs } = fakeClient()
+    expect(await saveTransaction(client, { ...expense, repeat })).toEqual({ status: "success", message: `Expense saved. It repeats ${words}.` })
+    expect(rpcs).toEqual([
+      {
+        fn: "record_entry_with_repeat",
+        args: {
+          p_type: "expense", p_frequency: repeat, p_idempotency_key: KEY, p_amount_minor: 248050, p_occurred_on: "2026-10-22",
+          p_account_id: ACC, p_category_id: CAT, p_note: "Lunch", p_payment_mode: "upi",
+        },
+      },
+    ])
+  })
+
+  it("'Just once' and a transfer never repeat", async () => {
+    const once = fakeClient()
+    await saveTransaction(once.client, { ...expense, repeat: "once" })
+    expect(once.rpcs[0]?.fn).toBe("record_transaction")
+    const transfer = fakeClient()
+    await saveTransaction(transfer.client, { type: "transfer", amount: "500", accountId: ACC, counterAccountId: ACC2, occurredOn: "2026-10-22", idempotencyKey: KEY, repeat: "monthly" })
+    expect(transfer.rpcs[0]?.fn).toBe("record_transaction")
+  })
+
+  it("rejects an unknown repeat without saving", async () => {
+    const { client, rpcs } = fakeClient()
+    const result = await saveTransaction(client, { ...expense, repeat: "weekly" })
+    expect(result).toMatchObject({ status: "error", fieldErrors: { repeat: "Choose how often" } })
+    expect(rpcs).toEqual([])
   })
 
   it("drops the payment mode for a cash account", async () => {
@@ -139,6 +172,11 @@ describe("voidTransaction", () => {
     const result = await voidTransaction(client, { transactionId: ACC, idempotencyKey: KEY, reason: " Entered twice " })
     expect(result).toEqual({ status: "success", message: "Transfer voided." })
     expect(rpcs).toEqual([{ fn: "void_transaction", args: { p_transaction_id: ACC, p_idempotency_key: KEY, p_reason: "Entered twice" } }])
+  })
+
+  it("a version an edit replaced is stale: nothing voided, and the client is told to show the latest", async () => {
+    const { client } = fakeClient({ rpcError: { code: "FC014", message: "raw" } })
+    expect(await voidTransaction(client, { transactionId: ACC, idempotencyKey: KEY })).toEqual({ status: "error", stale: true, message: STALE_VOID })
   })
 
   it("needs an entry id and a request key", async () => {

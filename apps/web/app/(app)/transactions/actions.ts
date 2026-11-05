@@ -30,7 +30,7 @@ async function client() {
 
 const ENTRY_FIELDS = [
   "transactionId", "type", "amount", "categoryId", "accountId", "counterAccountId",
-  "paymentMode", "refundOfId", "occurredOn", "note", "idempotencyKey",
+  "paymentMode", "refundOfId", "occurredOn", "note", "repeat", "idempotencyKey",
 ] as const
 
 /** Only the known fields, as strings (server actions take any value a client sends). */
@@ -40,9 +40,10 @@ function fields(input: unknown, names: readonly string[]): FormInput {
 }
 
 function refreshed(result: WriteResult): WriteResult {
-  if (result.status === "success") {
+  if (result.status === "success" || result.stale) {
     revalidatePath("/transactions")
     revalidatePath("/income")
+    revalidatePath("/recurring")
   }
   return result
 }

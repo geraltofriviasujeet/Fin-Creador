@@ -2268,6 +2268,49 @@ export type Database = {
         }
       }
       profile_display_name: { Args: { meta: Json }; Returns: string }
+      record_entry_with_repeat: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_category_id: string
+          p_frequency: string
+          p_idempotency_key: string
+          p_note?: string
+          p_occurred_on: string
+          p_payment_mode?: string
+          p_type: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          category_id: string | null
+          counter_account_id: string | null
+          created_at: string
+          currency: string
+          due_payment_id: string | null
+          id: string
+          idempotency_key: string
+          liability_payment_id: string | null
+          note: string | null
+          occurred_on: string
+          occurrence_date: string | null
+          payment_mode: string | null
+          recurring_rule_id: string | null
+          refund_of_id: string | null
+          replaces_id: string | null
+          type: string
+          user_id: string
+          void_idempotency_key: string | null
+          void_reason: string | null
+          voided_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_income: {
         Args: {
           p_account_id: string

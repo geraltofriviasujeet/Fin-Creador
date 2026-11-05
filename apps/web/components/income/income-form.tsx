@@ -11,6 +11,7 @@ import { useFormSuccess } from "@/components/income/use-form-success"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
+import { RepeatField, type RepeatValue } from "@/components/transactions/repeat-field"
 import { initialFormState } from "@/lib/form-state"
 import type { IncomeAccount, IncomeSourceItem } from "@/lib/income/types"
 
@@ -39,6 +40,7 @@ export function IncomeForm({ accounts, sources, today, presetAccountId, onDone, 
   )
   const [accountTouched, setAccountTouched] = useState(Boolean(presetAccountId))
   const [occurredOn, setOccurredOn] = useState(v.occurredOn ?? today)
+  const [repeat, setRepeat] = useState<RepeatValue>(v.repeat === "monthly" || v.repeat === "yearly" ? v.repeat : "once")
 
   const account = accounts.find((a) => a.id === accountId)
   const beforeOpening = account && occurredOn && !countsTowardBalance(occurredOn, account.openingBalanceDate)
@@ -56,7 +58,7 @@ export function IncomeForm({ accounts, sources, today, presetAccountId, onDone, 
 
   return (
     <form onSubmit={submitWithoutReset(action)} noValidate className="grid gap-5">
-      <div role="group" aria-label="Transaction type" className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1">
+      <div role="group" aria-label="Type" className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1">
         <span
           aria-disabled="true"
           className="flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-semibold text-muted-foreground"
@@ -134,6 +136,8 @@ export function IncomeForm({ accounts, sources, today, presetAccountId, onDone, 
       )}
 
       <TextField name="note" label="Note" placeholder="What was this for?" maxLength={280} defaultValue={v.note} error={errors.note} />
+
+      <RepeatField value={repeat} onChange={setRepeat} occurredOn={occurredOn} today={today} error={errors.repeat} />
 
       <FormActions submit="Save income" busy="Saving…" pending={pending} />
     </form>

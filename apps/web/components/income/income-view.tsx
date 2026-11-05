@@ -3,16 +3,16 @@
 import { useActionState, useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
-import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, ChevronRight, House, MoreHorizontal, Plus } from "lucide-react"
+import { BriefcaseBusiness, ChevronRight, House, MoreHorizontal, Plus } from "lucide-react"
 import {
   type AccountKind,
-  formatPercentFromBasisPoints,
+  RATE_WORDS,
+  type SourceRateRule,
   incomeBySource,
-  incomeTrendBasisPoints,
   isInRange,
   monthRange,
-  previousMonthRange,
   rentalIncome,
+  sourceRates,
   sumIncome,
   summarizeHoldings,
   yearRange,
@@ -44,13 +44,17 @@ type Open =
   | { type: "entries"; sourceId: string }
   | { type: "archive"; account: IncomeAccount }
   | { type: "archived" }
+  | { type: "banks" }
   | null
+
+const FOOTER_LINK = "-mx-1 inline-flex min-h-11 items-center px-1 font-semibold text-ink underline underline-offset-4"
 
 const ADD_TITLES: Record<AccountKind, string> = { bank: "Add bank account", cash: "Add cash", other: "Add other account" }
 
 /** The Income page (design-spec §9). All figures come from packages/domain. */
 /** `upcoming`: the compact Upcoming card (recurring income), rendered below the summary. */
-export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?: React.ReactNode }) {
+/** `rules`: recurring rules, the only source of a source's rate ("₹X every month"). */
+export function IncomeView({ data, upcoming, rules = [] }: { data: IncomePageData; upcoming?: React.ReactNode; rules?: readonly SourceRateRule[] }) {
   const { currency, today, timeZone, accounts, sources, entries } = data
   const [open, setOpen] = useState<Open>(null)
   // A fresh id per opened dialog remounts its form, so each Add income gets a new
@@ -62,7 +66,7 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
   }, [])
   const close = useCallback(() => setOpen(null), [])
 
-  // Deep links: /income?add=income (topbar "Add transaction") and ?add=bank. Handled
+  // Deep links: /income?add=income (topbar "Add income") and ?add=bank. Handled
   // while rendering so it also works when the link is used on this page.
   const params = useSearchParams()
   const router = useRouter()
@@ -81,23 +85,21 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
   }, [add, pathname, router])
 
   const view = useMemo(() => {
-    const periods = { month: monthRange(today), previousMonth: previousMonthRange(today), year: yearRange(today) }
-    const thisMonth = sumIncome(entries, periods.month, currency)
-    const lastMonth = sumIncome(entries, periods.previousMonth, currency)
+    const periods = { month: monthRange(today), year: yearRange(today) }
     const holdings = summarizeHoldings(accounts, currency)
     const cashRows = holdings.rows.filter((r) => r.account.kind === "cash")
     const cashUpdated = cashRows.map((r) => r.account.lastActivityAt).sort().at(-1)
     return {
       periods,
-      thisMonth,
       thisYear: sumIncome(entries, periods.year, currency),
-      trend: incomeTrendBasisPoints(thisMonth, lastMonth),
       holdings,
+      bankRows: holdings.rows.filter((r) => r.account.kind === "bank"),
       cashUpdated,
       sourceRows: incomeBySource(entries, sources, periods, currency),
+      rates: sourceRates(rules, today),
       rental: rentalIncome(entries, sources, periods, currency),
     }
-  }, [accounts, currency, entries, sources, today])
+  }, [accounts, currency, entries, rules, sources, today])
 
   const activeAccounts = view.holdings.rows.map((r) => r.account)
   const activeSources = sources.filter((s) => !s.archived)
@@ -127,36 +129,22 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
         }
       />
 
-      <section aria-label="Summary" className="-mx-4 mb-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 lg:grid-cols-3">
-        <StatCard
-          label="Income this month"
-          value={money(view.thisMonth, currency)}
-          footer={
-            view.trend !== null && (
-              <span className={view.trend >= 0 ? "inline-flex items-center gap-1 text-success" : "inline-flex items-center gap-1 text-danger"}>
-                {view.trend >= 0 ? <ArrowUpRight aria-hidden="true" className="size-4" /> : <ArrowDownRight aria-hidden="true" className="size-4" />}
-                {formatPercentFromBasisPoints(view.trend, { signed: true })} from last month
-              </span>
-            )
-          }
-        />
+      {/* Stacked one per row on phones; no sideways scroll. */}
+      <section aria-label="Summary" className="mb-4 grid gap-4 md:grid-cols-3">
         <StatCard label="Income this year" value={money(view.thisYear, currency)} footer={`January – December ${year}`} />
-        <StatCard
-          label="Bank accounts"
-          value={view.holdings.bankCount}
-          footer={
-            view.holdings.bankCount === 0
-              ? "None added yet"
-              : `${view.holdings.savingsCount} savings · ${view.holdings.currentCount} current`
-          }
-        />
         <StatCard
           label="Money in banks"
           value={money(view.holdings.moneyInBanksMinor, currency)}
           footer={
-            view.holdings.bankCount === 0
-              ? "Add a bank account to see this"
-              : `Across ${view.holdings.bankCount} bank account${view.holdings.bankCount === 1 ? "" : "s"}`
+            view.holdings.bankCount === 0 ? (
+              <button type="button" className={FOOTER_LINK} onClick={() => show({ type: "account", kind: "bank" })}>
+                Add a bank account
+              </button>
+            ) : (
+              <button type="button" className={FOOTER_LINK} aria-haspopup="dialog" onClick={() => show({ type: "banks" })}>
+                {view.holdings.bankCount} account{view.holdings.bankCount === 1 ? "" : "s"}
+              </button>
+            )
           }
         />
         <StatCard
@@ -164,28 +152,25 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
           value={money(view.holdings.cashInHandMinor, currency)}
           footer={view.cashUpdated ? `As of ${shortDateTime(view.cashUpdated, timeZone)}` : "No cash added yet"}
         />
-        <StatCard
-          label="Rental income"
-          value={money(view.rental.monthMinor, currency)}
-          footer={
-            view.rental.hasRentSource ? (
-              `${money(view.rental.yearMinor, currency)} this year`
-            ) : (
-              <button type="button" className="font-semibold text-ink underline underline-offset-4" onClick={() => show({ type: "source" })}>
-                Add a rental source
-              </button>
-            )
-          }
-        />
       </section>
+      {/* Rental income: a smaller card, only once rent has come in this year. */}
+      {view.rental.yearMinor > 0 && (
+        <Card className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-4">
+          <p className="text-sm text-muted-foreground">Rental income</p>
+          <p className="text-sm tabular-nums">
+            <span className="font-heading text-lg font-semibold">{money(view.rental.yearMinor, currency)}</span> this year
+            <span className="text-muted-foreground"> · {money(view.rental.monthMinor, currency)} this month</span>
+          </p>
+        </Card>
+      )}
       {upcoming && <div className="mb-4">{upcoming}</div>}
 
       <div className="grid gap-4 lg:grid-cols-[1.45fr_0.8fr]">
         <Card>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>Income sources</CardTitle>
-              <CardDescription className="mt-1">Monthly and yearly earnings by source</CardDescription>
+              <CardTitle>Income by source</CardTitle>
+              <CardDescription className="mt-1">What each source paid this month and this year</CardDescription>
             </div>
             <Button variant="ghost" size="sm" className="text-success" onClick={() => show({ type: "source" })}>
               Add source
@@ -204,30 +189,41 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
             </div>
           ) : (
             <ul className="mt-4 divide-y divide-line">
-              {view.sourceRows.map(({ source, monthMinor, yearMinor, linked, onlyVoided }) => (
-                <li key={source.id}>
-                  <button
-                    type="button"
-                    onClick={() => show({ type: "entries", sourceId: source.id })}
-                    className="flex w-full items-center gap-4 rounded-xl py-4 text-left outline-none hover:bg-canvas/60 focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-chip-mint text-ink">
-                      {source.sourceType === "rent" ? <House aria-hidden="true" className="size-5" /> : <BriefcaseBusiness aria-hidden="true" className="size-5" />}
-                    </span>
-                    <span className="grid min-w-0 flex-1 gap-0.5">
-                      <span className="truncate font-semibold">{source.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {linked.kind === "multiple" ? "Multiple accounts" : linked.kind === "account" ? accountLabel(linked.accountId) : "No account yet"}
+              {view.sourceRows.map(({ source, monthMinor, yearMinor, linked, onlyVoided }) => {
+                // A rate only when a recurring rule says so (never inferred from entries).
+                const rates = view.rates.get(source.id) ?? []
+                return (
+                  <li key={source.id}>
+                    <button
+                      type="button"
+                      onClick={() => show({ type: "entries", sourceId: source.id })}
+                      className="flex w-full items-center gap-4 rounded-xl py-4 text-left outline-none hover:bg-canvas/60 focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-chip-mint text-ink">
+                        {source.sourceType === "rent" ? <House aria-hidden="true" className="size-5" /> : <BriefcaseBusiness aria-hidden="true" className="size-5" />}
                       </span>
-                      {onlyVoided && <span className="text-xs text-muted-foreground">Voided entries only</span>}
-                    </span>
-                    <span className="grid justify-items-end gap-0.5 tabular-nums">
-                      <span className="font-semibold text-success">{money(monthMinor, currency)}</span>
-                      <span className="text-xs text-muted-foreground">{money(yearMinor, currency)} yearly</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
+                      <span className="grid min-w-0 flex-1 gap-0.5">
+                        <span className="truncate font-semibold">{source.name}</span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {linked.kind === "multiple" ? "Multiple accounts" : linked.kind === "account" ? accountLabel(linked.accountId) : "No account yet"}
+                        </span>
+                        {onlyVoided && <span className="text-xs text-muted-foreground">Voided entries only</span>}
+                        {rates.map((r, i) => (
+                          <span key={i} className="text-xs text-ink tabular-nums">
+                            {money(r.amountMinor, r.currency)} {RATE_WORDS[r.frequency]}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="grid shrink-0 justify-items-end gap-0.5 text-right tabular-nums">
+                        <span className="text-sm">
+                          <span className="font-semibold text-success">{money(monthMinor, currency)}</span> this month
+                        </span>
+                        <span className="text-xs text-muted-foreground">{money(yearMinor, currency)} this year</span>
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </Card>
@@ -293,10 +289,17 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
             </ul>
           )}
 
-          <div className="on-dark mt-4 flex items-center justify-between gap-3 rounded-2xl bg-brand-deep px-5 py-4 text-nav-text">
-            <span className="text-sm text-nav-muted">Total available</span>
-            <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">{money(view.holdings.totalAvailableMinor, currency)}</span>
-          </div>
+          {/* Total available (every active account) is shown only when cash or other accounts
+              make it differ from Money in banks above; otherwise it would repeat that figure. */}
+          {view.holdings.totalAvailableMinor !== view.holdings.moneyInBanksMinor && (
+            <div className="on-dark mt-4 flex items-center justify-between gap-3 rounded-2xl bg-brand-deep px-5 py-4 text-nav-text">
+              <span className="grid text-sm text-nav-muted">
+                Total available
+                <span className="text-xs">Banks, cash and other accounts</span>
+              </span>
+              <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">{money(view.holdings.totalAvailableMinor, currency)}</span>
+            </div>
+          )}
 
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" onClick={addOrUpdateCash}>
@@ -318,7 +321,7 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
 
       <Dialog open={open !== null} onOpenChange={(next) => !next && close()}>
         {open?.type === "income" && (
-          <DialogContent eyebrow="New transaction" title="Add income">
+          <DialogContent title="Add income">
             <IncomeForm
               key={openId}
               accounts={activeAccounts}
@@ -368,6 +371,30 @@ export function IncomeView({ data, upcoming }: { data: IncomePageData; upcoming?
         {open?.type === "archive" && (
           <DialogContent eyebrow="Archive account" title={`Archive ${open.account.label}?`}>
             <ArchiveForm key={openId} account={open.account} onDone={close} />
+          </DialogContent>
+        )}
+        {open?.type === "banks" && (
+          <DialogContent title="Bank accounts" description="Balances as of today.">
+            <ul className="grid divide-y divide-line">
+              {view.bankRows.map(({ account, balanceMinor, inTotal }) => (
+                <li key={account.id}>
+                  <button
+                    type="button"
+                    onClick={() => show({ type: "account", kind: "bank", account })}
+                    className="flex min-h-14 w-full items-center gap-3 rounded-lg px-1 py-3 text-left outline-none hover:bg-canvas/60 focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm">{account.label}</span>
+                    {!inTotal && <Badge tone="neutral">Not in total</Badge>}
+                    <span className="font-semibold tabular-nums">{money(balanceMinor, account.currency)}</span>
+                    <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-4">
+              <span className="text-sm text-muted-foreground">Money in banks</span>
+              <span className="font-heading text-xl font-semibold tabular-nums">{money(view.holdings.moneyInBanksMinor, currency)}</span>
+            </div>
           </DialogContent>
         )}
         {open?.type === "archived" && (

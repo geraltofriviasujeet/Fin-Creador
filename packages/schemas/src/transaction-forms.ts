@@ -27,6 +27,23 @@ const text = z
   .optional()
   .transform((v) => (v ?? "").trim());
 
+/**
+ * "Repeat this?" on the add income and add expense forms (Sprint 10a). A repeat creates a
+ * recurring rule starting on the entry date and posts the entry as its first occurrence
+ * (record_entry_with_repeat), so nothing is counted twice.
+ */
+export const REPEAT_OPTIONS = [
+  { value: "once", label: "Just once" },
+  { value: "monthly", label: "Every month" },
+  { value: "yearly", label: "Every year" },
+] as const;
+export type RepeatFrequency = "monthly" | "yearly";
+
+/** The form's repeat field: empty or "once" is no repeat (null). */
+export const repeatField = text
+  .pipe(z.enum(["", "once", "monthly", "yearly"], { message: "Choose how often" }))
+  .transform((v): RepeatFrequency | null => (v === "monthly" || v === "yearly" ? v : null));
+
 /** Icons an expense category may use (categories_icon in the database), with their names. */
 export const EXPENSE_ICON_OPTIONS = [
   { value: "food", label: "Food" },
@@ -88,6 +105,8 @@ export function transactionFormSchema({
         .refine((d) => d <= today, "The date can't be in the future")
         .refine((d) => d >= "1970-01-01", "Choose a later date"),
       note: text.refine((n) => n.length <= 280, "Keep the note under 280 characters"),
+      /** Adding income or an expense only; an edit, transfer or refund never repeats. */
+      repeat: repeatField,
       idempotencyKey: z.uuid({ message: "Please reopen the form and try again" }),
     })
     .transform((v, ctx) => {
@@ -132,6 +151,7 @@ export function transactionFormSchema({
         refundOfId: v.type === "refund" && v.refundOfId ? v.refundOfId : null,
         occurredOn: v.occurredOn,
         note: v.note || null,
+        repeat: !v.transactionId && (v.type === "income" || v.type === "expense") ? v.repeat : null,
         idempotencyKey: v.idempotencyKey,
       };
     });
