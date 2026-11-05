@@ -49,6 +49,8 @@ test("activity in another tab keeps this tab signed in; the sign-out ends the se
   // activity the way a real tab does: by writing the shared last-active time.
   const other = await context.newPage()
   await other.goto("/favicon.ico")
+  // The timed tab in front: Chrome throttles a hidden tab's timers.
+  await page.bringToFront()
 
   await page.clock.fastForward("01:59:01")
   await expect(warning(page)).toBeVisible()
