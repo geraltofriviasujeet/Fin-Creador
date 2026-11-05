@@ -1,16 +1,21 @@
-# Next session: Sprint 9a prod rollout, then Sprint 9b (bank account statements)
+# Next session: Sprint 10, the Roma assistant (step 10.1)
 
-**State (2026-11-04).** Sprints 1–8 are on `main` and deployed (Vercel Hobby, Supabase Free). Sprint 9a (credit card statement PDFs, web) is complete on `sprint-9a`, draft PR #46, CI green: an in-browser TypeScript reader (the file and password never leave the device), Punjab National Bank as the one issuer reader, a self-check gate before Save, an honest "We can't read [issuer] statements yet..." for other banks (unless the statement verifies itself with the general reader), "Copy layout" for unreadable rows, self-hosted fonts. Details and decisions: `docs/sprint-plan.md` (9a row, Decisions 2026-10-29 and 2026-11-04). Mobile Overview, Goals, Investments, Loans, cards, borrowing, statutory dues, net worth, Reports and statement import are in the backlog.
+**State (2026-11-05).** Sprints 1–9 and 10a are on `main` and deployed (Vercel Hobby, Supabase Free). Sprint 9 (statement import, web) is complete: 9a card statement PDFs (PR #46), 9b bank statements, PNB PDF and CSV (PR #47), 9c refunds (PR #48), 9d generic structure-based bank reader with endpoint reconciliation and a masked Copy layout (PR #49). Statements are read in the browser; the file and any password never leave the device. Details and decisions: `docs/sprint-plan.md` (Sprint 9 rows, Decisions 2026-10-29 to 2026-11-05). Mobile Overview, Goals, Investments, Loans, cards, borrowing, statutory dues, net worth, Reports, statement import and adding refunds are in the backlog.
 
-**Known limitations (9a, kept).** Two tabs saving the same lines at once can both report "saved" (each line is still posted once). A parser change that alters a line's parsed values gives it another key, so a line imported before the change shows as Possible duplicate rather than Already imported.
+**Sprint 10a (clarity pass, web) is complete** (PR #51 merged into `main`): "Repeat this?" on add income and add expense, sign-out after 2 hours without activity across tabs, plainer wording, four Overview cards, three Income cards, and income sources showing actual amounts with a rate only from recurring rules. Migration `20261105120000_entry_repeat.sql` (confirm on dev and prod with `supabase migration list --linked`). Details: the 10a row and Decisions 2026-11-05 in `docs/sprint-plan.md`.
 
-**Order (owner, 2026-11-04).**
-1. **9a prod rollout.** Migration `20261029180000_bank_charges_category.sql` to dev first if `supabase migration list --linked` doesn't show it there (owner db push), re-test the import on dev with the real PNB file, then the owner marks PR #46 ready and merges it. Prod: manual backup, `db push` from a clean `main` checkout, then the deploy and a live check (`docs/deployment.md` section 4).
-2. **Sprint 9b bank account statements (web).** First the PNB savings layout already described (Decisions 2026-10-29, "Bank statements (9b, no parser yet)": ignore everything above the column header row; Date, Instrument ID, Amount, Type DR/CR, Balance, Remarks; newest first; wrapped Remarks; UPI remarks keep the payee only; balance-chain self-check), then CSV / Excel (exact, preferred). Bank rules: credits as income, debits as expenses, own-account transfers posted as transfers, closing-balance reconciliation against the account balance, duplicates against manual entries unticked. Same privacy rules as 9a: synthetic statements only in the repo, runs of 4+ digits stripped, never uploaded. New parsers follow "How to add a new issuer parser" (Sprint 9 in `docs/sprint-plan.md`).
+**Known limitations (kept).**
+- 9a: two tabs saving the same lines at once can both report "saved" (each line is still posted once). A parser change that alters a line's parsed values gives it another key, so a line imported before the change shows as Possible duplicate rather than Already imported.
+- 9b: importing both sides of a transfer in two tabs at the same moment can post it twice; a transfer the two banks book on different days is not matched and can post twice.
+- 9c: refund suggestions are exact-amount only (part refunds are picked by hand); two refunds linked to one purchase in one review can pass the picker and the second is refused at save (FC055); a refund's link can't be changed after saving (void and add again).
+- 9d: a scanned PDF has no text; a page footer printed one line below the last row can merge into it.
 
-**Backlog (owner, 2026-10-28).** Card list: PNB cards first, from PNB's own pages only (verified, no guessing), then other public-sector and mid-size banks, as the next quarterly list refresh (January 2027, `docs/quarterly-list-refresh.md`, including `FD_BANKS` and `LENDERS`). Until then "Other" typed works.
+**Order (owner, 2026-11-05).**
+1. **Sprint 10, the Roma assistant: step 10.1.** Sprint 10 in `docs/sprint-plan.md` and CLAUDE.md section 7 (figures computed in code, never by the model; provider keys server-side; informational only; no financial actions). The step's exact scope comes from the owner at the start of the session.
 
-**Migrations.** All in `supabase/migrations/`, all on **dev and prod**: `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals · `20261027120000` instruments and investments · `20261027180000` price refresh run log and `pg_cron` job · `20261027200000` fixed deposits · `20261028120000` loans, due items and payments · `20261028180000` cards, statements, borrowing · `20261028210000` borrowing details, card products, digits in any script · `20261028230000` statutory dues · `20261029120000` account balances at a date. Pending: `20261029180000` bank charges category (Sprint 9a; dev after the owner's db push, prod with the 9a rollout).
+**Backlog (owner).** Card list: PNB cards first, from PNB's own pages only (verified, no guessing), then other public-sector and mid-size banks, as the next quarterly list refresh (January 2027, `docs/quarterly-list-refresh.md`, including `FD_BANKS` and `LENDERS`). Until then "Other" typed works. Statements: Excel (.xlsx) import; an SBI statement layout. Full list: Backlog in `docs/sprint-plan.md`.
+
+**Migrations.** All in `supabase/migrations/`, all on **dev and prod**: `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals · `20261027120000` instruments and investments · `20261027180000` price refresh run log and `pg_cron` job · `20261027200000` fixed deposits · `20261028120000` loans, due items and payments · `20261028180000` cards, statements, borrowing · `20261028210000` borrowing details, card products, digits in any script · `20261028230000` statutory dues · `20261029120000` account balances at a date. Sprint 9: `20261029180000` bank charges category · `20261104120000` refunds. Sprint 10a: `20261105120000` entry repeat. (Confirm each on dev and prod with `supabase migration list --linked`.)
 
 Check `supabase migration list --linked` against each project before any database work. Status, steps and decisions: `docs/sprint-plan.md`; deploy steps: `docs/deployment.md` (4a dev refresh, 4b prod refresh, 4c Sprint 8 record).
 
@@ -18,7 +23,14 @@ Check `supabase migration list --linked` against each project before any databas
 
 **Before production.**
 - Remove `exp://**` and `localhost` entries from the development project's redirect list once mobile release builds exist (prod has only `https://<your-app>.vercel.app/auth/callback**`); drop `npm run dev:mobile:google`; fixed `fincreador://` scheme in release builds.
-- Custom SMTP before inviting testers; weekly manual prod backups; Vercel Pro and Supabase Pro before any commercial use.
+- Pre-launch checklist, before inviting outside testers:
+  - FinCreador name in the prod Supabase email templates (confirm sign-up, reset password, magic link, change email).
+  - FinCreador as the app name on the Google OAuth consent screen.
+  - Privacy and terms pages on the web app, linked from sign-up and sign-in.
+  - Custom SMTP on prod before any outside tester (the built-in sender allows only a few emails per hour).
+  - Weekly manual prod backup (`scripts/backup-prod.sh`, `docs/deployment.md`) until the move to Pro.
+  - Leaked-password protection, once on Supabase Pro (not available on Free).
+- Vercel Pro and Supabase Pro before any commercial use.
 - Review the licence terms of the market data (AMFI, BSE, and NSE if added) before any commercial use (upgrade checklist in `docs/deployment.md`).
 - A paused Free project stops the daily price job: after a restore, check `cron.job_run_details` and run the refresh once by hand.
 - Pending: Google sign-in on iPhone.
@@ -36,7 +48,7 @@ Check `supabase migration list --linked` against each project before any databas
 **Start prompt (paste into a fresh session):**
 
 ```text
-Next: the Sprint 9a prod rollout, then Sprint 9b bank account statements (see docs/next-session.md). Read CLAUDE.md, docs/sprint-plan.md and docs/next-session.md first.
+Next: Sprint 10, the Roma assistant, step 10.1 (see docs/next-session.md). Read CLAUDE.md, docs/sprint-plan.md and docs/next-session.md first.
 Branch from `main`; open draft PRs only, never merge, no prod access.
 Then give me a plan of at most 25 lines: scope, what already exists, the first step, and only the questions that block the work, each with your recommendation.
 Wait for my one reply. After it, work through everything that stays green without pausing.
