@@ -46,15 +46,16 @@ async function IncomeContent() {
         type="income"
       />
     ) : null
-  return <IncomeView data={result.data} upcoming={upcoming} />
+  // Without the rules, sources show totals only (no rate is ever guessed).
+  return <IncomeView data={result.data} upcoming={upcoming} rules={recurring.ok ? recurring.data.rules : []} />
 }
 
 function IncomeSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading income">
       <PageHeader eyebrow="Money in" title="Income" description="See where your money comes from and where it is held." />
-      <div className="mb-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }, (_, i) => (
+      <div className="mb-4 grid gap-4 md:grid-cols-3">
+        {Array.from({ length: 3 }, (_, i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-4 w-28 rounded bg-canvas" />
             <span className="h-9 w-40 rounded bg-canvas" />

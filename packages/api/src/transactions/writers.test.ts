@@ -48,6 +48,39 @@ describe("saveTransaction", () => {
     ])
   })
 
+  it.each([
+    ["monthly", "every month"],
+    ["yearly", "every year"],
+  ])("a %s repeat creates the rule and its first entry in one call", async (repeat, words) => {
+    const { client, rpcs } = fakeClient()
+    expect(await saveTransaction(client, { ...expense, repeat })).toEqual({ status: "success", message: `Expense saved. It repeats ${words}.` })
+    expect(rpcs).toEqual([
+      {
+        fn: "record_entry_with_repeat",
+        args: {
+          p_type: "expense", p_frequency: repeat, p_idempotency_key: KEY, p_amount_minor: 248050, p_occurred_on: "2026-10-22",
+          p_account_id: ACC, p_category_id: CAT, p_note: "Lunch", p_payment_mode: "upi",
+        },
+      },
+    ])
+  })
+
+  it("'Just once' and a transfer never repeat", async () => {
+    const once = fakeClient()
+    await saveTransaction(once.client, { ...expense, repeat: "once" })
+    expect(once.rpcs[0]?.fn).toBe("record_transaction")
+    const transfer = fakeClient()
+    await saveTransaction(transfer.client, { type: "transfer", amount: "500", accountId: ACC, counterAccountId: ACC2, occurredOn: "2026-10-22", idempotencyKey: KEY, repeat: "monthly" })
+    expect(transfer.rpcs[0]?.fn).toBe("record_transaction")
+  })
+
+  it("rejects an unknown repeat without saving", async () => {
+    const { client, rpcs } = fakeClient()
+    const result = await saveTransaction(client, { ...expense, repeat: "weekly" })
+    expect(result).toMatchObject({ status: "error", fieldErrors: { repeat: "Choose how often" } })
+    expect(rpcs).toEqual([])
+  })
+
   it("drops the payment mode for a cash account", async () => {
     const { client, rpcs } = fakeClient({ account: { currency: "INR", kind: "cash" } })
     await saveTransaction(client, expense)

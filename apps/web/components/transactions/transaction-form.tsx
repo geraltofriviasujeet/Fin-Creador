@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { fullDate, money, signedAmount } from "./display"
+import { RepeatField, type RepeatValue } from "./repeat-field"
 
 export type EntryType = LedgerItem["type"]
 
@@ -25,6 +26,8 @@ export type Draft = {
   note: string | null
   /** Refunds only: the purchase it reverses ("Refund this"), else null. */
   refundOfId: string | null
+  /** "Repeat this?" (adding income or an expense only); "once" otherwise. */
+  repeat: RepeatValue
 }
 
 export type Prefill = Pick<LedgerItem, "amountMinor" | "currency" | "occurredOn" | "accountId" | "counterAccountId" | "categoryId" | "paymentMode" | "note">
@@ -88,6 +91,9 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
   const [counterAccountId, setCounterAccountId] = useState(start?.counterAccountId ?? "")
   const [paymentMode, setPaymentMode] = useState<string>(start?.paymentMode ?? "")
   const [note, setNote] = useState(start?.note ?? "")
+  const [repeat, setRepeat] = useState<RepeatValue>("once")
+  // Only a fresh income or expense can repeat (not an edit, a recurring confirm or a refund).
+  const canRepeat = mode.kind === "add" && !locked && !refundOf && (type === "income" || type === "expense")
 
   // Archived accounts and categories can't be chosen for new entries; an edit may keep the
   // one it already has.
@@ -147,6 +153,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
       paymentMode: type === "expense" && account?.kind === "bank" && paymentMode ? (paymentMode as PaymentModeValue) : null,
       note: note.trim() || null,
       refundOfId: type === "refund" ? (refundOf?.id ?? null) : null,
+      repeat: canRepeat ? repeat : "once",
     }
     if (
       editing &&
@@ -181,7 +188,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
 
   return (
     <form onSubmit={submit} noValidate className="grid gap-5">
-      <div role="radiogroup" aria-label="Transaction type" className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1 md:grid-cols-4">
+      <div role="radiogroup" aria-label="Type" className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1 md:grid-cols-4">
         {TYPES.map((t) => {
           const checked = t.value === type
           return (
@@ -365,6 +372,8 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
         onChange={(e) => setNote(e.target.value)}
         error={errors.note}
       />
+
+      {canRepeat && <RepeatField value={repeat} onChange={setRepeat} occurredOn={occurredOn} today={today} error={errors.repeat} />}
 
       <div className="mt-2 flex justify-end gap-3">
         <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>

@@ -28,7 +28,7 @@ import type { EntryType } from "./transaction-form"
 
 export const TRANSACTIONS_HEADER = {
   eyebrow: "Money activity",
-  title: "Transactions",
+  title: "Money in & out",
   description: "See every rupee coming in and going out.",
 }
 
@@ -127,7 +127,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
 
   return (
     <>
-      <PageHeader {...TRANSACTIONS_HEADER} actions={addLink("expense", "Add transaction")} />
+      <PageHeader {...TRANSACTIONS_HEADER} actions={addLink("expense", "Add expense")} />
 
       {upcoming && (
         <div className="mb-6">
@@ -143,7 +143,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         </div>
       )}
 
-      <nav aria-label="Transaction type" className="mb-4">
+      <nav aria-label="Type" className="mb-4">
         <ul className="grid grid-cols-5 gap-1 rounded-xl border border-line bg-surface p-1 md:inline-flex">
           {TYPE_TABS.map((t) => {
             const active = t.value === f.type
@@ -178,7 +178,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
           }}
         >
           <label htmlFor="tx-search" className="sr-only">
-            Search transactions
+            Search
           </label>
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-subtle" />
           <input
@@ -308,7 +308,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         <Card className="px-0 md:px-0">
           <div className="flex flex-wrap items-end justify-between gap-2 px-5 md:px-6">
             <div>
-              <CardTitle>{loaded.type === "all" ? "All transactions" : tabLabel}</CardTitle>
+              <CardTitle>{loaded.type === "all" ? "Everything" : tabLabel}</CardTitle>
               <CardDescription className="mt-1">
                 {label}
                 {exactCount !== null && ` · ${exactCount} ${exactCount === 1 ? "entry" : "entries"}`}
@@ -321,7 +321,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
             <div className="grid justify-items-center gap-3 px-5 py-12 text-center md:px-6">
               {!context.hasEntries ? (
                 <>
-                  <p className="font-heading text-xl font-semibold">No transactions yet</p>
+                  <p className="font-heading text-xl font-semibold">Nothing recorded yet</p>
                   <p className="max-w-md text-sm text-muted-foreground">
                     {context.accounts.some((a) => !a.archived)
                       ? "Add what you spend and receive. Transfers between your own accounts go here too, without counting as income or expenses."
@@ -534,7 +534,7 @@ function MenuItem({ onClick, children }: { onClick: () => void; children: React.
 
 export function TransactionsSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading transactions">
+    <div aria-busy="true" aria-label="Loading money in and out">
       <PageHeader {...TRANSACTIONS_HEADER} />
       <div className="mb-4 h-13 w-full max-w-md rounded-xl bg-surface" />
       <Card className="mb-6 grid gap-4">

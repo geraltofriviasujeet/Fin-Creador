@@ -50,9 +50,9 @@ export type ExportParams = z.output<typeof exportParamsSchema>
 
 export const EXPORT_MESSAGES = {
   invalid: "Choose a valid date range (at most 10 years).",
-  signedOut: "Sign in to export your transactions.",
+  signedOut: "Sign in to export.",
   tooMany: `More than ${EXPORT_ROW_CAP.toLocaleString("en-IN")} entries in this range. Choose a shorter range, an account or a category.`,
-  unavailable: "We couldn't export your transactions. Check your connection and try again.",
+  unavailable: "We couldn't create the export. Check your connection and try again.",
 } as const
 
 export type ExportResult =

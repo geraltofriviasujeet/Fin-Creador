@@ -3,6 +3,7 @@
 import { type DateRange, type IsoDate, isInRange } from "./dates";
 import { ratioToBasisPoints } from "./format";
 import { addMinor } from "./money";
+import type { Frequency } from "./recurrence";
 
 export type SourceType = "salary" | "rent" | "freelance" | "business" | "interest" | "other";
 
@@ -98,6 +99,51 @@ export function incomeBySource<S extends IncomeSource>(
   }
   return rows.sort((a, b) => b.yearMinor - a.yearMinor || a.source.name.localeCompare(b.source.name));
 }
+
+/** The fields of a recurring rule that say how much a source pays and how often. */
+export interface SourceRateRule {
+  type: string;
+  categoryId: string | null;
+  amountMinor: number;
+  currency: string;
+  frequency: Frequency;
+  endDate: IsoDate | null;
+  archived: boolean;
+}
+
+export interface SourceRate {
+  amountMinor: number;
+  currency: string;
+  frequency: Frequency;
+}
+
+/**
+ * The rate of each income source ("₹X every month"), taken only from its recurring income
+ * rules (a source is an income category; a rule links to it by category_id), never
+ * inferred from past entries. A rule counts while it is not archived and has not ended
+ * (end date on or after today). One rate per rule, at the rule's current amount (a changed
+ * amount applies to future occurrences only, so past entries keep what they were);
+ * several rules give several rates, largest first. A source with no such rule is absent.
+ */
+export function sourceRates(rules: readonly SourceRateRule[], today: IsoDate): Map<string, SourceRate[]> {
+  const rates = new Map<string, SourceRate[]>();
+  for (const r of rules) {
+    if (r.type !== "income" || !r.categoryId || r.archived || (r.endDate !== null && r.endDate < today)) continue;
+    const list = rates.get(r.categoryId) ?? [];
+    list.push({ amountMinor: r.amountMinor, currency: r.currency, frequency: r.frequency });
+    rates.set(r.categoryId, list);
+  }
+  for (const list of rates.values()) list.sort((a, b) => b.amountMinor - a.amountMinor);
+  return rates;
+}
+
+/** "every month", "every week", ...: how often a rate repeats, in words. */
+export const RATE_WORDS: Readonly<Record<Frequency, string>> = {
+  weekly: "every week",
+  monthly: "every month",
+  quarterly: "every quarter",
+  yearly: "every year",
+};
 
 /** The Rental income card: all rent-type sources together. */
 export function rentalIncome(

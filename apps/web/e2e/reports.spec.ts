@@ -107,8 +107,8 @@ test("a month equals the Overview's; the trend's last point plus investments equ
   expect(holding.error).toBeNull()
 
   await page.goto("/")
-  const overviewIncome = minor(await overviewCard(page, "Income").textContent() ?? "")
-  const overviewExpenses = minor(await overviewCard(page, "Expenses").textContent() ?? "")
+  const overviewIncome = minor(await overviewCard(page, "Income this month").textContent() ?? "")
+  const overviewExpenses = minor(await overviewCard(page, "Spent this month").textContent() ?? "")
   await expect(netWorthCard(page).getByText(/^Net worth ₹/)).toBeVisible()
   const overviewNetWorth = minor(await netWorthCard(page).getByText(/^Net worth ₹/).textContent() ?? "")
   expect([overviewIncome, overviewExpenses]).toEqual([5_000_00, 650_00])
@@ -147,10 +147,10 @@ test("a month equals the Overview's; the trend's last point plus investments equ
   await page.getByRole("navigation", { name: "Range" }).getByRole("link", { name: "Custom" }).click()
   await expect(page.getByLabel("From month")).toBeVisible()
 
-  // Each month opens its entries on Transactions.
+  // Each month opens on Money in & out.
   await monthRow(page, month).getByRole("link", { name: month }).click()
   await expect(page).toHaveURL(/\/transactions\?period=custom&from=\d{4}-\d{2}-01&to=\d{4}-\d{2}-\d{2}/)
-  await expect(page.getByRole("heading", { level: 1, name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Money in & out" })).toBeVisible()
 })
 
 test("CSV export: injection neutralised, Amount numeric, voided left out by default, another user's rows absent", async ({ browser, baseURL }) => {

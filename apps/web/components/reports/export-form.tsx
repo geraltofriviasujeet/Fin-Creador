@@ -15,7 +15,7 @@ export const EXPORT_PATH = "/reports/export"
 type Option = { id: string; label: string }
 type State = { kind: "idle" } | { kind: "loading" } | { kind: "done"; rows: number } | { kind: "empty" } | { kind: "error"; message: string; narrow: boolean }
 
-const OFFLINE = "We couldn't export your transactions. Check your connection and try again."
+const OFFLINE = "We couldn't create the export. Check your connection and try again."
 
 function filenameOf(res: Response): string {
   return /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "fincreador-transactions.csv"

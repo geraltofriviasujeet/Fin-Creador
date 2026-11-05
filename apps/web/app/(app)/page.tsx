@@ -18,7 +18,7 @@ import {
   loadTransactionsContext,
   readDashboardParams,
 } from "@fin-creador/api"
-import { comparisonFor, netWorth } from "@fin-creador/domain"
+import { comparisonFor, monthRange, netWorth } from "@fin-creador/domain"
 import { OVERVIEW_HEADER, OverviewSkeleton, OverviewView } from "@/components/dashboard/overview-view"
 import { NetWorthCard, NetWorthSkeleton } from "@/components/net-worth/overview-card"
 import { UpcomingSection } from "@/components/recurring/upcoming"
@@ -41,7 +41,7 @@ export default function OverviewPage({ searchParams }: { searchParams: SearchPar
   )
 }
 
-/** The earliest date the "Recent transactions" list looks back to (any period). */
+/** The earliest date the "Recent activity" list looks back to (any period). */
 const ALL_TIME_START = "1900-01-01"
 
 async function OverviewContent({ searchParams }: { searchParams: SearchParams }) {
@@ -56,10 +56,18 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   const { today, currency } = context.data
   const { period, range, charts } = readDashboardParams(params, today)
   const comparison = comparisonFor(period, range, today)
+  // The four cards always show this month, whatever period the charts below use (10a).
+  const thisMonth = monthRange(today)
+  const monthComparison = comparisonFor("month", thisMonth, today)
+  const chartsAreMonth = period === "month"
 
-  const [totals, prevTotals, breakdown, recent, recurring, profile, goals, investments, loans] = await Promise.all([
+  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans] = await Promise.all([
     loadTransactionTotals(supabase, { from: range.start, to: range.end }, currency),
     comparison ? loadTransactionTotals(supabase, { from: comparison.previous.start, to: comparison.previous.end }, currency) : null,
+    chartsAreMonth ? null : loadTransactionTotals(supabase, { from: thisMonth.start, to: thisMonth.end }, currency),
+    chartsAreMonth || !monthComparison
+      ? null
+      : loadTransactionTotals(supabase, { from: monthComparison.previous.start, to: monthComparison.previous.end }, currency),
     loadDashboardBreakdown(supabase, range, currency),
     loadTransactionPage(supabase, { from: ALL_TIME_START, to: today }, { currency, limit: 5 }),
     loadRecurringData(supabase),
@@ -68,7 +76,15 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
     loadInvestmentsData(supabase),
     loadLoansData(supabase),
   ])
-  if (!totals.ok || (prevTotals && !prevTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
+  if (!totals.ok || (prevTotals && !prevTotals.ok) || (monthTotals && !monthTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
+  const month = chartsAreMonth
+    ? { range, comparison, totals: totals.totals, prevTotals: prevTotals?.ok ? prevTotals.totals : null }
+    : {
+        range: thisMonth,
+        comparison: monthComparison,
+        totals: monthTotals?.ok ? monthTotals.totals : totals.totals, // ok: checked above
+        prevTotals: monthPrevTotals?.ok ? monthPrevTotals.totals : null,
+      }
 
   // The Recurring card is optional: if it can't load, the rest of the Overview still shows.
   const upcoming = recurring.ok ? (
@@ -89,7 +105,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
       range={range}
       comparison={comparison}
       totals={totals.totals}
-      prevTotals={prevTotals?.ok ? prevTotals.totals : null}
+      month={month}
       breakdown={breakdown.data}
       recent={recent.items}
       charts={charts}

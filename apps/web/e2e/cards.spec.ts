@@ -57,7 +57,7 @@ test("a card: add, purchase, statement with the difference, minimum, full and a 
 
   // A purchase on the card: offered as "Holiday card (card)" for expenses only, with the limit warning.
   await page.goto("/transactions")
-  await page.getByRole("link", { name: "Add transaction" }).first().click()
+  await page.getByRole("link", { name: "Add expense" }).first().click()
   const expense = dialog(page, "Add expense")
   await expect(expense.getByLabel("Paid from").locator("option", { hasText: "Holiday card (card)" })).toHaveCount(1)
   await expense.getByLabel("Amount").fill("85,000")

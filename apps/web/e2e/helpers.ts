@@ -80,9 +80,9 @@ export async function addCash(page: Page, amount: string) {
 
 export type Entry = { type?: "Expense" | "Income" | "Transfer" | "Refund"; amount: string; category?: string; from: string; to?: string; note?: string; mode?: string }
 
-/** Opens Add transaction from the topbar and saves one entry. */
+/** Opens Add expense from the topbar (switching type if needed) and saves one entry. */
 export async function addEntry(page: Page, e: Entry) {
-  await page.getByRole("link", { name: "Add transaction" }).first().click()
+  await page.getByRole("link", { name: "Add expense" }).first().click()
   await expect(dialog(page, "Add expense")).toBeVisible()
   const type = e.type ?? "Expense"
   if (type !== "Expense") await dialog(page, "Add expense").getByRole("radio", { name: type }).click()

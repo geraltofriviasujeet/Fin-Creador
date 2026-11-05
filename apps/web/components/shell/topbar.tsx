@@ -1,18 +1,19 @@
 "use client"
 
 import Link from "next/link"
-import { Plus, Search, Settings } from "lucide-react"
+import { Search, Settings } from "lucide-react"
 import { Logo } from "@/components/brand/logo"
 import { cn } from "cn"
 import { buttonVariants } from "@/components/ui/button"
+import { AddMenu } from "@/components/shell/add-menu"
 import { Bell, type BellReminders } from "@/components/shell/bell"
 
 /**
- * Sticky topbar (design-spec §4–5). "Add transaction" opens Add expense on the
- * Transactions page and search is a plain GET to it (?q=). The bell lists in-app reminders
- * (Sprint 8a: EMIs due soon); its dot shows only when something is due.
+ * Sticky topbar (design-spec §4–5). "Add expense" (with a menu for income, transfer and
+ * refund) opens the add dialog on Money in & out, and search is a plain GET to it (?q=).
+ * The bell lists in-app reminders (Sprint 8a: EMIs due soon); its dot shows only when
+ * something is due.
  */
-const ADD_HREF = "/transactions?add=expense"
 
 export function Topbar({ reminders }: { reminders?: BellReminders }) {
   return (
@@ -25,7 +26,7 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
         className="relative hidden w-(--fc-layout-search-width) max-w-full md:block"
       >
         <label htmlFor="global-search" className="sr-only">
-          Search transactions
+          Search
         </label>
         <Search
           aria-hidden="true"
@@ -35,7 +36,7 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
           id="global-search"
           name="q"
           type="search"
-          placeholder="Search transactions…"
+          placeholder="Search…"
           className="h-[36px] w-full rounded-lg border border-line bg-canvas pr-3 pl-10 text-sm text-ink outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         />
       </form>
@@ -46,13 +47,7 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
         <Link href="/settings" aria-label="Settings" className={cn(buttonVariants({ variant: "secondary", size: "icon" }), "md:hidden")}>
           <Settings aria-hidden="true" className="size-5" />
         </Link>
-        <Link href={ADD_HREF} aria-label="Add transaction" className={cn(buttonVariants({ size: "icon" }), "md:hidden")}>
-          <Plus aria-hidden="true" className="size-5" />
-        </Link>
-        <Link href={ADD_HREF} className={cn(buttonVariants({ size: "lg" }), "hidden md:inline-flex")}>
-          <Plus aria-hidden="true" />
-          Add transaction
-        </Link>
+        <AddMenu />
       </div>
     </header>
   )

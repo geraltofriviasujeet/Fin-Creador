@@ -1,6 +1,7 @@
 import { AMOUNT_ERROR_MESSAGES, isIsoDate, parseAmount } from "@fin-creador/domain";
 import { z } from "zod";
 import { currencyCodeSchema } from "./profile";
+import { repeatField } from "./transaction-forms";
 
 // Form schemas for accounts, income entries and income sources. Inputs are the raw
 // strings a form sends; outputs are the exact values the database stores (integer minor
@@ -151,6 +152,7 @@ export function incomeFormSchema({ today, currency }: { today: string; currency:
       accountId: z.uuid({ message: "Choose where it was received" }),
       occurredOn: notFuture(today, "The date can't be in the future"),
       note: optionalText.refine((n) => n.length <= 280, "Keep the note under 280 characters"),
+      repeat: repeatField,
       idempotencyKey: z.uuid({ message: "Please reopen the form and try again" }),
     })
     .transform((v, ctx) => {
@@ -165,6 +167,7 @@ export function incomeFormSchema({ today, currency }: { today: string; currency:
         accountId: v.accountId,
         occurredOn: v.occurredOn,
         note: v.note || null,
+        repeat: v.repeat,
         idempotencyKey: v.idempotencyKey,
       };
     });

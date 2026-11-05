@@ -13,6 +13,7 @@ import type { FormInput } from "../income/writers"
 const FIX_FIELDS = "Please fix the highlighted fields."
 const SIGNED_OUT = "Your session has ended. Please sign in again."
 const NOUN = { income: "Income", expense: "Expense", transfer: "Transfer", refund: "Refund" } as const
+const REPEAT_WORDS = { monthly: "every month", yearly: "every year" } as const
 
 function dbError(error: { code?: string; message?: string; details?: string }, currency = "INR"): WriteResult {
   // FC006's shared message names the income form's source field; here it is categoryId.
@@ -62,11 +63,27 @@ export async function saveTransaction(supabase: UserClient, input: FormInput): P
     p_payment_mode: t.paymentMode ?? undefined,
   }
   // An edit keeps a refund's link (the database moves or clears it, never the form).
+  // "Repeat this?" (add income or expense only): the entry is the first occurrence of a new
+  // recurring rule, created together in one call.
+  const repeat = t.repeat && t.categoryId && (t.type === "income" || t.type === "expense") ? t.repeat : null
   const { error } = t.transactionId
     ? await supabase.rpc("edit_transaction", { p_transaction_id: t.transactionId, ...details })
-    : await supabase.rpc("record_transaction", { p_type: t.type, ...details, p_refund_of_id: t.refundOfId ?? undefined })
+    : repeat
+      ? await supabase.rpc("record_entry_with_repeat", {
+          p_type: t.type,
+          p_frequency: repeat,
+          p_idempotency_key: t.idempotencyKey,
+          p_amount_minor: t.amountMinor,
+          p_occurred_on: t.occurredOn,
+          p_account_id: t.accountId,
+          p_category_id: t.categoryId!,
+          p_note: t.note ?? undefined,
+          p_payment_mode: t.paymentMode ?? undefined,
+        })
+      : await supabase.rpc("record_transaction", { p_type: t.type, ...details, p_refund_of_id: t.refundOfId ?? undefined })
   if (error) return dbError(error, account.currency)
-  return { status: "success", message: t.transactionId ? "Changes saved." : `${NOUN[t.type]} saved.` }
+  if (t.transactionId) return { status: "success", message: "Changes saved." }
+  return { status: "success", message: repeat ? `${NOUN[t.type]} saved. It repeats ${REPEAT_WORDS[repeat]}.` : `${NOUN[t.type]} saved.` }
 }
 
 /** One-way void under the form's request key: the entry stays in history and stops counting. */

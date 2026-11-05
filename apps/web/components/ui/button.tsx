@@ -7,7 +7,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        /** Dark ink — main action ("Add transaction", "Save"). */
+        /** Dark ink — main action ("Add expense", "Save"). */
         primary: "bg-primary text-primary-foreground hover:bg-ink/90",
         /** White with border — secondary action ("Cancel"). */
         secondary: "border-line bg-surface text-ink hover:bg-canvas",

@@ -30,7 +30,7 @@ async function client() {
 
 const ENTRY_FIELDS = [
   "transactionId", "type", "amount", "categoryId", "accountId", "counterAccountId",
-  "paymentMode", "refundOfId", "occurredOn", "note", "idempotencyKey",
+  "paymentMode", "refundOfId", "occurredOn", "note", "repeat", "idempotencyKey",
 ] as const
 
 /** Only the known fields, as strings (server actions take any value a client sends). */
@@ -43,6 +43,7 @@ function refreshed(result: WriteResult): WriteResult {
   if (result.status === "success") {
     revalidatePath("/transactions")
     revalidatePath("/income")
+    revalidatePath("/recurring")
   }
   return result
 }

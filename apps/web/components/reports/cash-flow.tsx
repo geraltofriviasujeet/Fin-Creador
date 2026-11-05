@@ -76,7 +76,7 @@ export function CashFlowSection({ data, categories, chartRange }: { data: CashFl
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[40rem] text-left text-sm tabular-nums">
-              <caption className="pb-2 text-left text-xs text-muted-foreground">Newest month first. Each month opens its entries on Transactions.</caption>
+              <caption className="pb-2 text-left text-xs text-muted-foreground">Newest month first. Each month opens on Money in & out.</caption>
               <thead>
                 <tr className="border-b border-line text-xs text-muted-foreground">
                   <th scope="col" className="py-1.5 font-semibold">Month</th>
