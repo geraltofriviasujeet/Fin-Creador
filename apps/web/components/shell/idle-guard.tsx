@@ -11,6 +11,7 @@ import {
   countdownText,
   idlePhase,
   lastActiveAt,
+  lastActiveStore,
 } from "@/lib/auth/idle"
 
 // Signs out after 2 hours without activity in any tab of this browser (Sprint 10a), with a
@@ -22,24 +23,7 @@ import {
 
 const ACTIVITY_EVENTS = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"] as const
 
-// localStorage can be missing or throw (private windows, blocked storage): fall back to
-// this tab's own memory.
-let memory: string | null = null
-function readStored(): string | null {
-  try {
-    return window.localStorage.getItem(LAST_ACTIVE_KEY)
-  } catch {
-    return memory
-  }
-}
-function writeStored(value: string) {
-  memory = value
-  try {
-    window.localStorage.setItem(LAST_ACTIVE_KEY, value)
-  } catch {
-    // This tab still keeps its own time.
-  }
-}
+const store = lastActiveStore(() => window.localStorage)
 
 /** `signedInAt`: the session's sign-in time, so a fresh sign-in is never treated as idle. */
 export function IdleGuard({ signedInAt }: { signedInAt: string | null }) {
@@ -68,7 +52,7 @@ export function IdleGuard({ signedInAt }: { signedInAt: string | null }) {
     form.submit()
   }, [])
 
-  const evaluate = useCallback(() => idlePhase(lastActiveAt(readStored(), signedInAt), Date.now()), [signedInAt])
+  const evaluate = useCallback(() => idlePhase(lastActiveAt(store.read(), signedInAt), Date.now()), [signedInAt])
 
   const check = useCallback(() => {
     const next = evaluate()
@@ -78,7 +62,7 @@ export function IdleGuard({ signedInAt }: { signedInAt: string | null }) {
 
   const record = useCallback(() => {
     lastWrite.current = Date.now()
-    writeStored(String(lastWrite.current))
+    store.write(lastWrite.current)
   }, [])
 
   const markActive = useCallback(

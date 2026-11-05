@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { UserClient } from "../income/client"
-import { saveTransaction, voidTransaction } from "./writers"
+import { STALE_VOID, saveTransaction, voidTransaction } from "./writers"
 
 // Stand-in for the signed-in user's client: records every RPC and answers from the scenario.
 type Scenario = {
@@ -172,6 +172,11 @@ describe("voidTransaction", () => {
     const result = await voidTransaction(client, { transactionId: ACC, idempotencyKey: KEY, reason: " Entered twice " })
     expect(result).toEqual({ status: "success", message: "Transfer voided." })
     expect(rpcs).toEqual([{ fn: "void_transaction", args: { p_transaction_id: ACC, p_idempotency_key: KEY, p_reason: "Entered twice" } }])
+  })
+
+  it("a version an edit replaced is stale: nothing voided, and the client is told to show the latest", async () => {
+    const { client } = fakeClient({ rpcError: { code: "FC014", message: "raw" } })
+    expect(await voidTransaction(client, { transactionId: ACC, idempotencyKey: KEY })).toEqual({ status: "error", stale: true, message: STALE_VOID })
   })
 
   it("needs an entry id and a request key", async () => {

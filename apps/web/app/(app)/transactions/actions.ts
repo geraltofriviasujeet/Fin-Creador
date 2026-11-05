@@ -40,7 +40,7 @@ function fields(input: unknown, names: readonly string[]): FormInput {
 }
 
 function refreshed(result: WriteResult): WriteResult {
-  if (result.status === "success") {
+  if (result.status === "success" || result.stale) {
     revalidatePath("/transactions")
     revalidatePath("/income")
     revalidatePath("/recurring")

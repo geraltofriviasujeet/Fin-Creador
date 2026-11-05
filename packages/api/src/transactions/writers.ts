@@ -15,6 +15,8 @@ const SIGNED_OUT = "Your session has ended. Please sign in again."
 const NOUN = { income: "Income", expense: "Expense", transfer: "Transfer", refund: "Refund" } as const
 const REPEAT_WORDS = { monthly: "every month", yearly: "every year" } as const
 
+export const STALE_VOID = "This entry was just edited, so nothing was voided. The list now shows its latest version."
+
 function dbError(error: { code?: string; message?: string; details?: string }, currency = "INR"): WriteResult {
   // FC006's shared message names the income form's source field; here it is categoryId.
   if (error.code === "FC006") {
@@ -95,6 +97,8 @@ export async function voidTransaction(supabase: UserClient, input: FormInput): P
     p_idempotency_key: parsed.data.idempotencyKey,
     p_reason: parsed.data.reason ?? undefined,
   })
+  // A version an edit just replaced (often a row clicked before the list caught up).
+  if (error?.code === "FC014") return { status: "error", stale: true, message: STALE_VOID }
   if (error || !data) return dbError(error ?? {})
   return { status: "success", message: `${NOUN[data.type as keyof typeof NOUN] ?? "Entry"} voided.` }
 }

@@ -19,6 +19,34 @@ export function lastActiveAt(stored: string | null, signedInAt: string | null): 
   return Math.max(fromStore, Number.isFinite(fromSignIn) ? fromSignIn : 0)
 }
 
+/** The storage every tab of this browser shares (localStorage in the app). */
+export type SharedStorage = Pick<Storage, "getItem" | "setItem">
+
+/**
+ * Reads and writes the shared last-active time. If storage is missing or throws (private
+ * windows, blocked storage), this tab falls back to its own memory.
+ */
+export function lastActiveStore(storage: () => SharedStorage) {
+  let memory: string | null = null
+  return {
+    read(): string | null {
+      try {
+        return storage().getItem(LAST_ACTIVE_KEY)
+      } catch {
+        return memory
+      }
+    },
+    write(at: number) {
+      memory = String(at)
+      try {
+        storage().setItem(LAST_ACTIVE_KEY, memory)
+      } catch {
+        // This tab still keeps its own time.
+      }
+    },
+  }
+}
+
 /** Where `now` falls: active, in the last minute (warning, with time left) or past the limit. */
 export function idlePhase(lastActive: number, now: number): IdlePhase {
   const left = lastActive + IDLE_LIMIT_MS - now

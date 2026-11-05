@@ -151,6 +151,10 @@ export function VoidEntryDialog({ entry, lookup, onClose }: { entry: LedgerItem 
               if (result.status === "success") {
                 onClose()
                 toast.success(result.message, "It stays in your history and no longer counts.")
+              } else if (result.stale) {
+                // The action refreshed the list: close, so the latest version can be voided.
+                onClose()
+                toast.info(result.message)
               }
               return toSaveResult(result)
             }}
