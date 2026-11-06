@@ -36,14 +36,27 @@ test("turn Roma on, ask what I spent this month, see figures from my records, tu
 
   await page.getByRole("link", { name: "Ask Roma", exact: true }).first().click()
   await expect(page).toHaveURL(/\/roma$/)
-  await page.getByLabel("Your question").fill("What did I spend this month?")
-  await page.getByRole("button", { name: "Ask Roma" }).click()
+  // Opening screen: static text in her own time zone, with the first name from the profile.
+  await expect(page.getByText(/^Good (morning|afternoon|evening), Meera\.$/)).toBeVisible()
+  await expect(page.getByText("I’m Roma, your Intelligent Finance Analyst. What do you want to know?", { exact: true })).toBeVisible()
+
+  // Shift+Enter adds a line; Enter sends.
+  const box = page.getByLabel("Your question")
+  await box.fill("What did I spend")
+  await box.press("Shift+Enter")
+  await expect(box).toHaveValue("What did I spend\n")
+  await expect(page.getByRole("list", { name: "Roma's answers" })).toHaveCount(0)
+  await box.fill("What did I spend this month?")
+  await box.press("Enter")
 
   const answers = page.getByRole("list", { name: "Roma's answers" })
   await expect(answers.getByText(/^You spent ₹1,634\.50 from \d{4}-\d{2}-01 to \d{4}-\d{2}-\d{2}, across 2 expenses\./)).toBeVisible()
   await expect(answers.getByText("From your records", { exact: false })).toBeVisible()
   await expect(answers.getByRole("definition").first()).toHaveText("₹1,634.50")
   await expect(page.getByText("Informational only, not financial advice.", { exact: false })).toBeVisible()
+  // The opening lines give way once a question is asked; the send button stays.
+  await expect(page.getByText(/^Good (morning|afternoon|evening), Meera\.$/)).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Ask Roma" })).toBeVisible()
 
   await page.goto("/settings")
   await page.getByRole("button", { name: "Turn Roma off" }).click()
