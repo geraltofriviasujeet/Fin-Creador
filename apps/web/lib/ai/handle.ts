@@ -75,6 +75,8 @@ export type ChatDeps = {
   /** The person's today and currency, or null when they can't be read. */
   loadContext: () => Promise<ToolContext | null>
   run?: typeof runChat
+  /** Server diagnostic when an answer is refused by the figure check: the numbers only, never the answer; not stored. */
+  onUnverified?: (unmatched: readonly string[]) => void
 }
 
 export type ChatErrorCode =
@@ -117,7 +119,8 @@ export const CHAT_MESSAGES: Record<ChatErrorCode, string> = {
   global_budget: "Roma has reached this month's limit. She'll be back on the 1st.",
   user_budget: "You've reached your Roma limit for this month. It resets on the 1st.",
   daily_limit: "You've asked Roma as many questions as allowed today. Try again tomorrow.",
-  unverified: "Roma couldn't check a number in this answer against your records, so it isn't shown. Try asking again.",
+  unverified:
+    "Roma's answer had a number she couldn't match to a figure from your records, so it isn't shown. Ask about one thing at a time and name the period, account, goal or trip details you mean.",
   tone: "Roma's answer didn't follow her rules, so it isn't shown. Try asking again.",
   timeout: "Roma took too long. Try a narrower question.",
   refusal: "Roma can't help with that question.",
@@ -236,8 +239,21 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
         },
       }
     }
-    case "unverified":
-      return error("unverified")
+    case "unverified": {
+      deps.onUnverified?.(result.unmatched)
+      const shown = result.unmatched.slice(0, 3)
+      if (shown.length === 0) return error("unverified")
+      const nums = shown.length === 1 ? shown[0]! : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`
+      const more = result.unmatched.length > shown.length ? " and others" : ""
+      return {
+        status: STATUS.unverified,
+        body: {
+          status: "error",
+          code: "unverified",
+          message: `Roma's answer used ${nums}${more}, which she couldn't match to a figure from your records, so it isn't shown. Ask about one thing at a time and name the period, account, goal or trip details you mean.`,
+        },
+      }
+    }
     case "tone":
     case "invalid":
       return error("tone")

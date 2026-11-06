@@ -2,7 +2,7 @@ import type { DateRange } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, literalStrings } from "./output"
 import { ROMA_SYSTEM_PROMPT, romaContext } from "./prompts/roma-system"
-import { type FinanceTool, type Figure, type GoalCheck, type ToolContext, ToolError, toToolDef } from "./tools/types"
+import { type FinanceTool, type Figure, type GoalCheck, type InputNeeded, type ToolContext, ToolError, toToolDef } from "./tools/types"
 import {
   LlmError,
   type LlmMessage,
@@ -43,7 +43,8 @@ export type ChatResult =
       toolsRan: string[]
       descriptionsSent: boolean
     }
-  | { kind: "unverified" }
+  /** `unmatched`: the numbers that failed the check (for the server's diagnostic only; never the answer text). */
+  | { kind: "unverified"; unmatched: string[] }
   | { kind: "tone" }
   | { kind: "invalid" }
   | { kind: "failed"; reason: ChatFailure }
@@ -89,7 +90,7 @@ export async function runChat({
   ]
   const figures: Figure[] = []
   const periods: DateRange[] = []
-  const found: Found = { dates: [], descriptionsWithheld: false, descriptionsSent: false, toolsRan: [], checks: [], literals: [] }
+  const found: Found = { dates: [], descriptionsWithheld: false, descriptionsSent: false, toolsRan: [], checks: [], literals: [], needs: [] }
   let usage = NO_USAGE
   let calls = 0
   let unknownCalls = 0
@@ -128,9 +129,24 @@ export async function runChat({
     if (response.stop === "max_tokens") return done({ kind: "failed", reason: "max_tokens" })
     if (response.stop !== "end") return done({ kind: "failed", reason: "rejected" })
 
+    // A tool that needs more from the person (and no check that ran anyway): its own question,
+    // built in code, replaces whatever the model wrote.
+    if (found.needs.length > 0 && found.checks.length === 0) {
+      return done({
+        kind: "answer",
+        text: [...new Set(found.needs.map((n) => n.question))].join("\n\n"),
+        figures: [],
+        periods: [],
+        descriptionsWithheld: false,
+        checks: [],
+        toolsRan: found.toolsRan,
+        descriptionsSent: found.descriptionsSent,
+      })
+    }
+
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
     const check = checkAnswer(response.text, allowedNumbers(figures, dates), found.literals)
-    if (!check.ok) return done({ kind: check.reason })
+    if (!check.ok) return done(check.reason === "unverified" ? { kind: "unverified", unmatched: check.unmatched ?? [] } : { kind: check.reason })
     return done({
       kind: "answer",
       text: withVerdict(check.text, found.checks),
@@ -146,7 +162,15 @@ export async function runChat({
 }
 
 /** What tools found besides figures and periods. */
-type Found = { dates: string[]; descriptionsWithheld: boolean; descriptionsSent: boolean; toolsRan: string[]; checks: GoalCheck[]; literals: string[] }
+type Found = {
+  dates: string[]
+  descriptionsWithheld: boolean
+  descriptionsSent: boolean
+  toolsRan: string[]
+  checks: GoalCheck[]
+  literals: string[]
+  needs: InputNeeded[]
+}
 
 /** The answer, when it starts with a verdict a goal check computed; otherwise the checks' own summaries. */
 export function withVerdict(text: string, checks: readonly GoalCheck[]): string {
@@ -177,6 +201,7 @@ async function runTool(
     if (output.descriptionsWithheld) found.descriptionsWithheld = true
     if (output.descriptionsSent) found.descriptionsSent = true
     if (output.check) found.checks.push(output.check)
+    if (output.needs) found.needs.push(output.needs)
     found.literals.push(...literalStrings(output.data), ...literalStrings(output.figures.map((f) => f.label)))
     found.toolsRan.push(tool.name)
     return { callId, content: JSON.stringify(output.data) }

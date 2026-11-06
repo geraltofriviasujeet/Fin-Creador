@@ -9,6 +9,7 @@ import type { Figure } from "./tools/types"
 //     refused: numbers are never stripped, rounded or corrected. Digits inside a string a tool
 //     returned (a goal, category or account name such as "Car 2027") are not figures: those
 //     strings are set aside, exactly as written (any case), before the numbers are read;
+//     A numbered-list marker at the start of a line ("1. ") is a position, not a figure (10.5);
 //   * it doesn't open with praise (Roma's rules).
 
 export const MAX_ANSWER_CHARS = 2000
@@ -25,9 +26,12 @@ export function normalizeNumber(raw: string): string {
   return f ? `${w}.${f}` : w
 }
 
-/** Every number written in the text (digits with optional grouping and decimals), normalized. */
+/** A numbered-list marker at the start of a line ("1. ", "2) "): a position, not a figure. */
+const LIST_MARKER = /^([ \t]*)\d{1,2}[.)](?=[ \t])/gm
+
+/** Every number written in the text (digits with optional grouping and decimals), normalized. List markers are not numbers. */
 export function numbersIn(text: string): string[] {
-  return [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => normalizeNumber(m[0].replace(/,+$/, "")))
+  return [...text.replace(LIST_MARKER, "$1").matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => normalizeNumber(m[0].replace(/,+$/, "")))
 }
 
 /** The numbers an answer may contain: figure amounts, counts and rates (as the tool wrote them), and date parts. */

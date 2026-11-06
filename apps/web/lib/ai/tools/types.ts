@@ -35,6 +35,12 @@ export type GoalCheck = {
   assumptions: string[]
 }
 
+/**
+ * A check that can't run until the person says more (10.5): the app shows `question`, built in
+ * code, instead of the model's text, so no model prose can fail the figure check.
+ */
+export type InputNeeded = { tool: string; missing: string[]; question: string }
+
 export type ToolOutput = {
   /** Sent to the model as the tool result: compact and structured, never raw rows. */
   data: Record<string, unknown>
@@ -48,6 +54,7 @@ export type ToolOutput = {
   /** Descriptions were sent to the model (the answer may quote one; stored with the turn, 10.3). */
   descriptionsSent?: boolean
   check?: GoalCheck
+  needs?: InputNeeded
 }
 
 export type FinanceTool<I = unknown> = {

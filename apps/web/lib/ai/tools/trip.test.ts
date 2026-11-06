@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { GoalRecord, LoansView, UserClient } from "@fin-creador/api"
 import { cashFlowReport, monthStart } from "@fin-creador/domain"
-import { withVerdict } from "../chat"
+import { runChat, withVerdict } from "../chat"
+import { mockProvider, mockText, mockToolCall } from "../llm/mock"
 import { allowedNumbers, checkAnswer, literalStrings } from "../output"
 import { CANT_ESTIMATE, tripCheckTool } from "./trip"
-import { type ToolContext, ToolError } from "./types"
+import { type FinanceTool, type ToolContext, ToolError } from "./types"
 
 // trip_check (10.5) against stubbed loaders; the Goals view, tripEstimate and goalProjection
 // run for real. Scaling and run rules are tested in packages/domain.
@@ -95,8 +96,22 @@ describe("trip_check", () => {
   it("asks for what the person hasn't said, without loading anything", async () => {
     const out = await tripCheckTool.run(ctx, { destination: "Kerala", nights: 3 })
     expect(out.data).toMatchObject({ ask_for: ["scope", "month", "travellers"] })
+    expect(out.needs).toEqual({
+      tool: "trip_check",
+      missing: ["scope", "month", "travellers"],
+      question:
+        "To estimate a trip to Kerala from your records, Roma needs to know whether the trip is domestic or international, the month you want to travel and how many people are travelling. Tell her these and ask again.",
+    })
     expect(out.figures).toEqual([])
     expect(api.loadGoalsData).not.toHaveBeenCalled()
+  })
+
+  it("asks for everything when no details are supplied", async () => {
+    const out = await tripCheckTool.run(ctx, {})
+    expect(out.needs?.missing).toEqual(["destination", "scope", "month", "nights", "travellers"])
+    expect(out.needs?.question).toBe(
+      "To estimate a trip from your records, Roma needs to know where you want to go, whether the trip is domestic or international, the month you want to travel, how many nights and how many people are travelling. Tell her these and ask again.",
+    )
   })
 
   it("refuses a month that has passed", async () => {
@@ -194,5 +209,47 @@ describe("trip_check", () => {
     setUp({ goals: [goal({ ...goaGoal, archivedAt: null, targetDate: "2027-04-30" })] })
     const out = await tripCheckTool.run(ctx, { goal: "goa" })
     expect(out.check).toMatchObject({ goal: "Goa", verdict: "Yes." })
+  })
+})
+
+// The chat loop with trip_check (10.5, the "can I go vietnam?" failure on dev): the model's own
+// text never decides what is shown when details are missing or nothing is comparable.
+describe("trip questions in the chat loop", () => {
+  const chat = (input: unknown, reply: string) =>
+    runChat({
+      provider: mockProvider((_req, round) => (round === 0 ? mockToolCall("trip_check", input) : mockText(reply))),
+      tools: [tripCheckTool as FinanceTool],
+      context: ctx,
+      question: "can I go vietnam? can you estimate my trip plan?",
+    })
+
+  it("no details supplied: shows the question built in code, even when the model wrote a numbered list", async () => {
+    const run = await chat({ destination: "Vietnam" }, "I need a few details first:\n\n1. Which month?\n2. How many nights, say 5?")
+    expect(run.result).toMatchObject({
+      kind: "answer",
+      text: "To estimate a trip to Vietnam from your records, Roma needs to know whether the trip is domestic or international, the month you want to travel, how many nights and how many people are travelling. Tell her these and ask again.",
+      figures: [],
+      checks: [],
+      toolsRan: ["trip_check"],
+    })
+  })
+
+  it("a destination with no comparable: the honest verdict, or the code-built summary in place of other wording", async () => {
+    setUp({ goals: [goaGoal], travelDates: [] })
+    const vietnam = { destination: "Vietnam", scope: "international", month: "2027-04", nights: 6, travellers: 2 }
+    const honest = await chat(vietnam, `${CANT_ESTIMATE} There is no international trip to compare with.`)
+    expect(honest.result).toMatchObject({ kind: "answer", text: `${CANT_ESTIMATE} There is no international trip to compare with.` })
+
+    const vague = await chat(vietnam, "Hard to say without more data.")
+    expect(vague.result).toMatchObject({
+      kind: "answer",
+      text: `${CANT_ESTIMATE} There is no international trip to scale from: no international trip goal with costs, and no past international trip confirmed. A trip goal with its costs filled in would also do.`,
+    })
+  })
+
+  it("a destination with no comparable: a guessed cost is refused, and only the number is reported", async () => {
+    setUp({ goals: [goaGoal], travelDates: [] })
+    const run = await chat({ destination: "Vietnam", scope: "international", month: "2027-04", nights: 6, travellers: 2 }, "It would cost about ₹80,000.")
+    expect(run.result).toEqual({ kind: "unverified", unmatched: ["80000"] })
   })
 })

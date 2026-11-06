@@ -16,6 +16,17 @@ describe("numbers in an answer", () => {
   })
 })
 
+describe("numbered lists (10.5)", () => {
+  it("doesn't read a list marker at the start of a line as a number", () => {
+    expect(numbersIn("I need:\n\n1. Which month?\n2) How many nights?\n  3. How many travellers?")).toEqual([])
+  })
+  it("still reads every figure on a list line, and numbers that aren't markers", () => {
+    expect(numbersIn("1. ₹5,000 on food\nUp 1. 2 people")).toEqual(["5000", "1", "2"])
+    expect(numbersIn("1.5 lakh")).toEqual(["1.5"])
+    expect(checkAnswer("1. You spent ₹9,000.", allowedNumbers([], []))).toEqual({ ok: false, reason: "unverified", unmatched: ["9000"] })
+  })
+})
+
 describe("the figure check", () => {
   it("passes an answer whose every number comes from the tools or the period", () => {
     const text = "You spent ₹12,345.50 from 1 October to 31 October 2026, across 17 expenses. Refunds: ₹500."

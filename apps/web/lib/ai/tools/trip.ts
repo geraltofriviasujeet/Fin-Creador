@@ -90,6 +90,22 @@ export type TripInput = z.infer<typeof input>
 
 const REQUIRED = ["destination", "scope", "month", "nights", "travellers"] as const
 
+const ASK: Record<(typeof REQUIRED)[number], string> = {
+  destination: "where you want to go",
+  scope: "whether the trip is domestic or international",
+  month: "the month you want to travel",
+  nights: "how many nights",
+  travellers: "how many people are travelling",
+}
+
+/** What Roma asks when details are missing, built here and shown as is (never the model's text). */
+export function tripQuestion(destination: string | undefined, missing: readonly (typeof REQUIRED)[number][]): string {
+  const items = missing.map((k) => ASK[k])
+  const list = items.length === 1 ? items[0]! : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`
+  const trip = destination ? `a trip to ${destination}` : "a trip"
+  return `To estimate ${trip} from your records, Roma needs to know ${list}. Tell her these and ask again.`
+}
+
 /** A run with its two figures, added up from the records (profile currency, expenses net of refunds). */
 export type PricedRun = TravelRun & { travelMinor: number; allMinor: number }
 
@@ -171,8 +187,9 @@ export const tripCheckTool: FinanceTool<TripInput> = {
     const missing = REQUIRED.filter((k) => p[k] === undefined)
     if (missing.length > 0) {
       return {
-        data: { ask_for: missing, note: "Ask the person for these, then call trip_check again. Never assume them." },
+        data: { ask_for: missing, note: "The app asks the person for these itself. Reply in one short sentence without numbers." },
         figures: [],
+        needs: { tool: "trip_check", missing: [...missing], question: tripQuestion(p.destination, missing) },
       }
     }
     const { today, currency } = ctx
