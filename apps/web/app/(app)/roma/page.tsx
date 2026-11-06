@@ -1,4 +1,5 @@
-import "@fontsource-variable/lora/wght-italic.css"
+// DM Sans italic for Roma's opening line; layout.tsx loads only the upright face.
+import "@fontsource-variable/dm-sans/wght-italic.css"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { Suspense } from "react"

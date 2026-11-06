@@ -32,7 +32,7 @@ This file is the visual source of truth for web and mobile. Financial rules stay
 | radius-lg / md | 20px / 14px | cards / inner blocks; buttons and inputs 10px |
 | shadow | 0 14px 40px rgba(29,52,41,.07) | modal, hover |
 
-Fonts: Manrope 600/700 (headings, big numbers), DM Sans 400/500/600/700 (body). One exception: Roma's opening line ("I’m Roma, your Intelligent Finance Analyst…") is Lora 700 italic, loaded on the Roma page only.
+Fonts: Manrope 600/700 (headings, big numbers), DM Sans 400/500/600/700 (body).
 Put these in `packages/design-tokens` (single source) and map them into Tailwind theme / shadcn CSS variables on web and a tokens object on mobile. Do not duplicate values by hand.
 
 ## 3. Accessibility changes versus the Figma code
