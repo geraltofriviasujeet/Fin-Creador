@@ -36,6 +36,18 @@ export function categoryMatches(name: string, asked: string): boolean {
   return wanted.length > 0 && wanted.every((w) => have.includes(w))
 }
 
+/**
+ * The categories whose name contains the words asked for (category_breakdown and
+ * search_transactions). None: a ToolError that lists the person's active categories, so they
+ * can see what to ask for.
+ */
+export function matchCategories<C extends { name: string; archived_at: string | null }>(all: readonly C[], asked: string): C[] {
+  const matched = all.filter((c) => categoryMatches(c.name, asked))
+  if (matched.length > 0) return matched
+  const existing = all.filter((c) => c.archived_at === null).map((c) => c.name)
+  throw new ToolError(`No category name contains "${asked}". The person's categories are: ${existing.join(", ") || "none"}.`)
+}
+
 export const categoryBreakdownTool: FinanceTool<CategoryInput> = {
   name: "category_breakdown",
   description:
@@ -55,11 +67,7 @@ export const categoryBreakdownTool: FinanceTool<CategoryInput> = {
 
     if (p.category) {
       const asked = p.category
-      const matched = names.data.filter((c) => categoryMatches(c.name, asked))
-      if (matched.length === 0) {
-        const existing = names.data.filter((c) => c.archived_at === null).map((c) => c.name)
-        throw new ToolError(`No category name contains "${asked}". The person's categories are: ${existing.join(", ") || "none"}.`)
-      }
+      const matched = matchCategories(names.data, asked)
       const rows = matched
         .map((c) => ({ name: c.name, minor: addMinor(...byCategory.filter((r) => r.categoryId === c.id).map((r) => r.expenseMinor)) }))
         .sort((a, b) => b.minor - a.minor || a.name.localeCompare(b.name))
