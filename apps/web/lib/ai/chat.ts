@@ -1,7 +1,8 @@
-import type { DateRange } from "@fin-creador/domain"
+import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber } from "./output"
 import { ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
+import { decimalToMinor } from "./search/totals"
 import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
 import {
   LlmError,
@@ -182,7 +183,7 @@ export async function runChat({
       checks: found.checks,
       toolsRan: found.toolsRan,
       descriptionsSent: found.descriptionsSent,
-      ...webPart(found.web, context),
+      ...webPart(found.web, context, found.checks),
     })
   }
   return done({ kind: "failed", reason: "rounds" })
@@ -212,10 +213,19 @@ export function webNumbers(blocks: readonly WebBlock[]): string[] {
   ])
 }
 
-/** The question's web estimates (the last report wins) and notices. */
-function webPart(blocks: readonly WebBlock[], context: ToolContext): { web?: WebBlock; webNotices?: string[] } {
+/**
+ * The question's web estimates (the last report wins) and notices. A check that offers a
+ * web-assisted line gets one, from the web total in the person's own currency (its higher end);
+ * a total in another currency is never converted, so it gives no web-assisted line.
+ */
+function webPart(blocks: readonly WebBlock[], context: ToolContext, checks: GoalCheck[]): { web?: WebBlock; webNotices?: string[] } {
   const web = blocks.at(-1)
   const notices = context.web ? [...context.web.notices] : []
+  const total = web?.totals.find((t) => t.currency === context.currency)
+  if (total) {
+    const targetMinor = decimalToMinor(total.high, currencyMinorDigits(context.currency))
+    for (const check of checks) if (check.withTarget && targetMinor > 0) check.web = check.withTarget(targetMinor, total.costLines)
+  }
   return { ...(web && web.figures.length > 0 ? { web } : {}), ...(notices.length > 0 ? { webNotices: notices } : {}) }
 }
 

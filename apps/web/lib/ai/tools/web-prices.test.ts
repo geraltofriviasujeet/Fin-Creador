@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest"
+import { z } from "zod"
 import type { UserClient } from "@fin-creador/api"
+import { formatMoney, goalProjection } from "@fin-creador/domain"
 import { runChat } from "../chat"
 import { WEB_TOOLS } from "../handle"
 import { type MockScript, mockProvider, mockText } from "../llm/mock"
 import { NO_USAGE } from "../llm/types"
 import { mockSearchProvider } from "../search/mock"
-import { type SearchDb, WebSession } from "../search/session"
+import { type SearchDb, WEB_NOTICES, WebSession } from "../search/session"
 import type { SearchResult } from "../search/types"
-import type { ToolContext } from "./types"
+import { webTripVerdict } from "./trip"
+import type { FinanceTool, GoalCheck, ToolContext } from "./types"
 import { timesFor, webTotals } from "./web-prices"
 
 // Web lookups through the chat loop, on the mock model and mock search: no paid API, no credit.
@@ -47,7 +50,7 @@ describe("web lookups in Roma's answers", () => {
       ["Return flight", "9000", "flights.example.test"],
     ])
     // 4,500 × 4 nights + 9,000 × 2 travellers.
-    expect(run.result.web?.totals).toEqual([{ currency: "INR", lines: 2, low: "36000", high: "36000" }])
+    expect(run.result.web?.totals).toEqual([{ currency: "INR", lines: 2, costLines: ["stay", "transport"], low: "36000", high: "36000" }])
     // Web figures stay out of the records' figures.
     expect(run.result.figures).toEqual([])
   })
@@ -125,8 +128,103 @@ describe("web totals", () => {
       trip,
     )
     expect(totals).toEqual([
-      { currency: "INR", lines: 2, low: "30000", high: "36002" },
-      { currency: "GBP", lines: 1, low: "600", high: "600" },
+      { currency: "INR", lines: 2, costLines: ["stay", "transport"], low: "30000", high: "36002" },
+      { currency: "GBP", lines: 1, costLines: ["food"], low: "600", high: "600" },
     ])
+  })
+})
+
+describe("the records' verdict and the web-assisted line", () => {
+  // Six months of ₹10,000 net; the trip is in January 2027, so Nov, Dec and Jan: ₹30,000 free.
+  const months = Array.from({ length: 6 }, () => ({ incomeMinor: 20_000_00, expenseMinor: 10_000_00 }))
+  const project = (targetMinor: number) =>
+    goalProjection({ today: "2026-11-06", targetMinor, savedMinor: 0, targetDate: "2027-01-01", months, claims: [], otherGoals: [] })
+  const money = (minor: number) => formatMoney(minor, { currency: "INR" })
+
+  // A stand-in for trip_check: the records estimate ₹20,000 (Yes.); the same projection takes a web total.
+  const tripStandIn: FinanceTool<Record<string, never>> = {
+    name: "trip_check",
+    description: "Test stand-in.",
+    input: z.object({}).strict(),
+    async run() {
+      const records = project(20_000_00)
+      const check: GoalCheck = {
+        kind: "trip",
+        goal: "Goa",
+        verdict: records.verdict === "yes" ? "Yes." : "No.",
+        summary: "Yes. A trip to Goa would cost about ₹20,000 from your records.",
+        assumptions: [],
+        withTarget: (targetMinor, costLines) => webTripVerdict(project(targetMinor), { targetMinor, costLines, travelMonth: "2027-01-01", money }),
+      }
+      return { data: { verdict: check.verdict }, figures: [{ label: "Trip estimate", kind: "money", minor: 20_000_00, currency: "INR" }], check }
+    },
+  }
+
+  it("keeps the records' Yes. when web prices would make it No., and shows both", async () => {
+    const run = await runChat({
+      provider: mockProvider((_req, round) => {
+        if (round === 0) return call({ id: "t", name: "trip_check", input: {} })
+        if (round === 1) return call(lookup("stay"), lookup("transport"))
+        if (round === 2) return call({ id: "f", name: "web_price_figures", input: { figures: [hotel, flight] } })
+        return mockText("Yes. From your records the trip costs about ₹20,000. Web estimates come to ₹36,000 (hotels.example.test, flights.example.test); check the source.")
+      }),
+      tools: [tripStandIn as FinanceTool, ...WEB_TOOLS],
+      context: contextWith(),
+      question: "Can I afford Goa? Check web prices too.",
+    })
+    expect(run.result.kind).toBe("answer")
+    if (run.result.kind !== "answer") return
+    // The answer still opens with the records' verdict, and the check's verdict is unchanged.
+    expect(run.result.text.startsWith("Yes.")).toBe(true)
+    expect(run.result.checks).toHaveLength(1)
+    expect(run.result.checks[0]!.verdict).toBe("Yes.")
+    // ₹36,000 against ₹30,000 free by January: the web-assisted line says No., apart.
+    expect(run.result.checks[0]!.web).toEqual({
+      verdict: "No.",
+      summary:
+        "No. The web prices kept add up to ₹36,000 for stay, travel only, not the whole trip. At your current rate that wouldn't be covered by January 2027. Saving ₹2,000 more a month would cover it. At your current rate it is reached in February 2027.",
+    })
+  })
+
+  it("gives no web-assisted line from a total in another currency (never converted)", async () => {
+    const pounds = [{ title: "Test data", url: "https://uk.example.test/", snippet: "Test data. Rooms about £60 per night." }]
+    const run = await runChat({
+      provider: mockProvider((_req, round) => {
+        if (round === 0) return call({ id: "t", name: "trip_check", input: {} })
+        if (round === 1) return call(lookup("stay"))
+        if (round === 2) return call({ id: "f", name: "web_price_figures", input: { figures: [{ ...hotel, amount: "60", currency: "GBP", source_url: "https://uk.example.test/", quote: "Rooms about £60 per night" }] } })
+        return mockText("Yes. From your records the trip costs about ₹20,000.")
+      }),
+      tools: [tripStandIn as FinanceTool, ...WEB_TOOLS],
+      context: contextWith(mockSearchProvider(() => pounds)),
+      question: "Can I afford Goa? Check web prices too.",
+    })
+    expect(run.result.kind === "answer" && run.result.checks[0]!.web).toBe(undefined)
+    expect(run.result.kind === "answer" && run.result.web?.totals).toEqual([{ currency: "GBP", lines: 1, costLines: ["stay"], low: "240", high: "240" }])
+  })
+
+  it("says plainly when the month's web lookups are used up, and answers from the records", async () => {
+    const capped: SearchDb = { ...db, begin: async () => ({ outcome: "monthly_cap", credits: 0 }) }
+    const web = new WebSession({ provider: mockSearchProvider(() => RESULTS), db: capped, requestId: "r1", terms: { names: [], phrases: [] }, countryCode: "IN" })
+    const run = await runChat({
+      provider: mockProvider((_req, round) => (round === 0 ? call(lookup("stay")) : mockText("I can only answer from your records this time."))),
+      tools: WEB_TOOLS,
+      context: { ...contextWith(), web },
+      question: "What would a Goa hotel cost?",
+    })
+    expect(run.result).toMatchObject({ kind: "answer", webNotices: [WEB_NOTICES.monthly_cap] })
+    expect(WEB_NOTICES.monthly_cap).toBe("Web lookups are used up for this month (they reset on the 1st). This answer uses your own records only.")
+  })
+
+  it("says plainly when the person's lookups for today are used up", async () => {
+    const capped: SearchDb = { ...db, begin: async () => ({ outcome: "daily_limit", credits: 0 }) }
+    const web = new WebSession({ provider: mockSearchProvider(() => RESULTS), db: capped, requestId: "r1", terms: { names: [], phrases: [] }, countryCode: "IN" })
+    const run = await runChat({
+      provider: mockProvider((_req, round) => (round === 0 ? call(lookup("stay")) : mockText("I can only answer from your records this time."))),
+      tools: WEB_TOOLS,
+      context: { ...contextWith(), web },
+      question: "What would a Goa hotel cost?",
+    })
+    expect(run.result).toMatchObject({ kind: "answer", webNotices: [WEB_NOTICES.daily_limit] })
   })
 })

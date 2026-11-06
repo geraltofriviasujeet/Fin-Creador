@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
     async record(turn) {
       const { data, error } = await supabase.rpc("roma_record_turn", {
         p_request_id: turn.requestId,
-        p_conversation_id: turn.conversationId,
+        // Null starts a new conversation; generated argument types can't say a SQL argument takes null.
+        p_conversation_id: turn.conversationId as string,
         p_question: turn.question,
         p_answer: turn.answer,
         p_as_of: turn.asOf,

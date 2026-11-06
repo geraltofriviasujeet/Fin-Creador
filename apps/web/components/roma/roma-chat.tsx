@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
 import { controlClasses } from "@/components/ui/input"
 import type { ChatResponseBody } from "@/lib/ai/handle"
+import { webPrice, webTotal } from "@/lib/ai/web-format"
 import { MAX_QUESTION_CHARS } from "@/lib/ai/limits"
 import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL } from "@/lib/ai/wording"
 import { allowRomaDescriptionsAction } from "@/app/(app)/roma/actions"
@@ -20,7 +21,9 @@ import { cn } from "cn"
 // the recent turns with each question and records the answer; past conversations are listed
 // beside the chat. A stored turn shows its answer text only: figures are not stored, so the
 // figures panel is for answers given in this visit. From 10.4 a goal check shows its verdict
-// (computed in code) above the answer and its assumptions under the figures.
+// (computed in code) above the answer and its assumptions under the figures. From 10.8 web
+// prices sit in their own block after the records' figures, each with its site and link, and a
+// web-assisted verdict is a second, marked line under the records' verdict, never in its place.
 
 export type Turn = {
   id: string
@@ -266,8 +269,17 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
     <div className="mt-3 grid gap-3">
       {reply.checks?.map((c, i) => (
         <div key={i} className="rounded-lg border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
-          <p className="text-xs font-semibold text-muted-foreground">{c.kind === "trip" ? "Trip check" : "Goal check"} · {c.goal}</p>
+          <p className="text-xs font-semibold text-muted-foreground">
+            {c.kind === "trip" ? "Trip check" : "Goal check"} · {c.goal}
+            {c.web ? " · From your records" : ""}
+          </p>
           <p className="font-heading text-lg font-bold text-ink">{c.verdict}</p>
+          {c.web && (
+            <div className="mt-2 border-t border-dashed border-line pt-2" data-testid="web-verdict">
+              <p className="text-xs font-semibold text-muted-foreground">With web estimates, not your records</p>
+              <p className="text-sm text-ink">{c.web.summary}</p>
+            </div>
+          )}
         </div>
       ))}
       <p className="text-sm whitespace-pre-line text-ink">{reply.answer}</p>
@@ -287,6 +299,12 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
           </dl>
         </div>
       )}
+      {reply.web && <WebEstimates web={reply.web} />}
+      {reply.webNotices?.map((n) => (
+        <FormMessage key={n} tone="info">
+          {n}
+        </FormMessage>
+      ))}
       {reply.checks?.map(
         (c, i) =>
           c.assumptions.length > 0 && (
@@ -301,6 +319,38 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
           ),
       )}
     </div>
+  )
+}
+
+/** Web prices kept for this answer (10.8), apart from the records: each with its site and a link to check it. */
+function WebEstimates({ web }: { web: NonNullable<Extract<ChatResponseBody, { status: "answer" }>["web"]> }) {
+  return (
+    <section className="rounded-lg border border-dashed border-line p-3" aria-label="Web estimates">
+      <p className="text-xs font-semibold text-muted-foreground">Web estimates. Check the source.</p>
+      <ul className="mt-2 grid gap-2 text-sm">
+        {web.figures.map((f, i) => (
+          <li key={i} className="flex flex-wrap items-baseline justify-between gap-x-4">
+            <span className="text-muted-foreground">
+              {f.label} ·{" "}
+              <a href={f.url} target="_blank" rel="noopener noreferrer nofollow" className="text-ink underline underline-offset-2">
+                {f.site}
+              </a>
+            </span>
+            <span className="font-semibold text-ink tabular-nums">{webPrice(f)}</span>
+          </li>
+        ))}
+        {web.totals.map((t) => (
+          <li key={t.currency} className="flex flex-wrap items-baseline justify-between gap-x-4 border-t border-line pt-2">
+            <span className="text-muted-foreground">
+              Web total, {t.costLines.join(", ")} only
+              {web.trip ? ` · ${web.trip.nights} ${web.trip.nights === 1 ? "night" : "nights"}, ${web.trip.travellers} ${web.trip.travellers === 1 ? "traveller" : "travellers"}` : ""}
+            </span>
+            <span className="font-semibold text-ink tabular-nums">{webTotal(t)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-muted-foreground">Prices as the sites show them, in their own currency, not converted. They can change; check the source before you rely on them.</p>
+    </section>
   )
 }
 

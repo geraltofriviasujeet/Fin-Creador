@@ -30,7 +30,7 @@ import {
   YEARS,
 } from "./goals"
 import { tripPlaceScope } from "@fin-creador/schemas"
-import { type Figure, type FinanceTool, type GoalCheck, type ToolContext, ToolError } from "./types"
+import { type Figure, type FinanceTool, type GoalCheck, type ToolContext, ToolError, type WebVerdict } from "./types"
 
 // trip_check (Sprint 10.5): what a trip would cost, from the person's own records only, and
 // whether they can pay for it by the month they want. The estimate is tripEstimate and the
@@ -44,6 +44,9 @@ import { type Figure, type FinanceTool, type GoalCheck, type ToolContext, ToolEr
 //   * No comparable of the trip's scope: "I can't estimate this from your records.", never a
 //     guess. Without web research until 10.8.
 //   * An existing trip goal is checked by goal_projection.
+//   * From 10.8 the check carries `withTarget`: the same projection (same records, same month)
+//     with only the target replaced by a web total, for a separate web-assisted line. The
+//     records' verdict above is never changed by it.
 
 /** Runs offered (newest first): each costs one dashboard_breakdown call. */
 export const MAX_RUNS = 6
@@ -249,6 +252,19 @@ export const tripCheckTool: FinanceTool<TripInput> = {
       { label: "Days counted", kind: "count", value: size.days },
     ]
     const runDates = priced.flatMap((r) => [r.from, r.to])
+    const withTarget = (targetMinor: number, costLines: readonly string[]): WebVerdict =>
+      webTripVerdict(
+        goalProjection({
+          today,
+          targetMinor,
+          savedMinor: 0,
+          targetDate: travelMonth,
+          months: basis.complete,
+          claims: [...basis.claims.loans, ...basis.claims.dues],
+          otherGoals: otherGoals(basis.goals.active, currency, null).map((g) => g.plan),
+        }),
+        { targetMinor, costLines, travelMonth, money },
+      )
 
     if (!estimate) {
       const confirm =
@@ -256,7 +272,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
           ? ` These look like past trips: ${priced.map((r) => `${r.from} to ${r.to}, ${money(r.travelMinor)} on Travel, ${money(r.allMinor)} all spending in those dates`).join("; ")}. If one was a ${tripScope} trip, say how many travelled and which figure to use (all spending in those dates may include things unrelated to the trip).`
           : ""
       const summary = `${CANT_ESTIMATE} There is no ${tripScope} trip to scale from: no ${tripScope} trip goal with costs, and no past ${tripScope} trip confirmed.${confirm} A trip goal with its costs filled in would also do.`
-      const check: GoalCheck = { kind: "trip", goal: destination, verdict: CANT_ESTIMATE, summary, assumptions: scopeAssumption }
+      const check: GoalCheck = { kind: "trip", goal: destination, verdict: CANT_ESTIMATE, summary, assumptions: scopeAssumption, withTarget }
       return {
         data: {
           can_estimate: false,
@@ -346,7 +362,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
         hasLoan: false,
       }),
     ]
-    const check: GoalCheck = { kind: "trip", goal: destination, verdict: VERDICT_WORDS[projection.verdict], summary, assumptions }
+    const check: GoalCheck = { kind: "trip", goal: destination, verdict: VERDICT_WORDS[projection.verdict], summary, assumptions, withTarget }
 
     return {
       data: {
@@ -388,6 +404,30 @@ export const tripCheckTool: FinanceTool<TripInput> = {
       subject: { checked: destination, goals: allGoalNames(basis) },
     }
   },
+}
+
+const COST_LINE_WORDS: Record<string, string> = { transport: "travel", stay: "stay", food: "food", activities: "activities", visa: "visa" }
+
+/**
+ * The web-assisted line (10.8): the trip check's projection run on a web total instead of the
+ * records' estimate. Said as resting on web prices and covering only the costs looked up.
+ */
+export function webTripVerdict(
+  projection: GoalProjection,
+  a: { targetMinor: number; costLines: readonly string[]; travelMonth: IsoDate; money: (minor: number) => string },
+): WebVerdict {
+  const verdict = VERDICT_WORDS[projection.verdict]
+  const lines = a.costLines.map((l) => COST_LINE_WORDS[l] ?? l).join(", ")
+  const total = `The web prices kept add up to ${a.money(a.targetMinor)} for ${lines} only, not the whole trip.`
+  const month = monthName(a.travelMonth)
+  let outcome: string
+  if (projection.verdict === "yes") outcome = `At your current rate that would be covered by ${month}.`
+  else if (projection.verdict === "no") {
+    const more = projection.extraMonthlyMinor === null ? "" : ` Saving ${a.money(projection.extraMonthlyMinor)} more a month would cover it.`
+    const reached = projection.reachMonth ? ` At your current rate it is reached in ${monthName(projection.reachMonth)}.` : ""
+    outcome = `At your current rate that wouldn't be covered by ${month}.${more}${reached}`
+  } else outcome = "There aren't enough months in your records to say."
+  return { verdict, summary: `${verdict} ${total} ${outcome}` }
 }
 
 type Slip = { name: string; reachMonth: IsoDate | null }

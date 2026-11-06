@@ -1338,12 +1338,60 @@ export type Database = {
           },
         ]
       }
+      roma_search_usage: {
+        Row: {
+          created_at: string
+          credits: number | null
+          ended_at: string | null
+          id: string
+          provider: string
+          request_id: string
+          reserved_credits: number
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          credits?: number | null
+          ended_at?: string | null
+          id?: string
+          provider: string
+          request_id: string
+          reserved_credits: number
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          credits?: number | null
+          ended_at?: string | null
+          id?: string
+          provider?: string
+          request_id?: string
+          reserved_credits?: number
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roma_search_usage_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "roma_usage"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       roma_settings: {
         Row: {
           enabled: boolean
           id: boolean
           monthly_budget_usd: number
           reserve_usd: number
+          search_enabled: boolean
+          search_monthly_credits: number
+          search_reserve_credits: number
+          search_user_daily_credits: number
           updated_at: string
           user_daily_requests: number
           user_monthly_budget_usd: number
@@ -1353,6 +1401,10 @@ export type Database = {
           id?: boolean
           monthly_budget_usd?: number
           reserve_usd?: number
+          search_enabled?: boolean
+          search_monthly_credits?: number
+          search_reserve_credits?: number
+          search_user_daily_credits?: number
           updated_at?: string
           user_daily_requests?: number
           user_monthly_budget_usd?: number
@@ -1362,6 +1414,10 @@ export type Database = {
           id?: boolean
           monthly_budget_usd?: number
           reserve_usd?: number
+          search_enabled?: boolean
+          search_monthly_credits?: number
+          search_reserve_credits?: number
+          search_user_daily_credits?: number
           updated_at?: string
           user_daily_requests?: number
           user_monthly_budget_usd?: number
@@ -2620,11 +2676,12 @@ export type Database = {
         Args: { p_row: Database["public"]["Tables"]["roma_usage"]["Row"] }
         Returns: number
       }
+      roma_prune_conversations: { Args: never; Returns: number }
       roma_record_turn: {
         Args: {
           p_answer: string
           p_as_of: string
-          p_conversation_id: string | null
+          p_conversation_id: string
           p_periods: unknown[]
           p_question: string
           p_request_id: string
@@ -2643,6 +2700,12 @@ export type Database = {
           credits: number
           outcome: string
         }[]
+      }
+      roma_search_counted: {
+        Args: {
+          p_row: Database["public"]["Tables"]["roma_search_usage"]["Row"]
+        }
+        Returns: number
       }
       roma_search_release: { Args: { p_request_id: string }; Returns: boolean }
       roma_search_settle: {

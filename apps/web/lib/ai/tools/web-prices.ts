@@ -101,15 +101,16 @@ export function webTotals(kept: readonly (KeptWebFigure & { cost_line: string })
       if (compareDecimals(amount, line.high) > 0) line.high = amount
     }
   }
-  const byCurrency = new Map<string, { lines: number; low: string[]; high: string[] }>()
-  for (const line of lines.values()) {
-    const c = byCurrency.get(line.currency) ?? { lines: 0, low: [], high: [] }
+  const byCurrency = new Map<string, { lines: number; costLines: string[]; low: string[]; high: string[] }>()
+  for (const [key, line] of lines.entries()) {
+    const c = byCurrency.get(line.currency) ?? { lines: 0, costLines: [], low: [], high: [] }
     c.lines++
+    c.costLines.push(key.slice(line.currency.length + 1))
     c.low.push(line.low)
     c.high.push(line.high)
     byCurrency.set(line.currency, c)
   }
-  return [...byCurrency.entries()].map(([currency, c]) => ({ currency, lines: c.lines, low: addDecimals(...c.low), high: addDecimals(...c.high) }))
+  return [...byCurrency.entries()].map(([currency, c]) => ({ currency, lines: c.lines, costLines: c.costLines, low: addDecimals(...c.low), high: addDecimals(...c.high) }))
 }
 
 export const webPriceFiguresTool: FinanceTool<WebFiguresInput> = {

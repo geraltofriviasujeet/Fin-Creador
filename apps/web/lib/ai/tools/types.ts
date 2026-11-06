@@ -36,7 +36,17 @@ export type GoalCheck = {
   /** The whole result in words, built in code: shown instead when the answer doesn't start with the verdict. */
   summary: string
   assumptions: string[]
+  /**
+   * 10.8: the same projection with only the target replaced by a web total (profile currency,
+   * minor units), for the separate web-assisted line. Never changes `verdict`.
+   */
+  withTarget?: (targetMinor: number, costLines: readonly string[]) => WebVerdict
+  /** The web-assisted verdict, when web prices were kept for this answer. */
+  web?: WebVerdict
 }
+
+/** A verdict that rests on web estimates (10.8), worked out in code and always shown second. */
+export type WebVerdict = { verdict: string; summary: string }
 
 /**
  * A check that can't run until the person says more (10.5): the app shows `question`, built in
@@ -66,7 +76,7 @@ export type ToolOutput = {
 }
 
 /** A web total for one currency (10.8): the cost lines' lowest and highest prices added up, as plain decimals. */
-export type WebTotal = { currency: string; lines: number; low: string; high: string }
+export type WebTotal = { currency: string; lines: number; costLines: string[]; low: string; high: string }
 
 /** Web estimates for one answer (10.8): each price as found, with its site, and totals per currency. */
 export type WebBlock = {

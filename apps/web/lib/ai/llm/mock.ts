@@ -33,10 +33,15 @@ export const mockToolCall = (name: string, input: unknown, id = `call-${name}`):
  * figures. Labelled as a test answer. "Can I reach <goal>?" asks goal_projection and repeats its
  * code-built verdict summary (10.4). "Trip to <place>, <scope>, <YYYY-MM>, <n> nights, <n>
  * travellers" asks trip_check, optionally confirming one run: "; <from> to <to> was <scope>
- * for <n>, <travel|all_spending>" (10.5).
+ * for <n>, <travel|all_spending>" (10.5). "Web prices for a trip to <place>, <YYYY-MM>, <n>
+ * nights, <n> travellers" (10.8) asks trip_check, then web_price_lookup for stay and transport,
+ * then reports the mock search's two prices with web_price_figures, then repeats trip_check's
+ * code-built summary.
  */
 const defaultScript: MockScript = (request) => {
   const last = request.messages.at(-1)
+  const web = webScript(request)
+  if (web) return web
   if (last?.role === "tool_results") {
     const result = JSON.parse(last.results[0]?.content ?? "{}") as {
       period?: { from: string; to: string }
@@ -77,4 +82,33 @@ const defaultScript: MockScript = (request) => {
     })
   }
   return mockToolCall("spending_for_period", { period: /last month/i.test(text) ? "last_month" : "this_month" })
+}
+
+const WEB_TRIP = /^web prices for a trip to (.+?), (\d{4}-\d{2}), (\d+) nights, (\d+) travellers$/i
+
+/** The 10.8 web flow, one step per round, from which tool the previous round called. */
+function webScript(request: LlmRequest): LlmResponse | null {
+  const question = request.messages.filter((m) => m.role === "user").at(-1)
+  const trip = WEB_TRIP.exec(question?.role === "user" ? question.text.trim() : "")
+  if (!trip) return null
+  const [, destination, month, nights, travellers] = trip
+  const tripInput = { destination, month, nights: Number(nights), travellers: Number(travellers) }
+  const asked = request.messages.filter((m) => m.role === "assistant").flatMap((m) => (m.role === "assistant" ? m.toolCalls.map((c) => c.name) : []))
+  const results = request.messages.filter((m) => m.role === "tool_results")
+  if (!asked.includes("trip_check")) return mockToolCall("trip_check", tripInput)
+  if (!asked.includes("web_price_lookup")) {
+    const lookup = (cost_line: string) => ({ id: `call-${cost_line}`, name: "web_price_lookup", input: { kind: "trip", ...tripInput, cost_line } })
+    return { stop: "tool_use", text: "", toolCalls: [lookup("stay"), lookup("transport")], usage: NO_USAGE }
+  }
+  if (!asked.includes("web_price_figures")) {
+    return mockToolCall("web_price_figures", {
+      figures: [
+        { label: "Mid-range hotel", amount: "4,500", currency: "INR", per: "night", cost_line: "stay", source_url: "https://example.test/hotels", quote: "Mid-range hotels cost about ₹4,500 per night" },
+        { label: "Return flight", amount: "18,000", currency: "INR", per: "person", cost_line: "transport", source_url: "https://example.test/flights", quote: "Return flights from about ₹18,000 per person" },
+      ],
+    })
+  }
+  const first = results[0]?.role === "tool_results" ? results[0].results[0]?.content : undefined
+  const summary = (JSON.parse(first ?? "{}") as { verdict_summary?: string }).verdict_summary
+  return mockText(`${summary ?? "I couldn't check this trip."} (Test answer.)`)
 }

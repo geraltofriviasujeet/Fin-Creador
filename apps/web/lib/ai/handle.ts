@@ -120,7 +120,8 @@ export type ChatResponseBody =
       /** Matching descriptions were left out: show the notice and ask once (10.2). */
       descriptionsNotice?: true
       /** Goal and trip checks (10.4, 10.5): the verdict computed in code and its assumptions. */
-      checks?: { kind?: "trip"; goal: string; verdict: string; assumptions: string[] }[]
+      /** `web`: the separate web-assisted line (10.8), shown after the records' verdict, never instead of it. */
+      checks?: { kind?: "trip"; goal: string; verdict: string; assumptions: string[]; web?: { verdict: string; summary: string } }[]
       /** Web estimates (10.8): prices as found with their site and link, totals per currency; never part of the verdict. */
       web?: WebBlock
       /** Why web lookups were skipped (caps, timeouts). */
@@ -268,7 +269,9 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           figures: result.figures.filter((f) => !f.hideWhenZero || figureValue(f) !== 0).map((f) => ({ label: f.label, value: formatFigure(f) })),
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
-          ...(result.checks.length > 0 ? { checks: result.checks.map(({ kind, goal, verdict, assumptions }) => ({ ...(kind ? { kind } : {}), goal, verdict, assumptions })) } : {}),
+          ...(result.checks.length > 0
+            ? { checks: result.checks.map(({ kind, goal, verdict, assumptions, web }) => ({ ...(kind ? { kind } : {}), goal, verdict, assumptions, ...(web ? { web } : {}) })) }
+            : {}),
           ...(result.web ? { web: result.web } : {}),
           ...(result.webNotices ? { webNotices: result.webNotices } : {}),
           conversationId: recorded?.conversationId ?? null,

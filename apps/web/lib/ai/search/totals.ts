@@ -32,3 +32,12 @@ export function compareDecimals(a: string, b: string): number {
   const y = toBig(b, scale)
   return x < y ? -1 : x > y ? 1 : 0
 }
+
+/** A decimal amount in minor units (`digits` of them), rounded up when it has more: a total is never understated. */
+export function decimalToMinor(amount: string, digits: number): number {
+  const [whole = "0", fraction = ""] = amount.split(".")
+  let minor = BigInt(whole + fraction.slice(0, digits).padEnd(digits, "0"))
+  if (/[1-9]/.test(fraction.slice(digits))) minor += 1n
+  if (minor > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError("Amount too large")
+  return Number(minor)
+}
