@@ -1,6 +1,7 @@
 "use client"
 
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
@@ -43,7 +44,37 @@ type Props = {
   missing?: boolean
 }
 
-export function RomaChat({ greeting, timeZone, conversations: initialConversations, open, missing = false }: Props) {
+// Opening a conversation from the list is a navigation, and the chat starts afresh for it (like
+// the statement import keyed by card). The key follows the conversation in the address rather
+// than the server's props: the chat moves the address itself (a new conversation, the first
+// answer recorded) without a server render, so Next can open a conversation it already holds
+// without sending new props, so it is asked for them again. Those moves are the chat's own and
+// keep its state.
+export function RomaChat(props: Props) {
+  const router = useRouter()
+  const inAddress = useSearchParams().get("c")
+  const [seen, setSeen] = useState(inAddress)
+  const [moved, setMoved] = useState<string | null | undefined>(undefined)
+  const [generation, setGeneration] = useState(0)
+  if (inAddress !== seen) {
+    setSeen(inAddress)
+    setMoved(undefined)
+    if (inAddress !== moved) setGeneration((g) => g + 1)
+  }
+  useEffect(() => {
+    if (generation > 0) router.refresh()
+  }, [generation, router])
+  return <Conversation key={generation} {...props} onMove={setMoved} />
+}
+
+function Conversation({
+  greeting,
+  timeZone,
+  conversations: initialConversations,
+  open,
+  missing = false,
+  onMove,
+}: Props & { onMove: (id: string | null) => void }) {
   const [question, setQuestion] = useState("")
   const [turns, setTurns] = useState<Turn[]>(open?.turns ?? [])
   const [conversationId, setConversationId] = useState<string | null>(open?.id ?? null)
@@ -52,8 +83,7 @@ export function RomaChat({ greeting, timeZone, conversations: initialConversatio
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [consent, setConsent] = useState<Consent>("ask")
-  // Opening a conversation from the list is a navigation: the server sends new props, and the
-  // chat shows that conversation even if it is the one already in the address.
+  // The props the server sent after the address moved (see RomaChat) replace what was shown.
   const [shown, setShown] = useState({ open, initialConversations })
   if (shown.open !== open || shown.initialConversations !== initialConversations) {
     setShown({ open, initialConversations })
@@ -106,6 +136,7 @@ export function RomaChat({ greeting, timeZone, conversations: initialConversatio
     })
     if (id !== conversationId) {
       setConversationId(id)
+      onMove(id)
       window.history.replaceState(null, "", `/roma?c=${id}`)
     }
   }
@@ -119,6 +150,7 @@ export function RomaChat({ greeting, timeZone, conversations: initialConversatio
     setConversationId(null)
     setFailure(null)
     setNotice(null)
+    onMove(null)
     window.history.replaceState(null, "", "/roma")
   }
 
