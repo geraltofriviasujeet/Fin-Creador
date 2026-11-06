@@ -5,7 +5,7 @@ import { accountBalancesTool, netWorthTool } from "./balances"
 import { incomeVsExpensesTool, savingsRateTool } from "./cash-flow"
 import { categoryBreakdownTool, categoryMatches } from "./categories"
 import { loansAndCardsTool } from "./liabilities"
-import { SEARCH_LIMIT, cleanDescription, searchTransactionsTool } from "./search"
+import { MAX_MATCHED_CATEGORIES, SEARCH_LIMIT, cleanDescription, searchTransactionsTool } from "./search"
 import { type ToolContext, ToolError, toToolDef } from "./types"
 
 // The 10.2 tools against a stand-in for the signed-in user's client. The page loaders behind
@@ -23,7 +23,7 @@ vi.mock("@fin-creador/api", async (importOriginal) => ({ ...(await importOrigina
 type Calls = { name: string; args: unknown }[]
 
 /** rpc answers by function name; from(table) answers every chain with that table's rows. */
-function fakeClient(rpc: Record<string, unknown[] | null>, tables: Record<string, unknown[]> = {}, calls: Calls = []) {
+function fakeClient(rpc: Record<string, unknown[] | null | ((args: Record<string, unknown>) => unknown[])>, tables: Record<string, unknown[]> = {}, calls: Calls = []) {
   const query = (rows: unknown[] | undefined) => {
     const result = rows ? { data: rows, error: null } : { data: null, error: { code: "XX000", message: "down" } }
     const chain: Record<string, unknown> = { then: (resolve: (r: unknown) => unknown) => resolve(result) }
@@ -33,7 +33,8 @@ function fakeClient(rpc: Record<string, unknown[] | null>, tables: Record<string
   return {
     rpc: async (name: string, args: unknown) => {
       calls.push({ name, args })
-      const rows = rpc[name]
+      const answer = rpc[name]
+      const rows = typeof answer === "function" ? answer(args as Record<string, unknown>) : answer
       return rows ? { data: rows, error: null } : { data: null, error: { code: "XX000", message: "down" } }
     },
     from: (table: string) => query(tables[table]),
@@ -206,7 +207,7 @@ describe("search_transactions", () => {
     created_at: "2026-10-10T10:00:00.123456+00:00",
     void_reason: null,
   })
-  const tables = { categories: [{ id: "c1", name: "Food" }], accounts: [{ id: "acc-1", name: "HDFC Savings" }] }
+  const tables = { categories: [{ id: "c1", name: "Food", archived_at: null }], accounts: [{ id: "acc-1", name: "HDFC Savings" }] }
 
   it("asks for at most 20 entries and sends names, never IDs or digits of accounts", async () => {
     const calls: Calls = []
@@ -246,13 +247,58 @@ describe("search_transactions", () => {
     expect(none.data).toMatchObject({ entries: [], shown: 0, more_not_shown: false, note: "No entries match." })
   })
 
-  it("finds a category by name, and refuses one that doesn't exist", async () => {
-    const calls: Calls = []
-    await searchTransactionsTool.run(ctx(fakeClient({ list_transactions: [] }, tables, calls)), { period: "this_month", category: "food" })
-    expect(calls[0]?.args).toMatchObject({ p_category_id: "c1" })
-    await expect(searchTransactionsTool.run(ctx(fakeClient({ list_transactions: [] }, tables)), { period: "this_month", category: "Pets" })).rejects.toThrow(
-      "There is no category called Pets.",
-    )
+  describe("a category asked for by name (the same matcher as category_breakdown)", () => {
+    const named = {
+      categories: [
+        { id: "f1", name: "Food & dining", archived_at: null },
+        { id: "f2", name: "Fast food", archived_at: null },
+        { id: "r1", name: "Rent & housing", archived_at: null },
+        { id: "o1", name: "Old stuff", archived_at: "2026-01-01T00:00:00Z" },
+      ],
+      accounts: tables.accounts,
+    }
+    const inCategory = (categoryId: string, i: number, day: string) => ({ ...entry(i, null), category_id: categoryId, occurred_on: day })
+    const byCategory = (pages: Record<string, unknown[]>) => (args: Record<string, unknown>) => pages[String(args.p_category_id)] ?? []
+    const run = (category: string, pages: Record<string, unknown[]>, calls: Calls = []) =>
+      searchTransactionsTool.run(ctx(fakeClient({ list_transactions: byCategory(pages) }, named, calls)), { period: "this_month", category })
+
+    it("finds a category from part of its name, case-insensitively", async () => {
+      const calls: Calls = []
+      const out = await run("RENT", { r1: [inCategory("r1", 1, "2026-11-01")] }, calls)
+      expect(calls.map((c) => (c.args as { p_category_id: string }).p_category_id)).toEqual(["r1"])
+      expect(out.data).toMatchObject({ categories_searched: ["Rent & housing"], shown: 1 })
+      expect(out.data.entries).toEqual([expect.objectContaining({ category: "Rent & housing", amount: "₹450.01" })])
+    })
+
+    it("searches every matching category and merges them, newest first", async () => {
+      const calls: Calls = []
+      const out = await run("food", { f1: [inCategory("f1", 1, "2026-11-02")], f2: [inCategory("f2", 2, "2026-11-04")] }, calls)
+      expect(calls.map((c) => (c.args as { p_category_id: string }).p_category_id).sort()).toEqual(["f1", "f2"])
+      expect(out.data).toMatchObject({ categories_searched: ["Food & dining", "Fast food"], shown: 2, more_not_shown: false })
+      expect((out.data.entries as { date: string; category: string }[]).map((e) => [e.date, e.category])).toEqual([
+        ["2026-11-04", "Fast food"],
+        ["2026-11-02", "Food & dining"],
+      ])
+    })
+
+    it("keeps a small category's entry and caps the merged list at 20", async () => {
+      const busy = Array.from({ length: SEARCH_LIMIT }, (_, i) => inCategory("f1", i, "2026-11-01"))
+      const out = await run("food", { f1: busy, f2: [inCategory("f2", 99, "2026-11-05")] })
+      expect(out.data).toMatchObject({ shown: SEARCH_LIMIT, more_not_shown: true })
+      expect((out.data.entries as { category: string }[])[0]).toMatchObject({ category: "Fast food", date: "2026-11-05" })
+    })
+
+    it("asks for a narrower name when too many categories match", async () => {
+      const many = Array.from({ length: MAX_MATCHED_CATEGORIES + 1 }, (_, i) => ({ id: `s${i}`, name: `Shop ${i}`, archived_at: null }))
+      const calls: Calls = []
+      const out = searchTransactionsTool.run(ctx(fakeClient({ list_transactions: [] }, { categories: many, accounts: [] }, calls)), { period: "this_month", category: "shop" })
+      await expect(out).rejects.toThrow(`"shop" matches ${MAX_MATCHED_CATEGORIES + 1} categories`)
+      expect(calls).toEqual([])
+    })
+
+    it("says when nothing matches and lists the active categories", async () => {
+      await expect(run("pets", {})).rejects.toThrow('No category name contains "pets". The person\'s categories are: Food & dining, Fast food, Rent & housing.')
+    })
   })
 
   it("cleans every description again: long digit runs, emails and UPI handles go", () => {
