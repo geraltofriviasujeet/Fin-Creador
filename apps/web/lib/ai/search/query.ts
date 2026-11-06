@@ -19,29 +19,61 @@ export type WebTripLine = (typeof WEB_TRIP_LINES)[number]
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
 const placeText = z.string().trim().min(1).max(40)
 
-export const webLookupInput = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("trip"),
-      destination: placeText.describe("Where, as the person said it. Must be a listed country, Indian state or city."),
-      month: month.describe("Travel month, YYYY-MM."),
-      nights: z.number().int().min(1).max(30),
-      travellers: z.number().int().min(1).max(9),
-      cost_line: z.enum(WEB_TRIP_LINES).describe("One cost line to look up."),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("vehicle"),
-      vehicle: z.enum(["bike", "car", "hmv"]),
-      make: z.string().trim().min(1).max(40).describe("A make from the app's vehicle list."),
-      model: z.string().trim().min(1).max(40).optional().describe("A model of that make from the app's list."),
-      month: month.describe("Purchase month, YYYY-MM."),
-    })
-    .strict(),
-])
+const tripLookup = z
+  .object({
+    kind: z.literal("trip"),
+    destination: placeText,
+    month,
+    nights: z.number().int().min(1).max(30),
+    travellers: z.number().int().min(1).max(9),
+    cost_line: z.enum(WEB_TRIP_LINES),
+  })
+  .strict()
 
-export type WebLookupInput = z.infer<typeof webLookupInput>
+const vehicleLookup = z
+  .object({
+    kind: z.literal("vehicle"),
+    vehicle: z.enum(["bike", "car", "hmv"]),
+    make: z.string().trim().min(1).max(40),
+    model: z.string().trim().min(1).max(40).optional(),
+    month,
+  })
+  .strict()
+
+export type WebLookupInput = z.infer<typeof tripLookup> | z.infer<typeof vehicleLookup>
+
+/** Only the fields that were given: the per-kind schemas are strict. */
+const given = (v: Record<string, unknown>) => Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined))
+
+/** The lookup as one of its two kinds; throws on a mix (webLookupInput has already refused one). */
+export const toLookup = (v: Record<string, unknown>): WebLookupInput =>
+  v.kind === "trip" ? tripLookup.parse(given(v)) : vehicleLookup.parse(given(v))
+
+/**
+ * The model-facing input: one flat object, because a tool's input schema must be an object at
+ * the top (a union is refused by the provider). Which fields a kind needs, and that no other
+ * kind's fields are sent, is checked against the two strict schemas above.
+ */
+export const webLookupInput = z
+  .object({
+    kind: z.enum(["trip", "vehicle"]),
+    destination: placeText.optional().describe("Trip: where, as the person said it. Must be a listed country, Indian state or city."),
+    month: month.describe("Travel or purchase month, YYYY-MM."),
+    nights: z.number().int().min(1).max(30).optional().describe("Trip only."),
+    travellers: z.number().int().min(1).max(9).optional().describe("Trip only."),
+    cost_line: z.enum(WEB_TRIP_LINES).optional().describe("Trip only: one cost line to look up."),
+    vehicle: z.enum(["bike", "car", "hmv"]).optional().describe("Vehicle only."),
+    make: z.string().trim().min(1).max(40).optional().describe("Vehicle only: a make from the app's vehicle list."),
+    model: z.string().trim().min(1).max(40).optional().describe("Vehicle only: a model of that make from the app's list."),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    const parsed = (v.kind === "trip" ? tripLookup : vehicleLookup).safeParse(given(v))
+    if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue({ code: "custom", message: issue.message, path: issue.path })
+  })
+
+export type WebLookupFields = z.infer<typeof webLookupInput>
+
 
 /** The person's own words that must never reach a search provider. */
 export type PrivateTerms = {

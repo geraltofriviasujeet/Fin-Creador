@@ -3,14 +3,14 @@ import { z } from "zod"
 import type { UserClient } from "@fin-creador/api"
 import { formatMoney, goalProjection } from "@fin-creador/domain"
 import { runChat } from "../chat"
-import { WEB_TOOLS } from "../handle"
+import { ROMA_TOOLS, WEB_TOOLS } from "../handle"
 import { type MockScript, mockProvider, mockText } from "../llm/mock"
 import { NO_USAGE } from "../llm/types"
 import { mockSearchProvider } from "../search/mock"
 import { type SearchDb, WEB_NOTICES, WebSession } from "../search/session"
 import type { SearchResult } from "../search/types"
 import { webTripVerdict } from "./trip"
-import type { FinanceTool, GoalCheck, ToolContext } from "./types"
+import { type FinanceTool, type GoalCheck, type ToolContext, toToolDef } from "./types"
 import { timesFor, webTotals } from "./web-prices"
 
 // Web lookups through the chat loop, on the mock model and mock search: no paid API, no credit.
@@ -35,6 +35,28 @@ const flight = { label: "Return flight", amount: "9,000", currency: "INR", per: 
 
 const ask = (script: MockScript, context = contextWith()) =>
   runChat({ provider: mockProvider(script), tools: WEB_TOOLS, context, question: "What would a Goa trip cost on the web?" })
+
+describe("tool definitions sent to the provider", () => {
+  // Anthropic refuses the whole request when one tool's input schema isn't an object at the top
+  // (seen on dev, 2026-11-07: a union gave "input_schema.type: Field required"); the mock doesn't check.
+  it("has an object at the top of every tool's input schema, with no union there", () => {
+    for (const tool of [...ROMA_TOOLS, ...WEB_TOOLS]) {
+      const schema = toToolDef(tool).inputSchema
+      expect(schema, tool.name).toMatchObject({ type: "object" })
+      expect(schema, tool.name).not.toHaveProperty("oneOf")
+      expect(schema, tool.name).not.toHaveProperty("anyOf")
+    }
+  })
+
+  it("still takes only one kind's fields in a lookup", () => {
+    const input = WEB_TOOLS[0]!.input
+    expect(input.safeParse(lookup("stay").input).success).toBe(true)
+    expect(input.safeParse({ kind: "vehicle", vehicle: "car", make: "Tata", model: "Nexon", month: "2027-03" }).success).toBe(true)
+    expect(input.safeParse({ ...lookup("stay").input, make: "Tata" }).success).toBe(false)
+    expect(input.safeParse({ kind: "trip", destination: "Goa", month: "2027-01", cost_line: "stay" }).success).toBe(false)
+    expect(input.safeParse({ kind: "vehicle", vehicle: "car", month: "2027-03" }).success).toBe(false)
+  })
+})
 
 describe("web lookups in Roma's answers", () => {
   it("keeps verified prices, works out the totals in code, and lets the answer quote them", async () => {

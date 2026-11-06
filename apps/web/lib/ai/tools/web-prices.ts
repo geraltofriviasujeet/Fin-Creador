@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { WEB_TRIP_LINES, type WebLookupInput, webLookupInput } from "../search/query"
+import { WEB_TRIP_LINES, type WebLookupFields, toLookup, webLookupInput } from "../search/query"
 import { addDecimals, compareDecimals, multiplyDecimal } from "../search/totals"
 import { type KeptWebFigure, siteOf, verifyWebFigure, webFigureInput } from "../search/verify"
 import { type FinanceTool, ToolError, type WebBlock, type WebTotal } from "./types"
@@ -14,13 +14,14 @@ import { type FinanceTool, ToolError, type WebBlock, type WebTotal } from "./typ
 /** Snippet characters sent to the model per result. */
 const SNIPPET_CHARS = 600
 
-export const webPriceLookupTool: FinanceTool<WebLookupInput> = {
+export const webPriceLookupTool: FinanceTool<WebLookupFields> = {
   name: "web_price_lookup",
   description:
     "Looks up current prices on the web for one cost line of a trip (a listed destination) or for a listed vehicle. Only when the person asks what something would cost and their records can't say, or they ask for web prices. At most 3 per question. Then report the prices you read with web_price_figures.",
   input: webLookupInput,
-  async run(ctx, input) {
+  async run(ctx, fields) {
     if (!ctx.web) throw new ToolError("Web lookups are off. Answer from the person's records only.")
+    const input = toLookup(fields)
     const outcome = await ctx.web.lookup(input, AbortSignal.timeout(10_000))
     if (!outcome.ok) {
       const why: Record<typeof outcome.reason, string> = {
