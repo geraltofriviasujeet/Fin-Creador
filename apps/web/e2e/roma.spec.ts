@@ -100,3 +100,66 @@ test("turn Roma on, ask what I spent this month, find entries, allow description
   await page.goto("/roma")
   await expect(page.getByText("Roma is off", { exact: true })).toBeVisible()
 })
+
+test("conversations: follow up, reopen, start a new one, delete one, delete all (10.3)", async ({ page }) => {
+  await signUpConfirmed(page, "Kabir Rao", uniqueEmail("roma-history"))
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
+  await addEntry(page, { amount: "250", category: "Groceries", from: "HDFC Bank ··4821" })
+  await page.goto("/settings")
+  await page.getByRole("button", { name: "Turn Roma on" }).click()
+  await expect(page.getByRole("status").getByText("Roma is on.")).toBeVisible()
+  await expect(page.getByText(/^You have no saved conversations with Roma\. Conversations are deleted 180 days after the last message\.$/)).toBeVisible()
+
+  await page.goto("/roma")
+  const history = page.getByRole("navigation", { name: "Past conversations" })
+  await expect(history.getByText("No past conversations yet.")).toBeVisible()
+  await expect(history.getByText("Conversations are deleted 180 days after the last message.")).toBeVisible()
+
+  // Two questions in one conversation: one entry in the list, and the address keeps it.
+  const box = page.getByLabel("Your question")
+  const answers = page.getByRole("list", { name: "Roma's answers" })
+  await box.fill("What did I spend this month?")
+  await box.press("Enter")
+  await expect(answers.getByText(/^You spent ₹250 from /)).toBeVisible()
+  await expect(page).toHaveURL(/\/roma\?c=[0-9a-f-]{36}$/)
+  await box.fill("And what did I spend last month?")
+  await box.press("Enter")
+  await expect(answers.getByText(/^You spent ₹0(\.00)? from /)).toBeVisible()
+  await expect(history.getByRole("link")).toHaveCount(1)
+  await expect(history.getByRole("link", { name: "What did I spend this month?" })).toHaveAttribute("aria-current", "page")
+
+  // Reopened: the stored answers, newest first, dated; no figures panel for stored turns.
+  await page.reload()
+  await expect(answers.getByRole("listitem")).toHaveCount(2)
+  await expect(answers.getByRole("listitem").first()).toContainText("And what did I spend last month?")
+  await expect(answers.getByText(/^Answered on \d{4}-\d{2}-\d{2}\. Ask again for today’s figures\.$/).first()).toBeVisible()
+
+  // A new conversation, then a third question: two in the list.
+  await history.getByRole("button", { name: "New conversation" }).click()
+  await expect(page).toHaveURL(/\/roma$/)
+  await expect(page.getByText(/^Good (morning|afternoon|evening), Kabir\.$/)).toBeVisible()
+  await box.fill("Find my entries this month")
+  await box.press("Enter")
+  await expect(answers.getByText(/^I found 1 entries\./)).toBeVisible()
+  await expect(history.getByRole("link")).toHaveCount(2)
+
+  // Open the first one from the list, then delete it (asked once more first).
+  await history.getByRole("link", { name: "What did I spend this month?" }).click()
+  await expect(answers.getByRole("listitem")).toHaveCount(2)
+  await history.getByRole("button", { name: "Delete conversation: What did I spend this month?" }).click()
+  await history.getByRole("button", { name: "Delete", exact: true }).click()
+  await expect(history.getByRole("link")).toHaveCount(1)
+  await expect(page).toHaveURL(/\/roma$/)
+  await page.goto("/roma")
+  await expect(history.getByRole("link")).toHaveCount(1)
+
+  // Settings counts what is left and deletes all of it; turning Roma off would have kept it.
+  await page.goto("/settings")
+  await expect(page.getByText(/^You have 1 saved conversation with Roma\./)).toBeVisible()
+  await page.getByRole("button", { name: "Delete all conversations" }).click()
+  await page.getByRole("button", { name: "Delete all", exact: true }).click()
+  await expect(page.getByRole("status").getByText("All your conversations with Roma were deleted.")).toBeVisible()
+  await page.goto("/roma")
+  await expect(history.getByText("No past conversations yet.")).toBeVisible()
+})

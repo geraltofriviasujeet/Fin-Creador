@@ -53,7 +53,8 @@ const defaultScript: MockScript = (request) => {
       `You spent ${result.spent} from ${result.period.from} to ${result.period.to}, across ${result.expense_count ?? 0} expenses. (Test answer.)`,
     )
   }
-  const question = request.messages.find((m) => m.role === "user")
+  // The new question is the last user message (earlier turns come first, from 10.3).
+  const question = request.messages.filter((m) => m.role === "user").at(-1)
   const text = question?.role === "user" ? question.text : ""
   if (/^find\b/i.test(text)) return mockToolCall("search_transactions", { period: "this_month" })
   return mockToolCall("spending_for_period", { period: /last month/i.test(text) ? "last_month" : "this_month" })

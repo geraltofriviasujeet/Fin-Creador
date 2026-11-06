@@ -62,6 +62,93 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string
+          title: string
+          turn_count: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          title: string
+          turn_count?: number
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          title?: string
+          turn_count?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_messages: {
+        Row: {
+          answer: string
+          as_of: string
+          conversation_id: string
+          created_at: string
+          id: string
+          periods: unknown[]
+          question: string
+          request_id: string | null
+          sent_descriptions: boolean
+          seq: number
+          tools: string[]
+          user_id: string
+        }
+        Insert: {
+          answer: string
+          as_of: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          periods?: unknown[]
+          question: string
+          request_id?: string | null
+          sent_descriptions?: boolean
+          seq: number
+          tools?: string[]
+          user_id: string
+        }
+        Update: {
+          answer?: string
+          as_of?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          periods?: unknown[]
+          question?: string
+          request_id?: string | null
+          sent_descriptions?: boolean
+          seq?: number
+          tools?: string[]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_conversation"
+            columns: ["conversation_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "ai_messages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "roma_usage"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       borrowings: {
         Row: {
           account_id: string
@@ -2532,6 +2619,22 @@ export type Database = {
       roma_counted_usd: {
         Args: { p_row: Database["public"]["Tables"]["roma_usage"]["Row"] }
         Returns: number
+      }
+      roma_record_turn: {
+        Args: {
+          p_answer: string
+          p_as_of: string
+          p_conversation_id: string | null
+          p_periods: unknown[]
+          p_question: string
+          p_request_id: string
+          p_sent_descriptions: boolean
+          p_tools: string[]
+        }
+        Returns: {
+          conversation_id: string
+          seq: number
+        }[]
       }
       roma_release_request: { Args: { p_request_id: string }; Returns: boolean }
       roma_settle_request: {

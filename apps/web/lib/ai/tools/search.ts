@@ -120,6 +120,7 @@ export const searchTransactionsTool: FinanceTool<SearchInput> = {
       period: range,
       dates: rows.map((r) => r.date),
       descriptionsWithheld: withheld,
+      descriptionsSent: ctx.descriptionsOk && rows.some((r) => r.hasDescription),
     }
   },
 }
