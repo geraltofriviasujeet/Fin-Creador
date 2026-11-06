@@ -71,6 +71,20 @@ deployed app never points at it.
    data you care about.
 4. Deploy from `main`. The production Supabase project must already have every migration
    the deployed commit needs (step 1.2) before the deploy.
+5. Roma (Sprint 10), server-only variables (type **Secret** for the key; never
+   `NEXT_PUBLIC_`). Roma stays off until both `LLM_ENABLED=true` and the key are set; the
+   caps live in the database (`roma_settings`), not here.
+
+   | Variable | Value |
+   |----|----|
+   | `LLM_ENABLED` | `true` to turn Roma on; anything else keeps her off |
+   | `LLM_PROVIDER` | `anthropic` (`mock` is refused on a production deployment) |
+   | `LLM_MODEL` | `claude-haiku-5-5` (the default) |
+   | `ANTHROPIC_API_KEY` | a key from a dedicated Anthropic workspace with a monthly spend limit |
+
+   Previews: leave `LLM_ENABLED` unset, or use `LLM_PROVIDER=mock` against the development
+   project. To stop Roma at once without a redeploy:
+   `update public.roma_settings set enabled = false;` in the SQL editor.
 
 ## 3. After the first deploy
 

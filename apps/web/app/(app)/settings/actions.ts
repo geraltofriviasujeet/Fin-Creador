@@ -70,3 +70,21 @@ export async function setExpenseCategoryArchivedAction(_prev: FormState, formDat
   const { id = "", archived } = readFields(formData, ["id", "archived"])
   return categoryState(await setExpenseCategoryArchived(await signedInClient(), { id, archived: archived === "true" }))
 }
+
+// Roma opt-in (Sprint 10.1). Only roma_enabled is written; turning Roma off also clears the
+// descriptions consent (the profiles_roma_consent trigger). RLS limits the row to the caller.
+export async function setRomaEnabledAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const enabled = formData.get("enabled") === "true"
+  const supabase = await signedInClient()
+  const { data: auth } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ roma_enabled: enabled })
+    .eq("id", auth.user?.id ?? "")
+    .select("id")
+    .maybeSingle()
+  if (error || !data) return { status: "error", message: "We couldn’t change this setting. Please try again." }
+  revalidatePath("/settings")
+  revalidatePath("/roma")
+  return { status: "success", message: enabled ? "Roma is on." : "Roma is off." }
+}

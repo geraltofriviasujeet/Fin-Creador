@@ -35,7 +35,7 @@ test("navigation and empty states", async ({ page }) => {
   await expect(budgets(page)).toContainText("No budgets this month")
 })
 
-test("trip: cost lines add up; no target date assumes 12 months; AI insights is disabled", async ({ page }) => {
+test("trip: cost lines add up; no target date assumes 12 months; Roma is disabled", async ({ page }) => {
   await newUser(page, "goals-trip")
   const d = await openPlan(page)
   await d.getByRole("radio", { name: "Trip" }).click()
@@ -64,7 +64,7 @@ test("trip: cost lines add up; no target date assumes 12 months; AI insights is 
   await expect(card).toContainText("International · Japan · 2 people · 8 days")
   await expect(card).toContainText("₹1,54,000")
   await expect(card).toContainText("₹12,000 a month, assuming 12 months (no target date)") // (1,54,000 − 10,000) ÷ 12
-  await expect(card.getByText("AI insights · soon")).toBeVisible()
+  await expect(card.getByText("Roma · soon")).toBeVisible()
 
   // Saved amount, archive and restore.
   await card.getByRole("button", { name: "Update saved amount for Japan in spring" }).click()

@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-11-05 (Sprint 9 and Sprint 10a complete on `main`: 9a–9d PRs #46–#49, 10a PR #51. Next: Sprint 10, the Roma assistant, step 10.1.)
+Last updated: 2026-11-05 (Sprint 10 plan approved, steps 10.1–10.8. Step 10.1 in progress on draft PR #53: migration on dev, app code under review.)
 
 ## Sprint status
 
@@ -41,7 +41,7 @@ Last updated: 2026-11-05 (Sprint 9 and Sprint 10a complete on `main`: 9a–9d PR
 | **9c** | Refunds (import and manual entry) | Done (web) | PR #48 merged into `main`; migration `20261104120000_refunds.sql`. Entry type `refund`: a positive inflow in an expense category, optionally linked to the purchase it reverses (`refund_of_id`). Spending nets refunds (transaction_summary, dashboard_breakdown, so budgets and Reports); balances, a card's owed amount and statements count them; a card may go into credit (an asset in net worth, never in Total available). Linked refunds capped at the purchase (live rows only); a voided purchase keeps its refunds and their link clears; an edited purchase takes its links along. Both importers: refund lines tickable with a category, linked when a purchase has exactly that amount left (else a picker or none). Web: Refund in the add form, Refund this on an expense, a Refunds tab, categories below zero listed apart on the Overview, charts drawn at zero, budgets count it as nothing spent. Mobile shows and edits refunds; adding one on mobile is in the backlog. Known limitations: suggestions are exact-amount only (part refunds are picked by hand); two refunds linked to one purchase in one review can pass the picker and the second is refused at save (FC055); a refund's link can't be changed after it is saved (void and add again). |
 | **9d** | Generic bank statement reader (PDF, CSV) | Done (web), deployed | Completed 2026-11-05; PR #49 merged into `main` and deployed, no migration. QA passed (synthetic fixtures; masked row layout tested to carry only kinds and geometry). `packages/domain/src/statement-bank-generic.ts`: any bank's table read by structure (header naming a date, a description, debit and credit columns or one amount column with or without Dr / Cr, and a balance; synonyms such as Narration / Particulars, Withdrawal Amt. / Debit, Closing Balance, Txn / Post / Value date). PDF cells placed under headers by x position (`pdf-rows` now gives each cell's x range). Repeated headers, footers, totals skipped; wrapped descriptions joined. Accepted when opening + credits − debits = closing (when printed), else when the balance chain holds on every row after same-date reordering; otherwise the honest unreadable message. The chain only flags rows (listed as unreadable, not saveable, Save needs the check). PNB and the 9b CSV reader stay first (`readBankStatement`). A row with no date but an amount and a balance takes the date of the row above (date printed once per day). A row with no date and no amount joins the description above only when its text sits in the description column; other such rows (a page's customer block, legal text, text in an amount column) are skipped, not reported. A row is unreadable only when it has an amount or a date that can't be used. Opening / closing / carried-forward labels are found anywhere in a balance-only row. Total rows and lone page numbers are skipped; when the totals reconcile, a row printed without a date is not reported (it can't be a missed line). After a header, Copy layout shows the header row and the rows under it, each with what became of it. A file no reader can read shows Copy layout on the message: why the generic reader gave up (no header row and the closest row's missing column, no lines, dates out of order, reconciliation failed, balances don't follow) and the masked layout of the first 30 rows (and the closest header row), never text or digits from the file. Known limitations: a scanned PDF has no text; a page footer printed one line below the last row can merge into it. |
 | **10a** | Clarity pass (web) | Done (web) | Completed 2026-11-05; PR #51 merged into `main` (merge commit 5e6c3d5), migration `20261105120000_entry_repeat.sql` (dev and prod by the owner's db push; check `supabase migration list --linked`). "Repeat this?" (Just once, Every month, Every year) on add income and add expense: `record_entry_with_repeat` creates a recurring rule starting on the entry date and confirms its first occurrence as the entry, in one call; a back-dated start makes the later dates due on Recurring (nothing posts by itself). Income page: three cards (Income this year, Money in banks with an "N accounts" list, Cash in hand), a small Rental income card only when rent came in this year; "Income by source" shows "₹X this month" and "₹Y this year", and a rate ("₹X every month") only from the source's active recurring rules (one line per rule, at its current amount); Total available shows under "Where your money is" only when it differs from Money in banks. Overview: four cards, always this month (Money left, Income this month, Spent this month, Savings rate); the period switcher now applies to the charts only. Sign-out after 2 hours without activity in any tab, with a one-minute warning (the server's `IDLE_LIMIT_MS` may only shorten it and is ignored on a Vercel production deployment; the E2E run uses 20 s on a second server), through `/auth/idle-sign-out` (Supabase `signOut`, this browser only) and the reason on the sign-in page. Wording: topbar "Add expense" with a menu (Add income, Transfer, Refund); the page stays "Transactions"; no database names changed. Mobile unchanged (backlog). |
-| **10** | AI financial insights: the Roma assistant | Next | Starts with step 10.1. |
+| **10** | Roma, the AI assistant | In progress | Plan approved 2026-11-05 (steps 10.1–10.8, see Sprint 10 below). 10.1 in progress on draft PR #53: migration `20261105180000_roma_usage.sql` (approved, on dev), app code: provider abstraction (Anthropic SDK 1.1.0, mock), `POST /api/ai/chat`, `spending_for_period`, figure check, Settings toggle, Roma page; unit tests and E2E on the mock provider. |
 | **11** | Notifications & reminders | Not started | |
 | **12** | Mobile polish, offline & PWA | Not started | |
 | **13** | Security & production release | Not started | |
@@ -253,6 +253,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-11-05** | Sprint 9d complete (owner). Bank statements from any bank are read by a generic, structure-based reader (`statement-bank-generic.ts`): the header row is found by what it names (date, description, debit and credit or one amount column with or without Dr / Cr, balance), not by bank. Endpoint reconciliation is the acceptance test: opening + credits − debits = closing to the paisa; without printed endpoints, the balance chain must hold on every row after same-date reordering. The row chain only flags rows (shown as unreadable, never saved); it never accepts or rejects the file on its own. The PNB parser (and the 9b CSV reader) stay first as the known-good path; the generic reader is the fallback (`readBankStatement`). A masked "Copy layout" diagnostic (kinds and geometry only, never text or digits from the file) is on both the review screen and the couldn't-read message. | No migration. Known limitations kept: a scanned PDF has no text; a page footer printed one line below the last row can merge into it. |
 | **2026-11-05** | Sprint 9 complete (owner): 9a card statement import, 9b bank statement import, 9c refunds, 9d generic bank reader, all on `main` (web). Next: the pre-launch checklist (`docs/next-session.md`), then Sprint 10. | Known limitations of 9a–9d kept as recorded in their rows. Excel (.xlsx) import and the SBI layout added to the Backlog. |
 | **2026-11-05** | Sprint 10a complete (owner): "Repeat this?" on add income and add expense; sign-out after 2 hours without activity, shared by every tab; plainer wording; four Overview cards, always this month; three Income cards; income sources show actual amounts this month and this year, and a rate only from active recurring rules (a total is never shown as a rate). Next: Sprint 10, the Roma assistant, step 10.1. | The idle limit is 2 hours in production: the server's `IDLE_LIMIT_MS` may only shorten it (10 s to 2 h) and is ignored when `VERCEL_ENV` is production; nothing from the browser changes it. Tabs sharing one clock is unit-tested; the idle E2E runs in real time against a 20 s server, with no fake clock. Voiding a version an edit just replaced closes the dialog, refreshes the list and says nothing was voided. Mobile unchanged (backlog). |
+| **2026-11-05** | Sprint 10 plan (owner): the assistant is Roma, direct and not flattering. Claude Haiku 5.5 first behind our own provider abstraction (no LangChain); tools wrap existing loaders under RLS; no answer text streamed before validation; an answer with a number not matched to a tool result is refused, never corrected. Caps on the server: global and per-person monthly spend, a per-person daily limit, a one-row database kill switch; only a real provider call consumes budget. No service-role key in the web app: the ledger is written by three security-definer functions. Descriptions are not sent in 10.1; from 10.2 at most 20 per search, re-cleaned, with the same notice in Settings and in Roma. Web research (Tavily) is step 10.8, last; until then estimates use the person's own data only. | Figures stay deterministic and auditable; spend can't exceed the caps from the browser. Tavily's terms don't settle commercial use on the free plan: written confirmation before any commercial launch. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -850,39 +851,226 @@ Card statements only (9a); a bank account parser (9b) follows the same steps on 
 5. **Keys:** a parser change that alters parsed values changes line keys; note it in the sprint
    plan's known limitations when it affects lines already imported.
 
-## Sprint 10 — AI-powered financial insights
+## Sprint 10 — Roma, the AI assistant
 
-**Weeks 19–20 \| Usable outcome:** A user receives explanations grounded
-in verified financial data.
+**Weeks 19–20 \| Usable outcome:** A person asks Roma, the FinCreador
+assistant, about their own money and gets a direct answer whose every
+figure comes from their records, computed in code. Plan approved by the
+owner on 2026-11-05.
 
-### Scope and deliverables
+### Rules
 
-- Summarize spending patterns and period-over-period changes.
+- The assistant is called **Roma** in the UI, the docs and every product
+  reference (never "AI Chat"). Roma is direct and honest, not flattering:
+  a straight yes or no, then the reasoning and the numbers. She says
+  plainly when a goal is not achievable and what would have to change. No
+  praise openers, no softening of bad figures, no padding. These rules
+  live in the system prompt and are covered by a test.
+- The model is never the source of truth for balances, transactions,
+  calculations or permissions. No SQL from the model, ever. Tools are
+  thin wrappers around existing loaders and database functions, run with
+  the person's own session (RLS). All money arithmetic stays in
+  `packages/domain` or the database.
+- The model receives compact, structured tool results, never transaction
+  dumps. Prompts, tool definitions and model configuration are kept apart.
+  The final output is validated with Zod.
+- **Figure check:** every amount in Roma's answer must match a figure in
+  this request's tool results. If any amount doesn't match, Roma refuses
+  to show the answer and says a number could not be verified ("Roma
+  couldn't check a number in this answer against your records, so it
+  isn't shown. Try asking again."). An unmatched number is never
+  stripped, rounded or corrected. The figures panel is built from the
+  tool results, not from the model's text.
+- Informational only. Roma can't move money, pay, trade or change any
+  record.
+- No streaming of answer text: an answer is shown only after it has been
+  validated. Status-only streaming (progress lines) may come in 10.8.
 
-- Detect potential unusually high spending and budget overruns using
-  deterministic checks first.
+### Provider
 
-- Generate savings scenarios based on goals and stated assumptions.
+- Claude Haiku 5.5 (`claude-haiku-5-5`) first, server-side only. Prices
+  checked against Anthropic's pricing page on 2026-11-05: $0.10 per
+  million input tokens and $0.50 per million output tokens for prompts up
+  to 100,000 tokens (cache reads $0.01, 5-minute cache writes $0.125);
+  $0.50 / $2.50 above 100,000 tokens, which Roma's prompt bounds never
+  reach. Estimate: about 4,000 input and 600 output tokens per question,
+  about $0.0007, so $5 covers about 7,000 questions.
+- A provider abstraction in `apps/web/lib/ai/llm`: our own message, tool
+  definition, tool call, response, usage and error types; one adapter per
+  provider (`anthropic.ts` is the only file that imports
+  `@anthropic-ai/sdk`) and a mock provider. `LLM_PROVIDER` and
+  `LLM_MODEL` choose them. Finance tools are provider-independent:
+  `{name, description, input (Zod), run}`, converted to each provider's
+  tool format by its adapter (`z.toJSONSchema`).
+- Settings: adaptive thinking at effort `low`, about 1,500 output tokens,
+  20 s per call, one retry, at most 4 model rounds per question, a 45 s
+  deadline inside the route's `maxDuration = 60` (Vercel Hobby allows
+  300 s with Fluid compute). Past the deadline Roma says the question took
+  too long.
+- LangChain.js: not used. The abstraction is a few types and one adapter;
+  Zod tools exist already; the tool loop is short; a vector store is one
+  RPC. Reconsidered only at 10.7 if orchestration grows.
 
-- Add optional financial Q&A through a server-side provider abstraction.
+### Cost and safety
 
-- Show context period, source figures, and links to relevant records.
+- Off until `ANTHROPIC_API_KEY` is set **and** `LLM_ENABLED=true`, and
+  off for each person until they turn Roma on in Settings.
+- Kill switch and caps: one row in `roma_settings`, changed by the owner
+  in the SQL editor with no redeploy (for example
+  `update public.roma_settings set enabled = false;`). It holds the
+  global monthly budget ($5), the per-person monthly budget ($1), the
+  per-person daily question limit (50) and the amount reserved per
+  question ($0.01). No client can read or change it, and no limit is
+  taken from the caller. `LLM_ENABLED=false` (with a redeploy) and a
+  monthly spend limit on a dedicated Anthropic workspace are the other
+  two off switches.
+- Spend ledger `roma_usage` (no client access): `roma_begin_request`
+  checks, under one lock, the kill switch, the opt-in, the global monthly
+  cap, the person's monthly cap and their daily question limit, then
+  reserves the stored amount. A refusal writes nothing. A reservation
+  ends once: **settled** with the real tokens and cost (normally lower
+  than the reservation) when a provider call was made, or **released**
+  (counts as nothing) when none was (bad input, a failed check, the
+  provider not reached). Only a real call consumes budget or the day's
+  allowance. A reservation never ended keeps counting at its reserved
+  cost. Months are UTC calendar months; the day is the person's own. A
+  person calling the function directly gets the same limits, so one
+  person can use at most their own monthly cap.
+- Consent: `roma_descriptions_ok_at` is set by the database to the time
+  of agreeing (any value a client sends becomes now()); null withdraws
+  it, and turning Roma off clears it.
+- Keys never reach the browser: server-only variables, and the CI secret
+  check gets a canary for `ANTHROPIC_API_KEY`.
+- No test calls a paid API: every automated test uses the mock provider;
+  the Anthropic adapter is tested through the SDK's `fetch` option with
+  recorded responses; the factory refuses a real provider when `CI` is
+  set; CI passes with no key. A real-model persona check
+  (`roma:eval`) is owner-run only, never in CI.
+
+### What leaves the app
+
+- Sent to Anthropic: the question as typed, and tool results (totals,
+  category names, account names, currency, date ranges). Never the
+  email, display name, phone or record IDs (tools use short handles).
+- Transaction descriptions (`transactions.note`) are not sent in 10.1.
+  From 10.2, transaction search sends the descriptions of at most 20
+  matching entries. Imported descriptions are already cleaned at import
+  by `cleanStatementDescription` (UPI remarks keep the payee name only;
+  the reference, bank code and handle are dropped; runs of 4 or more
+  digits and masks removed), for card PDFs (9a), PNB PDF and CSV (9b)
+  and the generic reader (9d). Notes typed by hand are not cleaned, so
+  every note is cleaned again before it is sent: digit runs of 4 or more
+  stripped (the same `stripDigitRuns` rule) and anything shaped like an
+  email or UPI handle (`x@y`) removed.
+- Settings toggle text, also shown in Roma the first time a question
+  would send descriptions (agreeing there sets
+  `roma_descriptions_ok_at`; until then search answers without them):
+  "Roma sends your question and summaries of your figures to Anthropic to
+  answer it. When you ask her to find transactions, up to 20 matching
+  descriptions (which can include payee names) are sent too. Account
+  numbers are masked. Off by default."
+- The privacy page names Anthropic (and Tavily from 10.8) before outside
+  testers; check the providers' current data-retention terms then.
+
+### Steps
+
+Each step is independently testable and deployable.
+
+| **Step** | **Ships** | **Migration** |
+|----|----|----|
+| **10.1** | One question end to end: provider abstraction (Anthropic and mock), `POST /api/ai/chat` (signed-out callers get 401 JSON, not the sign-in redirect), caps, daily limit, kill switch, the `spending_for_period` tool (presets such as last month, or a from–to range, resolved against the person's own today; at most 5 years; the Overview's spending figure from `transaction_summary`), the figure check, the Roma page and the Settings toggle. "What did I spend last month" works on the live site. | `20261105180000_roma_usage.sql`: `profiles.roma_enabled`, `profiles.roma_descriptions_ok_at`, `roma_settings`, `roma_usage`, `roma_begin_request`, `roma_settle_request`, `roma_release_request` |
+| **10.2** | Remaining tools: category breakdown, income vs expenses, savings rate, transaction search (descriptions as above), account balances, net worth, loans and cards. | None |
+| **10.3** | Conversation memory: the last few turns as text plus a compact summary of earlier ones, built in code; history listed and deletable. Each request is rebuilt from stored text (check once against the live model that this is accepted with thinking on). | Conversations and messages tables (RLS, deleted with the account) |
+| **10.4** | Goal check: projections from `savingPlan`, `monthsToTarget` and `goalFigures` with measured cash flow; a blunt verdict: achievable or not, by when, what would have to change. | None expected |
+| **10.5** | Trip check: an estimate from the person's own Travel spending and trip-goal cost lines plus stated assumptions, against goals and cash flow; what to change. Own data only. | None expected |
+| **10.6** | Knowledge base with real citations. Embeddings: Supabase's built-in `gte-small` in an Edge Function (free) or Postgres full-text search for a small base; Anthropic has no embeddings API. Who writes and licenses the content is decided before the step. | `vector` extension, documents and chunks |
+| **10.7** | Personalised planning combining tools, retrieval and memory. | Maybe |
+| **10.8** | Web research for trip and goal estimates (Tavily), after 10.1–10.7 have shipped. Until then estimates come from the person's own data only. | Search credits in the usage ledger |
+
+### 10.8 web research (Tavily)
+
+- Same shape as the LLM: a `SearchProvider` adapter (`tavily.ts` with
+  plain `fetch`, and a mock), `SEARCH_ENABLED`, `SEARCH_PROVIDER`,
+  `TAVILY_API_KEY` (server only), a mock in every test, and the factory
+  refuses a real provider in CI.
+- Queries are built by the server from a fixed template, never written
+  by the model: `kind` (trip or a goal type), `destination` or `item`,
+  `month`, `nights` and `travellers` (small integers), one cost line. The
+  destination is positively constrained: letters and spaces only, at most
+  40 characters and 4 words, no digits, and rejected if it matches
+  anything in the person's own data (display name, email, account names,
+  category names, payees in their descriptions). A goal item is chosen
+  from fixed lists (goal types, vehicle kinds), not typed. Recommended: a
+  known-place list for destinations (countries, Indian states and union
+  territories, and a few hundred popular cities, about 600 entries,
+  refreshed with the quarterly list refresh); a place not on it is not
+  looked up. Never the person's names, amounts or account details.
+- Searches: basic depth only (1 credit), at most 3 per question in
+  parallel, 8 s each (a timed-out search is skipped and the answer says
+  so). Monthly cap `SEARCH_MONTHLY_CREDIT_CAP=900` of the free 1,000, and
+  `SEARCH_USER_DAILY_LIMIT=5`, counted in the database like model spend
+  (a search not sent counts as nothing). At the cap Roma says "Web
+  lookups are used up for this month (they reset on the 1st). This
+  answer uses your own records only." and still answers.
+- Web figures: the model returns each as label, amount, currency, source
+  URL and quote. A figure is used only if its URL is one of this
+  request's results and the amount appears in that result's text;
+  otherwise the figure check above applies and the answer is not shown.
+  Totals (nights × rate) are computed in code; foreign prices are never
+  converted. The answer shows two blocks: **From your records** and
+  **Web estimates — check the source**, each web figure with its link.
+  Search results are untrusted text and can't trigger any action.
+- Gate before the UI: measure, with the owner's key, how often a real
+  web figure appears in the result snippet (about 50 representative
+  queries, about 50 credits). If more than 30% would be dropped, use
+  Tavily's fuller page content instead (check its credit cost first).
+  The measured rate goes in the step's row.
+- Latency: an answer goes from about 3–8 s to about 8–15 s (one more
+  model round, up to 3 parallel searches, 3,000–5,000 more input tokens,
+  about $0.0004). Bounded by the 45 s deadline inside `maxDuration = 60`;
+  `maxDuration` may go to 90 for this route only if measurement needs it.
+  Status-only streaming ("Checking your records…", "Looking up
+  prices…") while the validated answer is prepared.
+- Tavily terms (read 2026-11-05): use is granted "solely for Customer's
+  internal business purposes" (section 2); the free plan is "as is" with
+  no support (section 5); Tavily holds a perpetual licence to queries and
+  may use them to train models (sections 6.5, 9.1, 9.2), which is why
+  queries carry nothing personal; no attribution or display requirement
+  and nothing on storing results (Roma doesn't store them; each answer
+  links its sources). The terms don't say whether the free plan allows
+  commercial use: get Tavily's written confirmation before any commercial
+  launch. Paid: pay-as-you-go $0.008 per credit, or Project $30 a month
+  for 4,000 credits. Example: 1,000 questions a month with web lookups,
+  3 searches each, is 3,000 credits, about $24 pay-as-you-go.
+
+### Environment (server only)
+
+`LLM_ENABLED=false`, `LLM_PROVIDER=anthropic` (or `mock`),
+`LLM_MODEL=claude-haiku-5-5`, `ANTHROPIC_API_KEY=`. The caps are not
+environment variables: they live in `roma_settings` (global $5 and
+per-person $1 a month, 50 questions a day, $0.01 reserved per question),
+so no caller can supply them. From 10.8: `SEARCH_ENABLED=false`,
+`SEARCH_PROVIDER=tavily` (or `mock`), `TAVILY_API_KEY=`,
+`SEARCH_MONTHLY_CREDIT_CAP=900`, `SEARCH_USER_DAILY_LIMIT=5`. Preview
+deployments keep Roma off or on the mock.
 
 ### Acceptance criteria
 
-- Totals and comparisons are computed in validated code/SQL, not
-  generated by AI.
+- Totals and comparisons are computed in validated code or SQL, never by
+  the model; an answer with a number that can't be matched to a tool
+  result is not shown.
+- Responses are bounded, validated and labelled informational; Roma
+  can't initiate payments, transfers, trades or any other action.
+- Only the data listed under "What leaves the app" is sent; keys stay
+  server-side.
+- The caps, the daily limit and the kill switch are enforced on the
+  server; a question that never reached the provider consumes nothing.
+- The feature degrades gracefully when the provider is off, over budget
+  or unavailable.
+- CI passes with no API key and never calls a paid API.
 
-- Responses are bounded, validated, and labeled informational.
-
-- Only necessary summarized data is sent; secrets remain server-side.
-
-- Feature degrades gracefully if provider is unavailable.
-
-- AI cannot initiate payments, transfers, trades, or other financial
-  actions.
-
-**Dependencies:** Stable dashboard, goals, and portfolio data.
+**Dependencies:** stable dashboard, goals and portfolio data (Sprints
+5–8).
 
 ## Sprint 11 — Notifications and reminders
 
