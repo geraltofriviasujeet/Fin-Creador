@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
@@ -10,20 +10,22 @@ import { MAX_QUESTION_CHARS } from "@/lib/ai/limits"
 import { ROMA_INFORMATIONAL } from "@/lib/ai/wording"
 import { cn } from "cn"
 
-// Roma's page (Sprint 10.1): one question at a time. Earlier questions stay on screen for this
-// visit only; nothing is sent back as history. An answer is shown only after the server has
+// Roma's page (Sprint 10.1): a static greeting, then one question at a time. Earlier questions
+// stay on screen for this visit only; nothing is sent back as history. An answer is shown only after the server has
 // checked every number in it.
 
 type Turn = { id: number; question: string; reply: ChatResponseBody }
 
 const EXAMPLE = "What did I spend last month?"
+const OPENING = "I’m Roma, your Intelligent Finance Analyst. What do you want to know?"
 
-export function RomaChat() {
+export function RomaChat({ greeting }: { greeting: string }) {
   const [question, setQuestion] = useState("")
   const [turns, setTurns] = useState<Turn[]>([])
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const inputId = useId()
+  const formRef = useRef<HTMLFormElement>(null)
 
   async function ask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -48,10 +50,23 @@ export function RomaChat() {
     }
   }
 
+  // Enter sends; Shift+Enter adds a line. Composing (e.g. an IME) keeps Enter for the composer.
+  function sendOnEnter(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    formRef.current?.requestSubmit()
+  }
+
   return (
     <div className="grid max-w-2xl gap-4">
+      {turns.length === 0 && (
+        <div className="grid gap-1">
+          <p className="font-heading text-lg font-semibold text-ink">{greeting}</p>
+          <p className="text-xl font-bold text-ink italic">{OPENING}</p>
+        </div>
+      )}
       <Card>
-        <form onSubmit={ask} className="grid gap-3">
+        <form ref={formRef} onSubmit={ask} className="grid gap-3">
           <label htmlFor={inputId} className="text-sm font-semibold text-ink">
             Your question
           </label>
@@ -62,6 +77,7 @@ export function RomaChat() {
             maxLength={MAX_QUESTION_CHARS}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={sendOnEnter}
             placeholder={EXAMPLE}
             className={cn(controlClasses, "h-auto py-2")}
           />

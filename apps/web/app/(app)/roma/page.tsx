@@ -1,3 +1,5 @@
+// DM Sans italic for Roma's opening line; layout.tsx loads only the upright face.
+import "@fontsource-variable/dm-sans/wght-italic.css"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { Suspense } from "react"
@@ -9,6 +11,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
 import { readLlmConfig } from "@/lib/ai/config"
 import { ROMA_DATA_NOTICE } from "@/lib/ai/wording"
+import { greeting } from "@/lib/greeting"
 import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = { title: "Roma" }
@@ -29,7 +32,7 @@ async function RomaContent() {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) redirect("/sign-in?next=%2Froma")
 
-  const { data: profile, error } = await supabase.from("profiles").select("roma_enabled").eq("id", auth.user.id).maybeSingle()
+  const { data: profile, error } = await supabase.from("profiles").select("roma_enabled, display_name, time_zone").eq("id", auth.user.id).maybeSingle()
   if (error || !profile) {
     return (
       <FormMessage tone="error" className="max-w-2xl">
@@ -60,7 +63,8 @@ async function RomaContent() {
     )
   }
 
-  return <RomaChat />
+  // Static text, not a model call: it costs nothing and needs no output check.
+  return <RomaChat greeting={`${greeting(profile.display_name, profile.time_zone)}.`} />
 }
 
 function RomaSkeleton() {

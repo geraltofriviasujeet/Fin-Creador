@@ -42,6 +42,7 @@ import { EntryIcon, dayHeading, entryKindLabel, entryTitle, fullDate, money, ran
 import { BudgetOverviewCard, GoalsOverviewCard } from "@/components/goals/overview-cards"
 import { InvestmentsOverviewCard } from "@/components/investments/overview-card"
 import { DueSoonOverviewCard } from "@/components/loans/due-soon"
+import { greeting } from "@/lib/greeting"
 import { CategoryPie } from "./category-pie"
 import { TimeChart } from "./time-chart"
 
@@ -76,13 +77,6 @@ export type OverviewViewProps = {
   investments: InvestmentsView | null
   /** Loans for the "Due soon" card (null when they couldn't load; the card is then left out). */
   loans: LoansView | null
-}
-
-function greeting(name: string | null, timeZone: string): string {
-  const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone }).format(new Date()))
-  const part = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening"
-  const first = name?.trim().split(/\s+/)[0]
-  return first ? `Good ${part}, ${first}` : `Good ${part}`
 }
 
 function longDate(date: string): string {
