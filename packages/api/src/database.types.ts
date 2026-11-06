@@ -2637,6 +2637,18 @@ export type Database = {
         }[]
       }
       roma_release_request: { Args: { p_request_id: string }; Returns: boolean }
+      roma_search_begin: {
+        Args: { p_provider: string; p_request_id: string }
+        Returns: {
+          credits: number
+          outcome: string
+        }[]
+      }
+      roma_search_release: { Args: { p_request_id: string }; Returns: boolean }
+      roma_search_settle: {
+        Args: { p_credits: number; p_request_id: string }
+        Returns: boolean
+      }
       roma_settle_request: {
         Args: {
           p_cost_usd: number

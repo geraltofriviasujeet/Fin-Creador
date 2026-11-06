@@ -30,6 +30,7 @@ Check `supabase migration list --linked` against each project before any databas
   - Custom SMTP on prod before any outside tester (the built-in sender allows only a few emails per hour).
   - Weekly manual prod backup (`scripts/backup-prod.sh`, `docs/deployment.md`) until the move to Pro.
   - Leaked-password protection, once on Supabase Pro (not available on Free).
+  - Tavily: written confirmation that the free plan allows commercial use, before any commercial launch (a launch blocker, not a build blocker; Roma's web lookups, step 10.8).
 - Vercel Pro and Supabase Pro before any commercial use.
 - Review the licence terms of the market data (AMFI, BSE, and NSE if added) before any commercial use (upgrade checklist in `docs/deployment.md`).
 - A paused Free project stops the daily price job: after a restore, check `cron.job_run_details` and run the refresh once by hand.

@@ -6,6 +6,9 @@ import { MAX_TURNS, type StoredTurn, buildHistory } from "./history"
 import { MAX_QUESTION_CHARS } from "./limits"
 import { callCostMicroUsd, microToUsd } from "./llm/prices"
 import type { LlmProvider } from "./llm/types"
+import type { PrivateTerms } from "./search/query"
+import { type SearchDb, WebSession } from "./search/session"
+import type { SearchProvider } from "./search/types"
 import { accountBalancesTool, netWorthTool } from "./tools/balances"
 import { incomeVsExpensesTool, savingsRateTool } from "./tools/cash-flow"
 import { categoryBreakdownTool } from "./tools/categories"
@@ -14,7 +17,8 @@ import { loansAndCardsTool } from "./tools/liabilities"
 import { searchTransactionsTool } from "./tools/search"
 import { tripCheckTool } from "./tools/trip"
 import { spendingTool } from "./tools/spending"
-import type { FinanceTool, Figure, ToolContext } from "./tools/types"
+import type { FinanceTool, Figure, ToolContext, WebBlock } from "./tools/types"
+import { webPriceFiguresTool, webPriceLookupTool } from "./tools/web-prices"
 
 // POST /api/ai/chat, without the framework (Sprint 10.1; the remaining tools from 10.2). Order: signed in, Roma configured,
 // a valid question, the conversation's stored turns (10.3), then roma_begin_request (kill
@@ -22,7 +26,9 @@ import type { FinanceTool, Figure, ToolContext } from "./tools/types"
 // provider made and called. The reservation is settled with the real cost when a call was
 // sent, and released when none was, so only a real call consumes budget. An answer is then
 // recorded as a turn (roma_record_turn, idempotent per request, so it is retried once); a
-// refused or failed question is not stored.
+// refused or failed question is not stored. From 10.8, when web lookups are configured, the
+// question gets a WebSession: the web tools are offered, their credits are reserved on first
+// use and settled or released once the question ends, whatever the outcome.
 
 export const ROMA_TOOLS: readonly FinanceTool[] = [
   spendingTool,
@@ -36,6 +42,9 @@ export const ROMA_TOOLS: readonly FinanceTool[] = [
   goalProjectionTool,
   tripCheckTool,
 ] as FinanceTool[]
+
+/** Offered only when web lookups are on for this question (10.8). */
+export const WEB_TOOLS: readonly FinanceTool[] = [webPriceLookupTool, webPriceFiguresTool] as FinanceTool[]
 
 const questionSchema = z.object({
   question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
@@ -77,6 +86,14 @@ export type ChatDeps = {
   run?: typeof runChat
   /** Server diagnostic when an answer is refused by the figure check: the numbers only, never the answer; not stored. */
   onUnverified?: (unmatched: readonly string[]) => void
+  /** Web lookups (10.8); absent when SEARCH_ENABLED is off. */
+  search?: {
+    db: SearchDb
+    /** May throw (then the question goes on without web lookups). */
+    makeProvider: () => SearchProvider
+    /** The person's own words a query must never carry, and their country code; null when they can't be read. */
+    loadTerms: () => Promise<{ terms: PrivateTerms; countryCode: string | null } | null>
+  }
 }
 
 export type ChatErrorCode =
@@ -104,6 +121,10 @@ export type ChatResponseBody =
       descriptionsNotice?: true
       /** Goal and trip checks (10.4, 10.5): the verdict computed in code and its assumptions. */
       checks?: { kind?: "trip"; goal: string; verdict: string; assumptions: string[] }[]
+      /** Web estimates (10.8): prices as found with their site and link, totals per currency; never part of the verdict. */
+      web?: WebBlock
+      /** Why web lookups were skipped (caps, timeouts). */
+      webNotices?: string[]
       /** The conversation the turn was recorded in (10.3); null when it couldn't be saved. */
       conversationId: string | null
       saved: boolean
@@ -186,21 +207,35 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
     return error("unavailable")
   }
 
+  // Without a provider or the person's words to keep out, the question goes on without the web.
+  let web: WebSession | null = null
+  if (deps.search) {
+    try {
+      const loaded = await deps.search.loadTerms()
+      if (loaded) web = new WebSession({ provider: deps.search.makeProvider(), db: deps.search.db, requestId, ...loaded })
+    } catch {
+      web = null
+    }
+  }
+  if (web) context = { ...context, web }
+
   let run: ChatRun
   try {
     run = await (deps.run ?? runChat)({
       provider,
-      tools: ROMA_TOOLS,
+      tools: web ? [...ROMA_TOOLS, ...WEB_TOOLS] : ROMA_TOOLS,
       context,
       question: parsed.data.question,
       history: buildHistory(turns, context.descriptionsOk),
     })
   } catch {
+    await finishWeb(web)
     // An unexpected failure mid-way: calls may have been sent, so charge the worst case.
     await deps.db.settle(requestId, 0, 0, microToUsd(worstCaseQuestionMicroUsd(model)))
     return error("unavailable")
   }
 
+  await finishWeb(web)
   if (run.calls === 0) {
     await deps.db.release(requestId)
   } else {
@@ -234,6 +269,8 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
           ...(result.checks.length > 0 ? { checks: result.checks.map(({ kind, goal, verdict, assumptions }) => ({ ...(kind ? { kind } : {}), goal, verdict, assumptions })) } : {}),
+          ...(result.web ? { web: result.web } : {}),
+          ...(result.webNotices ? { webNotices: result.webNotices } : {}),
           conversationId: recorded?.conversationId ?? null,
           saved: recorded !== null,
         },
@@ -261,6 +298,15 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
       if (result.reason === "timeout") return error("timeout")
       if (result.reason === "refusal") return error("refusal")
       return error("unavailable")
+  }
+}
+
+/** Search credits end with the question: a failure leaves the reservation counting, the safe side. */
+async function finishWeb(web: WebSession | null): Promise<void> {
+  try {
+    await web?.finish()
+  } catch {
+    // The reservation keeps counting at its reserved credits.
   }
 }
 

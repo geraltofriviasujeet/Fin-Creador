@@ -1,8 +1,8 @@
 import type { DateRange } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
-import { allowedNumbers, checkAnswer, checkSubjects, literalStrings } from "./output"
-import { ROMA_SYSTEM_PROMPT, romaContext } from "./prompts/roma-system"
-import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, type ToolContext, ToolError, toToolDef } from "./tools/types"
+import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber } from "./output"
+import { ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
+import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
 import {
   LlmError,
   type LlmMessage,
@@ -23,6 +23,9 @@ import {
 // From 10.4 a goal check's verdict is computed in code: an answer that doesn't start with it
 // (after passing the figure check) is replaced by the check's own code-built summary. Strings
 // the tools returned (names with digits in them) are not read as figures.
+// From 10.8 the tools of one round run in parallel (up to 3 web lookups at once). Web text is
+// untrusted: its strings are never set aside as names, so a number from a page can be quoted
+// only as a kept web figure or a total worked out in code. The verdict stays the records' one.
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -42,6 +45,10 @@ export type ChatResult =
       /** Tools that ran without error, in order (stored with the turn). */
       toolsRan: string[]
       descriptionsSent: boolean
+      /** Web estimates (10.8), shown apart from the records; absent when none were kept. */
+      web?: WebBlock
+      /** Why web lookups were skipped (caps, timeouts), in code's words. */
+      webNotices?: string[]
     }
   /** `unmatched`: the numbers that failed the check (for the server's diagnostic only; never the answer text). */
   | { kind: "unverified"; unmatched: string[] }
@@ -80,7 +87,8 @@ export async function runChat({
 }: Options): Promise<ChatRun> {
   const deadline = Date.now() + deadlineMs
   const toolDefs = tools.map(toToolDef)
-  const system = [ROMA_SYSTEM_PROMPT, romaContext(context), ...(history.summary ? [history.summary] : [])]
+  const webTools = tools.some((t) => t.name === "web_price_lookup")
+  const system = [ROMA_SYSTEM_PROMPT, romaContext(context), ...(webTools ? [WEB_RULES] : []), ...(history.summary ? [history.summary] : [])]
   const messages: LlmMessage[] = [
     ...history.recent.flatMap((t): LlmMessage[] => [
       { role: "user", text: t.question },
@@ -90,7 +98,7 @@ export async function runChat({
   ]
   const figures: Figure[] = []
   const periods: DateRange[] = []
-  const found: Found = { dates: [], descriptionsWithheld: false, descriptionsSent: false, toolsRan: [], checks: [], literals: [], needs: [], subjects: [], subjectText: [] }
+  const found: Found = { dates: [], descriptionsWithheld: false, descriptionsSent: false, toolsRan: [], checks: [], literals: [], needs: [], subjects: [], subjectText: [], web: [] }
   let usage = NO_USAGE
   let calls = 0
   let unknownCalls = 0
@@ -117,10 +125,9 @@ export async function runChat({
 
     if (response.stop === "tool_use" && response.toolCalls.length > 0) {
       messages.push({ role: "assistant", text: response.text, toolCalls: response.toolCalls, providerContent: response.providerContent })
-      const results: LlmToolResult[] = []
-      for (const call of response.toolCalls) {
-        results.push(await runTool(tools, context, call.id, call.name, call.input, figures, periods, found))
-      }
+      // All of a round's tools at once; their results are taken in the order they were called.
+      const runs = await Promise.all(response.toolCalls.map((call) => runTool(tools, context, call.id, call.name, call.input)))
+      const results: LlmToolResult[] = runs.map((r) => applyTool(r, figures, periods, found))
       messages.push({ role: "tool_results", results })
       continue
     }
@@ -145,7 +152,9 @@ export async function runChat({
     }
 
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
-    const check = checkAnswer(response.text, allowedNumbers(figures, dates), found.literals)
+    const allowed = allowedNumbers(figures, dates)
+    for (const n of webNumbers(found.web)) allowed.add(n)
+    const check = checkAnswer(response.text, allowed, found.literals)
     if (!check.ok) return done(check.reason === "unverified" ? { kind: "unverified", unmatched: check.unmatched ?? [] } : { kind: check.reason })
 
     // A goal or trip answer about something the person didn't ask about: refused, and a summary
@@ -173,6 +182,7 @@ export async function runChat({
       checks: found.checks,
       toolsRan: found.toolsRan,
       descriptionsSent: found.descriptionsSent,
+      ...webPart(found.web, context),
     })
   }
   return done({ kind: "failed", reason: "rounds" })
@@ -190,6 +200,23 @@ type Found = {
   subjects: CheckSubject[]
   /** The results of the tools that had a subject, for the subject check. */
   subjectText: string[]
+  web: WebBlock[]
+}
+
+/** The numbers a web block lets an answer quote: prices as written and in full, totals, nights and travellers. */
+export function webNumbers(blocks: readonly WebBlock[]): string[] {
+  return blocks.flatMap((b) => [
+    ...b.figures.flatMap((f) => [normalizeNumber(f.amount), normalizeNumber(f.value)]),
+    ...b.totals.flatMap((t) => [t.low, t.high]),
+    ...(b.trip ? [String(b.trip.nights), String(b.trip.travellers)] : []),
+  ])
+}
+
+/** The question's web estimates (the last report wins) and notices. */
+function webPart(blocks: readonly WebBlock[], context: ToolContext): { web?: WebBlock; webNotices?: string[] } {
+  const web = blocks.at(-1)
+  const notices = context.web ? [...context.web.notices] : []
+  return { ...(web && web.figures.length > 0 ? { web } : {}), ...(notices.length > 0 ? { webNotices: notices } : {}) }
 }
 
 /** Shown instead of an answer about a goal or trip the person didn't ask about. */
@@ -204,39 +231,37 @@ export function withVerdict(text: string, checks: readonly GoalCheck[]): string 
   return checks.map((c) => c.summary).join("\n\n")
 }
 
-async function runTool(
-  tools: readonly FinanceTool[],
-  context: ToolContext,
-  callId: string,
-  name: string,
-  rawInput: unknown,
-  figures: Figure[],
-  periods: DateRange[],
-  found: Found,
-): Promise<LlmToolResult> {
-  const fail = (message: string): LlmToolResult => ({ callId, content: JSON.stringify({ error: message }), isError: true })
+type ToolRun = { callId: string; tool: string; output: ToolOutput } | { callId: string; error: string }
+
+async function runTool(tools: readonly FinanceTool[], context: ToolContext, callId: string, name: string, rawInput: unknown): Promise<ToolRun> {
   const tool = tools.find((t) => t.name === name)
-  if (!tool) return fail(`There is no tool called ${name}.`)
+  if (!tool) return { callId, error: `There is no tool called ${name}.` }
   const input = tool.input.safeParse(rawInput)
-  if (!input.success) return fail(`Invalid input: ${input.error.issues.map((i) => i.message).join("; ")}`)
+  if (!input.success) return { callId, error: `Invalid input: ${input.error.issues.map((i) => i.message).join("; ")}` }
   try {
-    const output = await tool.run(context, input.data)
-    figures.push(...output.figures)
-    if (output.period) periods.push(output.period)
-    if (output.dates) found.dates.push(...output.dates)
-    if (output.descriptionsWithheld) found.descriptionsWithheld = true
-    if (output.descriptionsSent) found.descriptionsSent = true
-    if (output.check) found.checks.push(output.check)
-    if (output.needs) found.needs.push(output.needs)
-    if (output.subject) {
-      found.subjects.push(output.subject)
-      found.subjectText.push(JSON.stringify(output.data))
-    }
-    found.literals.push(...literalStrings(output.data), ...literalStrings(output.figures.map((f) => f.label)))
-    found.toolsRan.push(tool.name)
-    return { callId, content: JSON.stringify(output.data) }
+    return { callId, tool: tool.name, output: await tool.run(context, input.data) }
   } catch (error) {
-    if (error instanceof ToolError) return fail(error.message)
-    return fail("The figures couldn't be loaded.")
+    return { callId, error: error instanceof ToolError ? error.message : "The figures couldn't be loaded." }
   }
+}
+
+function applyTool(run: ToolRun, figures: Figure[], periods: DateRange[], found: Found): LlmToolResult {
+  const { callId } = run
+  if ("error" in run) return { callId, content: JSON.stringify({ error: run.error }), isError: true }
+  const { output } = run
+  figures.push(...output.figures)
+  if (output.period) periods.push(output.period)
+  if (output.dates) found.dates.push(...output.dates)
+  if (output.descriptionsWithheld) found.descriptionsWithheld = true
+  if (output.descriptionsSent) found.descriptionsSent = true
+  if (output.check) found.checks.push(output.check)
+  if (output.needs) found.needs.push(output.needs)
+  if (output.subject) {
+    found.subjects.push(output.subject)
+    found.subjectText.push(JSON.stringify(output.data))
+  }
+  if (output.web) found.web.push(output.web)
+  if (!output.untrusted) found.literals.push(...literalStrings(output.data), ...literalStrings(output.figures.map((f) => f.label)))
+  found.toolsRan.push(run.tool)
+  return { callId, content: JSON.stringify(output.data) }
 }

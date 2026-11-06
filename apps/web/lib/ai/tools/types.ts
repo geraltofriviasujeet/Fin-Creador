@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { UserClient } from "@fin-creador/api"
 import type { DateRange, IsoDate } from "@fin-creador/domain"
 import type { LlmToolDef } from "../llm/types"
+import type { WebSession } from "../search/session"
 
 // Roma's finance tools are provider-independent: a Zod input schema, a description, and a
 // `run` that reads with the person's own session (RLS) through existing loaders. Arithmetic
@@ -13,6 +14,8 @@ export type ToolContext = {
   currency: string
   /** The person agreed, in Roma, to transaction descriptions being sent (roma_descriptions_ok_at). */
   descriptionsOk: boolean
+  /** This question's web lookups (10.8); absent when web lookups are off. */
+  web?: WebSession
 }
 
 /** A figure a tool produced: what the answer may quote and what the figures panel shows. */
@@ -56,6 +59,20 @@ export type ToolOutput = {
   check?: GoalCheck
   needs?: InputNeeded
   subject?: CheckSubject
+  /** Web text (10.8): none of its strings are set aside as names by the figure check. */
+  untrusted?: true
+  /** Web prices kept and totals worked out in code (10.8), shown apart from the records. */
+  web?: WebBlock
+}
+
+/** A web total for one currency (10.8): the cost lines' lowest and highest prices added up, as plain decimals. */
+export type WebTotal = { currency: string; lines: number; low: string; high: string }
+
+/** Web estimates for one answer (10.8): each price as found, with its site, and totals per currency. */
+export type WebBlock = {
+  figures: { label: string; amount: string; scale: string; value: string; currency: string; per: string; site: string; url: string }[]
+  totals: WebTotal[]
+  trip?: { nights: number; travellers: number }
 }
 
 /**

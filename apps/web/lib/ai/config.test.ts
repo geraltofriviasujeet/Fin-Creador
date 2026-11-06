@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { readLlmConfig } from "./config"
+import { readLlmConfig, readSearchConfig } from "./config"
 import { callCostMicroUsd, microToUsd } from "./llm/prices"
 import { worstCaseQuestionMicroUsd } from "./handle"
 
@@ -59,5 +59,23 @@ describe("Roma costs", () => {
 
   it("keeps one question's worst case under the $0.01 reserved in roma_settings", () => {
     expect(worstCaseQuestionMicroUsd("claude-haiku-5-5")).toBeLessThan(10_000)
+  })
+})
+
+describe("Web lookup configuration", () => {
+  const tavily = { SEARCH_ENABLED: "true", SEARCH_PROVIDER: "tavily", TAVILY_API_KEY: "test-key-not-real" }
+
+  it("is off unless SEARCH_ENABLED is exactly true, and without a key", () => {
+    expect(readSearchConfig({})).toEqual({ status: "off", reason: "not_enabled" })
+    expect(readSearchConfig({ ...tavily, SEARCH_ENABLED: "1" })).toEqual({ status: "off", reason: "not_enabled" })
+    expect(readSearchConfig({ ...tavily, TAVILY_API_KEY: " " })).toEqual({ status: "off", reason: "no_key" })
+    expect(readSearchConfig(tavily)).toEqual({ status: "on", provider: "tavily", apiKey: "test-key-not-real" })
+  })
+
+  it("never uses a real provider in CI, and never the mock in production", () => {
+    expect(readSearchConfig({ ...tavily, CI: "true" })).toEqual({ status: "off", reason: "ci" })
+    expect(readSearchConfig({ SEARCH_ENABLED: "true", SEARCH_PROVIDER: "mock", CI: "true" })).toMatchObject({ status: "on", provider: "mock" })
+    expect(readSearchConfig({ SEARCH_ENABLED: "true", SEARCH_PROVIDER: "mock", VERCEL_ENV: "production" })).toEqual({ status: "off", reason: "mock_in_production" })
+    expect(readSearchConfig({ ...tavily, SEARCH_PROVIDER: "other" })).toEqual({ status: "off", reason: "unknown_provider" })
   })
 })
