@@ -31,6 +31,12 @@ checked on 2026-10-28 (names only, from the issuer's own credit card page):
 | Kotak Mahindra Bank | https://www.kotak.bank.in/en/personal-banking/cards/credit-cards.html |
 | Punjab National Bank | https://creditcard.pnb.bank.in/ (issuer name only since 2026-10-29; add its cards in the January 2027 refresh) |
 
+Roma's trip check (Sprint 10.5) works out domestic or international from the destination with
+`tripPlaceScope` in `packages/schemas/src/trip-places.ts`: the states, union territories and
+cities above are domestic, the countries in `region-data.ts` other than India are international,
+plus `TRIP_PLACE_ALIASES` (other names in common use, such as Bangalore or USA). A place on no
+list is asked about, never guessed.
+
 ## When
 
 In January, April, July and October. Normally only vehicle makes and models change. Touch
@@ -57,7 +63,9 @@ territory or a renamed city).
    Leave out business and corporate cards. `npm test` checks every name for digit runs and
    duplicates. Update `CARD_PRODUCTS_REVIEWED_ON` in `card-data.ts`, even when nothing changed.
 4. Places: change states, union territories or cities only on an official change, with the
-   official source.
+   official source. Trip places: add an alias to `TRIP_PLACE_ALIASES` only for a name in common
+   use that is unambiguous (not a city outside India); `npm test` checks that no name is both
+   an Indian place and a country.
 5. Record every change in a diff table in the PR description, one row per change, with the
    source URL:
 

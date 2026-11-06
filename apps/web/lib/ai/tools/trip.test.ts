@@ -96,12 +96,11 @@ beforeEach(() => vi.clearAllMocks())
 describe("trip_check", () => {
   it("asks for what the person hasn't said, without loading anything", async () => {
     const out = await tripCheckTool.run(ctx, { destination: "Kerala", nights: 3 })
-    expect(out.data).toMatchObject({ ask_for: ["scope", "month", "travellers"] })
+    expect(out.data).toMatchObject({ ask_for: ["month", "travellers"] })
     expect(out.needs).toEqual({
       tool: "trip_check",
-      missing: ["scope", "month", "travellers"],
-      question:
-        "To estimate a trip to Kerala from your records, Roma needs to know whether the trip is domestic or international, the month you want to travel and how many people are travelling. Tell her these and ask again.",
+      missing: ["month", "travellers"],
+      question: "To estimate a trip to Kerala from your records, Roma needs to know the month you want to travel and how many people are travelling. Tell her these and ask again.",
     })
     expect(out.figures).toEqual([])
     expect(api.loadGoalsData).not.toHaveBeenCalled()
@@ -228,7 +227,7 @@ describe("trip questions in the chat loop", () => {
     const run = await chat({ destination: "Vietnam" }, "I need a few details first:\n\n1. Which month?\n2. How many nights, say 5?")
     expect(run.result).toMatchObject({
       kind: "answer",
-      text: "To estimate a trip to Vietnam from your records, Roma needs to know whether the trip is domestic or international, the month you want to travel, how many nights and how many people are travelling. Tell her these and ask again.",
+      text: "To estimate a trip to Vietnam from your records, Roma needs to know the month you want to travel, how many nights and how many people are travelling. Tell her these and ask again.",
       figures: [],
       checks: [],
       toolsRan: ["trip_check"],
@@ -318,7 +317,7 @@ describe("a destination with no goal and no comparable never gets another goal's
     expect(run.result).toMatchObject({
       kind: "answer",
       checks: [],
-      text: "To estimate a trip to Vietnam from your records, Roma needs to know whether the trip is domestic or international, the month you want to travel, how many nights and how many people are travelling. Tell her these and ask again.",
+      text: "To estimate a trip to Vietnam from your records, Roma needs to know the month you want to travel, how many nights and how many people are travelling. Tell her these and ask again.",
     })
   })
 
@@ -342,5 +341,63 @@ describe("a destination with no goal and no comparable never gets another goal's
   it("still answers about a goal the person named", async () => {
     const run = await chat(["goal_projection", { goal: "Assam Trip" }], (d) => String(d.verdict_summary), "Can I afford the Assam trip?")
     expect(run.result).toMatchObject({ kind: "answer", checks: [{ goal: "Assam Trip" }] })
+  })
+})
+
+// Domestic or international from the destination (10.5): worked out in code from the lists in
+// packages/schemas (trip-places), shown as an assumption, and the person's own word wins.
+describe("domestic or international from the destination", () => {
+  const when = { month: "2027-04", nights: 3, travellers: 2 }
+
+  it("a domestic place: only month, nights and travellers are asked for", async () => {
+    const out = await tripCheckTool.run(ctx, { destination: "Goa" })
+    expect(out.needs?.missing).toEqual(["month", "nights", "travellers"])
+  })
+
+  it("a domestic place: checked as domestic, with the inference shown as an assumption", async () => {
+    setUp({ goals: [goaGoal] })
+    const out = await tripCheckTool.run(ctx, { destination: "goa", ...when })
+    expect(out.data).toMatchObject({ estimate: "₹60,000", scope_worked_out_from_destination: true })
+    expect(out.check!.summary).toMatch(/^Yes\. A 3-night domestic trip to goa/)
+    expect(out.check!.assumptions[0]).toBe("goa is treated as domestic. If it isn't, say so and Roma will check it as international.")
+  })
+
+  it("a scope passed in is shown as said by the person, never as the list's decision", async () => {
+    setUp({ goals: [goaGoal] })
+    const said = await tripCheckTool.run(ctx, { destination: "Goa", scope: "domestic", ...when })
+    expect(said.check!.assumptions[0]).toBe("You said this trip is domestic. If it isn't, say so and Roma will check it as international.")
+    expect(said.check!.assumptions.join(" ")).not.toContain("is treated as")
+    const listed = await tripCheckTool.run(ctx, { destination: "Goa", ...when })
+    expect(listed.check!.assumptions[0]).toBe("Goa is treated as domestic. If it isn't, say so and Roma will check it as international.")
+    expect(listed.check!.assumptions.join(" ")).not.toContain("You said")
+  })
+
+  it("an international place: checked as international, never against domestic trips", async () => {
+    setUp({ goals: [goaGoal], travelDates: [] })
+    const out = await tripCheckTool.run(ctx, { destination: "Vietnam", ...when })
+    expect(out.check).toMatchObject({
+      verdict: CANT_ESTIMATE,
+      assumptions: ["Vietnam is treated as international. If it isn't, say so and Roma will check it as domestic."],
+    })
+    expect(out.data).toMatchObject({ scope: "international", scope_worked_out_from_destination: true })
+  })
+
+  it("an unknown place: domestic or international is still asked for", async () => {
+    const out = await tripCheckTool.run(ctx, { destination: "Dubai", ...when })
+    expect(out.needs).toMatchObject({
+      missing: ["scope"],
+      question: "To estimate a trip to Dubai from your records, Roma needs to know whether the trip is domestic or international. Tell her that and ask again.",
+    })
+    expect(api.loadGoalsData).not.toHaveBeenCalled()
+  })
+
+  it("the person's own word overrides the list, and the assumption says it came from them", async () => {
+    setUp({ goals: [goaGoal], travelDates: [] })
+    const out = await tripCheckTool.run(ctx, { destination: "Goa", scope: "international", ...when })
+    expect(out.check).toMatchObject({
+      verdict: CANT_ESTIMATE,
+      assumptions: ["You said this trip is international. If it isn't, say so and Roma will check it as domestic."],
+    })
+    expect(out.data).toMatchObject({ scope: "international", scope_worked_out_from_destination: false })
   })
 })

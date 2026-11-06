@@ -6,6 +6,7 @@ export * from "./recurring-forms";
 export * from "./regions";
 export * from "./transaction-forms";
 export * from "./goal-data";
+export * from "./trip-places";
 export * from "./goal-forms";
 export * from "./investment-forms";
 export * from "./fixed-deposit-forms";

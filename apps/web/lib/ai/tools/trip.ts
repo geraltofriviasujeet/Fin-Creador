@@ -29,6 +29,7 @@ import {
   otherGoals,
   YEARS,
 } from "./goals"
+import { tripPlaceScope } from "@fin-creador/schemas"
 import { type Figure, type FinanceTool, type GoalCheck, type ToolContext, ToolError } from "./types"
 
 // trip_check (Sprint 10.5): what a trip would cost, from the person's own records only, and
@@ -71,7 +72,9 @@ const input = z
   .object({
     goal: z.string().trim().min(1).max(80).optional().describe("An existing trip goal's name. Leave out for a new trip."),
     destination: z.string().trim().min(1).max(80).optional().describe("Where, as the person said it."),
-    scope: scope.optional().describe("Domestic or international, as the person said. Never assume it."),
+    scope: scope
+      .optional()
+      .describe("Only when the person said domestic or international themselves (or corrected Roma). Leave out otherwise: the app works it out from the destination."),
     month: z
       .string()
       .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
@@ -104,7 +107,7 @@ export function tripQuestion(destination: string | undefined, missing: readonly 
   const items = missing.map((k) => ASK[k])
   const list = items.length === 1 ? items[0]! : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`
   const trip = destination ? `a trip to ${destination}` : "a trip"
-  return `To estimate ${trip} from your records, Roma needs to know ${list}. Tell her these and ask again.`
+  return `To estimate ${trip} from your records, Roma needs to know ${list}. Tell her ${items.length === 1 ? "that" : "these"} and ask again.`
 }
 
 /** A run with its two figures, added up from the records (profile currency, expenses net of refunds). */
@@ -180,7 +183,7 @@ export function confirmedRuns(confirmed: TripInput["past_trips"], priced: readon
 export const tripCheckTool: FinanceTool<TripInput> = {
   name: "trip_check",
   description:
-    "Estimates what a trip would cost from the person's own records (their trip goals and past travel spending), then checks whether they can pay for it by the month they want, what it does to their other goals and what would have to change. Needs destination, domestic or international, month, nights and travellers, all as the person said; or the name of an existing trip goal. It lists past travel runs with two figures each for the person to confirm. Use it for any question about a trip's cost or whether a trip is affordable.",
+    "Estimates what a trip would cost from the person's own records (their trip goals and past travel spending), then checks whether they can pay for it by the month they want, what it does to their other goals and what would have to change. Needs destination, month, nights and travellers, all as the person said; domestic or international is worked out from the destination (pass scope only when the person said it). Or the name of an existing trip goal. It lists past travel runs with two figures each for the person to confirm. Use it for any question about a trip's cost or whether a trip is affordable.",
   input,
   async run(ctx, input) {
     // A trip goal by name; a name that is no goal of theirs is the destination of a new trip.
@@ -192,6 +195,9 @@ export const tripCheckTool: FinanceTool<TripInput> = {
       p = { ...rest, destination: input.destination ?? goal }
     }
 
+    // Domestic or international from the destination's name (packages/schemas trip-places), unless the person said.
+    const inferred = p.scope === undefined && p.destination !== undefined ? tripPlaceScope(p.destination) : null
+    if (inferred) p = { ...p, scope: inferred }
     const missing = REQUIRED.filter((k) => p[k] === undefined)
     if (missing.length > 0) {
       return {
@@ -203,6 +209,14 @@ export const tripCheckTool: FinanceTool<TripInput> = {
     const { today, currency } = ctx
     const destination = p.destination!
     const tripScope = p.scope as TripScope
+    // Where the scope came from is always shown: the list's decision, or what the person is
+    // taken to have said (so a scope the model passed without them saying it is visible).
+    const other = tripScope === "domestic" ? "international" : "domestic"
+    const scopeAssumption = [
+      inferred
+        ? `${destination} is treated as ${tripScope}. If it isn't, say so and Roma will check it as ${other}.`
+        : `You said this trip is ${tripScope}. If it isn't, say so and Roma will check it as ${other}.`,
+    ]
     const travelMonth = `${p.month!}-01`
     if (travelMonth < monthStart(today)) throw new ToolError(`${monthName(travelMonth)} has passed. Ask for a month from now on.`)
     const size: TripSize = { days: p.nights! + 1, travellers: p.travellers! }
@@ -242,12 +256,14 @@ export const tripCheckTool: FinanceTool<TripInput> = {
           ? ` These look like past trips: ${priced.map((r) => `${r.from} to ${r.to}, ${money(r.travelMinor)} on Travel, ${money(r.allMinor)} all spending in those dates`).join("; ")}. If one was a ${tripScope} trip, say how many travelled and which figure to use (all spending in those dates may include things unrelated to the trip).`
           : ""
       const summary = `${CANT_ESTIMATE} There is no ${tripScope} trip to scale from: no ${tripScope} trip goal with costs, and no past ${tripScope} trip confirmed.${confirm} A trip goal with its costs filled in would also do.`
-      const check: GoalCheck = { kind: "trip", goal: destination, verdict: CANT_ESTIMATE, summary, assumptions: [] }
+      const check: GoalCheck = { kind: "trip", goal: destination, verdict: CANT_ESTIMATE, summary, assumptions: scopeAssumption }
       return {
         data: {
           can_estimate: false,
           verdict: CANT_ESTIMATE,
           verdict_summary: summary,
+          scope: tripScope,
+          scope_worked_out_from_destination: inferred !== null,
           travel_runs_found: runData,
           note: `Start the answer with "${CANT_ESTIMATE}" exactly. Never guess a cost. ${
             priced.length > 0
@@ -316,6 +332,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
 
     const summary = tripSummary({ trip, travelMonth, estimateMinor: estimate.estimateMinor, projection, slipped, nightsFit, travellersFit, money, netSoFar })
     const assumptions = [
+      ...scopeAssumption,
       ...tripAssumptions(estimate.scaled.map((s) => s.comparable), tripScope, p.past_trips ?? []),
       ...buildAssumptions({
         ctx,
@@ -334,6 +351,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
     return {
       data: {
         trip,
+        scope_worked_out_from_destination: inferred !== null,
         verdict: check.verdict,
         verdict_summary: summary,
         estimate: money(estimate.estimateMinor),
