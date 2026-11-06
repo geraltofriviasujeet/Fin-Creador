@@ -6,7 +6,9 @@ import type { Figure } from "./tools/types"
 //   * it passes the Zod envelope (non-empty text of bounded length);
 //   * every number in it matches a figure from this request's tool results, a count, or a
 //     date part of the periods and of today. One unmatched number and the whole answer is
-//     refused: numbers are never stripped, rounded or corrected;
+//     refused: numbers are never stripped, rounded or corrected. Digits inside a string a tool
+//     returned (a goal, category or account name such as "Car 2027") are not figures: those
+//     strings are set aside, exactly as written (any case), before the numbers are read;
 //   * it doesn't open with praise (Roma's rules).
 
 export const MAX_ANSWER_CHARS = 2000
@@ -40,15 +42,40 @@ export function allowedNumbers(figures: readonly Figure[], dates: readonly strin
   return allowed
 }
 
+/**
+ * Every string in a tool result that has a digit and a letter (names, labels, sentences). A
+ * string of only digits and punctuation is a figure and must match as one.
+ */
+export function literalStrings(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") {
+    if (/\d/.test(value) && /\p{L}/u.test(value)) out.push(value)
+  } else if (Array.isArray(value)) {
+    for (const v of value) literalStrings(v, out)
+  } else if (value !== null && typeof value === "object") {
+    for (const v of Object.values(value)) literalStrings(v, out)
+  }
+  return out
+}
+
+/** The text with every occurrence of the literals (longest first, any case) blanked out. */
+function withoutLiterals(text: string, literals: readonly string[]): string {
+  let rest = text
+  for (const literal of [...new Set(literals)].sort((a, b) => b.length - a.length)) {
+    const escaped = literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    rest = rest.replace(new RegExp(escaped, "gi"), " ")
+  }
+  return rest
+}
+
 const PRAISE_OPENER =
   /^\s*(?:(?:great|good|excellent|fantastic|wonderful|nice|awesome)\s+(?:question|news|job|work|point)\b|(?:happy to help|i'?d be happy|absolutely|certainly|sure thing)\b)/i
 
-export function checkAnswer(raw: string, allowed: Set<string>): AnswerCheck {
+export function checkAnswer(raw: string, allowed: Set<string>, literals: readonly string[] = []): AnswerCheck {
   const parsed = romaAnswerSchema.safeParse({ text: raw })
   if (!parsed.success) return { ok: false, reason: "invalid" }
   const { text } = parsed.data
   if (PRAISE_OPENER.test(text)) return { ok: false, reason: "tone" }
-  const unmatched = [...new Set(numbersIn(text).filter((n) => !allowed.has(n)))]
+  const unmatched = [...new Set(numbersIn(withoutLiterals(text, literals)).filter((n) => !allowed.has(n)))]
   if (unmatched.length > 0) return { ok: false, reason: "unverified", unmatched }
   return { ok: true, text }
 }

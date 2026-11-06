@@ -23,6 +23,16 @@ export type Figure = { label: string; hideWhenZero?: boolean } & (
   | { kind: "percent"; bps: number }
 )
 
+/** A goal check (10.4): the verdict computed in code, the same said in full, and its assumptions. */
+export type GoalCheck = {
+  goal: string
+  /** "Yes.", "No." or "Too early to say.": the answer must start with it. */
+  verdict: string
+  /** The whole result in words, built in code: shown instead when the answer doesn't start with the verdict. */
+  summary: string
+  assumptions: string[]
+}
+
 export type ToolOutput = {
   /** Sent to the model as the tool result: compact and structured, never raw rows. */
   data: Record<string, unknown>
@@ -35,6 +45,7 @@ export type ToolOutput = {
   descriptionsWithheld?: boolean
   /** Descriptions were sent to the model (the answer may quote one; stored with the turn, 10.3). */
   descriptionsSent?: boolean
+  check?: GoalCheck
 }
 
 export type FinanceTool<I = unknown> = {

@@ -1,8 +1,8 @@
 import type { DateRange } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
-import { allowedNumbers, checkAnswer } from "./output"
+import { allowedNumbers, checkAnswer, literalStrings } from "./output"
 import { ROMA_SYSTEM_PROMPT, romaContext } from "./prompts/roma-system"
-import { type FinanceTool, type Figure, type ToolContext, ToolError, toToolDef } from "./tools/types"
+import { type FinanceTool, type Figure, type GoalCheck, type ToolContext, ToolError, toToolDef } from "./tools/types"
 import {
   LlmError,
   type LlmMessage,
@@ -20,6 +20,9 @@ import {
 // Neither is a source of figures: the figure check accepts only numbers from this question's
 // tool calls. The history part of the request is the same in every round of a question, so the
 // model's thinking blocks stay valid when they are sent back (checked live, 2026-11-06).
+// From 10.4 a goal check's verdict is computed in code: an answer that doesn't start with it
+// (after passing the figure check) is replaced by the check's own code-built summary. Strings
+// the tools returned (names with digits in them) are not read as figures.
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -34,6 +37,8 @@ export type ChatResult =
       figures: Figure[]
       periods: DateRange[]
       descriptionsWithheld: boolean
+      /** Goal checks made for this question (10.4). */
+      checks: GoalCheck[]
       /** Tools that ran without error, in order (stored with the turn). */
       toolsRan: string[]
       descriptionsSent: boolean
@@ -84,7 +89,7 @@ export async function runChat({
   ]
   const figures: Figure[] = []
   const periods: DateRange[] = []
-  const found: Found = { dates: [], descriptionsWithheld: false, descriptionsSent: false, toolsRan: [] }
+  const found: Found = { dates: [], descriptionsWithheld: false, descriptionsSent: false, toolsRan: [], checks: [], literals: [] }
   let usage = NO_USAGE
   let calls = 0
   let unknownCalls = 0
@@ -124,14 +129,15 @@ export async function runChat({
     if (response.stop !== "end") return done({ kind: "failed", reason: "rejected" })
 
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
-    const check = checkAnswer(response.text, allowedNumbers(figures, dates))
+    const check = checkAnswer(response.text, allowedNumbers(figures, dates), found.literals)
     if (!check.ok) return done({ kind: check.reason })
     return done({
       kind: "answer",
-      text: check.text,
+      text: withVerdict(check.text, found.checks),
       figures,
       periods,
       descriptionsWithheld: found.descriptionsWithheld,
+      checks: found.checks,
       toolsRan: found.toolsRan,
       descriptionsSent: found.descriptionsSent,
     })
@@ -140,7 +146,13 @@ export async function runChat({
 }
 
 /** What tools found besides figures and periods. */
-type Found = { dates: string[]; descriptionsWithheld: boolean; descriptionsSent: boolean; toolsRan: string[] }
+type Found = { dates: string[]; descriptionsWithheld: boolean; descriptionsSent: boolean; toolsRan: string[]; checks: GoalCheck[]; literals: string[] }
+
+/** The answer, when it starts with a verdict a goal check computed; otherwise the checks' own summaries. */
+export function withVerdict(text: string, checks: readonly GoalCheck[]): string {
+  if (checks.length === 0 || checks.some((c) => text.startsWith(c.verdict))) return text
+  return checks.map((c) => c.summary).join("\n\n")
+}
 
 async function runTool(
   tools: readonly FinanceTool[],
@@ -164,6 +176,8 @@ async function runTool(
     if (output.dates) found.dates.push(...output.dates)
     if (output.descriptionsWithheld) found.descriptionsWithheld = true
     if (output.descriptionsSent) found.descriptionsSent = true
+    if (output.check) found.checks.push(output.check)
+    found.literals.push(...literalStrings(output.data), ...literalStrings(output.figures.map((f) => f.label)))
     found.toolsRan.push(tool.name)
     return { callId, content: JSON.stringify(output.data) }
   } catch (error) {

@@ -30,7 +30,8 @@ export const mockToolCall = (name: string, input: unknown, id = `call-${name}`):
  * The E2E script: "find …" asks search_transactions for this month and names the newest entry
  * (with its description when one was sent); anything else asks spending_for_period for "last
  * month" when the question says so, otherwise "this month", then repeats the tool's own
- * figures. Labelled as a test answer.
+ * figures. Labelled as a test answer. "Can I reach <goal>?" asks goal_projection and repeats its
+ * code-built verdict summary (10.4).
  */
 const defaultScript: MockScript = (request) => {
   const last = request.messages.at(-1)
@@ -41,7 +42,9 @@ const defaultScript: MockScript = (request) => {
       expense_count?: number
       entries?: { date: string; amount: string; description: string | null }[]
       shown?: number
+      verdict_summary?: string
     }
+    if (result.verdict_summary) return mockText(`${result.verdict_summary} (Test answer.)`)
     if (result.entries) {
       const newest = result.entries[0]
       if (!newest) return mockText("I found no matching entries. (Test answer.)")
@@ -57,5 +60,7 @@ const defaultScript: MockScript = (request) => {
   const question = request.messages.filter((m) => m.role === "user").at(-1)
   const text = question?.role === "user" ? question.text : ""
   if (/^find\b/i.test(text)) return mockToolCall("search_transactions", { period: "this_month" })
+  const goal = /^can i reach (.+?)\??$/i.exec(text.trim())
+  if (goal) return mockToolCall("goal_projection", { goal: goal[1] })
   return mockToolCall("spending_for_period", { period: /last month/i.test(text) ? "last_month" : "this_month" })
 }

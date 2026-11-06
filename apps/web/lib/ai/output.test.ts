@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { allowedNumbers, checkAnswer, normalizeNumber, numbersIn } from "./output"
+import { allowedNumbers, checkAnswer, literalStrings, normalizeNumber, numbersIn } from "./output"
 import type { Figure } from "./tools/types"
 
 const figures: Figure[] = [
@@ -63,3 +63,27 @@ describe("rates (10.2)", () => {
   })
 })
 
+
+describe("names a tool returned", () => {
+  const data = { goal: "Car 2027", categories: [{ category: "Rent 2BHK", spent: "₹12,345.50" }], count: 3, months: "6" }
+
+  it("collects strings with a digit and a letter, not bare numbers", () => {
+    expect(literalStrings(data)).toEqual(["Car 2027", "Rent 2BHK"])
+  })
+
+  it("does not read digits inside a goal or category name as figures", () => {
+    const literals = literalStrings(data)
+    expect(checkAnswer("No. Car 2027 needs ₹500 more a month.", allowed, literals)).toEqual({ ok: true, text: "No. Car 2027 needs ₹500 more a month." })
+    expect(checkAnswer("You spent ₹12,345.50 on rent 2bhk.", allowed, literals).ok).toBe(true)
+  })
+
+  it("still refuses the same digits outside the name", () => {
+    const literals = literalStrings(data)
+    expect(checkAnswer("Car 2027 by 2027.", allowed, literals)).toMatchObject({ ok: false, reason: "unverified", unmatched: ["2027"] })
+    expect(checkAnswer("Rent 2BHK, 2 rooms.", allowed, literals)).toMatchObject({ ok: false, unmatched: ["2"] })
+  })
+
+  it("without the tool's strings, the name's digits are refused", () => {
+    expect(checkAnswer("Car 2027 needs ₹500.", allowed)).toMatchObject({ ok: false, unmatched: ["2027"] })
+  })
+})

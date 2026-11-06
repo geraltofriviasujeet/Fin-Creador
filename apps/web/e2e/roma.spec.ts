@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test"
-import { addBank, addEntry, signUpConfirmed, uniqueEmail } from "./helpers"
+import { type Page, expect, test } from "@playwright/test"
+import { createClient } from "@supabase/supabase-js"
+import { PASSWORD, addBank, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Roma (Sprints 10.1 and 10.2) end to end on the mock provider (LLM_PROVIDER=mock on the test server, see
 // playwright.config.ts): no paid API is called and no key is set. The mock asks the real
@@ -162,4 +163,109 @@ test("conversations: follow up, reopen, start a new one, delete one, delete all 
   await expect(page.getByRole("status").getByText("All your conversations with Roma were deleted.")).toBeVisible()
   await page.goto("/roma")
   await expect(history.getByText("No past conversations yet.")).toBeVisible()
+})
+
+// The goal check (10.4). Past months can't be entered through the form in bulk, so income for
+// earlier months is recorded as the signed-in person (their own session, RLS), as the Reports
+// tests do. The mock repeats the tool's code-built verdict summary.
+
+const todayInIndia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+/** The 15th of the month `offset` months from today's month in India. */
+function monthDay(offset: number) {
+  const [y, m] = todayInIndia().split("-").map(Number) as [number, number]
+  const index = y * 12 + (m - 1) + offset
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}-15`
+}
+
+async function startWithRoma(page: Page, name: string, email: string) {
+  await signUpConfirmed(page, name, email)
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000", asOf: monthDay(-8) })
+  await page.goto("/settings")
+  await page.getByRole("button", { name: "Turn Roma on" }).click()
+  await expect(page.getByRole("status").getByText("Roma is on.")).toBeVisible()
+}
+
+async function addOtherGoal(page: Page, name: string, amount: string, date?: string) {
+  await page.goto("/goals")
+  await page.getByRole("button", { name: "Plan an expense" }).first().click()
+  const plan = dialog(page, "Plan an expense")
+  await plan.getByRole("radio", { name: "Other" }).click()
+  await plan.getByLabel("Name", { exact: true }).fill(name)
+  await plan.getByLabel("What it's for").fill(name)
+  await plan.getByLabel("Amount", { exact: true }).fill(amount)
+  if (date) await plan.getByLabel("Target date (optional)").fill(date)
+  await plan.getByRole("button", { name: "Add goal" }).click()
+  await expect(toast(page, "Goal added.")).toBeVisible()
+  await expect(plan).toBeHidden()
+}
+
+async function ask(page: Page, question: string) {
+  await page.goto("/roma")
+  await page.getByLabel("Your question").fill(question)
+  await page.getByLabel("Your question").press("Enter")
+  return page.getByRole("list", { name: "Roma's answers" }).getByRole("listitem").first()
+}
+
+const figure = (answer: ReturnType<Page["locator"]>, label: string) =>
+  answer.locator("dl > div").filter({ has: answer.page().getByText(label, { exact: true }) }).getByRole("definition")
+
+test("goal check: Yes for a goal within reach, No with what to change, the verdict, figures and assumptions shown (10.4)", async ({ page }) => {
+  const email = uniqueEmail("roma-goals")
+  await startWithRoma(page, "Nisha Verma", email)
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } })
+  expect((await supabase.auth.signInWithPassword({ email, password: PASSWORD })).error).toBeNull()
+  const account = await supabase.from("accounts").select("id").eq("kind", "bank").single()
+  const salary = await supabase.from("categories").select("id").eq("kind", "income").limit(1).single()
+  expect(account.error ?? salary.error).toBeNull()
+  // ₹50,000 of income in each of the last 6 complete months: the median net is ₹50,000.
+  for (let offset = -6; offset <= -1; offset++) {
+    const recorded = await supabase.rpc("record_transaction", {
+      p_type: "income",
+      p_idempotency_key: crypto.randomUUID(),
+      p_amount_minor: 50_000_00,
+      p_occurred_on: monthDay(offset),
+      p_account_id: account.data!.id,
+      p_category_id: salary.data!.id,
+    })
+    expect(recorded.error).toBeNull()
+  }
+  const nextYear = Number(todayInIndia().slice(0, 4)) + 1
+
+  // A name with digits in it is a name, not a figure the check refuses.
+  await addOtherGoal(page, "Car 2027", "1,00,000", `${nextYear}-12-31`)
+  const yes = await ask(page, "Can I reach Car 2027?")
+  await expect(yes.getByText("Goal check · Car 2027")).toBeVisible()
+  await expect(yes.getByText("Yes.", { exact: true })).toBeVisible()
+  await expect(yes.getByText(/^Yes\. At your current rate Car 2027 would be reached in \w+ \d{4}, by the target of December \d{4}\. Free for it this month: ₹50,000\./)).toBeVisible()
+  await expect(figure(yes, "Median monthly net (income minus spending)")).toHaveText("₹50,000")
+  await expect(figure(yes, "Months with records")).toHaveText("6")
+  await expect(figure(yes, "Car 2027: target")).toHaveText("₹1,00,000")
+  await expect(yes.getByText("Assumptions", { exact: true })).toBeVisible()
+  await expect(yes.getByRole("listitem").filter({ hasText: "Only INR entries are counted; entries in other currencies are ignored, not added." })).toBeVisible()
+  await expect(yes.getByRole("listitem").filter({ hasText: "so this figure is deliberately conservative" })).toBeVisible()
+
+  // Out of reach, with the other goal's saving shown as an assumption.
+  await addOtherGoal(page, "House fund", "50,00,000", `${nextYear}-12-31`)
+  const no = await ask(page, "Can I reach House fund?")
+  await expect(no.getByText("Goal check · House fund")).toBeVisible()
+  await expect(no.getByText("No.", { exact: true })).toBeVisible()
+  await expect(no.getByText(/^No\. At your current rate House fund would be reached (in \w+ \d{4}|not within 10 years), after the target of December \d{4}\..* save ₹[\d,]+ more a month/)).toBeVisible()
+  await expect(figure(no, "Assuming you keep saving for your other goals: Car 2027, a month")).toHaveText(/^₹[\d,]+$/)
+  await expect(figure(no, "Save more a month")).toHaveText(/^₹[\d,]+$/)
+  await expect(no.getByRole("listitem").filter({ hasText: "Assuming you keep saving for your other goals (Car 2027)" })).toBeVisible()
+})
+
+test("goal check: too early to say with under 3 months of records (10.4)", async ({ page }) => {
+  await startWithRoma(page, "Arjun Mehta", uniqueEmail("roma-goal-early"))
+  await page.goto("/income")
+  await addEntry(page, { type: "Income", amount: "20,000", category: "Salary", from: "HDFC Bank ··4821" })
+  await addOtherGoal(page, "Trip to Goa", "30,000")
+  const early = await ask(page, "Can I reach Trip to Goa?")
+  await expect(early.getByText("Goal check · Trip to Goa")).toBeVisible()
+  await expect(early.getByText("Too early to say.", { exact: true })).toBeVisible()
+  await expect(early.getByText(/^Too early to say\. There are only 0 complete months of records, too few to project from\. Trip to Goa needs ₹2,500 a month\./)).toBeVisible()
+  await expect(figure(early, "Months with records")).toHaveText("0")
+  await expect(figure(early, "Net recorded so far")).toHaveText("₹20,000")
+  await expect(early.getByRole("listitem").filter({ hasText: "At least 3 complete months with records are needed before Roma projects anything." })).toBeVisible()
 })

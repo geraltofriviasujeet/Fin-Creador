@@ -19,7 +19,8 @@ import { cn } from "cn"
 // (roma_descriptions_ok_at). From 10.3 questions belong to a conversation: the server sends
 // the recent turns with each question and records the answer; past conversations are listed
 // beside the chat. A stored turn shows its answer text only: figures are not stored, so the
-// figures panel is for answers given in this visit.
+// figures panel is for answers given in this visit. From 10.4 a goal check shows its verdict
+// (computed in code) above the answer and its assumptions under the figures.
 
 export type Turn = {
   id: string
@@ -260,6 +261,12 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
   }
   return (
     <div className="mt-3 grid gap-3">
+      {reply.checks?.map((c, i) => (
+        <div key={i} className="rounded-lg border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
+          <p className="text-xs font-semibold text-muted-foreground">Goal check · {c.goal}</p>
+          <p className="font-heading text-lg font-bold text-ink">{c.verdict}</p>
+        </div>
+      ))}
       <p className="text-sm whitespace-pre-line text-ink">{reply.answer}</p>
       {reply.figures.length > 0 && (
         <div className="rounded-lg bg-canvas p-3">
@@ -276,6 +283,19 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
             ))}
           </dl>
         </div>
+      )}
+      {reply.checks?.map(
+        (c, i) =>
+          c.assumptions.length > 0 && (
+            <div key={i} className="rounded-lg border border-line p-3">
+              <p className="text-xs font-semibold text-muted-foreground">Assumptions{reply.checks!.length > 1 ? ` · ${c.goal}` : ""}</p>
+              <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-ink">
+                {c.assumptions.map((a, j) => (
+                  <li key={j}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          ),
       )}
     </div>
   )

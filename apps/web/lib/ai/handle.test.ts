@@ -128,7 +128,7 @@ describe("POST /api/ai/chat flow", () => {
 
   it("settles Haiku usage at its price", async () => {
     const run: ChatRun = {
-      result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [], descriptionsWithheld: false, toolsRan: [], descriptionsSent: false },
+      result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [], descriptionsWithheld: false, toolsRan: [], descriptionsSent: false, checks: [] },
       calls: 2,
       usage: { inputTokens: 3000, outputTokens: 600, cacheReadTokens: 1000, cacheWriteTokens: 0 },
       unknownCalls: 0,
@@ -193,6 +193,7 @@ describe("POST /api/ai/chat flow", () => {
         descriptionsWithheld: true,
         toolsRan: ["savings_rate"],
         descriptionsSent: false,
+        checks: [],
       },
       calls: 2,
       usage: NO_USAGE,
@@ -230,7 +231,7 @@ describe("POST /api/ai/chat flow", () => {
         run: async (options) => {
           seen = options
           return {
-            result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [], descriptionsWithheld: false, toolsRan: [], descriptionsSent: false },
+            result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [], descriptionsWithheld: false, toolsRan: [], descriptionsSent: false, checks: [] },
             calls: 1,
             usage: NO_USAGE,
             unknownCalls: 0,

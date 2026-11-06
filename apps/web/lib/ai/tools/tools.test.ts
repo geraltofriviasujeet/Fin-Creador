@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { UserClient } from "@fin-creador/api"
-import { allowedNumbers, checkAnswer } from "../output"
+import { allowedNumbers, checkAnswer, literalStrings } from "../output"
 import { accountBalancesTool, netWorthTool } from "./balances"
 import { incomeVsExpensesTool, savingsRateTool } from "./cash-flow"
 import { categoryBreakdownTool, categoryMatches } from "./categories"
@@ -124,6 +124,16 @@ describe("category_breakdown", () => {
       other_currencies: ["USD"],
     })
     expect(JSON.stringify(out.data)).not.toContain("c1")
+  })
+
+  it("a category with a digit in its name passes the figure check as a name, not a figure", async () => {
+    const out = await categoryBreakdownTool.run(ctx(fakeClient({ dashboard_breakdown: [cat("c9", 2500000)] }, { categories: [{ id: "c9", name: "Rent 2BHK" }] })), {
+      period: "last_month",
+    })
+    const literals = literalStrings([out.data, out.figures.map((f) => f.label)])
+    const allowed = allowedNumbers(out.figures, [TODAY, out.period!.start, out.period!.end])
+    expect(checkAnswer("Rent 2BHK took ₹25,000 last month.", allowed, literals).ok).toBe(true)
+    expect(checkAnswer("Rent 2BHK took ₹25,000 for 2 rooms.", allowed, literals)).toMatchObject({ ok: false, unmatched: ["2"] })
   })
 
   it("puts the rest under Everything else", async () => {
