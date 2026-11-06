@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(37);
+select plan(40);
 
 -- Users A and B, fictional.
 insert into auth.users (id, email) values
@@ -150,6 +150,20 @@ select is((select time_zone from public.profiles where id = 'b1000000-0000-4000-
   'B''s time zone is null');
 set local role authenticated;
 select is(public.t_begin('b4'), 'daily_limit', 'with a null time zone the daily limit still applies (UTC day)');
+reset role;
+
+-- ------------------------------------------------------------ withdrawing consent, Roma on (38-40)
+-- Settings' own descriptions toggle (10.2): null withdraws consent and leaves Roma on.
+select set_config('request.jwt.claims', '{"sub": "a1000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
+set local role authenticated;
+update public.profiles set roma_descriptions_ok_at = now() where id = 'a1000000-0000-4000-8000-00000000000a';
+select isnt((select roma_descriptions_ok_at from public.profiles where id = 'a1000000-0000-4000-8000-00000000000a'),
+  null, 'A agrees to descriptions while Roma is on');
+update public.profiles set roma_descriptions_ok_at = null where id = 'a1000000-0000-4000-8000-00000000000a';
+select is((select roma_descriptions_ok_at from public.profiles where id = 'a1000000-0000-4000-8000-00000000000a'),
+  null, 'A withdraws consent');
+select is((select roma_enabled from public.profiles where id = 'a1000000-0000-4000-8000-00000000000a'),
+  true, '... and Roma stays on');
 reset role;
 
 select * from finish();

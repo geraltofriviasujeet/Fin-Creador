@@ -5,11 +5,11 @@ import { LogOut } from "lucide-react"
 import { PROFILE_FORM_COLUMNS, loadExpenseCategories, profileFormValues } from "@fin-creador/api"
 import { countryOptions, currencyOptions, timeZoneOptions } from "@fin-creador/schemas"
 import { signOutAction } from "@/app/(auth)/actions"
-import { setRomaEnabledAction, updateProfileAction } from "@/app/(app)/settings/actions"
+import { setRomaDescriptionsAction, setRomaEnabledAction, updateProfileAction } from "@/app/(app)/settings/actions"
 import { PageHeader } from "@/components/shell/app-shell"
 import { ExpenseCategories } from "@/components/settings/expense-categories"
 import { ProfileForm } from "@/components/settings/profile-form"
-import { RomaSetting } from "@/components/settings/roma-setting"
+import { RomaDescriptionsSetting, RomaSetting } from "@/components/settings/roma-setting"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
@@ -35,7 +35,7 @@ async function SettingsContent() {
   if (!auth.user) redirect("/sign-in?next=%2Fsettings")
 
   const [{ data: profile, error }, categories] = await Promise.all([
-    supabase.from("profiles").select(`${PROFILE_FORM_COLUMNS}, roma_enabled`).eq("id", auth.user.id).maybeSingle(),
+    supabase.from("profiles").select(`${PROFILE_FORM_COLUMNS}, roma_enabled, roma_descriptions_ok_at`).eq("id", auth.user.id).maybeSingle(),
     loadExpenseCategories(supabase),
   ])
 
@@ -81,7 +81,12 @@ async function SettingsContent() {
         <CardTitle>Roma</CardTitle>
         <CardDescription className="mt-1">{ROMA_DATA_NOTICE}</CardDescription>
         {profile ? (
-          <RomaSetting action={setRomaEnabledAction} enabled={profile.roma_enabled} />
+          <>
+            <RomaSetting action={setRomaEnabledAction} enabled={profile.roma_enabled} />
+            {profile.roma_enabled && (
+              <RomaDescriptionsSetting action={setRomaDescriptionsAction} allowedAt={profile.roma_descriptions_ok_at} timeZone={profile.time_zone} />
+            )}
+          </>
         ) : (
           <FormMessage tone="error" className="mt-4">
             We couldn’t load this setting. Refresh the page to try again.

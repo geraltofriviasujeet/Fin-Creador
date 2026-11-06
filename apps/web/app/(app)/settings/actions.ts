@@ -88,3 +88,23 @@ export async function setRomaEnabledAction(_prev: FormState, formData: FormData)
   revalidatePath("/roma")
   return { status: "success", message: enabled ? "Roma is on." : "Roma is off." }
 }
+
+// Transaction descriptions (Sprint 10.2), apart from Roma on/off. Allowing sends any value
+// (the profiles_roma_consent trigger stores the server's now(), and refuses while Roma is
+// off); withdrawing sets null and leaves Roma on. RLS limits the row to the caller.
+export async function setRomaDescriptionsAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const allowed = formData.get("allowed") === "true"
+  const supabase = await signedInClient()
+  const { data: auth } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ roma_descriptions_ok_at: allowed ? new Date().toISOString() : null })
+    .eq("id", auth.user?.id ?? "")
+    .select("roma_descriptions_ok_at")
+    .maybeSingle()
+  if (error || !data || (data.roma_descriptions_ok_at !== null) !== allowed) {
+    return { status: "error", message: "We couldn’t change this setting. Please try again." }
+  }
+  revalidatePath("/settings")
+  return { status: "success", message: allowed ? "Roma may send descriptions." : "Roma won’t send descriptions." }
+}
