@@ -102,6 +102,8 @@ export type DashboardBreakdown = {
   categories: CategorySpend[]
   /** Categories below zero (refunds more than the spending), most refunded first. */
   refunded: CategorySpend[]
+  /** Every category with entries in the range, profile currency, before the top-5 fold (Roma's named categories). */
+  byCategory: CategorySpend[]
   /** Other currencies with income or expenses in the range: noted, never summed. */
   otherCurrencies: string[]
 }
@@ -126,7 +128,7 @@ type BreakdownRow = {
   expense_minor: number
 }
 
-const categoryRows = (rows: CategorySpend[]) => ({ categories: topCategories(rows), refunded: refundedCategories(rows) })
+const categoryRows = (rows: CategorySpend[]) => ({ categories: topCategories(rows), refunded: refundedCategories(rows), byCategory: rows })
 
 export function buildBreakdown(rows: readonly BreakdownRow[], range: DateRange, currency: string): DashboardBreakdown {
   const same = rows.filter((r) => r.currency === currency)
