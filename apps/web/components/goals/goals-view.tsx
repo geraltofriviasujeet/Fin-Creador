@@ -253,9 +253,9 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
               {answersLine(item) ? ` · ${answersLine(item)}` : ""}
             </p>
           </div>
-          <span aria-disabled="true" title="AI insights are coming in a later update" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-line px-2 py-0.5 text-xs text-muted-foreground">
+          <span aria-disabled="true" title="Roma on goals is coming in a later update" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-line px-2 py-0.5 text-xs text-muted-foreground">
             <Sparkles aria-hidden="true" className="size-3" />
-            AI insights · soon
+            Roma · soon
           </span>
         </div>
 
