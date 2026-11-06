@@ -3,7 +3,7 @@ import type { UserClient } from "@fin-creador/api"
 import { allowedNumbers, checkAnswer } from "../output"
 import { accountBalancesTool, netWorthTool } from "./balances"
 import { incomeVsExpensesTool, savingsRateTool } from "./cash-flow"
-import { categoryBreakdownTool } from "./categories"
+import { categoryBreakdownTool, categoryMatches } from "./categories"
 import { loansAndCardsTool } from "./liabilities"
 import { SEARCH_LIMIT, cleanDescription, searchTransactionsTool } from "./search"
 import { type ToolContext, ToolError, toToolDef } from "./types"
@@ -131,6 +131,54 @@ describe("category_breakdown", () => {
     const listed = (out.data.categories as { category: string; spent: string }[]).map((c) => c.category)
     expect(listed).toHaveLength(6)
     expect(listed.at(-1)).toBe("Everything else")
+  })
+
+  describe("asked for by name", () => {
+    const named = [
+      { id: "f1", name: "Food & dining", archived_at: null },
+      { id: "f2", name: "Fast food", archived_at: null },
+      { id: "r1", name: "Rent & housing", archived_at: null },
+      { id: "g1", name: "Groceries", archived_at: null },
+      { id: "o1", name: "Old stuff", archived_at: "2026-01-01T00:00:00Z" },
+      ...["a", "b", "c", "d", "e", "x"].map((id) => ({ id, name: `Big ${id}`, archived_at: null })),
+    ]
+    // Six large categories, so Food & dining (₹1,381) falls outside the top 5.
+    const rows = [...["a", "b", "c", "d", "e", "x"].map((id) => cat(id, 5000000)), cat("f1", 138100), cat("r1", 2500000)]
+    const run = (category: string) =>
+      categoryBreakdownTool.run(ctx(fakeClient({ dashboard_breakdown: rows }, { categories: named })), { period: "this_month", category })
+
+    it("matches words loosely, case-insensitively", () => {
+      expect(categoryMatches("Food & dining", "food")).toBe(true)
+      expect(categoryMatches("Rent & housing", "RENT")).toBe(true)
+      expect(categoryMatches("Food & dining", "dining food")).toBe(true)
+      expect(categoryMatches("Groceries", "food")).toBe(false)
+      expect(categoryMatches("Food & dining", "  &  ")).toBe(false)
+    })
+
+    it("finds a category from part of its name, with its own figure even when small", async () => {
+      const out = await run("rent")
+      expect(out.data).toMatchObject({ asked_for: "rent", categories: [{ category: "Rent & housing", spent: "₹25,000" }] })
+      const small = await run("Food & dining")
+      expect(small.data.categories).toEqual([{ category: "Food & dining", spent: "₹1,381" }])
+      expect(JSON.stringify(small.data)).not.toContain("Everything else")
+      expect(passes("You spent ₹1,381 on Food & dining this month.", small)).toBe(true)
+    })
+
+    it("returns each category separately when several match, zero for one without spending", async () => {
+      const out = await run("food")
+      expect(out.data.categories).toEqual([
+        { category: "Food & dining", spent: "₹1,381" },
+        { category: "Fast food", spent: "₹0" },
+      ])
+      expect(out.figures).toContainEqual({ label: "Categories matched", kind: "count", value: 2 })
+    })
+
+    it("says when nothing matches and lists the active categories", async () => {
+      const failure = run("pets")
+      await expect(failure).rejects.toBeInstanceOf(ToolError)
+      await expect(failure).rejects.toThrow('No category name contains "pets". The person\'s categories are: Food & dining, Fast food, Rent & housing, Groceries, Big a')
+      await expect(run("pets")).rejects.not.toThrow("Old stuff")
+    })
   })
 
   it("says when nothing was spent", async () => {
