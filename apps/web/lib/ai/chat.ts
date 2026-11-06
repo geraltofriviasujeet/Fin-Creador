@@ -1,4 +1,5 @@
 import type { DateRange } from "@fin-creador/domain"
+import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer } from "./output"
 import { ROMA_SYSTEM_PROMPT, romaContext } from "./prompts/roma-system"
 import { type FinanceTool, type Figure, type ToolContext, ToolError, toToolDef } from "./tools/types"
@@ -14,7 +15,11 @@ import {
 
 // One question, answered (Sprint 10.1; tools from 10.2): the model may call tools for up to MAX_ROUNDS calls
 // within DEADLINE_MS; tool inputs are validated with Zod and run under the person's own RLS;
-// the final text passes the output guard or is refused. No history is kept between questions.
+// the final text passes the output guard or is refused. From 10.3 the question comes with the
+// conversation's recent turns as plain text and a summary (history.ts) in a third system block.
+// Neither is a source of figures: the figure check accepts only numbers from this question's
+// tool calls. The history part of the request is the same in every round of a question, so the
+// model's thinking blocks stay valid when they are sent back (checked live, 2026-11-06).
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -23,7 +28,16 @@ export const MAX_OUTPUT_TOKENS = 1_200
 export type ChatFailure = "timeout" | "rounds" | "unavailable" | "rate_limited" | "rejected" | "refusal" | "max_tokens"
 
 export type ChatResult =
-  | { kind: "answer"; text: string; figures: Figure[]; periods: DateRange[]; descriptionsWithheld: boolean }
+  | {
+      kind: "answer"
+      text: string
+      figures: Figure[]
+      periods: DateRange[]
+      descriptionsWithheld: boolean
+      /** Tools that ran without error, in order (stored with the turn). */
+      toolsRan: string[]
+      descriptionsSent: boolean
+    }
   | { kind: "unverified" }
   | { kind: "tone" }
   | { kind: "invalid" }
@@ -44,18 +58,33 @@ type Options = {
   tools: readonly FinanceTool[]
   context: ToolContext
   question: string
+  history?: ChatHistory
   maxRounds?: number
   deadlineMs?: number
 }
 
-export async function runChat({ provider, tools, context, question, maxRounds = MAX_ROUNDS, deadlineMs = DEADLINE_MS }: Options): Promise<ChatRun> {
+export async function runChat({
+  provider,
+  tools,
+  context,
+  question,
+  history = NO_HISTORY,
+  maxRounds = MAX_ROUNDS,
+  deadlineMs = DEADLINE_MS,
+}: Options): Promise<ChatRun> {
   const deadline = Date.now() + deadlineMs
   const toolDefs = tools.map(toToolDef)
-  const system = [ROMA_SYSTEM_PROMPT, romaContext(context)]
-  const messages: LlmMessage[] = [{ role: "user", text: question }]
+  const system = [ROMA_SYSTEM_PROMPT, romaContext(context), ...(history.summary ? [history.summary] : [])]
+  const messages: LlmMessage[] = [
+    ...history.recent.flatMap((t): LlmMessage[] => [
+      { role: "user", text: t.question },
+      { role: "assistant", text: t.answer, toolCalls: [] },
+    ]),
+    { role: "user", text: question },
+  ]
   const figures: Figure[] = []
   const periods: DateRange[] = []
-  const found: Found = { dates: [], descriptionsWithheld: false }
+  const found: Found = { dates: [], descriptionsWithheld: false, descriptionsSent: false, toolsRan: [] }
   let usage = NO_USAGE
   let calls = 0
   let unknownCalls = 0
@@ -97,13 +126,21 @@ export async function runChat({ provider, tools, context, question, maxRounds = 
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
     const check = checkAnswer(response.text, allowedNumbers(figures, dates))
     if (!check.ok) return done({ kind: check.reason })
-    return done({ kind: "answer", text: check.text, figures, periods, descriptionsWithheld: found.descriptionsWithheld })
+    return done({
+      kind: "answer",
+      text: check.text,
+      figures,
+      periods,
+      descriptionsWithheld: found.descriptionsWithheld,
+      toolsRan: found.toolsRan,
+      descriptionsSent: found.descriptionsSent,
+    })
   }
   return done({ kind: "failed", reason: "rounds" })
 }
 
 /** What tools found besides figures and periods. */
-type Found = { dates: string[]; descriptionsWithheld: boolean }
+type Found = { dates: string[]; descriptionsWithheld: boolean; descriptionsSent: boolean; toolsRan: string[] }
 
 async function runTool(
   tools: readonly FinanceTool[],
@@ -126,6 +163,8 @@ async function runTool(
     if (output.period) periods.push(output.period)
     if (output.dates) found.dates.push(...output.dates)
     if (output.descriptionsWithheld) found.descriptionsWithheld = true
+    if (output.descriptionsSent) found.descriptionsSent = true
+    found.toolsRan.push(tool.name)
     return { callId, content: JSON.stringify(output.data) }
   } catch (error) {
     if (error instanceof ToolError) return fail(error.message)

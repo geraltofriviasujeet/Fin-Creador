@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest"
 import type { UserClient } from "@fin-creador/api"
 import type { ChatRun } from "./chat"
 import type { LlmConfig } from "./config"
-import { type BeginOutcome, type ChatDeps, type RomaDb, handleChat } from "./handle"
+import { type BeginOutcome, type ChatDeps, type RomaDb, type RomaHistory, type TurnToRecord, handleChat } from "./handle"
+import { MAX_TURNS, type StoredTurn } from "./history"
 import { mockProvider } from "./llm/mock"
 import { NO_USAGE } from "./llm/types"
 
@@ -29,6 +30,39 @@ function fakeDb(outcome: BeginOutcome = "ok"): RomaDb & { ledger: Ledger } {
   }
 }
 
+// Fake conversation store: turns by conversation, what was recorded, and a failure switch.
+const CONV = "c0000000-0000-4000-8000-000000000001"
+
+function fakeHistory(stored: Record<string, StoredTurn[]> = {}, failRecords = 0): RomaHistory & { recorded: TurnToRecord[]; loads: string[] } {
+  const recorded: TurnToRecord[] = []
+  const loads: string[] = []
+  let failures = failRecords
+  return {
+    recorded,
+    loads,
+    async load(id) {
+      loads.push(id)
+      return stored[id] ?? "missing"
+    },
+    async record(turn) {
+      recorded.push(turn)
+      if (failures-- > 0) return null
+      return { conversationId: turn.conversationId ?? "c0000000-0000-4000-8000-0000000000ff", seq: (stored[turn.conversationId ?? ""]?.length ?? 0) + 1 }
+    },
+  }
+}
+
+const storedTurn = (seq: number, over: Partial<StoredTurn> = {}): StoredTurn => ({
+  seq,
+  question: `Question ${seq}`,
+  answer: `Answer ${seq}`,
+  asOf: "2026-11-04",
+  periods: [{ start: "2026-10-01", end: "2026-10-31" }],
+  tools: ["spending_for_period"],
+  sentDescriptions: false,
+  ...over,
+})
+
 const supabase = {
   rpc: async () => ({
     data: [{ currency: "INR", income_minor: 0, expense_minor: 50000, refund_minor: 0, income_count: 0, expense_count: 2, refund_count: 0, transfer_count: 0 }],
@@ -38,15 +72,16 @@ const supabase = {
 const mockOn: LlmConfig = { status: "on", provider: "mock", model: "mock", apiKey: null }
 const haikuOn: LlmConfig = { status: "on", provider: "anthropic", model: "claude-haiku-5-5", apiKey: "test-key-not-real" }
 
-function deps(over: Partial<ChatDeps> = {}): ChatDeps & { db: ReturnType<typeof fakeDb> } {
+function deps(over: Partial<ChatDeps> = {}): ChatDeps & { db: ReturnType<typeof fakeDb>; history: ReturnType<typeof fakeHistory> } {
   return {
     signedIn: true,
     config: mockOn,
     db: fakeDb(),
+    history: fakeHistory(),
     makeProvider: () => mockProvider(),
     loadContext: async () => ({ supabase, today: "2026-11-05", currency: "INR", descriptionsOk: false }),
     ...over,
-  } as ChatDeps & { db: ReturnType<typeof fakeDb> }
+  } as ChatDeps & { db: ReturnType<typeof fakeDb>; history: ReturnType<typeof fakeHistory> }
 }
 
 const ask = { question: "What did I spend this month?" }
@@ -93,7 +128,7 @@ describe("POST /api/ai/chat flow", () => {
 
   it("settles Haiku usage at its price", async () => {
     const run: ChatRun = {
-      result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [], descriptionsWithheld: false },
+      result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [], descriptionsWithheld: false, toolsRan: [], descriptionsSent: false },
       calls: 2,
       usage: { inputTokens: 3000, outputTokens: 600, cacheReadTokens: 1000, cacheWriteTokens: 0 },
       unknownCalls: 0,
@@ -156,6 +191,8 @@ describe("POST /api/ai/chat flow", () => {
         figures: [{ label: "Savings rate", kind: "percent", bps: 2350 }],
         periods: [],
         descriptionsWithheld: true,
+        toolsRan: ["savings_rate"],
+        descriptionsSent: false,
       },
       calls: 2,
       usage: NO_USAGE,
@@ -165,5 +202,89 @@ describe("POST /api/ai/chat flow", () => {
     expect(res).toMatchObject({ status: 200, body: { status: "answer", figures: [{ label: "Savings rate", value: "23.5%" }], descriptionsNotice: true } })
     const plain = await handleChat(ask, deps({ run: async () => ({ ...run, result: { ...run.result, descriptionsWithheld: false } as ChatRun["result"] }) }))
     expect(plain.body).not.toHaveProperty("descriptionsNotice")
+  })
+
+  describe("conversations (10.3)", () => {
+    it("records an answered question as the first turn of a new conversation", async () => {
+      const d = deps()
+      const res = await handleChat(ask, d)
+      expect(res.body).toMatchObject({ status: "answer", conversationId: "c0000000-0000-4000-8000-0000000000ff", saved: true })
+      expect(d.history.recorded).toEqual([
+        {
+          requestId: "req-1",
+          conversationId: null,
+          question: "What did I spend this month?",
+          answer: expect.stringContaining("You spent ₹500"),
+          asOf: "2026-11-05",
+          periods: [{ start: "2026-11-01", end: "2026-11-05" }],
+          tools: ["spending_for_period"],
+          sentDescriptions: false,
+        },
+      ])
+    })
+
+    it("sends the stored turns with a follow-up and records it in the same conversation", async () => {
+      let seen: Parameters<NonNullable<ChatDeps["run"]>>[0] | undefined
+      const d = deps({
+        history: fakeHistory({ [CONV]: [1, 2, 3, 4].map((n) => storedTurn(n)) }),
+        run: async (options) => {
+          seen = options
+          return {
+            result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [], descriptionsWithheld: false, toolsRan: [], descriptionsSent: false },
+            calls: 1,
+            usage: NO_USAGE,
+            unknownCalls: 0,
+          }
+        },
+      })
+      const res = await handleChat({ ...ask, conversationId: CONV }, d)
+      expect(res.body).toMatchObject({ conversationId: CONV, saved: true })
+      expect(seen?.history?.recent.map((t) => t.question)).toEqual(["Question 2", "Question 3", "Question 4"])
+      expect(seen?.history?.summary).toContain('Turn 1 (asked on 2026-11-04): "Question 1"')
+      expect(d.history.recorded[0]?.conversationId).toBe(CONV)
+    })
+
+    it("refuses a conversation that isn't the person's, before reserving anything", async () => {
+      const d = deps()
+      expect(await handleChat({ ...ask, conversationId: CONV }, d)).toMatchObject({ status: 404, body: { code: "conversation_missing" } })
+      expect(d.db.ledger.begun).toBe(0)
+    })
+
+    it("answers 502 without a reservation when the turns can't be read", async () => {
+      const d = deps({ history: { ...fakeHistory(), load: async () => null } })
+      expect(await handleChat({ ...ask, conversationId: CONV }, d)).toMatchObject({ status: 502, body: { code: "unavailable" } })
+      expect(d.db.ledger.begun).toBe(0)
+    })
+
+    it("refuses a conversation id that isn't a UUID", async () => {
+      const d = deps()
+      expect(await handleChat({ ...ask, conversationId: "1; drop" }, d)).toMatchObject({ status: 400, body: { code: "invalid" } })
+      expect(d.history.loads).toEqual([])
+    })
+
+    it("carries a full conversation on in a new one", async () => {
+      const d = deps({ history: fakeHistory({ [CONV]: Array.from({ length: MAX_TURNS }, (_, i) => storedTurn(i + 1)) }) })
+      await handleChat({ ...ask, conversationId: CONV }, d)
+      expect(d.history.recorded[0]?.conversationId).toBeNull()
+    })
+
+    it("retries a failed recording once with the same request id, then still shows the answer", async () => {
+      const once = deps({ history: fakeHistory({}, 1) })
+      expect((await handleChat(ask, once)).body).toMatchObject({ status: "answer", saved: true })
+      expect(once.history.recorded.map((t) => t.requestId)).toEqual(["req-1", "req-1"])
+
+      const twice = deps({ history: fakeHistory({}, 2) })
+      expect((await handleChat(ask, twice)).body).toMatchObject({ status: "answer", saved: false, conversationId: null })
+      expect(twice.history.recorded).toHaveLength(2)
+
+      const throwing = deps({ history: { ...fakeHistory(), record: async () => { throw new Error("network") } } })
+      expect((await handleChat(ask, throwing)).body).toMatchObject({ status: "answer", saved: false })
+    })
+
+    it("stores nothing for a refused answer", async () => {
+      const d = deps({ run: async () => ({ result: { kind: "unverified" }, calls: 2, usage: NO_USAGE, unknownCalls: 0 }) })
+      await handleChat(ask, d)
+      expect(d.history.recorded).toEqual([])
+    })
   })
 })

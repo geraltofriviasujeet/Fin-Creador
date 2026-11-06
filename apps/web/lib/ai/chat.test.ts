@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { UserClient } from "@fin-creador/api"
 import { runChat } from "./chat"
+import { buildHistory } from "./history"
 import { type MockScript, mockProvider, mockText, mockToolCall } from "./llm/mock"
 import { LlmError, type LlmProvider } from "./llm/types"
 import { spendingTool } from "./tools/spending"
@@ -123,5 +124,65 @@ describe("Roma's chat loop", () => {
     })
     expect(run.result).toMatchObject({ kind: "answer", text: "You paid ₹450 on 2026-10-17.", descriptionsWithheld: true })
   })
-})
 
+  describe("with conversation history (10.3)", () => {
+    const history = buildHistory(
+      [
+        { seq: 1, question: "What did I spend in September?", answer: "You spent ₹38,500 in September.", asOf: "2026-11-01", periods: [{ start: "2026-09-01", end: "2026-09-30" }], tools: ["spending_for_period"], sentDescriptions: false },
+        { seq: 2, question: "And in October?", answer: "You spent ₹42,000 in October.", asOf: "2026-11-01", periods: [{ start: "2026-10-01", end: "2026-10-31" }], tools: ["spending_for_period"], sentDescriptions: false },
+        { seq: 3, question: "Thanks", answer: "Ask again any time.", asOf: "2026-11-01", periods: [], tools: [], sentDescriptions: false },
+        { seq: 4, question: "Was October higher?", answer: "I can't see that yet.", asOf: "2026-11-01", periods: [], tools: [], sentDescriptions: false },
+      ],
+      false,
+    )
+
+    it("never takes a figure from history: one quoted from an earlier answer is refused", async () => {
+      const run = await ask(() => mockText("You spent ₹42,000 in October."), { history })
+      expect(run.result).toEqual({ kind: "unverified" })
+    })
+
+    it("never takes a figure from history: one beside a fresh tool figure is still refused", async () => {
+      const run = await ask(
+        (_req, round) =>
+          round === 0 ? mockToolCall("spending_for_period", { period: "last_month" }) : mockText("You spent ₹12,345.50 last month, against ₹38,500 in September."),
+        { history },
+      )
+      expect(run.result).toEqual({ kind: "unverified" })
+    })
+
+    it("accepts the same follow-up once the figure comes from this question's tool call", async () => {
+      const run = await ask(
+        (_req, round) => (round === 0 ? mockToolCall("spending_for_period", { period: "last_month" }) : mockText("You spent ₹12,345.50 last month.")),
+        { history },
+      )
+      expect(run.result).toMatchObject({ kind: "answer", text: "You spent ₹12,345.50 last month.", toolsRan: ["spending_for_period"], descriptionsSent: false })
+    })
+
+    it("sends recent turns as plain text and the summary as a third system block, unchanged between rounds", async () => {
+      const seen: Parameters<MockScript>[0][] = []
+      await ask(
+        (req, round) => {
+          seen.push(structuredClone(req))
+          return round === 0 ? mockToolCall("spending_for_period", { period: "last_month" }) : mockText("You spent ₹12,345.50 last month.")
+        },
+        { history, question: "And last month?" },
+      )
+      const [first, second] = seen
+      expect(first?.system).toHaveLength(3)
+      expect(first?.system[2]).toContain('Turn 1 (asked on 2026-11-01): "What did I spend in September?" (tools: spending_for_period; periods: 2026-09-01 to 2026-09-30)')
+      expect(first?.system[2]).not.toContain("38,500")
+      expect(first?.messages).toEqual([
+        { role: "user", text: "And in October?" },
+        { role: "assistant", text: "You spent ₹42,000 in October.", toolCalls: [] },
+        { role: "user", text: "Thanks" },
+        { role: "assistant", text: "Ask again any time.", toolCalls: [] },
+        { role: "user", text: "Was October higher?" },
+        { role: "assistant", text: "I can't see that yet.", toolCalls: [] },
+        { role: "user", text: "And last month?" },
+      ])
+      // Append-only within a question: the second round starts with exactly what the first sent.
+      expect(second?.system).toEqual(first?.system)
+      expect(second?.messages.slice(0, first?.messages.length)).toEqual(first?.messages)
+    })
+  })
+})

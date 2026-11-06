@@ -2,6 +2,7 @@ import { z } from "zod"
 import { formatMoney, formatPercentFromBasisPoints } from "@fin-creador/domain"
 import { type ChatRun, MAX_OUTPUT_TOKENS, MAX_ROUNDS, runChat } from "./chat"
 import type { LlmConfig } from "./config"
+import { MAX_TURNS, type StoredTurn, buildHistory } from "./history"
 import { MAX_QUESTION_CHARS } from "./limits"
 import { callCostMicroUsd, microToUsd } from "./llm/prices"
 import type { LlmProvider } from "./llm/types"
@@ -14,10 +15,12 @@ import { spendingTool } from "./tools/spending"
 import type { FinanceTool, Figure, ToolContext } from "./tools/types"
 
 // POST /api/ai/chat, without the framework (Sprint 10.1; the remaining tools from 10.2). Order: signed in, Roma configured,
-// a valid question, then roma_begin_request (kill switch, opt-in, caps, daily limit: all in
-// the database). Only after a reservation is a provider made and called. The reservation is
-// settled with the real cost when a call was sent, and released when none was, so only a
-// real call consumes budget.
+// a valid question, the conversation's stored turns (10.3), then roma_begin_request (kill
+// switch, opt-in, caps, daily limit: all in the database). Only after a reservation is a
+// provider made and called. The reservation is settled with the real cost when a call was
+// sent, and released when none was, so only a real call consumes budget. An answer is then
+// recorded as a turn (roma_record_turn, idempotent per request, so it is retried once); a
+// refused or failed question is not stored.
 
 export const ROMA_TOOLS: readonly FinanceTool[] = [
   spendingTool,
@@ -30,7 +33,11 @@ export const ROMA_TOOLS: readonly FinanceTool[] = [
   loansAndCardsTool,
 ] as FinanceTool[]
 
-const questionSchema = z.object({ question: z.string().trim().min(1).max(MAX_QUESTION_CHARS) })
+const questionSchema = z.object({
+  question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
+  /** The conversation to continue; absent or null starts a new one. */
+  conversationId: z.uuid().nullable().optional(),
+})
 
 /** A call whose usage is unknown (it failed after it may have been sent) is charged at this. */
 const UNKNOWN_CALL_INPUT_TOKENS = 16_000
@@ -43,10 +50,22 @@ export type RomaDb = {
   release(requestId: string): Promise<boolean>
 }
 
+export type RecordedTurn = { conversationId: string; seq: number }
+
+export type TurnToRecord = Omit<StoredTurn, "seq"> & { requestId: string; conversationId: string | null }
+
+export type RomaHistory = {
+  /** The conversation's turns; "missing" when it isn't the caller's (or was deleted); null when it can't be read. */
+  load(conversationId: string): Promise<StoredTurn[] | "missing" | null>
+  /** Records an answered turn; null when it couldn't be saved. Same request id, same turn. */
+  record(turn: TurnToRecord): Promise<RecordedTurn | null>
+}
+
 export type ChatDeps = {
   signedIn: boolean
   config: LlmConfig
   db: RomaDb
+  history: RomaHistory
   /** Builds the provider; may throw (then nothing was sent). */
   makeProvider: () => LlmProvider
   /** The person's today and currency, or null when they can't be read. */
@@ -57,6 +76,7 @@ export type ChatDeps = {
 export type ChatErrorCode =
   | "signed_out"
   | "invalid"
+  | "conversation_missing"
   | "off"
   | "not_enabled"
   | "global_budget"
@@ -76,12 +96,16 @@ export type ChatResponseBody =
       periods: { from: string; to: string }[]
       /** Matching descriptions were left out: show the notice and ask once (10.2). */
       descriptionsNotice?: true
+      /** The conversation the turn was recorded in (10.3); null when it couldn't be saved. */
+      conversationId: string | null
+      saved: boolean
     }
   | { status: "error"; code: ChatErrorCode; message: string }
 
 export const CHAT_MESSAGES: Record<ChatErrorCode, string> = {
   signed_out: "Sign in to ask Roma.",
   invalid: `Ask a question of up to ${MAX_QUESTION_CHARS} characters.`,
+  conversation_missing: "This conversation was deleted. Start a new one to ask Roma.",
   off: "Roma is off right now.",
   not_enabled: "Turn Roma on in Settings to ask her questions.",
   global_budget: "Roma has reached this month's limit. She'll be back on the 1st.",
@@ -97,6 +121,7 @@ export const CHAT_MESSAGES: Record<ChatErrorCode, string> = {
 const STATUS: Record<ChatErrorCode, number> = {
   signed_out: 401,
   invalid: 400,
+  conversation_missing: 404,
   off: 503,
   not_enabled: 403,
   global_budget: 503,
@@ -116,6 +141,21 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
   if (deps.config.status !== "on") return error("off")
   const parsed = questionSchema.safeParse(body)
   if (!parsed.success) return error("invalid")
+
+  // Read before reserving: an unknown conversation or a failed read costs nothing.
+  let conversationId = parsed.data.conversationId ?? null
+  let turns: StoredTurn[] = []
+  if (conversationId) {
+    const loaded = await deps.history.load(conversationId)
+    if (loaded === null) return error("unavailable")
+    if (loaded === "missing") return error("conversation_missing")
+    turns = loaded
+    // A full conversation (MAX_TURNS) carries on in a new one.
+    if (turns.length >= MAX_TURNS) {
+      conversationId = null
+      turns = []
+    }
+  }
 
   const { provider: providerName, model } = deps.config
   const begun = await deps.db.begin(providerName, model)
@@ -139,7 +179,13 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
 
   let run: ChatRun
   try {
-    run = await (deps.run ?? runChat)({ provider, tools: ROMA_TOOLS, context, question: parsed.data.question })
+    run = await (deps.run ?? runChat)({
+      provider,
+      tools: ROMA_TOOLS,
+      context,
+      question: parsed.data.question,
+      history: buildHistory(turns, context.descriptionsOk),
+    })
   } catch {
     // An unexpected failure mid-way: calls may have been sent, so charge the worst case.
     await deps.db.settle(requestId, 0, 0, microToUsd(worstCaseQuestionMicroUsd(model)))
@@ -157,7 +203,19 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
 
   const result = run.result
   switch (result.kind) {
-    case "answer":
+    case "answer": {
+      const turn: TurnToRecord = {
+        requestId,
+        conversationId,
+        question: parsed.data.question,
+        answer: result.text,
+        asOf: context.today,
+        periods: result.periods,
+        tools: result.toolsRan,
+        sentDescriptions: result.descriptionsSent,
+      }
+      // Recording is idempotent per request id, so one retry can't store the turn twice.
+      const recorded = (await recordQuietly(deps.history, turn)) ?? (await recordQuietly(deps.history, turn))
       return {
         status: 200,
         body: {
@@ -166,8 +224,11 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           figures: result.figures.filter((f) => !f.hideWhenZero || figureValue(f) !== 0).map((f) => ({ label: f.label, value: formatFigure(f) })),
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
+          conversationId: recorded?.conversationId ?? null,
+          saved: recorded !== null,
         },
       }
+    }
     case "unverified":
       return error("unverified")
     case "tone":
@@ -177,6 +238,14 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
       if (result.reason === "timeout") return error("timeout")
       if (result.reason === "refusal") return error("refusal")
       return error("unavailable")
+  }
+}
+
+async function recordQuietly(history: RomaHistory, turn: TurnToRecord): Promise<RecordedTurn | null> {
+  try {
+    return await history.record(turn)
+  } catch {
+    return null
   }
 }
 

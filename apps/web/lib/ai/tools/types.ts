@@ -33,6 +33,8 @@ export type ToolOutput = {
   dates?: IsoDate[]
   /** Descriptions matched but were left out because the person hasn't agreed to send them. */
   descriptionsWithheld?: boolean
+  /** Descriptions were sent to the model (the answer may quote one; stored with the turn, 10.3). */
+  descriptionsSent?: boolean
 }
 
 export type FinanceTool<I = unknown> = {
