@@ -1,3 +1,4 @@
+import "@fontsource-variable/lora/wght-italic.css"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { Suspense } from "react"

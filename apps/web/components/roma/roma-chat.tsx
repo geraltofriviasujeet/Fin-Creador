@@ -62,7 +62,7 @@ export function RomaChat({ greeting }: { greeting: string }) {
       {turns.length === 0 && (
         <div className="grid gap-1">
           <p className="font-heading text-lg font-semibold text-ink">{greeting}</p>
-          <p className="text-ink">{OPENING}</p>
+          <p className="font-roma text-xl font-bold text-ink italic">{OPENING}</p>
         </div>
       )}
       <Card>
