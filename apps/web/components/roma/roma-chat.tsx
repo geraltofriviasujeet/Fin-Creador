@@ -76,7 +76,10 @@ function Conversation({
   missing = false,
   onMove,
 }: Props & { onMove: (id: string | null) => void }) {
-  const [question, setQuestion] = useState("")
+  // A question handed over in the address (?ask=, from the Goals page) is only filled in, never
+  // sent: asking spends one of the person's questions, so they press Send themselves.
+  const asked = useSearchParams().get("ask")
+  const [question, setQuestion] = useState(() => (open ? "" : (asked ?? "").trim().slice(0, MAX_QUESTION_CHARS)))
   const [turns, setTurns] = useState<Turn[]>(open?.turns ?? [])
   const [conversationId, setConversationId] = useState<string | null>(open?.id ?? null)
   const [conversations, setConversations] = useState(initialConversations)
@@ -263,7 +266,7 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
     <div className="mt-3 grid gap-3">
       {reply.checks?.map((c, i) => (
         <div key={i} className="rounded-lg border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
-          <p className="text-xs font-semibold text-muted-foreground">Goal check · {c.goal}</p>
+          <p className="text-xs font-semibold text-muted-foreground">{c.kind === "trip" ? "Trip check" : "Goal check"} · {c.goal}</p>
           <p className="font-heading text-lg font-bold text-ink">{c.verdict}</p>
         </div>
       ))}

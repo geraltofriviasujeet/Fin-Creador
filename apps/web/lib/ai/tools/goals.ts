@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { type GoalItem, type LoansView, buildGoalsView, buildLoansView, loadCashFlow, loadGoalsData, loadLoansData } from "@fin-creador/api"
+import { type GoalItem, type GoalsView, type LoansView, buildGoalsView, buildLoansView, loadCashFlow, loadGoalsData, loadLoansData } from "@fin-creador/api"
 import {
   type GoalProjection,
   type IsoDate,
@@ -33,9 +33,9 @@ type GoalInput = z.infer<typeof goalInput>
 
 export const VERDICT_WORDS = { yes: "Yes.", no: "No.", too_early: "Too early to say." } as const
 
-const YEARS = PROJECTION_HORIZON_MONTHS / 12
+export const YEARS = PROJECTION_HORIZON_MONTHS / 12
 
-const monthName = (date: IsoDate) => new Date(`${date}T00:00:00Z`).toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })
+export const monthName = (date: IsoDate) => new Date(`${date}T00:00:00Z`).toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })
 
 /** The goal asked for: same name (any case), else the one name containing it. An array when it isn't clear which. */
 export function pickGoal(active: readonly GoalItem[], name: string | undefined): GoalItem | readonly GoalItem[] {
@@ -50,7 +50,7 @@ export function pickGoal(active: readonly GoalItem[], name: string | undefined):
   return partial.length === 1 ? partial[0]! : active
 }
 
-type Claims = { loans: ProjectionClaim[]; dues: ProjectionClaim[]; unscheduledBorrowing: boolean }
+export type Claims = { loans: ProjectionClaim[]; dues: ProjectionClaim[]; unscheduledBorrowing: boolean }
 
 /** What loans, card EMIs, borrowing and statutory dues will take, per pending instalment. */
 export function liabilityClaims(view: LoansView, currency: string, windowStart: IsoDate): Claims {
@@ -81,6 +81,53 @@ export function liabilityClaims(view: LoansView, currency: string, windowStart: 
 
 const dueBy = (claims: readonly ProjectionClaim[], next: IsoDate) => addMinor(...claims.filter((c) => c.date < next).map((c) => c.amountMinor))
 
+/** What every projection reads (goal_projection, trip_check): goals, the months measured and the claims on the same money. */
+export type ProjectionBasis = {
+  goals: GoalsView
+  cash: CashFlow
+  complete: CashFlow["report"]["rows"]
+  claims: Claims
+  /** First day of the first month measured, and the last day of the last complete one. */
+  windowStart: IsoDate
+  lastComplete: IsoDate
+}
+
+type CashFlow = Extract<Awaited<ReturnType<typeof loadCashFlow>>, { ok: true }>["data"]
+
+export async function loadProjectionBasis(ctx: ToolContext): Promise<ProjectionBasis> {
+  const { today, currency } = ctx
+  const windowStart = monthStart(today, -PROJECTION_MEASURED_MONTHS)
+  const months = Array.from({ length: PROJECTION_MEASURED_MONTHS + 1 }, (_, i) => monthStart(today, i - PROJECTION_MEASURED_MONTHS))
+  const [goals, cash, loans] = await Promise.all([loadGoalsData(ctx.supabase), loadCashFlow(ctx.supabase, months), loadLoansData(ctx.supabase)])
+  if (!goals.ok) throw new ToolError("The goals couldn't be loaded.")
+  if (!cash.ok) throw new ToolError("The income and spending figures couldn't be loaded.")
+  if (!loans.ok) throw new ToolError("The loans and dues couldn't be loaded.")
+  return {
+    goals: buildGoalsView(goals.data),
+    cash: cash.data,
+    complete: cash.data.report.rows.filter((r) => !r.soFar),
+    claims: liabilityClaims(buildLoansView(loans.data), currency, windowStart),
+    windowStart,
+    lastComplete: addDays(monthStart(today), -1),
+  }
+}
+
+/** Active goals in the currency still being saved for, except `exceptId`. */
+export const otherGoals = (active: readonly GoalItem[], currency: string, exceptId: string | null) =>
+  active.filter((g) => g.goal.id !== exceptId && g.goal.currency === currency && g.plan.basis !== "reached")
+
+/** This month's claims, and the net recorded so far (shown when there are too few months to project). */
+export function basisFigures(basis: ProjectionBasis, today: IsoDate) {
+  const nextMonth = monthStart(today, 1)
+  const tracked = basis.cash.report.rows.filter((r) => r.incomeMinor !== 0 || r.expenseMinor !== 0)
+  return {
+    loansNow: dueBy(basis.claims.loans, nextMonth),
+    duesNow: dueBy(basis.claims.dues, nextMonth),
+    netSoFar: addMinor(...tracked.map((r) => r.netMinor)),
+    firstTracked: tracked[0]?.range.start ?? null,
+  }
+}
+
 export const goalProjectionTool: FinanceTool<GoalInput> = {
   name: "goal_projection",
   description:
@@ -88,15 +135,10 @@ export const goalProjectionTool: FinanceTool<GoalInput> = {
   input: goalInput,
   async run(ctx, input) {
     const { today, currency } = ctx
-    const thisMonth = monthStart(today)
-    const windowStart = monthStart(today, -PROJECTION_MEASURED_MONTHS)
-    const months = Array.from({ length: PROJECTION_MEASURED_MONTHS + 1 }, (_, i) => monthStart(today, i - PROJECTION_MEASURED_MONTHS))
-    const [goals, cash, loans] = await Promise.all([loadGoalsData(ctx.supabase), loadCashFlow(ctx.supabase, months), loadLoansData(ctx.supabase)])
-    if (!goals.ok) throw new ToolError("The goals couldn't be loaded.")
-    if (!cash.ok) throw new ToolError("The income and spending figures couldn't be loaded.")
-    if (!loans.ok) throw new ToolError("The loans and dues couldn't be loaded.")
+    const basis = await loadProjectionBasis(ctx)
+    const { cash, claims, windowStart, lastComplete } = basis
 
-    const active = buildGoalsView(goals.data).active
+    const active = basis.goals.active
     if (active.length === 0) throw new ToolError("There are no active goals to check.")
     const picked = pickGoal(active, input.goal)
     if (Array.isArray(picked)) {
@@ -109,27 +151,19 @@ export const goalProjectionTool: FinanceTool<GoalInput> = {
     const { goal } = item
     if (goal.currency !== currency) throw new ToolError(`${goal.name} is saved in ${goal.currency}; goals are checked in ${currency} only.`)
 
-    const others = active.filter((g) => g.goal.id !== goal.id && g.goal.currency === currency && g.plan.basis !== "reached")
-    const claims = liabilityClaims(buildLoansView(loans.data), currency, windowStart)
-    const complete = cash.data.report.rows.filter((r) => !r.soFar)
+    const others = otherGoals(active, currency, goal.id)
     const projection = goalProjection({
       today,
       targetMinor: goal.targetMinor,
       savedMinor: goal.savedMinor,
       targetDate: goal.targetDate,
-      months: complete,
+      months: basis.complete,
       claims: [...claims.loans, ...claims.dues],
       otherGoals: others.map((g) => g.plan),
     })
 
     const money = (minor: number) => formatMoney(minor, { currency })
-    const nextMonth = monthStart(today, 1)
-    const loansNow = dueBy(claims.loans, nextMonth)
-    const duesNow = dueBy(claims.dues, nextMonth)
-    const tracked = cash.data.report.rows.filter((r) => r.incomeMinor !== 0 || r.expenseMinor !== 0)
-    const netSoFar = addMinor(...tracked.map((r) => r.netMinor))
-    const firstTracked = tracked[0]?.range.start ?? null
-    const lastComplete = addDays(thisMonth, -1)
+    const { loansNow, duesNow, netSoFar, firstTracked } = basisFigures(basis, today)
     const noDateInvolved = goal.targetDate === null || others.some((g) => g.plan.basis === "assumed_months")
     const { plan } = projection
     const projected = projection.medianNetMinor !== null
@@ -169,7 +203,7 @@ export const goalProjectionTool: FinanceTool<GoalInput> = {
       projection,
       others,
       claims,
-      otherCurrencies: cash.data.otherCurrencies,
+      otherCurrencies: cash.otherCurrencies,
       windowStart,
       lastComplete,
       noDateInvolved,
@@ -256,7 +290,7 @@ function verdictSummary(
   return `${word} At your current rate ${name} would be reached ${reached}, after the target of ${target}.${free} To make it by ${target}, save ${money(p.extraMonthlyMinor!)} more a month${move}.${thin}`
 }
 
-function buildAssumptions(a: {
+export function buildAssumptions(a: {
   ctx: ToolContext
   projection: GoalProjection
   others: readonly GoalItem[]

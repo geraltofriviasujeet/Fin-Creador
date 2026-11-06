@@ -25,6 +25,8 @@ export type Figure = { label: string; hideWhenZero?: boolean } & (
 
 /** A goal check (10.4): the verdict computed in code, the same said in full, and its assumptions. */
 export type GoalCheck = {
+  /** A trip check (10.5) labels the card "Trip check"; `goal` is then the destination. */
+  kind?: "trip"
   goal: string
   /** "Yes.", "No." or "Too early to say.": the answer must start with it. */
   verdict: string

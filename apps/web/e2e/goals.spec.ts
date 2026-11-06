@@ -64,7 +64,7 @@ test("trip: cost lines add up; no target date assumes 12 months; Roma is disable
   await expect(card).toContainText("International · Japan · 2 people · 8 days")
   await expect(card).toContainText("₹1,54,000")
   await expect(card).toContainText("₹12,000 a month, assuming 12 months (no target date)") // (1,54,000 − 10,000) ÷ 12
-  await expect(card.getByText("Roma · soon")).toBeVisible()
+  await expect(card.getByRole("link", { name: "Ask Roma about Japan in spring" })).toHaveAttribute("href", "/roma?ask=Can+I+reach+Japan+in+spring%3F")
 
   // Saved amount, archive and restore.
   await card.getByRole("button", { name: "Update saved amount for Japan in spring" }).click()

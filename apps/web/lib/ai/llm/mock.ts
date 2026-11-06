@@ -31,7 +31,9 @@ export const mockToolCall = (name: string, input: unknown, id = `call-${name}`):
  * (with its description when one was sent); anything else asks spending_for_period for "last
  * month" when the question says so, otherwise "this month", then repeats the tool's own
  * figures. Labelled as a test answer. "Can I reach <goal>?" asks goal_projection and repeats its
- * code-built verdict summary (10.4).
+ * code-built verdict summary (10.4). "Trip to <place>, <scope>, <YYYY-MM>, <n> nights, <n>
+ * travellers" asks trip_check, optionally confirming one run: "; <from> to <to> was <scope>
+ * for <n>, <travel|all_spending>" (10.5).
  */
 const defaultScript: MockScript = (request) => {
   const last = request.messages.at(-1)
@@ -62,5 +64,17 @@ const defaultScript: MockScript = (request) => {
   if (/^find\b/i.test(text)) return mockToolCall("search_transactions", { period: "this_month" })
   const goal = /^can i reach (.+?)\??$/i.exec(text.trim())
   if (goal) return mockToolCall("goal_projection", { goal: goal[1] })
+  const trip = /^trip to (.+?), (domestic|international), (\d{4}-\d{2}), (\d+) nights, (\d+) travellers(?:; (\S+) to (\S+) was (domestic|international) for (\d+), (travel|all_spending))?$/i.exec(text.trim())
+  if (trip) {
+    const [, destination, scope, month, nights, travellers, from, to, runScope, runTravellers, basis] = trip
+    return mockToolCall("trip_check", {
+      destination,
+      scope,
+      month,
+      nights: Number(nights),
+      travellers: Number(travellers),
+      ...(from ? { past_trips: [{ from, to, scope: runScope, travellers: Number(runTravellers), basis }] } : {}),
+    })
+  }
   return mockToolCall("spending_for_period", { period: /last month/i.test(text) ? "last_month" : "this_month" })
 }
