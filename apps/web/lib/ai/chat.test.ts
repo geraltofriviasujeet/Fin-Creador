@@ -47,13 +47,14 @@ describe("Roma's chat loop", () => {
     const run = await ask((_req, round) =>
       round === 0 ? mockToolCall("spending_for_period", { period: "last_month" }) : mockText("You spent ₹12,345.50, or about ₹398 a day."),
     )
-    expect(run.result).toEqual({ kind: "unverified" })
-    expect(JSON.stringify(run.result)).not.toContain("398")
+    // Only the number that failed is carried (for the server diagnostic), never the answer text.
+    expect(run.result).toEqual({ kind: "unverified", unmatched: ["398"] })
+    expect(JSON.stringify(run.result)).not.toContain("a day")
   })
 
   it("refuses a figure stated without any tool call", async () => {
     const run = await ask(() => mockText("You spent ₹9,000 last month."))
-    expect(run.result).toEqual({ kind: "unverified" })
+    expect(run.result).toEqual({ kind: "unverified", unmatched: ["9000"] })
   })
 
   it("refuses a praise opener", async () => {
@@ -138,7 +139,7 @@ describe("Roma's chat loop", () => {
 
     it("never takes a figure from history: one quoted from an earlier answer is refused", async () => {
       const run = await ask(() => mockText("You spent ₹42,000 in October."), { history })
-      expect(run.result).toEqual({ kind: "unverified" })
+      expect(run.result).toEqual({ kind: "unverified", unmatched: ["42000"] })
     })
 
     it("never takes a figure from history: one beside a fresh tool figure is still refused", async () => {
@@ -147,7 +148,7 @@ describe("Roma's chat loop", () => {
           round === 0 ? mockToolCall("spending_for_period", { period: "last_month" }) : mockText("You spent ₹12,345.50 last month, against ₹38,500 in September."),
         { history },
       )
-      expect(run.result).toEqual({ kind: "unverified" })
+      expect(run.result).toEqual({ kind: "unverified", unmatched: ["38500"] })
     })
 
     it("accepts the same follow-up once the figure comes from this question's tool call", async () => {

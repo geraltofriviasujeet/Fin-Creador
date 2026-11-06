@@ -68,6 +68,8 @@ export interface GoalProjection {
   reachMonth: IsoDate | null;
   /** How much more a month would reach it by the target month (or, without a date, within the horizon); null when not needed or no projection. */
   extraMonthlyMinor: number | null;
+  /** Free money added up from this month to the target month, both counted (the trip check, 10.5); null without a target date or projection. */
+  availableByTargetMinor: number | null;
 }
 
 /** Median of whole minor amounts; the mean of the middle two for an even count, rounded half away from zero. */
@@ -116,7 +118,7 @@ export function goalProjection(input: GoalProjectionInput): GoalProjection {
     claimsThisMonthMinor: claims[0]!,
     otherGoalsThisMonthMinor: others[0]!,
   };
-  const none = { reachMonth: null, extraMonthlyMinor: null };
+  const none = { reachMonth: null, extraMonthlyMinor: null, availableByTargetMinor: null };
 
   if (plan.basis === "reached") {
     return { ...base, ...none, verdict: "yes", medianNetMinor: null, freeThisMonthMinor: null };
@@ -138,7 +140,8 @@ export function goalProjection(input: GoalProjectionInput): GoalProjection {
     const short = plan.remainingMinor - running[months - 1]!;
     return short > 0 ? ceilDiv(short, months) : null;
   };
-  const projected = { ...base, medianNetMinor: median, freeThisMonthMinor: free[0]!, reachMonth };
+  const availableByTargetMinor = plan.basis === "target_date" ? running[plan.months - 1]! : null;
+  const projected = { ...base, medianNetMinor: median, freeThisMonthMinor: free[0]!, reachMonth, availableByTargetMinor };
 
   switch (plan.basis) {
     case "past_due":

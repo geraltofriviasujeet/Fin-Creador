@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import Link from "next/link"
 import { Plus, Sparkles } from "lucide-react"
 import type { BudgetCategory, BudgetItem, GoalItem, GoalsView, WriteResult } from "@fin-creador/api"
 import { type GoalType, formatPercentFromBasisPoints, minorToInputString } from "@fin-creador/domain"
@@ -235,6 +236,9 @@ function answersLine(item: GoalItem): string | null {
   }
 }
 
+/** Opens Roma with the goal-check question filled in; the person still sends it (10.4). */
+export const romaGoalHref = (name: string) => `/roma?${new URLSearchParams({ ask: `Can I reach ${name}?` })}`
+
 function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "saved" | "archive") => void }) {
   const { goal, plan, figures } = item
   const type = goal.type as GoalType
@@ -253,10 +257,14 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
               {answersLine(item) ? ` · ${answersLine(item)}` : ""}
             </p>
           </div>
-          <span aria-disabled="true" title="Roma on goals is coming in a later update" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-line px-2 py-0.5 text-xs text-muted-foreground">
+          <Link
+            href={romaGoalHref(goal.name)}
+            aria-label={`Ask Roma about ${goal.name}`}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs font-medium text-ink hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             <Sparkles aria-hidden="true" className="size-3" />
-            Roma · soon
-          </span>
+            Ask Roma
+          </Link>
         </div>
 
         {!item.answers && <FormMessage tone="info">We couldn&apos;t read this plan&apos;s details. Edit it to enter them again.</FormMessage>}

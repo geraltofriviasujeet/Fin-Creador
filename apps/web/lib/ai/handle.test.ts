@@ -164,12 +164,35 @@ describe("POST /api/ai/chat flow", () => {
   })
 
   it("settles, not releases, when an unverified answer is refused: the call was made", async () => {
-    const d = deps({ run: async () => ({ result: { kind: "unverified" }, calls: 2, usage: NO_USAGE, unknownCalls: 0 }) })
+    const d = deps({ run: async () => ({ result: { kind: "unverified", unmatched: ["398"] }, calls: 2, usage: NO_USAGE, unknownCalls: 0 }) })
     const res = await handleChat(ask, d)
-    expect(res).toMatchObject({ status: 422, body: { code: "unverified", message: expect.stringContaining("couldn't check a number") } })
+    expect(res).toMatchObject({
+      status: 422,
+      body: {
+        code: "unverified",
+        message:
+          "Roma's answer used 398, which she couldn't match to a figure from your records, so it isn't shown. Ask about one thing at a time and name the period, account, goal or trip details you mean.",
+      },
+    })
     expect(res.body).not.toHaveProperty("answer")
     expect(d.db.ledger.settled).toHaveLength(1)
     expect(d.db.ledger.released).toEqual([])
+  })
+
+  it("reports the unmatched numbers to the server diagnostic only, and names at most three to the person", async () => {
+    const seen: (readonly string[])[] = []
+    const d = deps({
+      run: async () => ({ result: { kind: "unverified", unmatched: ["1", "2", "3", "4"] }, calls: 1, usage: NO_USAGE, unknownCalls: 0 }),
+      onUnverified: (n) => seen.push(n),
+    })
+    const res = await handleChat(ask, d)
+    expect(seen).toEqual([["1", "2", "3", "4"]])
+    expect(res.body).toMatchObject({ message: expect.stringMatching(/^Roma's answer used 1, 2 and 3 and others, which she couldn't match/) })
+  })
+
+  it("falls back to the general message when no number is known", async () => {
+    const d = deps({ run: async () => ({ result: { kind: "unverified", unmatched: [] }, calls: 1, usage: NO_USAGE, unknownCalls: 0 }) })
+    expect((await handleChat(ask, d)).body).toMatchObject({ message: expect.stringContaining("Ask about one thing at a time") })
   })
 
   it("charges the worst case when the loop fails unexpectedly mid-way", async () => {
@@ -283,7 +306,7 @@ describe("POST /api/ai/chat flow", () => {
     })
 
     it("stores nothing for a refused answer", async () => {
-      const d = deps({ run: async () => ({ result: { kind: "unverified" }, calls: 2, usage: NO_USAGE, unknownCalls: 0 }) })
+      const d = deps({ run: async () => ({ result: { kind: "unverified", unmatched: [] }, calls: 2, usage: NO_USAGE, unknownCalls: 0 }) })
       await handleChat(ask, d)
       expect(d.history.recorded).toEqual([])
     })

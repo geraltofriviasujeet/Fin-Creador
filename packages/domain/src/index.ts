@@ -4,6 +4,7 @@ export * from "./fixed-deposits";
 export * from "./format";
 export * from "./goals";
 export * from "./goal-projection";
+export * from "./trip-estimate";
 export * from "./holdings";
 export * from "./income";
 export * from "./investments";

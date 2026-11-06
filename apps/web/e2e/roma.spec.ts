@@ -234,6 +234,9 @@ test("goal check: Yes for a goal within reach, No with what to change, the verdi
 
   // A name with digits in it is a name, not a figure the check refuses.
   await addOtherGoal(page, "Car 2027", "1,00,000", `${nextYear}-12-31`)
+  // From the Goals page: the question is filled in, not sent.
+  await page.getByRole("link", { name: "Ask Roma about Car 2027" }).click()
+  await expect(page.getByLabel("Your question")).toHaveValue("Can I reach Car 2027?")
   const yes = await ask(page, "Can I reach Car 2027?")
   await expect(yes.getByText("Goal check · Car 2027")).toBeVisible()
   await expect(yes.getByText("Yes.", { exact: true })).toBeVisible()
@@ -268,4 +271,64 @@ test("goal check: too early to say with under 3 months of records (10.4)", async
   await expect(figure(early, "Months with records")).toHaveText("0")
   await expect(figure(early, "Net recorded so far")).toHaveText("₹20,000")
   await expect(early.getByRole("listitem").filter({ hasText: "At least 3 complete months with records are needed before Roma projects anything." })).toBeVisible()
+})
+
+// The trip check (10.5). A past trip is a run of Travel expenses; the person confirms it and
+// picks one of its two figures, both added up from the records. Entries for earlier months
+// are recorded as the signed-in person, as in the goal check above.
+
+/** `day` of the month `offset` months from today's month in India. */
+const dayOf = (offset: number, day: number) => `${monthDay(offset).slice(0, 8)}${String(day).padStart(2, "0")}`
+
+test("trip check: can't estimate until a past trip is confirmed, then an estimate from either figure (10.5)", async ({ page }) => {
+  const email = uniqueEmail("roma-trip")
+  await startWithRoma(page, "Kavya Rao", email)
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } })
+  expect((await supabase.auth.signInWithPassword({ email, password: PASSWORD })).error).toBeNull()
+  const account = await supabase.from("accounts").select("id").eq("kind", "bank").single()
+  const salary = await supabase.from("categories").select("id").eq("kind", "income").limit(1).single()
+  const travel = await supabase.from("categories").select("id").eq("kind", "expense").eq("icon", "travel").single()
+  const food = await supabase.from("categories").select("id").eq("kind", "expense").eq("icon", "food").single()
+  expect(account.error ?? salary.error ?? travel.error ?? food.error).toBeNull()
+  const record = async (type: "income" | "expense", minor: number, on: string, categoryId: string) =>
+    expect(
+      (
+        await supabase.rpc("record_transaction", {
+          p_type: type,
+          p_idempotency_key: crypto.randomUUID(),
+          p_amount_minor: minor,
+          p_occurred_on: on,
+          p_account_id: account.data!.id,
+          p_category_id: categoryId,
+        })
+      ).error,
+    ).toBeNull()
+  for (let offset = -6; offset <= -1; offset++) await record("income", 50_000_00, monthDay(offset), salary.data!.id)
+  // A 3-day trip two months ago: ₹9,000 on Travel and ₹3,000 on food in between.
+  await record("expense", 4_000_00, dayOf(-2, 10), travel.data!.id)
+  await record("expense", 3_000_00, dayOf(-2, 11), food.data!.id)
+  await record("expense", 5_000_00, dayOf(-2, 12), travel.data!.id)
+  const from = dayOf(-2, 10)
+  const to = dayOf(-2, 12)
+  const month = monthDay(3).slice(0, 7)
+  const question = `Trip to Kerala, domestic, ${month}, 3 nights, 2 travellers`
+
+  const none = await ask(page, question)
+  await expect(none.getByText("Trip check · Kerala")).toBeVisible()
+  await expect(none.getByText("I can't estimate this from your records.", { exact: true })).toBeVisible()
+  await expect(figure(none, `Travel run ${from} to ${to}: Travel category`)).toHaveText("₹9,000")
+  await expect(
+    figure(none, `Travel run ${from} to ${to}: all spending in those dates, which may include things unrelated to the trip`),
+  ).toHaveText("₹12,000")
+
+  // ₹9,000 over 2 travellers × 3 days, scaled to 2 travellers × 4 days.
+  const travelOnly = await ask(page, `${question}; ${from} to ${to} was domestic for 2, travel`)
+  await expect(travelOnly.getByText("Yes.", { exact: true })).toBeVisible()
+  await expect(figure(travelOnly, "Trip estimate")).toHaveText("₹12,000")
+  await expect(travelOnly.getByText(/^Yes\. A 3-night domestic trip to Kerala in \w+ \d{4} for 2 travellers would cost about ₹12,000/)).toBeVisible()
+  await expect(travelOnly.getByRole("listitem").filter({ hasText: "Travel category only" })).toBeVisible()
+
+  const allSpending = await ask(page, `${question}; ${from} to ${to} was domestic for 2, all_spending`)
+  await expect(figure(allSpending, "Trip estimate")).toHaveText("₹16,000")
+  await expect(allSpending.getByRole("listitem").filter({ hasText: "which may include things unrelated to the trip" })).toBeVisible()
 })

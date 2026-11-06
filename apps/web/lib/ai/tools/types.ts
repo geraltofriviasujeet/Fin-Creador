@@ -25,6 +25,8 @@ export type Figure = { label: string; hideWhenZero?: boolean } & (
 
 /** A goal check (10.4): the verdict computed in code, the same said in full, and its assumptions. */
 export type GoalCheck = {
+  /** A trip check (10.5) labels the card "Trip check"; `goal` is then the destination. */
+  kind?: "trip"
   goal: string
   /** "Yes.", "No." or "Too early to say.": the answer must start with it. */
   verdict: string
@@ -32,6 +34,12 @@ export type GoalCheck = {
   summary: string
   assumptions: string[]
 }
+
+/**
+ * A check that can't run until the person says more (10.5): the app shows `question`, built in
+ * code, instead of the model's text, so no model prose can fail the figure check.
+ */
+export type InputNeeded = { tool: string; missing: string[]; question: string }
 
 export type ToolOutput = {
   /** Sent to the model as the tool result: compact and structured, never raw rows. */
@@ -46,6 +54,20 @@ export type ToolOutput = {
   /** Descriptions were sent to the model (the answer may quote one; stored with the turn, 10.3). */
   descriptionsSent?: boolean
   check?: GoalCheck
+  needs?: InputNeeded
+  subject?: CheckSubject
+}
+
+/**
+ * What a goal or trip check was about (10.5): `checked` must be something the person named in
+ * the conversation, and the answer may name only the goals the tool's own result names. Either
+ * failing, the answer is refused and a summary built in code is shown (chat.ts).
+ */
+export type CheckSubject = {
+  /** The goal checked, or the trip's destination. */
+  checked: string
+  /** All the person's goal names (active and archived): the ones an answer could wrongly name. */
+  goals: string[]
 }
 
 export type FinanceTool<I = unknown> = {

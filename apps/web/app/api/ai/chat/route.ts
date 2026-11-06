@@ -9,7 +9,8 @@ import { createClient } from "@/lib/supabase/server"
 // Roma (Sprint 10.1): one question, answered from the person's own records. Runs as the
 // signed-in user (RLS); the caps, the kill switch and the opt-in are checked in the database
 // by roma_begin_request. Signed-out callers get 401 JSON (lib/auth/routes.ts lets /api/
-// through the sign-in redirect). Nothing about the question or the answer is logged. From
+// through the sign-in redirect). Nothing about the question or the answer is logged; when the
+// figure check refuses an answer, only the numbers it couldn't match are (10.5). From
 // 10.3 the conversation's turns are read and recorded under the same session (RLS and
 // roma_record_turn), never with a service key.
 //
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
       if (config.status !== "on") throw new Error("Roma is off")
       return createProvider(config)
     },
+    onUnverified: (unmatched) => console.warn(JSON.stringify({ event: "roma_unverified", unmatched })),
     async loadContext() {
       const [today, profile] = await Promise.all([
         userToday(supabase),
