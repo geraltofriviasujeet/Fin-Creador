@@ -250,9 +250,9 @@ test("goal check: Yes for a goal within reach, No with what to change, the verdi
   const no = await ask(page, "Can I reach House fund?")
   await expect(no.getByText("Goal check · House fund")).toBeVisible()
   await expect(no.getByText("No.", { exact: true })).toBeVisible()
-  await expect(no.getByText(/^No\. At your current rate House fund would be reached (in \w+ \d{4}|not within 10 years), after the target of December \d{4}\..* save ₹[\d,]+ more a month/)).toBeVisible()
-  await expect(figure(no, "Assuming you keep saving for your other goals: Car 2027, a month")).toHaveText(/^₹[\d,]+$/)
-  await expect(figure(no, "Save more a month")).toHaveText(/^₹[\d,]+$/)
+  await expect(no.getByText(/^No\. At your current rate House fund would be reached (in \w+ \d{4}|not within 10 years), after the target of December \d{4}\..* save ₹[\d,]+(\.\d{2})? more a month/)).toBeVisible()
+  await expect(figure(no, "Assuming you keep saving for your other goals: Car 2027, a month")).toHaveText(/^₹[\d,]+(\.\d{2})?$/)
+  await expect(figure(no, "Save more a month")).toHaveText(/^₹[\d,]+(\.\d{2})?$/)
   await expect(no.getByRole("listitem").filter({ hasText: "Assuming you keep saving for your other goals (Car 2027)" })).toBeVisible()
 })
 
