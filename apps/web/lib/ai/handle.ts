@@ -9,6 +9,7 @@ import type { LlmProvider } from "./llm/types"
 import { accountBalancesTool, netWorthTool } from "./tools/balances"
 import { incomeVsExpensesTool, savingsRateTool } from "./tools/cash-flow"
 import { categoryBreakdownTool } from "./tools/categories"
+import { goalProjectionTool } from "./tools/goals"
 import { loansAndCardsTool } from "./tools/liabilities"
 import { searchTransactionsTool } from "./tools/search"
 import { spendingTool } from "./tools/spending"
@@ -31,6 +32,7 @@ export const ROMA_TOOLS: readonly FinanceTool[] = [
   accountBalancesTool,
   netWorthTool,
   loansAndCardsTool,
+  goalProjectionTool,
 ] as FinanceTool[]
 
 const questionSchema = z.object({
@@ -96,6 +98,8 @@ export type ChatResponseBody =
       periods: { from: string; to: string }[]
       /** Matching descriptions were left out: show the notice and ask once (10.2). */
       descriptionsNotice?: true
+      /** Goal checks (10.4): the verdict computed in code and its assumptions. */
+      checks?: { goal: string; verdict: string; assumptions: string[] }[]
       /** The conversation the turn was recorded in (10.3); null when it couldn't be saved. */
       conversationId: string | null
       saved: boolean
@@ -224,6 +228,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           figures: result.figures.filter((f) => !f.hideWhenZero || figureValue(f) !== 0).map((f) => ({ label: f.label, value: formatFigure(f) })),
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
+          ...(result.checks.length > 0 ? { checks: result.checks.map(({ goal, verdict, assumptions }) => ({ goal, verdict, assumptions })) } : {}),
           conversationId: recorded?.conversationId ?? null,
           saved: recorded !== null,
         },
