@@ -52,3 +52,14 @@ describe("the figure check", () => {
     expect(checkAnswer("Refunds were larger: −₹250.", negative).ok).toBe(true)
   })
 })
+
+describe("rates (10.2)", () => {
+  it("allows a rate exactly as the tool wrote it, and nothing else", () => {
+    const rates = allowedNumbers([{ label: "Savings rate", kind: "percent", bps: 2350 }, { label: "Limit used", kind: "percent", bps: -1205 }], [])
+    expect(checkAnswer("You saved 23.5% of your income; last time it was -12.1%.", rates)).toMatchObject({ ok: true })
+    expect(checkAnswer("You saved 23.50% of your income.", rates)).toMatchObject({ ok: true })
+    expect(checkAnswer("You saved 24% of your income.", rates)).toMatchObject({ ok: false, reason: "unverified", unmatched: ["24"] })
+    expect(checkAnswer("You saved 2350 basis points.", rates)).toMatchObject({ ok: false, reason: "unverified" })
+  })
+})
+

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { currencyMinorDigits, minorUnitsToDecimalString } from "@fin-creador/domain"
+import { currencyMinorDigits, formatPercentFromBasisPoints, minorUnitsToDecimalString } from "@fin-creador/domain"
 import type { Figure } from "./tools/types"
 
 // Roma's output guard (Sprint 10). An answer is shown only when:
@@ -28,11 +28,12 @@ export function numbersIn(text: string): string[] {
   return [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => normalizeNumber(m[0].replace(/,+$/, "")))
 }
 
-/** The numbers an answer may contain: figure amounts and counts, and date parts. */
+/** The numbers an answer may contain: figure amounts, counts and rates (as the tool wrote them), and date parts. */
 export function allowedNumbers(figures: readonly Figure[], dates: readonly string[]): Set<string> {
   const allowed = new Set<string>()
   for (const f of figures) {
     if (f.kind === "count") allowed.add(String(f.value))
+    else if (f.kind === "percent") for (const n of numbersIn(formatPercentFromBasisPoints(Math.abs(f.bps)))) allowed.add(n)
     else allowed.add(normalizeNumber(minorUnitsToDecimalString(Math.abs(f.minor), currencyMinorDigits(f.currency))))
   }
   for (const d of dates) for (const part of d.split("-")) allowed.add(normalizeNumber(part))

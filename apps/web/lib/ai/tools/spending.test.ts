@@ -59,7 +59,7 @@ describe("spending periods (inclusive, the person's own today)", () => {
 })
 
 describe("spending_for_period", () => {
-  const ctx = (rows: unknown[] | null, calls: unknown[] = []) => ({ supabase: fakeClient(rows, calls), today: "2026-11-05", currency: "INR" })
+  const ctx = (rows: unknown[] | null, calls: unknown[] = []) => ({ supabase: fakeClient(rows, calls), today: "2026-11-05", currency: "INR", descriptionsOk: false })
 
   it("returns the Overview's spending figure for the period, formatted, with figures to check against", async () => {
     const calls: unknown[] = []

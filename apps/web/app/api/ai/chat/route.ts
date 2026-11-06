@@ -60,10 +60,10 @@ export async function POST(request: NextRequest) {
     async loadContext() {
       const [today, profile] = await Promise.all([
         userToday(supabase),
-        supabase.from("profiles").select("currency").eq("id", auth.user?.id ?? "").maybeSingle(),
+        supabase.from("profiles").select("currency, roma_descriptions_ok_at").eq("id", auth.user?.id ?? "").maybeSingle(),
       ])
       if (!today.ok || profile.error || !profile.data) return null
-      return { supabase, today: today.today, currency: profile.data.currency }
+      return { supabase, today: today.today, currency: profile.data.currency, descriptionsOk: profile.data.roma_descriptions_ok_at !== null }
     },
   })
   return NextResponse.json(result.body, { status: result.status, headers: NO_STORE })

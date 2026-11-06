@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { addBank, addEntry, signUpConfirmed, uniqueEmail } from "./helpers"
 
-// Roma (Sprint 10.1) end to end on the mock provider (LLM_PROVIDER=mock on the test server, see
+// Roma (Sprints 10.1 and 10.2) end to end on the mock provider (LLM_PROVIDER=mock on the test server, see
 // playwright.config.ts): no paid API is called and no key is set. The mock asks the real
 // spending tool and repeats its figures, so the answer is checked against the person's records.
 
@@ -11,7 +11,7 @@ test("signed out, the chat endpoint answers 401 JSON instead of redirecting", as
   expect(await res.json()).toEqual({ status: "error", code: "signed_out", message: "Sign in to ask Roma." })
 })
 
-test("turn Roma on, ask what I spent this month, see figures from my records, turn her off", async ({ page }) => {
+test("turn Roma on, ask what I spent this month, find entries, allow descriptions, turn her off", async ({ page }) => {
   await signUpConfirmed(page, "Meera Iyer", uniqueEmail("roma"))
 
   // Off by default: the page says what is sent and where to turn her on.
@@ -28,7 +28,7 @@ test("turn Roma on, ask what I spent this month, see figures from my records, tu
   await page.goto("/income")
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
   await addEntry(page, { amount: "1,234.50", category: "Groceries", from: "HDFC Bank ··4821" })
-  await addEntry(page, { amount: "400", category: "Transport", from: "HDFC Bank ··4821" })
+  await addEntry(page, { amount: "400", category: "Transport", from: "HDFC Bank ··4821", note: "Auto to office, ride 98765432" })
 
   await page.goto("/settings")
   await page.getByRole("button", { name: "Turn Roma on" }).click()
@@ -58,7 +58,43 @@ test("turn Roma on, ask what I spent this month, see figures from my records, tu
   await expect(page.getByText(/^Good (morning|afternoon|evening), Meera\.$/)).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Ask Roma" })).toBeVisible()
 
+  // Search (10.2): descriptions stay out until she is allowed to send them, asked once in Roma.
+  await box.fill("Find my entries this month")
+  await box.press("Enter")
+  await expect(answers.getByText(/^I found 2 entries\. The newest is ₹400 on \d{4}-\d{2}-\d{2}\./)).toBeVisible()
+  await expect(answers.getByText(/Roma left out the descriptions of these entries\./)).toBeVisible()
+  await answers.getByRole("button", { name: "Allow descriptions" }).click()
+  await expect(answers.getByRole("status").getByText(/^Descriptions allowed\./)).toBeVisible()
+  await box.fill("Find my entries this month")
+  await box.press("Enter")
+  // Sent cleaned: the long number in the note never leaves the app.
+  await expect(answers.getByText(/^I found 2 entries\. The newest is ₹400 for Auto to office, ride on \d{4}-\d{2}-\d{2}\./)).toBeVisible()
+  await expect(page.getByText("98765432")).toHaveCount(0)
+  await expect(answers.getByRole("button", { name: "Allow descriptions" })).toHaveCount(0)
+
+  // Settings shows the consent and withdraws it without turning Roma off.
   await page.goto("/settings")
+  await expect(page.getByText(/^Transaction descriptions: sent \(allowed on /)).toBeVisible()
+  await page.getByRole("button", { name: "Stop sending descriptions" }).click()
+  await expect(page.getByRole("status").getByText("Roma won’t send descriptions.")).toBeVisible()
+  await expect(page.getByText(/^Transaction descriptions: not sent\./)).toBeVisible()
+  await expect(page.getByText("Roma is on.", { exact: false })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Turn Roma off" })).toBeVisible()
+  await page.goto("/roma")
+  await page.getByLabel("Your question").fill("Find my entries this month")
+  await page.getByLabel("Your question").press("Enter")
+  await expect(answers.getByText(/^I found 2 entries\. The newest is ₹400 on /)).toBeVisible()
+  await expect(answers.getByRole("button", { name: "Allow descriptions" })).toBeVisible()
+
+  // Allowed again from Settings; turning Roma off still clears it.
+  await page.goto("/settings")
+  await page.getByRole("button", { name: "Allow descriptions" }).click()
+  await expect(page.getByText(/^Transaction descriptions: sent/)).toBeVisible()
+  await page.getByRole("button", { name: "Turn Roma off" }).click()
+  await expect(page.getByRole("status").getByText("Roma is off.")).toBeVisible()
+  await expect(page.getByText(/^Transaction descriptions:/)).toHaveCount(0)
+  await page.getByRole("button", { name: "Turn Roma on" }).click()
+  await expect(page.getByText(/^Transaction descriptions: not sent\./)).toBeVisible()
   await page.getByRole("button", { name: "Turn Roma off" }).click()
   await expect(page.getByRole("status").getByText("Roma is off.")).toBeVisible()
   await page.goto("/roma")

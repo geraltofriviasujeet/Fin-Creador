@@ -12,7 +12,7 @@ import {
   addUsage,
 } from "./llm/types"
 
-// One question, answered (Sprint 10.1): the model may call tools for up to MAX_ROUNDS calls
+// One question, answered (Sprint 10.1; tools from 10.2): the model may call tools for up to MAX_ROUNDS calls
 // within DEADLINE_MS; tool inputs are validated with Zod and run under the person's own RLS;
 // the final text passes the output guard or is refused. No history is kept between questions.
 
@@ -23,7 +23,7 @@ export const MAX_OUTPUT_TOKENS = 1_200
 export type ChatFailure = "timeout" | "rounds" | "unavailable" | "rate_limited" | "rejected" | "refusal" | "max_tokens"
 
 export type ChatResult =
-  | { kind: "answer"; text: string; figures: Figure[]; periods: DateRange[] }
+  | { kind: "answer"; text: string; figures: Figure[]; periods: DateRange[]; descriptionsWithheld: boolean }
   | { kind: "unverified" }
   | { kind: "tone" }
   | { kind: "invalid" }
@@ -55,6 +55,7 @@ export async function runChat({ provider, tools, context, question, maxRounds = 
   const messages: LlmMessage[] = [{ role: "user", text: question }]
   const figures: Figure[] = []
   const periods: DateRange[] = []
+  const found: Found = { dates: [], descriptionsWithheld: false }
   let usage = NO_USAGE
   let calls = 0
   let unknownCalls = 0
@@ -83,7 +84,7 @@ export async function runChat({ provider, tools, context, question, maxRounds = 
       messages.push({ role: "assistant", text: response.text, toolCalls: response.toolCalls, providerContent: response.providerContent })
       const results: LlmToolResult[] = []
       for (const call of response.toolCalls) {
-        results.push(await runTool(tools, context, call.id, call.name, call.input, figures, periods))
+        results.push(await runTool(tools, context, call.id, call.name, call.input, figures, periods, found))
       }
       messages.push({ role: "tool_results", results })
       continue
@@ -93,13 +94,16 @@ export async function runChat({ provider, tools, context, question, maxRounds = 
     if (response.stop === "max_tokens") return done({ kind: "failed", reason: "max_tokens" })
     if (response.stop !== "end") return done({ kind: "failed", reason: "rejected" })
 
-    const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end])]
+    const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
     const check = checkAnswer(response.text, allowedNumbers(figures, dates))
     if (!check.ok) return done({ kind: check.reason })
-    return done({ kind: "answer", text: check.text, figures, periods })
+    return done({ kind: "answer", text: check.text, figures, periods, descriptionsWithheld: found.descriptionsWithheld })
   }
   return done({ kind: "failed", reason: "rounds" })
 }
+
+/** What tools found besides figures and periods. */
+type Found = { dates: string[]; descriptionsWithheld: boolean }
 
 async function runTool(
   tools: readonly FinanceTool[],
@@ -109,6 +113,7 @@ async function runTool(
   rawInput: unknown,
   figures: Figure[],
   periods: DateRange[],
+  found: Found,
 ): Promise<LlmToolResult> {
   const fail = (message: string): LlmToolResult => ({ callId, content: JSON.stringify({ error: message }), isError: true })
   const tool = tools.find((t) => t.name === name)
@@ -119,6 +124,8 @@ async function runTool(
     const output = await tool.run(context, input.data)
     figures.push(...output.figures)
     if (output.period) periods.push(output.period)
+    if (output.dates) found.dates.push(...output.dates)
+    if (output.descriptionsWithheld) found.descriptionsWithheld = true
     return { callId, content: JSON.stringify(output.data) }
   } catch (error) {
     if (error instanceof ToolError) return fail(error.message)

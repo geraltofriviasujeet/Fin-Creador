@@ -1,20 +1,34 @@
 import { z } from "zod"
-import { formatMoney } from "@fin-creador/domain"
+import { formatMoney, formatPercentFromBasisPoints } from "@fin-creador/domain"
 import { type ChatRun, MAX_OUTPUT_TOKENS, MAX_ROUNDS, runChat } from "./chat"
 import type { LlmConfig } from "./config"
 import { MAX_QUESTION_CHARS } from "./limits"
 import { callCostMicroUsd, microToUsd } from "./llm/prices"
 import type { LlmProvider } from "./llm/types"
+import { accountBalancesTool, netWorthTool } from "./tools/balances"
+import { incomeVsExpensesTool, savingsRateTool } from "./tools/cash-flow"
+import { categoryBreakdownTool } from "./tools/categories"
+import { loansAndCardsTool } from "./tools/liabilities"
+import { searchTransactionsTool } from "./tools/search"
 import { spendingTool } from "./tools/spending"
-import type { FinanceTool, ToolContext } from "./tools/types"
+import type { FinanceTool, Figure, ToolContext } from "./tools/types"
 
-// POST /api/ai/chat, without the framework (Sprint 10.1). Order: signed in, Roma configured,
+// POST /api/ai/chat, without the framework (Sprint 10.1; the remaining tools from 10.2). Order: signed in, Roma configured,
 // a valid question, then roma_begin_request (kill switch, opt-in, caps, daily limit: all in
 // the database). Only after a reservation is a provider made and called. The reservation is
 // settled with the real cost when a call was sent, and released when none was, so only a
 // real call consumes budget.
 
-export const ROMA_TOOLS: readonly FinanceTool[] = [spendingTool as FinanceTool]
+export const ROMA_TOOLS: readonly FinanceTool[] = [
+  spendingTool,
+  incomeVsExpensesTool,
+  savingsRateTool,
+  categoryBreakdownTool,
+  searchTransactionsTool,
+  accountBalancesTool,
+  netWorthTool,
+  loansAndCardsTool,
+] as FinanceTool[]
 
 const questionSchema = z.object({ question: z.string().trim().min(1).max(MAX_QUESTION_CHARS) })
 
@@ -60,6 +74,8 @@ export type ChatResponseBody =
       answer: string
       figures: { label: string; value: string }[]
       periods: { from: string; to: string }[]
+      /** Matching descriptions were left out: show the notice and ask once (10.2). */
+      descriptionsNotice?: true
     }
   | { status: "error"; code: ChatErrorCode; message: string }
 
@@ -147,11 +163,9 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
         body: {
           status: "answer",
           answer: result.text,
-          figures: result.figures.filter((f) => !f.hideWhenZero || (f.kind === "money" ? f.minor : f.value) !== 0).map((f) => ({
-            label: f.label,
-            value: f.kind === "money" ? formatMoney(f.minor, { currency: f.currency }) : String(f.value),
-          })),
+          figures: result.figures.filter((f) => !f.hideWhenZero || figureValue(f) !== 0).map((f) => ({ label: f.label, value: formatFigure(f) })),
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
+          ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
         },
       }
     case "unverified":
@@ -164,6 +178,14 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
       if (result.reason === "refusal") return error("refusal")
       return error("unavailable")
   }
+}
+
+const figureValue = (f: Figure) => (f.kind === "money" ? f.minor : f.kind === "percent" ? f.bps : f.value)
+
+function formatFigure(f: Figure): string {
+  if (f.kind === "money") return formatMoney(f.minor, { currency: f.currency })
+  if (f.kind === "percent") return formatPercentFromBasisPoints(f.bps)
+  return String(f.value)
 }
 
 const unknownCallMicroUsd = (model: string) =>

@@ -14,7 +14,7 @@ const supabase = {
     error: null,
   }),
 } as unknown as UserClient
-const context: ToolContext = { supabase, today: "2026-11-05", currency: "INR" }
+const context: ToolContext = { supabase, today: "2026-11-05", currency: "INR", descriptionsOk: false }
 const tools = [spendingTool as FinanceTool]
 const ask = (script: MockScript, extra: Partial<Parameters<typeof runChat>[0]> = {}) =>
   runChat({ provider: mockProvider(script), tools, context, question: "What did I spend last month?", ...extra })
@@ -102,4 +102,26 @@ describe("Roma's chat loop", () => {
     const run = await runChat({ provider: failing, tools, context, question: "?" })
     expect(run).toMatchObject({ result: { kind: "failed", reason: "rate_limited" }, calls: 1, unknownCalls: 0 })
   })
+
+  it("lets an answer quote a found entry's date, and reports descriptions left out (10.2)", async () => {
+    const finder: FinanceTool = {
+      name: "search_transactions",
+      description: "test",
+      input: spendingTool.input,
+      run: async () => ({
+        data: { entries: [{ date: "2026-10-17", amount: "₹450" }] },
+        figures: [{ label: "2026-10-17 · Food", kind: "money", minor: 45000, currency: "INR" }],
+        dates: ["2026-10-17"],
+        descriptionsWithheld: true,
+      }),
+    }
+    const run = await runChat({
+      provider: mockProvider((_req, round) => (round === 0 ? mockToolCall("search_transactions", { period: "last_month" }) : mockText("You paid ₹450 on 2026-10-17."))),
+      tools: [finder],
+      context,
+      question: "When did I last order food?",
+    })
+    expect(run.result).toMatchObject({ kind: "answer", text: "You paid ₹450 on 2026-10-17.", descriptionsWithheld: true })
+  })
 })
+

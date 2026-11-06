@@ -27,8 +27,10 @@ export const mockToolCall = (name: string, input: unknown, id = `call-${name}`):
 })
 
 /**
- * The E2E script: asks spending_for_period for "last month" when the question says so,
- * otherwise "this month", then repeats the tool's own figures. Labelled as a test answer.
+ * The E2E script: "find …" asks search_transactions for this month and names the newest entry
+ * (with its description when one was sent); anything else asks spending_for_period for "last
+ * month" when the question says so, otherwise "this month", then repeats the tool's own
+ * figures. Labelled as a test answer.
  */
 const defaultScript: MockScript = (request) => {
   const last = request.messages.at(-1)
@@ -37,6 +39,14 @@ const defaultScript: MockScript = (request) => {
       period?: { from: string; to: string }
       spent?: string
       expense_count?: number
+      entries?: { date: string; amount: string; description: string | null }[]
+      shown?: number
+    }
+    if (result.entries) {
+      const newest = result.entries[0]
+      if (!newest) return mockText("I found no matching entries. (Test answer.)")
+      const what = newest.description ? ` for ${newest.description}` : ""
+      return mockText(`I found ${result.shown ?? 0} entries. The newest is ${newest.amount}${what} on ${newest.date}. (Test answer.)`)
     }
     if (!result.period || !result.spent) return mockText("I couldn't load your spending. (Test answer.)")
     return mockText(
@@ -44,6 +54,7 @@ const defaultScript: MockScript = (request) => {
     )
   }
   const question = request.messages.find((m) => m.role === "user")
-  const lastMonth = question?.role === "user" && /last month/i.test(question.text)
-  return mockToolCall("spending_for_period", { period: lastMonth ? "last_month" : "this_month" })
+  const text = question?.role === "user" ? question.text : ""
+  if (/^find\b/i.test(text)) return mockToolCall("search_transactions", { period: "this_month" })
+  return mockToolCall("spending_for_period", { period: /last month/i.test(text) ? "last_month" : "this_month" })
 }
