@@ -55,6 +55,19 @@ export type ToolOutput = {
   descriptionsSent?: boolean
   check?: GoalCheck
   needs?: InputNeeded
+  subject?: CheckSubject
+}
+
+/**
+ * What a goal or trip check was about (10.5): `checked` must be something the person named in
+ * the conversation, and the answer may name only the goals the tool's own result names. Either
+ * failing, the answer is refused and a summary built in code is shown (chat.ts).
+ */
+export type CheckSubject = {
+  /** The goal checked, or the trip's destination. */
+  checked: string
+  /** All the person's goal names (active and archived): the ones an answer could wrongly name. */
+  goals: string[]
 }
 
 export type FinanceTool<I = unknown> = {

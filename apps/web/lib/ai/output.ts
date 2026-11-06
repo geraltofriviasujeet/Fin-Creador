@@ -71,6 +71,42 @@ function withoutLiterals(text: string, literals: readonly string[]): string {
   return rest
 }
 
+// The subject check (10.5): a goal or trip answer must be about what the person asked.
+
+/** Words too common in goal names to tell one from another. */
+const GENERIC_WORDS = new Set(["a", "an", "the", "my", "our", "to", "for", "of", "and", "in", "new", "trip", "goal", "fund", "plan", "saving", "savings"])
+
+const wordsOf = (text: string) => text.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
+
+/** Whether the person's words name it: any of its own words (all its words when they are all common ones). */
+export function isNamedIn(name: string, said: string): boolean {
+  const have = new Set(wordsOf(said))
+  const all = wordsOf(name)
+  const own = all.filter((w) => !GENERIC_WORDS.has(w))
+  return own.length > 0 ? own.some((w) => have.has(w)) : all.length > 0 && all.every((w) => have.has(w))
+}
+
+export type SubjectCheck = { ok: true } | { ok: false; checked: string; goals: string[] }
+
+/**
+ * Refuses an answer when a check was about something the person didn't name (a goal put in for
+ * the one asked about), or when the answer names one of their goals that no check's own result
+ * named. `said`: the person's words in this conversation; `toolText`: the checks' results.
+ */
+export function checkSubjects(answer: string, said: string, subjects: readonly { checked: string; goals: readonly string[] }[], toolText: string): SubjectCheck {
+  const text = answer.toLocaleLowerCase()
+  const fromTools = toolText.toLocaleLowerCase()
+  for (const s of subjects) {
+    const fail = { ok: false as const, checked: s.checked, goals: [...s.goals] }
+    if (!isNamedIn(s.checked, said)) return fail
+    for (const g of s.goals) {
+      const name = g.trim().toLocaleLowerCase()
+      if (name && text.includes(name) && !fromTools.includes(name)) return { ...fail, checked: g }
+    }
+  }
+  return { ok: true }
+}
+
 const PRAISE_OPENER =
   /^\s*(?:(?:great|good|excellent|fantastic|wonderful|nice|awesome)\s+(?:question|news|job|work|point)\b|(?:happy to help|i'?d be happy|absolutely|certainly|sure thing)\b)/i
 

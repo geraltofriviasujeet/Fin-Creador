@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { allowedNumbers, checkAnswer, literalStrings, normalizeNumber, numbersIn } from "./output"
+import { allowedNumbers, checkAnswer, checkSubjects, isNamedIn, literalStrings, normalizeNumber, numbersIn } from "./output"
 import type { Figure } from "./tools/types"
 
 const figures: Figure[] = [
@@ -96,5 +96,21 @@ describe("names a tool returned", () => {
 
   it("without the tool's strings, the name's digits are refused", () => {
     expect(checkAnswer("Car 2027 needs ₹500.", allowed)).toMatchObject({ ok: false, unmatched: ["2027"] })
+  })
+})
+
+describe("the subject check (10.5)", () => {
+  it("knows a goal is named by any of its own words, not by common ones", () => {
+    expect(isNamedIn("Assam Trip", "can I go vietnam? can you estimate my trip plan?")).toBe(false)
+    expect(isNamedIn("Assam Trip", "Can I afford the assam trip?")).toBe(true)
+    expect(isNamedIn("Car 2027", "can I buy the car")).toBe(true)
+    expect(isNamedIn("Trip", "how is my trip")).toBe(true)
+  })
+  it("refuses a check about what wasn't asked, and an answer naming a goal no result named", () => {
+    const vietnam = { checked: "Vietnam", goals: ["Assam Trip", "Car"] }
+    expect(checkSubjects("I can't estimate this.", "can I go vietnam?", [vietnam], '{"trip":"Vietnam"}')).toEqual({ ok: true })
+    expect(checkSubjects("Yes.", "can I go vietnam?", [{ checked: "Assam Trip", goals: ["Assam Trip"] }], "")).toEqual({ ok: false, checked: "Assam Trip", goals: ["Assam Trip"] })
+    expect(checkSubjects("No. Assam trip is fine though.", "can I go vietnam?", [vietnam], '{"trip":"Vietnam"}')).toMatchObject({ ok: false, checked: "Assam Trip" })
+    expect(checkSubjects("No. Your Car saving comes first.", "can I go vietnam?", [vietnam], '{"other":"Car"}')).toEqual({ ok: true })
   })
 })

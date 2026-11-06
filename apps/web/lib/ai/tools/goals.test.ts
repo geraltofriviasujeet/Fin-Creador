@@ -92,7 +92,7 @@ describe("goal_projection", () => {
 
   it("is too early to say with under 3 months of records, and projects nothing", async () => {
     setUp({ nets: [0, 0, 0, 0, 500_000, 500_000, 200_000] })
-    const out = await goalProjectionTool.run(ctx, {})
+    const out = await goalProjectionTool.run(ctx, { goal: "Bike" })
     expect(out.check).toMatchObject({ verdict: "Too early to say." })
     expect(out.check!.summary).toBe(
       "Too early to say. There are only 2 complete months of records, too few to project from. Bike needs ₹10,000 a month. Your net since 2026-09-01: ₹12,000.",
@@ -103,13 +103,13 @@ describe("goal_projection", () => {
 
   it("says the estimate is thin with 3 to 5 months", async () => {
     setUp({ nets: [0, 0, 1_000_000, 1_000_000, 1_000_000, 1_000_000, 0] })
-    const out = await goalProjectionTool.run(ctx, {})
+    const out = await goalProjectionTool.run(ctx, { goal: "Bike" })
     expect(out.check!.summary).toContain("This is based on only 4 months of records, so the estimate is thin.")
   })
 
   it("says No when the target date has passed", async () => {
     setUp({ goals: [goal({ targetDate: "2026-08-31", targetMinor: 3_000_000 })] })
-    const out = await goalProjectionTool.run(ctx, {})
+    const out = await goalProjectionTool.run(ctx, { goal: "Bike" })
     expect(out.check!.summary).toMatch(
       /^No\. The target date for Bike \(August 2026\) has passed\. ₹30,000 is still needed now\. At your current rate it would be reached in January 2027\./,
     )
@@ -124,16 +124,34 @@ describe("goal_projection", () => {
     expect(passes("Yes. Car 2027 is reached in 2029.", out)).toBe(false)
   })
 
-  it("asks which goal when it isn't clear", async () => {
+  it("asks which goal, from code, when none is named: even with one goal it never picks it unasked (10.5)", async () => {
     setUp({ goals: [goal(), goal({ id: "g2", name: "Car" })] })
     const out = await goalProjectionTool.run(ctx, {})
-    expect(out.data).toMatchObject({ goals: ["Bike", "Car"] })
+    expect(out.needs).toMatchObject({ missing: ["goal"], question: "Which goal do you mean? Your goals are Bike and Car." })
     expect(out.check).toBeUndefined()
+    setUp({ goals: [goal({ name: "Assam Trip" })] })
+    const one = await goalProjectionTool.run(ctx, {})
+    expect(one.needs?.question).toBe("Which goal do you mean? Your goal is Assam Trip.")
+    expect(one.check).toBeUndefined()
+  })
+
+  it("says a named goal doesn't exist and lists the real ones, never putting another in its place (10.5)", async () => {
+    setUp({ goals: [goal({ name: "Assam Trip" })] })
+    const out = await goalProjectionTool.run(ctx, { goal: "Vietnam" })
+    expect(out.needs).toMatchObject({ missing: ["no_such_goal"] })
+    expect(out.needs!.question).toMatch(/^You have no goal called “Vietnam”\. Your goal is Assam Trip\. For a new trip/)
+    expect(out.check).toBeUndefined()
+  })
+
+  it("asks which of several goals a name matches", async () => {
+    setUp({ goals: [goal({ name: "Car 2027" }), goal({ id: "g2", name: "Car insurance" })] })
+    const out = await goalProjectionTool.run(ctx, { goal: "car" })
+    expect(out.needs?.question).toBe("Which goal do you mean: Car 2027 or Car insurance?")
   })
 
   it("refuses a goal in another currency and an empty list", async () => {
     setUp({ goals: [goal({ currency: "USD" })] })
-    await expect(goalProjectionTool.run(ctx, {})).rejects.toThrow("Bike is saved in USD; goals are checked in INR only.")
+    await expect(goalProjectionTool.run(ctx, { goal: "Bike" })).rejects.toThrow("Bike is saved in USD; goals are checked in INR only.")
     setUp({ goals: [] })
     await expect(goalProjectionTool.run(ctx, {})).rejects.toBeInstanceOf(ToolError)
   })

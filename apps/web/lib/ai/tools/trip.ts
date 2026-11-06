@@ -20,6 +20,7 @@ import {
 import {
   type ProjectionBasis,
   VERDICT_WORDS,
+  allGoalNames,
   basisFigures,
   buildAssumptions,
   goalProjectionTool,
@@ -181,8 +182,15 @@ export const tripCheckTool: FinanceTool<TripInput> = {
   description:
     "Estimates what a trip would cost from the person's own records (their trip goals and past travel spending), then checks whether they can pay for it by the month they want, what it does to their other goals and what would have to change. Needs destination, domestic or international, month, nights and travellers, all as the person said; or the name of an existing trip goal. It lists past travel runs with two figures each for the person to confirm. Use it for any question about a trip's cost or whether a trip is affordable.",
   input,
-  async run(ctx, p) {
-    if (p.goal !== undefined) return goalProjectionTool.run(ctx, { goal: p.goal })
+  async run(ctx, input) {
+    // A trip goal by name; a name that is no goal of theirs is the destination of a new trip.
+    let p = input
+    if (input.goal !== undefined) {
+      const out = await goalProjectionTool.run(ctx, { goal: input.goal })
+      if (out.needs?.missing[0] !== "no_such_goal") return out
+      const { goal, ...rest } = input
+      p = { ...rest, destination: input.destination ?? goal }
+    }
 
     const missing = REQUIRED.filter((k) => p[k] === undefined)
     if (missing.length > 0) {
@@ -250,6 +258,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
         figures: [...sizeFigures, ...runFigures],
         dates: [lookback, today, travelMonth, ...runDates],
         check,
+        subject: { checked: destination, goals: allGoalNames(basis) },
       }
     }
 
@@ -358,6 +367,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
         ...slipped.flatMap((s) => (s.reachMonth ? [s.reachMonth] : [])),
       ],
       check,
+      subject: { checked: destination, goals: allGoalNames(basis) },
     }
   },
 }

@@ -4,6 +4,7 @@ import { cashFlowReport, monthStart } from "@fin-creador/domain"
 import { runChat, withVerdict } from "../chat"
 import { mockProvider, mockText, mockToolCall } from "../llm/mock"
 import { allowedNumbers, checkAnswer, literalStrings } from "../output"
+import { goalProjectionTool } from "./goals"
 import { CANT_ESTIMATE, tripCheckTool } from "./trip"
 import { type FinanceTool, type ToolContext, ToolError } from "./types"
 
@@ -251,5 +252,95 @@ describe("trip questions in the chat loop", () => {
     setUp({ goals: [goaGoal], travelDates: [] })
     const run = await chat({ destination: "Vietnam", scope: "international", month: "2027-04", nights: 6, travellers: 2 }, "It would cost about ₹80,000.")
     expect(run.result).toEqual({ kind: "unverified", unmatched: ["80000"] })
+  })
+})
+
+// The "Assam Trip" failure on dev (10.5): asked about Vietnam, Roma answered with a goal check
+// for the person's only goal. Whatever the model calls, no check for another goal is shown.
+describe("a destination with no goal and no comparable never gets another goal's check", () => {
+  const assam = goal({
+    id: "assam",
+    type: "trip",
+    name: "Assam Trip",
+    targetMinor: 6_000_000,
+    targetDate: "2027-03-31",
+    details: { v: 1, scope: "domestic", place: "Assam", people: 2, days: 4, travelMode: "flight", stay: "hotel", costs: goaCosts },
+  })
+  const QUESTION = "can I go vietnam? can you estimate my trip plan?"
+  const chat = (call: [string, unknown], reply: (data: Record<string, unknown>) => string, question = QUESTION) =>
+    runChat({
+      provider: mockProvider((req, round) => {
+        if (round === 0) return mockToolCall(...call)
+        const last = req.messages.at(-1)
+        const data = last?.role === "tool_results" ? (JSON.parse(last.results[0]!.content) as Record<string, unknown>) : {}
+        return mockText(reply(data))
+      }),
+      tools: [goalProjectionTool as FinanceTool, tripCheckTool as FinanceTool],
+      context: ctx,
+      question,
+    })
+  const OFF = "Roma's answer was about Assam Trip, which isn't what you asked about, so it isn't shown. Your goals are: Assam Trip."
+  const noOtherCheck = (result: Awaited<ReturnType<typeof chat>>["result"]) => {
+    expect(result.kind).toBe("answer")
+    if (result.kind === "answer") {
+      expect(result.checks.filter((c) => c.goal !== "Vietnam")).toEqual([])
+    }
+  }
+
+  beforeEach(() => setUp({ goals: [assam], travelDates: [] }))
+
+  it("goal_projection with no name: asks which goal, never checks the only one", async () => {
+    const run = await chat(["goal_projection", {}], () => "Yes. Assam Trip is on track.")
+    expect(run.result).toMatchObject({ kind: "answer", text: "Which goal do you mean? Your goal is Assam Trip.", checks: [] })
+  })
+
+  it("goal_projection with the other goal's name: the check is refused, the coded summary shown", async () => {
+    const run = await chat(["goal_projection", { goal: "Assam Trip" }], (d) => String(d.verdict_summary))
+    noOtherCheck(run.result)
+    expect(run.result).toMatchObject({ checks: [], figures: [] })
+    expect(run.result.kind === "answer" && run.result.text).toMatch(new RegExp(`^${OFF.replace(/[.?]/g, "\\$&")} Name the goal you mean`))
+  })
+
+  it("goal_projection with a generic word that matches it (\"trip\"): refused the same way", async () => {
+    const run = await chat(["goal_projection", { goal: "trip" }], (d) => String(d.verdict_summary))
+    expect(run.result).toMatchObject({ checks: [], figures: [] })
+    expect(run.result.kind === "answer" && run.result.text).toContain("Roma's answer was about Assam Trip")
+  })
+
+  it("goal_projection with Vietnam: says there is no such goal and lists the real one", async () => {
+    const run = await chat(["goal_projection", { goal: "Vietnam" }], () => "Assam Trip instead?")
+    expect(run.result).toMatchObject({ kind: "answer", checks: [] })
+    expect(run.result.kind === "answer" && run.result.text).toMatch(/^You have no goal called “Vietnam”\. Your goal is Assam Trip\./)
+  })
+
+  it("trip_check with Vietnam as a goal name: a new trip, so the missing details are asked for", async () => {
+    const run = await chat(["trip_check", { goal: "Vietnam" }], () => "Assam Trip is on track.")
+    expect(run.result).toMatchObject({
+      kind: "answer",
+      checks: [],
+      text: "To estimate a trip to Vietnam from your records, Roma needs to know whether the trip is domestic or international, the month you want to travel, how many nights and how many people are travelling. Tell her these and ask again.",
+    })
+  })
+
+  it("with every detail: I can't estimate this from your records, and what would make it possible", async () => {
+    const vietnam = { destination: "Vietnam", scope: "international", month: "2027-04", nights: 6, travellers: 2 }
+    const run = await chat(["trip_check", vietnam], (d) => String(d.verdict_summary))
+    noOtherCheck(run.result)
+    expect(run.result).toMatchObject({ kind: "answer", checks: [{ kind: "trip", goal: "Vietnam", verdict: CANT_ESTIMATE }] })
+    expect(run.result.kind === "answer" && run.result.text).toBe(
+      `${CANT_ESTIMATE} There is no international trip to scale from: no international trip goal with costs, and no past international trip confirmed. A trip goal with its costs filled in would also do.`,
+    )
+  })
+
+  it("with every detail: an answer that brings in the other goal is refused", async () => {
+    const vietnam = { destination: "Vietnam", scope: "international", month: "2027-04", nights: 6, travellers: 2 }
+    const run = await chat(["trip_check", vietnam], () => `${CANT_ESTIMATE} But Assam Trip is on track.`)
+    expect(run.result).toMatchObject({ kind: "answer", checks: [], figures: [] })
+    expect(run.result.kind === "answer" && run.result.text).toContain("Roma's answer was about Assam Trip")
+  })
+
+  it("still answers about a goal the person named", async () => {
+    const run = await chat(["goal_projection", { goal: "Assam Trip" }], (d) => String(d.verdict_summary), "Can I afford the Assam trip?")
+    expect(run.result).toMatchObject({ kind: "answer", checks: [{ goal: "Assam Trip" }] })
   })
 })

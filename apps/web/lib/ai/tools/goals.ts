@@ -27,7 +27,7 @@ import { type Figure, type FinanceTool, type GoalCheck, type ToolContext, ToolEr
 //   * card bills: not taken off, as card purchases are already spending when made.
 
 const goalInput = z
-  .object({ goal: z.string().trim().min(1).max(80).optional().describe("The goal's name, as the person calls it. Leave out when they have one goal.") })
+  .object({ goal: z.string().trim().min(1).max(80).optional().describe("The goal's name, in the person's own words. Never a goal they didn't name; leave out when they named none.") })
   .strict()
 type GoalInput = z.infer<typeof goalInput>
 
@@ -37,17 +37,34 @@ export const YEARS = PROJECTION_HORIZON_MONTHS / 12
 
 export const monthName = (date: IsoDate) => new Date(`${date}T00:00:00Z`).toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })
 
-/** The goal asked for: same name (any case), else the one name containing it. An array when it isn't clear which. */
-export function pickGoal(active: readonly GoalItem[], name: string | undefined): GoalItem | readonly GoalItem[] {
-  if (name === undefined) return active.length === 1 ? active[0]! : active
-  const wanted = name.toLocaleLowerCase()
+/** The goal asked for: same name (any case), else the one name containing it (or contained in it). Never a goal that wasn't named. */
+export function pickGoal(
+  active: readonly GoalItem[],
+  name: string | undefined,
+): { kind: "one"; item: GoalItem } | { kind: "unnamed" | "none" } | { kind: "several"; items: GoalItem[] } {
+  if (name === undefined) return { kind: "unnamed" }
+  const wanted = name.trim().toLocaleLowerCase()
   const exact = active.filter((g) => g.goal.name.trim().toLocaleLowerCase() === wanted)
-  if (exact.length === 1) return exact[0]!
+  if (exact.length === 1) return { kind: "one", item: exact[0]! }
   const partial = active.filter((g) => {
     const n = g.goal.name.trim().toLocaleLowerCase()
     return n.includes(wanted) || wanted.includes(n)
   })
-  return partial.length === 1 ? partial[0]! : active
+  if (partial.length === 1) return { kind: "one", item: partial[0]! }
+  return partial.length === 0 ? { kind: "none" } : { kind: "several", items: partial }
+}
+
+const nameList = (names: readonly string[], last = "and") => (names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} ${last} ${names.at(-1)}`)
+
+/** What Roma asks, built here and shown as is, when the goal asked for isn't clear (10.5). */
+export function goalQuestion(picked: { kind: "unnamed" | "none" | "several"; items?: readonly GoalItem[] }, asked: string | undefined, active: readonly GoalItem[]): string {
+  const all = active.map((g) => g.goal.name)
+  const yours = `Your ${all.length === 1 ? "goal is" : "goals are"} ${nameList(all)}.`
+  if (picked.kind === "several") return `Which goal do you mean: ${nameList(picked.items!.map((g) => g.goal.name), "or")}?`
+  if (picked.kind === "none") {
+    return `You have no goal called “${asked}”. ${yours} For a new trip, ask about it with where you want to go, domestic or international, the month, how many nights and how many people.`
+  }
+  return `Which goal do you mean? ${yours}`
 }
 
 export type Claims = { loans: ProjectionClaim[]; dues: ProjectionClaim[]; unscheduledBorrowing: boolean }
@@ -112,6 +129,9 @@ export async function loadProjectionBasis(ctx: ToolContext): Promise<ProjectionB
   }
 }
 
+/** Every goal name the person has, active and archived. */
+export const allGoalNames = (basis: ProjectionBasis) => [...basis.goals.active, ...basis.goals.archived].map((g) => g.goal.name)
+
 /** Active goals in the currency still being saved for, except `exceptId`. */
 export const otherGoals = (active: readonly GoalItem[], currency: string, exceptId: string | null) =>
   active.filter((g) => g.goal.id !== exceptId && g.goal.currency === currency && g.plan.basis !== "reached")
@@ -141,13 +161,14 @@ export const goalProjectionTool: FinanceTool<GoalInput> = {
     const active = basis.goals.active
     if (active.length === 0) throw new ToolError("There are no active goals to check.")
     const picked = pickGoal(active, input.goal)
-    if (Array.isArray(picked)) {
+    if (picked.kind !== "one") {
       return {
-        data: { goals: picked.map((g) => g.goal.name), note: "Ask which of these goals to check, then call goal_projection with its name." },
+        data: { goals: active.map((g) => g.goal.name), note: "The app asks the person which goal they mean. Reply in one short sentence." },
         figures: [],
+        needs: { tool: "goal_projection", missing: [picked.kind === "none" ? "no_such_goal" : "goal"], question: goalQuestion(picked, input.goal, active) },
       }
     }
-    const item = picked as GoalItem
+    const { item } = picked
     const { goal } = item
     if (goal.currency !== currency) throw new ToolError(`${goal.name} is saved in ${goal.currency}; goals are checked in ${currency} only.`)
 
@@ -251,6 +272,7 @@ export const goalProjectionTool: FinanceTool<GoalInput> = {
       period: { start: windowStart, end: lastComplete },
       dates,
       check,
+      subject: { checked: goal.name, goals: allGoalNames(basis) },
     }
   },
 }
