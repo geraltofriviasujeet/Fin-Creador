@@ -7,12 +7,20 @@ import type { LlmToolDef } from "../llm/types"
 // `run` that reads with the person's own session (RLS) through existing loaders. Arithmetic
 // happens in packages/domain or the database, never in the model.
 
-export type ToolContext = { supabase: UserClient; today: IsoDate; currency: string }
+export type ToolContext = {
+  supabase: UserClient
+  today: IsoDate
+  currency: string
+  /** The person agreed, in Roma, to transaction descriptions being sent (roma_descriptions_ok_at). */
+  descriptionsOk: boolean
+}
 
 /** A figure a tool produced: what the answer may quote and what the figures panel shows. */
 export type Figure = { label: string; hideWhenZero?: boolean } & (
   | { kind: "money"; minor: number; currency: string }
   | { kind: "count"; value: number }
+  /** A rate in basis points (2,350 is 23.5%), shown with formatPercentFromBasisPoints. */
+  | { kind: "percent"; bps: number }
 )
 
 export type ToolOutput = {
@@ -21,6 +29,10 @@ export type ToolOutput = {
   figures: Figure[]
   /** The period the figures cover (inclusive). */
   period?: DateRange
+  /** Other dates in the result (entry and due dates): the answer may quote them. */
+  dates?: IsoDate[]
+  /** Descriptions matched but were left out because the person hasn't agreed to send them. */
+  descriptionsWithheld?: boolean
 }
 
 export type FinanceTool<I = unknown> = {

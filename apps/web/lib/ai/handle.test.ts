@@ -44,7 +44,7 @@ function deps(over: Partial<ChatDeps> = {}): ChatDeps & { db: ReturnType<typeof 
     config: mockOn,
     db: fakeDb(),
     makeProvider: () => mockProvider(),
-    loadContext: async () => ({ supabase, today: "2026-11-05", currency: "INR" }),
+    loadContext: async () => ({ supabase, today: "2026-11-05", currency: "INR", descriptionsOk: false }),
     ...over,
   } as ChatDeps & { db: ReturnType<typeof fakeDb> }
 }
@@ -93,7 +93,7 @@ describe("POST /api/ai/chat flow", () => {
 
   it("settles Haiku usage at its price", async () => {
     const run: ChatRun = {
-      result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [] },
+      result: { kind: "answer", text: "I can't see that yet.", figures: [], periods: [], descriptionsWithheld: false },
       calls: 2,
       usage: { inputTokens: 3000, outputTokens: 600, cacheReadTokens: 1000, cacheWriteTokens: 0 },
       unknownCalls: 0,
@@ -146,5 +146,24 @@ describe("POST /api/ai/chat flow", () => {
   it("answers 502 without a reservation when the ledger can't be reached", async () => {
     const d = deps({ db: { ...fakeDb(), begin: async () => null } })
     expect((await handleChat(ask, d)).status).toBe(502)
+  })
+
+  it("formats rates and carries the descriptions notice when a search left them out (10.2)", async () => {
+    const run: ChatRun = {
+      result: {
+        kind: "answer",
+        text: "Your savings rate is 23.5%.",
+        figures: [{ label: "Savings rate", kind: "percent", bps: 2350 }],
+        periods: [],
+        descriptionsWithheld: true,
+      },
+      calls: 2,
+      usage: NO_USAGE,
+      unknownCalls: 0,
+    }
+    const res = await handleChat(ask, deps({ run: async () => run }))
+    expect(res).toMatchObject({ status: 200, body: { status: "answer", figures: [{ label: "Savings rate", value: "23.5%" }], descriptionsNotice: true } })
+    const plain = await handleChat(ask, deps({ run: async () => ({ ...run, result: { ...run.result, descriptionsWithheld: false } as ChatRun["result"] }) }))
+    expect(plain.body).not.toHaveProperty("descriptionsNotice")
   })
 })
