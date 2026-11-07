@@ -46,7 +46,7 @@ export const webPriceLookupTool: FinanceTool<WebLookupFields> = {
         prices: outcome.prices.map((p) => ({ id: p.id, site: p.site, currency: p.currency, text: p.quote })),
         next:
           outcome.prices.length > 0
-            ? "Pick each price you use with web_price_figures by its id, with a short label, what it covers (per) and its cost line. Never type an amount and never convert a currency."
+            ? "Pick each price you use with web_price_figures by its id, with a short label, what it covers (per) and its cost line. Never type an amount and never convert a currency. A price may be stated only after web_price_figures keeps it, by its placeholder; an amount seen in a result but not kept must not be written."
             : "No prices were found in these results.",
       },
       figures: [],
