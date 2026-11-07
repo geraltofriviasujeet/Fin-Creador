@@ -1,6 +1,6 @@
 import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
-import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber, numbersIn } from "./output"
+import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber } from "./output"
 import { ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { decimalToMinor } from "./search/totals"
 import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
@@ -155,9 +155,7 @@ export async function runChat({
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
     const allowed = allowedNumbers(figures, dates)
     for (const n of webNumbers(found.web)) allowed.add(n)
-    // The person's own numbers (nights, travellers, a month) may be repeated back; money may not.
-    const stated = new Set(numbersIn([question, ...history.recent.map((t) => t.question)].join("\n")))
-    const check = checkAnswer(response.text, allowed, found.literals, stated)
+    const check = checkAnswer(response.text, allowed, found.literals)
     if (!check.ok) return done(check.reason === "unverified" ? { kind: "unverified", unmatched: check.unmatched ?? [] } : { kind: check.reason })
 
     // A goal or trip answer about something the person didn't ask about: refused, and a summary
