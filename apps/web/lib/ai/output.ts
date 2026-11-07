@@ -10,6 +10,9 @@ import type { Figure } from "./tools/types"
 //     returned (a goal, category or account name such as "Car 2027") are not figures: those
 //     strings are set aside, exactly as written (any case), before the numbers are read;
 //     A numbered-list marker at the start of a line ("1. ") is a position, not a figure (10.5);
+//     a number the person wrote in their own questions (nights, travellers, a month, a value
+//     they stated) is theirs, not the model's, and passes too, except where the answer writes
+//     it as money: a money amount always has to come from a tool (10.8);
 //   * it doesn't open with praise (Roma's rules).
 
 export const MAX_ANSWER_CHARS = 2000
@@ -29,9 +32,26 @@ export function normalizeNumber(raw: string): string {
 /** A numbered-list marker at the start of a line ("1. ", "2) "): a position, not a figure. */
 const LIST_MARKER = /^([ \t]*)\d{1,2}[.)](?=[ \t])/gm
 
+/** A currency sign or code just before a number, or a code or currency word just after it: the number is money. */
+const MONEY_BEFORE = /(?:[₹$€£¥]|\b(?:rs|inr|usd|eur|gbp|aed|sgd|thb|vnd)\.?)\s*$/i
+const MONEY_AFTER = /^\s*(?:inr|usd|eur|gbp|aed|sgd|thb|vnd|rupees?|dollars?|euros?|pounds?|lakhs?|crores?)\b/i
+
+/** Every number written in the text, normalized, and whether it is written as money. List markers are not numbers. */
+function numbersWritten(text: string): { value: string; money: boolean }[] {
+  const rest = text.replace(LIST_MARKER, "$1")
+  return [...rest.matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => {
+    const raw = m[0].replace(/,+$/, "")
+    const end = m.index + raw.length
+    return {
+      value: normalizeNumber(raw),
+      money: MONEY_BEFORE.test(rest.slice(Math.max(0, m.index - 6), m.index)) || MONEY_AFTER.test(rest.slice(end, end + 10)),
+    }
+  })
+}
+
 /** Every number written in the text (digits with optional grouping and decimals), normalized. List markers are not numbers. */
 export function numbersIn(text: string): string[] {
-  return [...text.replace(LIST_MARKER, "$1").matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => normalizeNumber(m[0].replace(/,+$/, "")))
+  return numbersWritten(text).map((n) => n.value)
 }
 
 /** The numbers an answer may contain: figure amounts, counts and rates (as the tool wrote them), and date parts. */
@@ -110,12 +130,14 @@ export function checkSubjects(answer: string, said: string, subjects: readonly {
 const PRAISE_OPENER =
   /^\s*(?:(?:great|good|excellent|fantastic|wonderful|nice|awesome)\s+(?:question|news|job|work|point)\b|(?:happy to help|i'?d be happy|absolutely|certainly|sure thing)\b)/i
 
-export function checkAnswer(raw: string, allowed: Set<string>, literals: readonly string[] = []): AnswerCheck {
+/** `stated`: the numbers in the person's own questions; they pass unless the answer writes them as money. */
+export function checkAnswer(raw: string, allowed: Set<string>, literals: readonly string[] = [], stated: ReadonlySet<string> = new Set()): AnswerCheck {
   const parsed = romaAnswerSchema.safeParse({ text: raw })
   if (!parsed.success) return { ok: false, reason: "invalid" }
   const { text } = parsed.data
   if (PRAISE_OPENER.test(text)) return { ok: false, reason: "tone" }
-  const unmatched = [...new Set(numbersIn(withoutLiterals(text, literals)).filter((n) => !allowed.has(n)))]
+  const written = numbersWritten(withoutLiterals(text, literals))
+  const unmatched = [...new Set(written.filter((n) => !allowed.has(n.value) && (n.money || !stated.has(n.value))).map((n) => n.value))]
   if (unmatched.length > 0) return { ok: false, reason: "unverified", unmatched }
   return { ok: true, text }
 }

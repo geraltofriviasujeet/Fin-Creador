@@ -114,3 +114,16 @@ describe("the subject check (10.5)", () => {
     expect(checkSubjects("No. Your Car saving comes first.", "can I go vietnam?", [vietnam], '{"other":"Car"}')).toEqual({ ok: true })
   })
 })
+
+describe("checkAnswer with the person's own numbers (10.8)", () => {
+  const stated = new Set(["5", "2", "45000"])
+  it("passes a stated count, refuses it as money in any spelling", () => {
+    expect(checkAnswer("5 nights for 2 people.", new Set(), [], stated).ok).toBe(true)
+    for (const text of ["It costs ₹45,000.", "It costs Rs. 45,000.", "It costs INR 45000.", "It costs 45,000 rupees.", "About $5."]) {
+      expect(checkAnswer(text, new Set(), [], stated)).toMatchObject({ ok: false, reason: "unverified" })
+    }
+  })
+  it("passes the same money amount when a tool gave it", () => {
+    expect(checkAnswer("It costs ₹45,000.", new Set(["45000"]), [], stated).ok).toBe(true)
+  })
+})

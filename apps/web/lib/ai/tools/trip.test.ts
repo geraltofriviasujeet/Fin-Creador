@@ -401,3 +401,51 @@ describe("domestic or international from the destination", () => {
     expect(out.data).toMatchObject({ scope: "international", scope_worked_out_from_destination: false })
   })
 })
+
+// The person's own numbers (10.8, the Goa question refused on dev): nights, travellers and a
+// month they wrote may be repeated back; a money amount still needs a tool. The check is on an
+// existing trip goal for 3 people, whose result doesn't carry the 2.
+describe("numbers the person stated in a trip question", () => {
+  const goaPlan = goal({
+    ...goaGoal,
+    archivedAt: null,
+    targetDate: "2027-04-30",
+    details: { v: 1, scope: "domestic", place: "Goa", people: 3, days: 8, travelMode: "flight", stay: "hotel", costs: goaCosts },
+  })
+  const QUESTION = "Can I afford my Goa trip? 5 nights for 2 people."
+  const chat = (question: string, reply: (summary: string) => string) =>
+    runChat({
+      provider: mockProvider((req, round) => {
+        if (round === 0) return mockToolCall("trip_check", { goal: "Goa" })
+        const last = req.messages.at(-1)
+        const data = last?.role === "tool_results" ? (JSON.parse(last.results[0]!.content) as Record<string, unknown>) : {}
+        return mockText(reply(String(data.verdict_summary)))
+      }),
+      tools: [tripCheckTool as FinanceTool],
+      context: ctx,
+      question,
+    })
+
+  beforeEach(() => setUp({ goals: [goaPlan] }))
+
+  it("repeating 5 nights for 2 people from the question is shown", async () => {
+    const reply = (summary: string) => `${summary} You said 5 nights for 2 people.`
+    const run = await chat(QUESTION, reply)
+    expect(run.result).toMatchObject({ kind: "answer", checks: [{ goal: "Goa" }] })
+    expect(run.result.kind === "answer" && run.result.text).toMatch(/ You said 5 nights for 2 people\.$/)
+
+    // The same reply when the question had no numbers: the 2 (in no figure of the goal's) is refused.
+    const unstated = await chat("Can I afford my Goa trip?", reply)
+    expect(unstated.result).toEqual({ kind: "unverified", unmatched: ["2"] })
+  })
+
+  it("a money amount the model invented is still refused", async () => {
+    const run = await chat(QUESTION, (s) => `${s} Flights for 2 people will be about ₹7,350.`)
+    expect(run.result).toEqual({ kind: "unverified", unmatched: ["7350"] })
+  })
+
+  it("a number from the question written back as money still has to come from a tool", async () => {
+    const run = await chat("Can I afford my Goa trip? I can spend 45000.", (s) => `${s} That fits your ₹45,000.`)
+    expect(run.result).toEqual({ kind: "unverified", unmatched: ["45000"] })
+  })
+})
