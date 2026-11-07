@@ -34,6 +34,7 @@ export const LINE_SOURCE: Record<PlanLine["from"], string> = {
   web: "Web estimate",
   worked_out: "Worked out by the app",
   none: "No estimate",
+  not_estimated: "Not estimated: your choice",
 }
 
 export const PLAN_NOT_LIVE = "Estimates, not quotes or bookings. Web prices are as pages listed them when the plan was made, not live fares or room rates."

@@ -189,6 +189,12 @@ function Verdict({ heading, verdict, summary, dashed = false }: { heading: strin
   )
 }
 
+const MENTION_WORDS: Partial<Record<PlanLine["line"], string>> = {
+  food: "Local dishes mentioned",
+  sightseeing: "Places mentioned",
+  shopping: "Known for",
+}
+
 function LineRow({ line }: { line: PlanLine }) {
   const tone = line.from === "none" ? "neutral" : line.from === "web" ? "info" : "savings"
   return (
@@ -198,17 +204,31 @@ function LineRow({ line }: { line: PlanLine }) {
           <span className="font-semibold text-ink">{lineWords(line.line)}</span>
           <Badge tone={tone}>{LINE_SOURCE[line.from]}</Badge>
         </span>
-        <span className="font-semibold text-ink tabular-nums">{line.amounts.length > 0 ? line.amounts.map(planAmount).join(" + ") : "No estimate"}</span>
+        <span className="font-semibold text-ink tabular-nums">
+          {line.amounts.length > 0 ? line.amounts.map(planAmount).join(" + ") : line.from === "not_estimated" ? "Not estimated" : "No estimate"}
+        </span>
       </div>
       <p className="text-muted-foreground">{line.how}</p>
       {line.prices.length > 0 && (
         <ul className="grid gap-0.5">
           {line.prices.map((p, i) => (
             <li key={i} className="text-ink">
+              {p.about ? `${p.about}, ` : ""}
               {webPrice(p)}, listed on <ExternalLink href={p.url}>{p.site}</ExternalLink>
             </li>
           ))}
         </ul>
+      )}
+      {line.mentions && line.mentions.length > 0 && (
+        <p className="text-ink">
+          <span className="text-muted-foreground">{MENTION_WORDS[line.line] ?? "Mentioned"}: </span>
+          {line.mentions.map((m, i) => (
+            <span key={m.name}>
+              {i > 0 ? "; " : ""}
+              {m.name} (<ExternalLink href={m.url}>{m.site}</ExternalLink>)
+            </span>
+          ))}
+        </p>
       )}
       {line.pages.length > 0 && (
         <p className="text-muted-foreground">

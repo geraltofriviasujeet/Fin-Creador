@@ -30,7 +30,7 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await intake.getByRole("button", { name: "Make the plan" }).click()
 
   const answers = page.getByRole("list", { name: "Roma's answers" })
-  await expect(answers.getByText(/^Plan: trip from Delhi to Goa in January \d{4}\. 6 of 7 cost lines have an estimate\./)).toBeVisible()
+  await expect(answers.getByText(/^Plan: trip from Delhi to Goa in January \d{4}\. 5 of 6 cost lines have an estimate\./)).toBeVisible()
   await expect(answers.getByText(/These are estimates, not quotes or bookings\./)).toBeVisible()
   await expect(intake).toHaveCount(0)
 

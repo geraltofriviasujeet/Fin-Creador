@@ -29,4 +29,11 @@ describe("names found in the results", () => {
     expect(hotelCandidates([result(text)], [price])[0]).toMatchObject({ name: "Novotel Goa Resort & Spa", stars: 4, rateId: "w7" })
     expect(hotelCandidates([result(text)], [{ ...price, quote: "Rooms cost ₹9,500 per night." }])[0]!.rateId).toBeUndefined()
   })
+
+  it("never takes a site's name for a hotel's, and keeps each hotel once", () => {
+    const text =
+      "Mumbai SHARE Filter By Hotel 5-star. Apply The Leela Palace Hotel is 5-star. Courtyard by Marriott Mumbai Hotel is a 4-star hotel. Mumbai Booking.com Hotel deals on 5-star stays. Taj Mahal Palace Mumbai is a 5-star hotel. The Taj Mahal Palace, a five-star landmark, is by the sea. TAJ MAHAL PALACE is a 5-star icon. Trident Hotel is a 5-star hotel at Nariman Point."
+    const found = hotelCandidates([result(text, "https://stays.example.test/mumbai")], [], "Mumbai")
+    expect(found.map((h) => h.name)).toEqual(["The Leela Palace Hotel", "Courtyard by Marriott Mumbai Hotel", "Taj Mahal Palace Mumbai", "Trident Hotel"])
+  })
 })

@@ -10,7 +10,9 @@ import { type PriceCandidate, siteOf } from "../search/verify"
 //     Spa"), with "4-star" or "5-star" (or four-, five-star) written in the same sentence,
 //     within STAR_WINDOW characters of it, so one hotel's stars are never another's. Generic phrases ("Best Hotels", "Luxury Resorts") are
 //     not names. A nightly rate is attached only when a price found in code on that page has
-//     the name in its own quote.
+//     the name in its own quote. A name with a site or domain in it ("Mumbai Booking.com Hotel")
+//     is not a hotel's name; names are kept once, compared without "The", the place's own name
+//     or a trailing "Hotel" ("The Taj Mahal Palace" and "Taj Mahal Palace Mumbai" are one).
 
 export const CARRIERS = [
   "Air India Express",
@@ -95,7 +97,8 @@ export function carrierCandidates(results: readonly SearchResult[]): NameCandida
 
 const LODGING = "Hotel|Hotels|Resort|Resorts|Palace|Retreat|Suites|Spa|Villas|Inn|Lodge"
 const CAP = "[A-Z][\\p{L}'’.-]*"
-const HOTEL_NAME = new RegExp(`(?:${CAP}\\s+){0,4}(?:${LODGING})(?:\\s+(?:&\\s+|and\\s+)?${CAP}){0,3}`, "gu")
+// Lower-case joining words inside a name ("Courtyard by Marriott") are allowed, never at its start.
+const HOTEL_NAME = new RegExp(`(?:(?:${CAP}|by|of|de|la)\\s+){0,4}(?:${LODGING})(?:\\s+(?:&\\s+|and\\s+)?${CAP}){0,3}`, "gu")
 /** First words that make a phrase generic, not a name. */
 const GENERIC = new Set(["best", "top", "luxury", "cheap", "budget", "popular", "book", "find", "compare", "star", "hotels", "resorts", "list", "new", "great", "beach", "family", "all", "our", "these", "other", "more", "and", "the"])
 const STARS = /\b(?:([45])\s?-?\s?star|(four|five)[\s-]star)\b/gi
@@ -126,10 +129,32 @@ function starsNear(text: string, at: number, end: number): 4 | 5 | undefined {
   return best?.stars
 }
 
+/** Booking and review sites, and anything shaped like a domain: never part of a hotel's name. */
+const SITES = /\b(?:booking|agoda|makemytrip|goibibo|expedia|tripadvisor|trivago|hotels\.com|airbnb|cleartrip|yatra|kayak|oyo|easemytrip|ixigo|skyscanner)\b|\b[\w-]+\.(?:com|in|net|org|co|io|travel)\b/i
+export const isSiteName = (name: string) => SITES.test(name)
+
+/** One key per hotel: without "The", the destination's words, "Hotel(s)" or punctuation. */
+export function nameKey(name: string, destination: string | null): string {
+  const drop = new Set(["the", "hotel", "hotels", ...(destination ?? "").toLowerCase().split(/\s+/).filter(Boolean)])
+  return name
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w && !drop.has(w))
+    .join(" ")
+}
+
+/** Words of a booking page's buttons and filters, never part of a hotel's name ("Apply", "Filter By"). */
+export const PAGE_WORDS = new Set(["apply", "filter", "filters", "share", "sort", "book", "view", "deals", "deal", "price", "prices", "search", "login", "sign", "menu", "show", "select", "compare", "reviews", "photos", "map", "save", "offer", "offers", "tour", "tours"])
+
 /** The name with a leading "The" kept only when it is part of it ("The Leela Palace"). */
 function cleanName(raw: string): string | null {
-  const name = raw.replace(/\s+/g, " ").replace(/[.’'-]+$/, "").trim()
-  const words = name.split(" ")
+  let words = raw.replace(/\s+/g, " ").replace(/[.’'-]+$/, "").trim().split(" ")
+  // Page words before a name are cut ("Apply The Leela Palace"); one inside it means it isn't one.
+  while (words.length > 0 && (PAGE_WORDS.has(words[0]!.toLowerCase()) || /^\p{Ll}/u.test(words[0]!))) words = words.slice(1)
+  if (words.some((w) => PAGE_WORDS.has(w.toLowerCase()))) return null
+  const name = words.join(" ")
+  if (isSiteName(name)) return null
   if (words.length < 2 || words.length > 7 || name.length > 80) return null
   const first = words[0]!.toLowerCase()
   if (first === "the" ? words.length < 3 || GENERIC.has(words[1]!.toLowerCase()) : GENERIC.has(first)) return null
@@ -142,13 +167,13 @@ function cleanName(raw: string): string | null {
  * 4- and 5-star hotels and resorts named in the results, each once; `prices` are the prices
  * found in code in the same results (with their ids), for a nightly rate quoted with the name.
  */
-export function hotelCandidates(results: readonly SearchResult[], prices: readonly (PriceCandidate & { id: string })[]): NameCandidate[] {
+export function hotelCandidates(results: readonly SearchResult[], prices: readonly (PriceCandidate & { id: string })[], destination: string | null = null): NameCandidate[] {
   const out: NameCandidate[] = []
   for (const r of results) {
     for (const text of textsOf(r)) {
       for (const m of text.matchAll(HOTEL_NAME)) {
         const name = cleanName(m[0])
-        if (!name || out.some((h) => h.name.toLowerCase() === name.toLowerCase())) continue
+        if (!name || out.some((h) => nameKey(h.name, destination) === nameKey(name, destination))) continue
         const stars = starsNear(text, m.index, m.index + m[0].length)
         if (!stars) continue
         const rate = prices.find((p) => p.source_url === r.url && p.quote.includes(name))
@@ -157,4 +182,16 @@ export function hotelCandidates(results: readonly SearchResult[], prices: readon
     }
   }
   return out.slice(0, NAMES_PER_KIND).map((h, i) => ({ ...h, id: `h${i + 1}` }))
+}
+
+/** The hotel named nearest a price in its quote (for a nightly rate's label), if any. */
+export function hotelNameAt(quote: string, at: number): string | undefined {
+  let best: { d: number; name: string } | null = null
+  for (const m of quote.matchAll(HOTEL_NAME)) {
+    const name = cleanName(m[0])
+    if (!name) continue
+    const d = m.index > at ? m.index - at : Math.max(0, at - (m.index + m[0].length))
+    if (!best || d < best.d) best = { d, name }
+  }
+  return best?.name
 }

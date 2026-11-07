@@ -373,7 +373,7 @@ describe("detailed plans (10.9)", () => {
     expect(d.db.ledger.settled).toHaveLength(1)
     expect(d.db.ledger.settled[0]!.costUsd).toBeGreaterThan(0)
     expect(d.history.recorded[0]).toMatchObject({ tools: ["trip_plan"], periods: [], plan: { v: 1, kind: "trip" } })
-    expect(res.body.status === "answer" && res.body.answer).toMatch(/^Plan: trip from Delhi to Goa in January 2027\. 0 of 7 cost lines have an estimate\./)
+    expect(res.body.status === "answer" && res.body.answer).toMatch(/^Plan: trip from Delhi to Goa in January 2027\. 0 of 6 cost lines have an estimate\./)
   })
 
   it("saves a plan that made no model call (nothing to pick): the request is settled at nothing, never released", async () => {

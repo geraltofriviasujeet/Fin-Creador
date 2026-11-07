@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { type GoalProjection, currencyMinorDigits, formatMoney } from "@fin-creador/domain"
+import { tripPlaceScope } from "@fin-creador/schemas"
 import { DEADLINE_MS } from "../chat"
 import { LlmError, type LlmMessage, type LlmProvider, type LlmUsage, NO_USAGE, addUsage } from "../llm/types"
 import type { WebLookupInput } from "../search/query"
@@ -10,6 +11,7 @@ import { VERDICT_WORDS, monthName } from "../tools/goals"
 import type { ToolContext, TotalBound } from "../tools/types"
 import { webTotal } from "../web-format"
 import { lineWords } from "./format"
+import { aboutPrice, dishesIn, placesIn, shoppingIn } from "./context"
 import { NAMES_PER_KIND, type NameCandidate, carrierCandidates, hotelCandidates } from "./names"
 import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanVerdict } from "./types"
 
@@ -311,15 +313,52 @@ function bufferOf(a: PlanAmount): PlanAmount {
   return { currency: a.currency, low: pct(a.low), high: pct(a.high), ...(a.bound ? { bound: a.bound } : {}) }
 }
 
-const toPrice = (c: PriceCandidate, per: PlanPrice["per"]): PlanPrice => ({
+const toPrice = (c: PriceCandidate, per: PlanPrice["per"], about?: string): PlanPrice => ({
   amount: c.amount,
   scale: c.scale as PlanPrice["scale"],
   currency: c.currency,
   per,
   ...(c.bound ? { bound: c.bound } : {}),
+  ...(about ? { about } : {}),
   site: c.site,
   url: c.source_url,
 })
+
+/**
+ * Plausible ranges per cost line (whole rupees, INR prices only): a price outside its line's
+ * range is dropped as a misread ("INR 5 a person" for a flight). A price is first scaled to the
+ * range's unit for this plan (a person, a night, a person a day), in exact minor units. Prices
+ * in another currency aren't range-checked (never converted).
+ */
+export const SANITY: Partial<Record<PlanLineName, { low: number; high: number; unit: "person" | "night" | "person_day"; international?: { low: number; high: number } }>> = {
+  transport: { low: 1_500, high: 40_000, unit: "person", international: { low: 8_000, high: 200_000 } },
+  stay: { low: 600, high: 60_000, unit: "night" },
+  food: { low: 200, high: 10_000, unit: "person_day" },
+  local_travel: { low: 100, high: 10_000, unit: "person_day" },
+  sightseeing: { low: 200, high: 20_000, unit: "person" },
+}
+const UNIT_WORDS = { person: "a person", night: "a night", person_day: "a person a day" } as const
+
+/** A line's range for this trip, or null when it has none. */
+function rangeFor(line: PlanLineName, international: boolean) {
+  const r = SANITY[line]
+  if (!r) return null
+  const { low, high } = international && r.international ? r.international : r
+  return { low, high, unit: r.unit }
+}
+
+const rangeWords = (r: { low: number; high: number; unit: keyof typeof UNIT_WORDS }) =>
+  `${formatMoney(r.low * 100, { currency: "INR" })} to ${formatMoney(r.high * 100, { currency: "INR" })} ${UNIT_WORDS[r.unit]}`
+
+/** Whether a price, scaled to the range's unit, is inside it; true when it can't be checked. */
+export function inRange(p: PlanPrice, r: { low: number; high: number; unit: keyof typeof UNIT_WORDS }, nights: number | null, travellers: number | null): boolean {
+  if (p.currency !== "INR") return true
+  const times = timesFor(p.per, nights, travellers)
+  const units = r.unit === "person" ? travellers : r.unit === "night" ? nights : nights === null || travellers === null ? null : (nights + 1) * travellers
+  if (times === null || units === null) return true
+  const total = decimalToMinor(multiplyDecimal(valueOf(p), times), 2)
+  return total >= r.low * 100 * units && total <= r.high * 100 * units
+}
 
 export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<PlanRun> {
   const deadline = Date.now() + (deps.deadlineMs ?? DEADLINE_MS)
@@ -350,11 +389,11 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   })()
   const hotelNames = (() => {
     const o = found("hotels")
-    return o?.ok ? hotelCandidates(o.results, o.prices) : []
+    return o?.ok ? hotelCandidates(o.results, o.prices, request.kind === "trip" ? request.destination : null) : []
   })()
 
   // 3. The model's round, only when there is something to pick.
-  const priced = outcomes.filter((o): o is { lookup: Lookup & { line: PlanLineName }; outcome: Extract<LookupOutcome, { ok: true }> } => o.lookup.line !== "carriers" && o.lookup.line !== "hotels" && !!o.outcome?.ok && o.outcome.prices.length > 0)
+  const priced = outcomes.filter((o): o is { lookup: Lookup & { line: PlanLineName }; outcome: Extract<LookupOutcome, { ok: true }> } => o.lookup.line !== "carriers" && o.lookup.line !== "hotels" && o.lookup.line !== "shopping" && !!o.outcome?.ok && o.outcome.prices.length > 0)
   const brief = {
     plan: request,
     lines: priced.map((o) => ({
@@ -369,6 +408,8 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   const { calls } = round
 
   // 4. Lines, from the goal, the checked picks, or no estimate.
+  const destination = request.kind === "trip" ? request.destination : null
+  const international = destination !== null && tripPlaceScope(destination) === "international"
   const nights = request.kind === "trip" ? request.nights : null
   const travellers = request.kind === "trip" ? request.travellers : null
   const results = web?.results ?? []
@@ -378,12 +419,34 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     const c = web!.candidates.get(id)
     if (!c) return null
     const checked = verifyWebFigure({ label: line, amount: c.amount, currency: c.currency, scale: c.scale, per, source_url: c.source_url, quote: c.quote }, results)
-    return checked.ok ? toPrice(c, per) : null
+    return checked.ok ? toPrice(c, per, aboutPrice(line, c.quote, c.amount, destination)) : null
   }
   const pagesOf = (o: LookupOutcome | null) => (o?.ok ? o.results.slice(0, 6).map((r) => ({ site: siteOf(r.url), url: r.url })) : [])
 
   const lineNames: PlanLineName[] = request.kind === "trip" ? ["transport", "stay", "food", "local_travel", "sightseeing", "shopping"] : ["price", "extras"]
   const lines: PlanLine[] = lineNames.map((line): PlanLine => {
+    // Shopping is never estimated (a personal choice): what the place is known for buying, with sources.
+    if (line === "shopping") {
+      const o = found("shopping")
+      const mentions = o?.ok ? shoppingIn(o.results) : []
+      return {
+        line,
+        from: "not_estimated",
+        amounts: [],
+        how: `Not estimated: what you spend on shopping is your choice.${mentions.length > 0 ? " Known for buying, as listed on the pages found:" : ""}`,
+        prices: [],
+        pages: [],
+        ...(mentions.length > 0 ? { mentions } : {}),
+      }
+    }
+    const built = priceLine(line)
+    // Named dishes (food) and well-known places (sightseeing) from the same lookup, priced or not.
+    const o = found(line)
+    const mentions = o?.ok ? (line === "food" ? dishesIn(o.results) : line === "sightseeing" ? placesIn(o.results) : []) : []
+    return mentions.length > 0 ? { ...built, mentions } : built
+  })
+
+  function priceLine(line: PlanLineName): PlanLine {
     const fromGoal = goalLines[line] ?? 0
     if (fromGoal > 0) {
       return { line, from: "goal", amounts: [{ currency, low: minorToDecimal(fromGoal, currency), high: minorToDecimal(fromGoal, currency) }], how: records.goal!.how, prices: [], pages: [] }
@@ -403,16 +466,22 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
       const other = web.candidates.get(p.id)?.rangeWith
       if (other && !withRanges.some((x) => x.id === other)) withRanges.push({ id: other, per: p.per })
     }
-    const prices = withRanges.flatMap((p) => keptPrice(line, p.id, p.per) ?? []).slice(0, PRICES_PER_LINE)
-    if (prices.length === 0) return none(line, `No estimate: ${NONE_PICKED}`, pagesOf(o))
+    const checked = withRanges.flatMap((p) => keptPrice(line, p.id, p.per) ?? [])
+    if (checked.length === 0) return none(line, `No estimate: ${NONE_PICKED}`, pagesOf(o))
+    // Misreads out: a price outside the line's plausible range is dropped, and the line says so.
+    const range = rangeFor(line, international)
+    const prices = (range ? checked.filter((p) => inRange(p, range, nights, travellers)) : checked).slice(0, PRICES_PER_LINE)
+    const dropped = range ? checked.length - checked.filter((p) => inRange(p, range, nights, travellers)).length : 0
+    const droppedWords = dropped === 0 || !range ? "" : ` ${dropped} ${dropped === 1 ? "price" : "prices"} outside ${rangeWords(range)} ${dropped === 1 ? "was" : "were"} dropped as implausible.`
+    if (prices.length === 0) return none(line, `No estimate:${droppedWords}`, pagesOf(o))
     const amounts = lineAmounts(prices, nights, travellers)
     if (amounts.length === 0) {
       const needs = [nights === null ? "nights" : null, travellers === null ? "travellers" : null].filter(Boolean).join(" and ")
       return { line, from: "none", amounts: [], how: `No estimate: the prices found need the number of ${needs}, which ${needs.includes(" and ") ? "were" : "was"} skipped.`, prices, pages: [] }
     }
     const sites = [...new Set(prices.map((p) => p.site))].join(", ")
-    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.`, prices, pages: [] }
-  })
+    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${droppedWords}`, prices, pages: [] }
+  }
 
   // The buffer: the goal's own, or BUFFER_PERCENT of the lines with an estimate, per currency.
   if (request.kind === "trip") {
@@ -460,7 +529,9 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     const c = web?.candidates.get(id)
     if (!o?.ok || !c || !o.prices.some((p) => p.id === id)) return null
     const checked = verifyWebFigure({ label: "hotel", amount: c.amount, currency: c.currency, scale: c.scale, per: "night", source_url: c.source_url, quote: c.quote }, results)
-    return checked.ok ? toPrice(c, "night") : null
+    if (!checked.ok) return null
+    const rate = toPrice(c, "night")
+    return inRange(rate, rangeFor("stay", international)!, 1, 1) ? rate : null
   }
   const carriers = names("carriers", carrierNames, round.picks?.carriers)
   const hotels = names("hotels", hotelNames, round.picks?.hotels)
@@ -477,7 +548,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
 
   // Every page used, and when nothing could be checked every page found: a spent lookup is never silent.
   const sources = uniqueSources([
-    ...lines.flatMap((l) => [...l.prices.map(({ site, url }) => ({ site, url })), ...l.pages]),
+    ...lines.flatMap((l) => [...l.prices.map(({ site, url }) => ({ site, url })), ...l.pages, ...(l.mentions ?? []).map(({ site, url }) => ({ site, url }))]),
     ...[carriers, hotels].flatMap((n) => n?.listed.flatMap((x) => [{ site: x.site, url: x.url }, ...(x.rate ? [{ site: x.rate.site, url: x.rate.url }] : [])]) ?? []),
     ...(round.picks ? [] : [...pagesOf(found("carriers")), ...pagesOf(found("hotels"))]),
   ])
@@ -611,7 +682,12 @@ function planAssumptions(r: PlanRequest, records: PlanRecords, otherCurrencies: 
   ]
   if (r.kind === "trip") {
     list.push(`The buffer is ${BUFFER_PERCENT}% of the lines with an estimate, for costs not listed.`)
-    list.push("Visa and travel insurance aren't included.")
+    list.push("Visa and travel insurance aren't included. Shopping isn't estimated: it is your choice.")
+    list.push(
+      `Prices in rupees outside a plausible range are dropped as misreads: ${(Object.keys(SANITY) as PlanLineName[])
+        .map((l) => `${lineWords(l).toLowerCase()} ${rangeWords(rangeFor(l, false)!)}${SANITY[l]!.international ? ` (international ${rangeWords(rangeFor(l, true)!)})` : ""}`)
+        .join("; ")}.`,
+    )
   } else {
     list.push(r.item === "house" ? "Registration, stamp duty and loan costs aren't included." : "Loan interest isn't included; insurance and extras are the first year's.")
   }
@@ -621,9 +697,10 @@ function planAssumptions(r: PlanRequest, records: PlanRecords, otherCurrencies: 
 
 /** The chat answer, written in code from the checked plan. */
 export function planAnswer(plan: CheckedPlan): string {
-  const estimated = plan.lines.filter((l) => l.from !== "none").length
+  const priced = plan.lines.filter((l) => l.from !== "not_estimated")
+  const estimated = priced.filter((l) => l.from !== "none").length
   return [
-    `${plan.intake.title}. ${estimated} of ${plan.lines.length} cost lines have an estimate.`,
+    `${plan.intake.title}. ${estimated} of ${priced.length} cost lines have an estimate.`,
     `From your records: ${plan.verdicts.records.summary}`,
     `With web estimates: ${plan.verdicts.web.summary}`,
     "Open the plan for each cost line, how it was worked out and its sources. These are estimates, not quotes or bookings.",

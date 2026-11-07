@@ -137,7 +137,7 @@ function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "intern
     case "local_travel":
       return `local taxi hire price per day in ${place}`
     case "shopping":
-      return `typical souvenir shopping prices in ${place}`
+      return `what to buy in ${place} famous local products`
     case "carriers":
       return from ? `airlines flying from ${from} to ${place}` : `airlines with flights to ${place}`
     case "hotels":

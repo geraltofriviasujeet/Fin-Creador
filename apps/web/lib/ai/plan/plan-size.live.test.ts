@@ -24,7 +24,7 @@ describe.skipIf(!run)("a real plan against the stored-plan checks (by hand only)
     const ctx = { supabase: {} as UserClient, today: "2026-11-07", currency: "INR", descriptionsOk: false, web }
     const real = anthropicProvider({ apiKey: env("ANTHROPIC_API_KEY"), model: env("LLM_MODEL") })
     const out = await runPlan(
-      { kind: "trip", destination: "Goa", origin: "Delhi", month: "2027-01", nights: 4, travellers: 2, style: "comfort" },
+      { kind: "trip", destination: process.env.PLAN_TO ?? "Goa", origin: process.env.PLAN_FROM ?? "Delhi", month: "2027-01", nights: 4, travellers: 2, style: "comfort" },
       { ctx, provider: { ...real, complete: async (r, sig) => { const res = await real.complete(r, sig).catch((e) => { console.warn(JSON.stringify({ error: String(e), kind: e.kind, cause: String(e.cause ?? '') })); throw e }); const call = res.toolCalls[0]; console.warn(JSON.stringify({ out: res.usage.outputTokens, stop: res.stop, tool: call?.name, text: res.text.slice(0, 300), input: String(JSON.stringify(call?.input)).slice(0, 1500), issues: call ? pickInput.safeParse(call.input).error?.issues.slice(0, 5) : null })); return res } }, records: async () => ({ records: { verdict: "No verdict.", summary: "Test." }, goal: null, saved: null, project: null, assumptions: [] }) },
     )
     const text = JSON.stringify(out.plan)
@@ -42,6 +42,12 @@ describe.skipIf(!run)("a real plan against the stored-plan checks (by hand only)
       schema: checkedPlanSchema.safeParse(out.plan).success,
       transport: out.plan.lines.find((l) => l.line === "transport")?.how, carriers: out.plan.carriers?.listed.map((c) => c.name), carrierNote: out.plan.carriers?.note,
     }))
+    if (process.env.PLAN_LINES) {
+      for (const l of out.plan.lines) {
+        console.warn(JSON.stringify({ line: l.line, from: l.from, how: l.how, prices: l.prices.map((p) => `${p.about ?? "-"} | ${p.currency} ${p.amount} ${p.per}`), mentions: (l.mentions ?? []).map((m) => m.name) }))
+      }
+      console.warn(JSON.stringify({ hotels: out.plan.hotels?.listed.map((h) => `${h.name} ${h.stars ?? ""} ${h.rate?.amount ?? ""}`) }))
+    }
     expect(out.plan.v).toBe(1)
   })
 })

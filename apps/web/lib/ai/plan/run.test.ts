@@ -14,18 +14,18 @@ const page = (title: string, snippet: string): SearchResult => ({ title, url: `h
 
 /** One page per query, by the words the query template uses. */
 const PAGES: [RegExp, SearchResult][] = [
-  [/^flight ticket price from Delhi to Goa/, page("Goa flights", "Delhi to Goa flights cost ₹4,200 per person one way on average.")],
-  [/hotel price per night/, page("Goa hotels", "A mid-range hotel in Goa costs ₹4,500 a night in January.")],
-  [/daily food cost/, page("Goa food", "Meals in Goa cost about ₹800 per person per day.")],
-  [/local taxi hire/, page("Goa taxis", "Taxi hire in Goa is ₹2,000 per day.")],
-  [/tours and activities/, page("Goa tours", "The Dudhsagar falls tour costs ₹1,500 per person.")],
-  [/souvenir shopping/, page("Goa shopping", "Cashew and spice shopping in Goa costs ₹3,000 in total for most visitors.")],
+  [/^flight ticket price from Delhi to Goa/, page("Goa flights", "Delhi to Goa flights cost ₹4,200 per person one way on average. Seat selection from ₹5 per person.")],
+  [/hotel price per night/, page("Goa hotels", "Rooms at Novotel Goa Resort & Spa in Candolim cost ₹4,500 a night in January.")],
+  [/daily food cost/, page("Goa food", "Street food meals in Goa cost about ₹800 per person per day; try the fish curry and bebinca.")],
+  [/local taxi hire/, page("Goa taxis", "An app cab (Uber or Ola) in Goa costs ₹2,000 per day.")],
+  [/tours and activities/, page("Goa tours", "The Dudhsagar Falls tour costs ₹1,500 per person. Basilica of Bom Jesus and Fort Aguada are free to visit.")],
+  [/what to buy in/, page("Goa shopping", "Goa is known for cashew nuts, spices and feni; a bottle costs ₹3,000.")],
   [/^airlines flying from Delhi to Goa/, page("Goa airlines", "IndiGo, Air India Express and Akasa Air fly to Goa daily. SpiceJet also operates the route.")],
   [
     /hotels and resorts/,
     page(
       "Goa luxury stays",
-      "Best Hotels in Goa: Taj Exotica Resort & Spa is a 5-star resort in Benaulim with rooms from ₹18,000 a night. Novotel Goa Resort & Spa, a 4-star hotel, costs ₹9,500 per night.",
+      "Best Hotels in Goa: Taj Exotica Resort & Spa is a 5-star resort in Benaulim with rooms from ₹18,000 a night. Novotel Goa Resort & Spa, a 4-star hotel, costs ₹9,500 per night. Goa Booking.com Hotel deals on 5-star stays. The Taj Exotica Resort & Spa Goa is a 5-star favourite.",
     ),
   ],
   [/on road price/, page("Creta price", "The Hyundai Creta on road price in India is ₹14.5 lakh for the base model.")],
@@ -119,21 +119,35 @@ function setup() {
 }
 
 describe("a trip plan", () => {
-  it("looks up each line, scales the picked prices, adds a 10% buffer and checks the total", async () => {
+  it("looks up each line, scales the picked prices, drops misreads, adds a 10% buffer and checks the total", async () => {
     const { search, ctx, web, calls } = setup()
     targets.length = 0
     const run = await runPlan(goa, { ctx, provider: pickingModel(), records: fakeRecords() })
     expect(search.queries).toHaveLength(8)
     expect(run.picked).toBe("picked")
+    expect(run.plan.assumptions.some((a) => a.startsWith("Prices in rupees outside a plausible range are dropped as misreads: transport ₹1,500 to ₹40,000 a person (international ₹8,000 to ₹2,00,000 a person)"))).toBe(true)
     const by = Object.fromEntries(run.plan.lines.map((l) => [l.line, l]))
     expect(by.transport!.amounts).toEqual([{ currency: "INR", low: "8400", high: "8400" }])
     expect(by.stay!.amounts[0]!.high).toBe("18000")
     expect(by.food!.amounts[0]!.high).toBe("8000") // ₹800 × 5 days × 2
-    expect(by.shopping!.amounts[0]!.high).toBe("3000")
-    expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4840", high: "4840" }] })
-    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "53240", high: "53240" }])
-    expect(targets).toEqual([5_324_000])
-    expect(run.plan.verdicts.web.summary).toBe("No. With web estimates the plan adds up to ₹53,240. At your current rate that wouldn't be covered by January 2027.")
+    // "₹5 per person" for a flight is a misread: dropped, and the line says so.
+    expect(by.transport!.prices).toHaveLength(1)
+    expect(by.transport!.how).toMatch(/1 price outside ₹1,500 to ₹40,000 a person was dropped as implausible\.$/)
+    // What each price is for, found next to it on its page.
+    expect(by.stay!.prices[0]!.about).toBe("Novotel Goa Resort & Spa")
+    expect(by.food!.prices[0]!.about).toBe("street food")
+    expect(by.food!.mentions!.map((m) => m.name)).toEqual(["fish curry", "bebinca"])
+    expect(by.local_travel!.prices[0]!.about).toBe("app cab")
+    expect(by.sightseeing!.prices[0]!.about).toBe("Dudhsagar Falls")
+    expect(by.sightseeing!.mentions!.map((m) => m.name)).toEqual(["Dudhsagar Falls", "Basilica of Bom Jesus", "Fort Aguada"])
+    // Shopping: never an amount, what the place is known for buying.
+    expect(by.shopping).toMatchObject({ from: "not_estimated", amounts: [], prices: [] })
+    expect(by.shopping!.mentions!.map((m) => m.name)).toEqual(["cashews", "spices", "feni"])
+    expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4540", high: "4540" }] })
+    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "49940", high: "49940" }])
+    expect(targets).toEqual([4_994_000])
+    expect(run.answer).toMatch(/ 6 of 6 cost lines have an estimate\./)
+    expect(run.plan.verdicts.web.summary).toBe("No. With web estimates the plan adds up to ₹49,940. At your current rate that wouldn't be covered by January 2027.")
     expect(run.plan.changes[0]).toMatch(/^Save ₹5,000(\.00)? more a month\.$/)
     // Every web line carries its page; names are only those found, each with where.
     expect(by.transport!.prices[0]).toMatchObject({ site: "goa-flights.example.test", per: "person" })
@@ -155,7 +169,7 @@ describe("a trip plan", () => {
     expect(Date.now() - started).toBeLessThan(2_600)
     expect(run.picked).toBe("timeout")
     expect(run.unknownCalls).toBe(1)
-    const looked = run.plan.lines.filter((l) => l.line !== "buffer")
+    const looked = run.plan.lines.filter((l) => l.line !== "buffer" && l.line !== "shopping")
     expect(looked.every((l) => l.from === "none" && /checked in time/.test(l.how) && l.pages.length === 1)).toBe(true)
     expect(run.plan.lines.find((l) => l.line === "buffer")!.from).toBe("none")
     expect(run.plan.carriers).toEqual({ listed: [], note: expect.stringMatching(/couldn't be checked in time/) })
@@ -244,7 +258,7 @@ describe("a trip plan", () => {
     expect(search.queries).toHaveLength(0)
     expect(run.calls).toBe(0)
     expect(run.plan.hotels!.note).toBe("No 4- and 5-star hotels or resorts looked up: the destination was skipped.")
-    expect(run.plan.lines.every((l) => l.from === "none")).toBe(true)
+    expect(run.plan.lines.every((l) => l.from === (l.line === "shopping" ? "not_estimated" : "none"))).toBe(true)
   })
 })
 

@@ -67,6 +67,8 @@ const priceSchema = z
     currency: z.string().regex(/^[A-Z]{3}$/),
     per: z.enum(["total", "night", "person", "person_night", "day_person"]),
     bound: z.enum(["from", "up_to"]).optional(),
+    /** What the price is for (a hotel or area, a kind of meal, a mode, a place), found next to it on its page. */
+    about: text(80).optional(),
     site,
     url,
   })
@@ -76,14 +78,16 @@ export type PlanPrice = z.infer<typeof priceSchema>
 const lineSchema = z
   .object({
     line: z.enum(PLAN_LINES),
-    /** goal: the person's own goal; web: prices found; worked_out: by the app from other lines; none: no estimate. */
-    from: z.enum(["goal", "web", "worked_out", "none"]),
+    /** goal: the person's own goal; web: prices found; worked_out: by the app from other lines; none: no estimate; not_estimated: left to the person (shopping). */
+    from: z.enum(["goal", "web", "worked_out", "none", "not_estimated"]),
     amounts: z.array(amountSchema).max(4),
     /** How it was worked out, or why there is no estimate, in code's words. */
     how: text(400),
     prices: z.array(priceSchema).max(6),
     /** Pages found for a line that couldn't be checked in time: kept, so a spent lookup is never silent. */
     pages: z.array(z.object({ site, url }).strict()).max(6),
+    /** Named dishes (food), well-known places (sightseeing) or what a place is known for buying (shopping), each with its page. */
+    mentions: z.array(z.object({ name: text(60), site, url }).strict()).max(8).optional(),
   })
   .strict()
 export type PlanLine = z.infer<typeof lineSchema>
