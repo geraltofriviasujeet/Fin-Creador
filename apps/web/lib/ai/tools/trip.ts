@@ -41,8 +41,9 @@ import { type Figure, type FinanceTool, type GoalCheck, NO_LOOKUPS, type ToolCon
 //     the conversation.
 //   * A run's two figures are added up from the records here, never taken from the model:
 //     the Travel category alone, and all spending in the same dates.
-//   * No comparable of the trip's scope: "I can't estimate this from your records.", never a
-//     guess. Without web research until 10.8.
+//   * No comparable of the trip's scope: "No estimate from your records.", never a guess. With
+//     web lookups on, the model is told to look up the trip's cost lines anyway, for a
+//     web-only line marked as resting entirely on web prices (10.8 follow-up).
 //   * An existing trip goal is checked by goal_projection.
 //   * From 10.8 the check carries `withTarget`: the same projection (same records, same month)
 //     with only the target replaced by a web total, for a separate web-assisted line. The
@@ -54,7 +55,7 @@ export const MAX_RUNS = 6
 const MAX_PAGES = 5
 const PAGE = 100
 
-export const CANT_ESTIMATE = "I can't estimate this from your records."
+export const CANT_ESTIMATE = "No estimate from your records."
 
 const isoDate = z.iso.date()
 const scope = z.enum(["domestic", "international"])
@@ -252,7 +253,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
       { label: "Days counted", kind: "count", value: size.days },
     ]
     const runDates = priced.flatMap((r) => [r.from, r.to])
-    const withTarget = (targetMinor: number, costLines: readonly string[]): WebVerdict =>
+    const withTarget = (targetMinor: number, costLines: readonly string[], webOnly = false): WebVerdict =>
       webTripVerdict(
         goalProjection({
           today,
@@ -263,7 +264,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
           claims: [...basis.claims.loans, ...basis.claims.dues],
           otherGoals: otherGoals(basis.goals.active, currency, null).map((g) => g.plan),
         }),
-        { targetMinor, costLines, travelMonth, money },
+        { targetMinor, costLines, travelMonth, money, webOnly },
       )
 
     if (!estimate) {
@@ -272,7 +273,18 @@ export const tripCheckTool: FinanceTool<TripInput> = {
           ? ` These look like past trips: ${priced.map((r) => `${r.from} to ${r.to}, ${money(r.travelMinor)} on Travel, ${money(r.allMinor)} all spending in those dates`).join("; ")}. If one was a ${tripScope} trip, say how many travelled and which figure to use (all spending in those dates may include things unrelated to the trip).`
           : ""
       const summary = `${CANT_ESTIMATE} There is no ${tripScope} trip to scale from: no ${tripScope} trip goal with costs, and no past ${tripScope} trip confirmed.${confirm} A trip goal with its costs filled in would also do.`
-      const check: GoalCheck = { kind: "trip", goal: destination, verdict: CANT_ESTIMATE, summary, assumptions: scopeAssumption, withTarget }
+      const check: GoalCheck = {
+        kind: "trip",
+        goal: destination,
+        verdict: CANT_ESTIMATE,
+        summary,
+        assumptions: [...scopeAssumption, NO_LOOKUPS],
+        withTarget: (targetMinor, costLines) => withTarget(targetMinor, costLines, true),
+      }
+      // With web lookups on, a trip the records can't price is the case they are most useful for.
+      const lookups = ctx.web
+        ? ` Then call web_price_lookup for this trip's cost lines (same destination, month, nights and travellers) and pick the prices with web_price_figures. After the verdict, give the web estimate as resting entirely on web prices, with no basis in the person's records.`
+        : ""
       return {
         data: {
           can_estimate: false,
@@ -285,7 +297,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
             priced.length > 0
               ? "List the travel runs with both figures; ask which, if any, was a trip of this kind, how many travelled and which figure to use. Then call trip_check again with past_trips."
               : "Suggest adding a trip goal with its costs."
-          }`,
+          }${lookups}`,
         },
         figures: [...sizeFigures, ...runFigures],
         dates: [lookback, today, travelMonth, ...runDates],
@@ -406,15 +418,18 @@ export const tripCheckTool: FinanceTool<TripInput> = {
   },
 }
 
+export const WEB_ONLY = "Web-only estimate: it rests entirely on web prices, with no basis in your records."
+
 const COST_LINE_WORDS: Record<string, string> = { transport: "travel", stay: "stay", food: "food", activities: "activities", visa: "visa" }
 
 /**
  * The web-assisted line (10.8): the trip check's projection run on a web total instead of the
- * records' estimate. Said as resting on web prices and covering only the costs looked up.
+ * records' estimate. Said as resting on web prices and covering only the costs looked up;
+ * `webOnly` when the records gave no estimate at all.
  */
 export function webTripVerdict(
   projection: GoalProjection,
-  a: { targetMinor: number; costLines: readonly string[]; travelMonth: IsoDate; money: (minor: number) => string },
+  a: { targetMinor: number; costLines: readonly string[]; travelMonth: IsoDate; money: (minor: number) => string; webOnly?: boolean },
 ): WebVerdict {
   const verdict = VERDICT_WORDS[projection.verdict]
   const lines = a.costLines.map((l) => COST_LINE_WORDS[l] ?? l).join(", ")
@@ -427,7 +442,9 @@ export function webTripVerdict(
     const reached = projection.reachMonth ? ` At your current rate it is reached in ${monthName(projection.reachMonth)}.` : ""
     outcome = `At your current rate that wouldn't be covered by ${month}.${more}${reached}`
   } else outcome = "There aren't enough months in your records to say."
-  return { verdict, summary: `${verdict} ${total} ${outcome}` }
+  if (!a.webOnly) return { verdict, summary: `${verdict} ${total} ${outcome}` }
+  // No comparable in the records: the line rests on web prices alone, and says so first.
+  return { verdict, summary: `${verdict} ${WEB_ONLY} ${total} ${outcome}`, webOnly: true }
 }
 
 type Slip = { name: string; reachMonth: IsoDate | null }

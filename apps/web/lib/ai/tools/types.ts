@@ -49,7 +49,7 @@ export type GoalCheck = {
 }
 
 /** A verdict that rests on web estimates (10.8), worked out in code and always shown second. */
-export type WebVerdict = { verdict: string; summary: string }
+export type WebVerdict = { verdict: string; summary: string; webOnly?: true }
 
 /**
  * A check that can't run until the person says more (10.5): the app shows `question`, built in

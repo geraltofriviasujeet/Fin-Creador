@@ -6,7 +6,7 @@ import { mockProvider, mockText, mockToolCall } from "../llm/mock"
 import { allowedNumbers, checkAnswer, literalStrings } from "../output"
 import { goalProjectionTool } from "./goals"
 import { CANT_ESTIMATE, tripCheckTool } from "./trip"
-import { type FinanceTool, type ToolContext, ToolError } from "./types"
+import { type FinanceTool, NO_LOOKUPS, type ToolContext, ToolError } from "./types"
 
 // trip_check (10.5) against stubbed loaders; the Goals view, tripEstimate and goalProjection
 // run for real. Scaling and run rules are tested in packages/domain.
@@ -144,6 +144,19 @@ describe("trip_check", () => {
       `${CANT_ESTIMATE} There is no domestic trip to scale from: no domestic trip goal with costs, and no past domestic trip confirmed. A trip goal with its costs filled in would also do.`,
     )
     expect(api.loadDashboardBreakdown).not.toHaveBeenCalled()
+  })
+
+  it("with no comparable, asks for web lookups only when they are on, for a line marked web-only", async () => {
+    setUp({ travelDates: [] })
+    const off = await tripCheckTool.run(ctx, trip)
+    expect((off.data as { note: string }).note).not.toContain("web_price_lookup")
+    const on = await tripCheckTool.run({ ...ctx, web: {} as ToolContext["web"] }, trip)
+    expect((on.data as { note: string }).note).toContain("call web_price_lookup for this trip's cost lines")
+    expect(on.check!.verdict).toBe(CANT_ESTIMATE)
+    expect(on.check!.assumptions).toContain(NO_LOOKUPS)
+    const web = on.check!.withTarget!(20_000_00, ["stay"])
+    expect(web.webOnly).toBe(true)
+    expect(web.summary).toMatch(/^(Yes|No)\. Web-only estimate: it rests entirely on web prices, with no basis in your records\. The web prices kept add up to ₹20,000 for stay only, not the whole trip\./)
   })
 
   it("doesn't use a trip of the other scope", async () => {
@@ -377,7 +390,7 @@ describe("domestic or international from the destination", () => {
     const out = await tripCheckTool.run(ctx, { destination: "Vietnam", ...when })
     expect(out.check).toMatchObject({
       verdict: CANT_ESTIMATE,
-      assumptions: ["Vietnam is treated as international. If it isn't, say so and Roma will check it as domestic."],
+      assumptions: ["Vietnam is treated as international. If it isn't, say so and Roma will check it as domestic.", NO_LOOKUPS],
     })
     expect(out.data).toMatchObject({ scope: "international", scope_worked_out_from_destination: true })
   })
@@ -396,7 +409,7 @@ describe("domestic or international from the destination", () => {
     const out = await tripCheckTool.run(ctx, { destination: "Goa", scope: "international", ...when })
     expect(out.check).toMatchObject({
       verdict: CANT_ESTIMATE,
-      assumptions: ["You said this trip is international. If it isn't, say so and Roma will check it as domestic."],
+      assumptions: ["You said this trip is international. If it isn't, say so and Roma will check it as domestic.", NO_LOOKUPS],
     })
     expect(out.data).toMatchObject({ scope: "international", scope_worked_out_from_destination: false })
   })
