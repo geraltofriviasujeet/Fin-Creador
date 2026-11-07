@@ -9,15 +9,21 @@ const TODAY = "2026-11-07"
 describe("recognising a plan", () => {
   it("fills in what a trip question already says, and asks only for the rest", () => {
     const draft = detectPlan("Plan my trip to Goa in January for 2 people, 4 nights", TODAY)
-    expect(draft).toEqual({ kind: "trip", destination: "Goa", month: "2027-01", nights: 4, travellers: 2, style: null })
-    expect(intakeQuestions(draft!, TODAY).map((q) => q.field)).toEqual(["style"])
+    expect(draft).toEqual({ kind: "trip", destination: "Goa", origin: null, month: "2027-01", nights: 4, travellers: 2, style: null })
+    expect(intakeQuestions(draft!, TODAY).map((q) => q.field)).toEqual(["origin", "style"])
     expect(planRequest.safeParse(draft).success).toBe(true)
   })
 
   it("asks every trip field when the question names none, and drops a place not on the list", () => {
     const draft = detectPlan("Help me plan a trip to Atlantis", TODAY)!
     expect(draft).toMatchObject({ destination: null })
-    expect(intakeQuestions(draft, TODAY).map((q) => q.field)).toEqual(["destination", "month", "nights", "travellers", "style"])
+    expect(intakeQuestions(draft, TODAY).map((q) => q.field)).toEqual(["destination", "origin", "month", "nights", "travellers", "style"])
+  })
+
+  it("always asks where from, filled in when the question says it, so it can be changed", () => {
+    const draft = detectPlan("Plan a trip from Delhi to Goa in January, 4 nights for 2 people, luxury", TODAY)!
+    expect(draft).toMatchObject({ destination: "Goa", origin: "Delhi", style: "luxury" })
+    expect(intakeQuestions(draft, TODAY)).toEqual([expect.objectContaining({ field: "origin", initial: "Delhi" })])
   })
 
   it("reads a purchase, its make and model from the app's list, and asks month and deposit", () => {

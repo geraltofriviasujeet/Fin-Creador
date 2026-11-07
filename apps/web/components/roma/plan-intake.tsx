@@ -32,7 +32,8 @@ type Props = {
 
 export function PlanIntake({ question, draft, today, currency, pending, onPlan, onAsk, onCancel }: Props) {
   const questions = intakeQuestions(draft, today)
-  const [answers, setAnswers] = useState<Answers>({})
+  // A question filled in from what was said (the origin) starts with that answer, to change or skip.
+  const [answers, setAnswers] = useState<Answers>(() => Object.fromEntries(questions.flatMap((q) => ("initial" in q && q.initial ? [[q.field, q.initial]] : []))))
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const baseId = useId()
@@ -146,7 +147,7 @@ function IntakeField({
   onChange: (v: string) => void
   onSkip: () => void
 }) {
-  const unlisted = q.field === "destination" && value.trim() !== "" && !tripPlaceScope(value)
+  const unlisted = (q.field === "destination" || q.field === "origin") && value.trim() !== "" && !tripPlaceScope(value)
   const hint = skipped ? "Skipped: this shows as no estimate." : unlisted ? "Not on the app's list, so it can't be priced on the web." : "hint" in q ? q.hint : undefined
   const aside = (
     <Button type="button" variant="ghost" size="sm" onClick={onSkip} disabled={skipped} aria-label={`Skip: ${q.label}`}>

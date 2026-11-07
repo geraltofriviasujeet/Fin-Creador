@@ -33,6 +33,8 @@ const tripLookup = z
     travellers: z.number().int().min(1).max(9),
     cost_line: z.enum(PLAN_TRIP_LINES),
     style: z.enum(TRIP_STYLES).optional(),
+    /** 10.9 plans: the city they travel from (a listed place), for flights and carriers. */
+    origin: placeText.optional(),
   })
   .strict()
 
@@ -117,10 +119,12 @@ function placeForQuery(destination: string): string | null {
 
 const STAY_WORDS: Record<TripStyle, string> = { budget: "budget hotel", comfort: "average hotel", luxury: "luxury hotel" }
 
-function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "international", monthText: string, country: string | null, style?: TripStyle): string | null {
+function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "international", monthText: string, country: string | null, style?: TripStyle, origin?: string): string | null {
+  const from = origin ?? (scope === "international" ? country : null)
   switch (line) {
     case "transport":
-      return scope === "international" && country ? `return flight price from ${country} to ${place} in ${monthText}` : `flight ticket price to ${place} in ${monthText}`
+      if (scope === "international" && from) return `return flight price from ${from} to ${place} in ${monthText}`
+      return from ? `flight ticket price from ${from} to ${place} in ${monthText}` : `flight ticket price to ${place} in ${monthText}`
     case "stay":
       return `${STAY_WORDS[style ?? "comfort"]} price per night in ${place} in ${monthText}`
     case "food":
@@ -135,7 +139,7 @@ function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "intern
     case "shopping":
       return `typical souvenir shopping prices in ${place}`
     case "carriers":
-      return scope === "international" && country ? `airlines flying from ${country} to ${place}` : `airlines with flights to ${place}`
+      return from ? `airlines flying from ${from} to ${place}` : `airlines with flights to ${place}`
     case "hotels":
       return `four star and five star hotels and resorts in ${place} price per night`
   }
@@ -181,9 +185,12 @@ export function buildQuery(input: WebLookupInput, terms: PrivateTerms, countryCo
     scope = tripPlaceScope(input.destination) ?? undefined
     const place = placeForQuery(input.destination)
     if (!scope || !place) return { ok: false, reason: "unlisted_place" }
-    query = tripQuery(input.cost_line, place, scope, monthText, country, input.style)
+    // The origin, like the destination, must be a listed place, and is checked for private words too.
+    const origin = input.origin === undefined ? undefined : placeForQuery(input.origin)
+    if (origin === null || (origin !== undefined && !tripPlaceScope(origin))) return { ok: false, reason: "unlisted_place" }
+    query = tripQuery(input.cost_line, place, scope, monthText, country, input.style, origin)
     if (!query) return { ok: false, reason: "line_not_for_scope" }
-    subject = place
+    subject = origin ? `${origin} ${place}` : place
   } else {
     const catalogue = VEHICLE_CATALOGUE[input.vehicle]
     const make = listedName(Object.keys(catalogue), input.make)

@@ -14,13 +14,13 @@ const page = (title: string, snippet: string): SearchResult => ({ title, url: `h
 
 /** One page per query, by the words the query template uses. */
 const PAGES: [RegExp, SearchResult][] = [
-  [/^flight ticket price/, page("Goa flights", "Delhi to Goa flights cost ₹4,200 per person one way on average.")],
+  [/^flight ticket price from Delhi to Goa/, page("Goa flights", "Delhi to Goa flights cost ₹4,200 per person one way on average.")],
   [/hotel price per night/, page("Goa hotels", "A mid-range hotel in Goa costs ₹4,500 a night in January.")],
   [/daily food cost/, page("Goa food", "Meals in Goa cost about ₹800 per person per day.")],
   [/local taxi hire/, page("Goa taxis", "Taxi hire in Goa is ₹2,000 per day.")],
   [/tours and activities/, page("Goa tours", "The Dudhsagar falls tour costs ₹1,500 per person.")],
   [/souvenir shopping/, page("Goa shopping", "Cashew and spice shopping in Goa costs ₹3,000 in total for most visitors.")],
-  [/^airlines/, page("Goa airlines", "IndiGo, Air India Express and Akasa Air fly to Goa daily. SpiceJet also operates the route.")],
+  [/^airlines flying from Delhi to Goa/, page("Goa airlines", "IndiGo, Air India Express and Akasa Air fly to Goa daily. SpiceJet also operates the route.")],
   [
     /hotels and resorts/,
     page(
@@ -108,7 +108,7 @@ function fakeRecords(overrides: Partial<PlanRecords> = {}): () => Promise<PlanRe
   })
 }
 
-const goa: PlanRequest = { kind: "trip", destination: "Goa", month: "2027-01", nights: 4, travellers: 2, style: "comfort" }
+const goa = { kind: "trip", destination: "Goa", origin: "Delhi", month: "2027-01", nights: 4, travellers: 2, style: "comfort" } satisfies PlanRequest
 
 function setup() {
   const search = fakeSearch()
@@ -193,6 +193,38 @@ describe("a trip plan", () => {
     expect(run.plan.lines.find((l) => l.line === "transport")).toMatchObject({ from: "none", how: expect.stringMatching(/could be confirmed/) })
     expect(run.plan.carriers!.listed).toEqual([])
     expect(run.plan.carriers!.note).toMatch(/none is suggested/)
+  })
+
+  it("without the origin: no flight lookup and no airlines, transport says why, the rest runs", async () => {
+    const { search, ctx } = setup()
+    const run = await runPlan({ ...goa, origin: null }, { ctx, provider: pickingModel(), records: fakeRecords() })
+    expect(search.queries.some((q) => /flight|airlines/.test(q))).toBe(false)
+    expect(search.queries).toHaveLength(6)
+    expect(run.plan.lines.find((l) => l.line === "transport")).toMatchObject({ from: "none", how: "No estimate: where you travel from was skipped." })
+    expect(run.plan.carriers!.note).toBe("No airlines looked up: where you travel from was skipped.")
+    expect(run.plan.intake.fields.find((f) => f.label === "From")!.value).toBeNull()
+  })
+
+  it("asks once more when the model answers without calling the tool, then uses the picks", async () => {
+    const { ctx } = setup()
+    const picking = pickingModel()
+    let first = true
+    const provider: LlmProvider = {
+      name: "fake",
+      model: "fake",
+      async complete(request, signal) {
+        if (first) {
+          first = false
+          return { stop: "end", text: "I'll pick the ids that fit.", toolCalls: [], usage: { inputTokens: 1000, outputTokens: 20, cacheReadTokens: 0, cacheWriteTokens: 0 } }
+        }
+        expect(request.messages.at(-1)).toMatchObject({ role: "user", text: "Call plan_pick now with your picks. Write nothing else." })
+        expect(request.thinking).toBe("off")
+        return picking.complete({ ...request, messages: [request.messages[0]!] }, signal)
+      },
+    }
+    const run = await runPlan(goa, { ctx, provider, records: fakeRecords() })
+    expect(run).toMatchObject({ picked: "picked", calls: 2 })
+    expect(run.plan.lines.find((l) => l.line === "transport")!.from).toBe("web")
   })
 
   it("takes a trip goal's lines instead of looking them up", async () => {

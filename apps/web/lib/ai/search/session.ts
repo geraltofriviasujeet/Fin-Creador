@@ -27,7 +27,7 @@ const PRICES_PER_LOOKUP = 12
 
 export const WEB_NOTICES: Partial<Record<LookupRefusal, string>> = {
   monthly_cap: "Web lookups are used up for this month (they reset on the 1st). This answer uses your own records only.",
-  daily_limit: "You've used today's web lookups. This answer uses your own records only.",
+  daily_limit: "You've used your web lookups for today. This is FinCreador's own daily limit, not the search provider's, and it resets at midnight in your time zone. This answer uses your own records only.",
   off: "Web lookups are off right now. This answer uses your own records only.",
   timeout: "A web lookup took too long and was skipped.",
   failed: "A web lookup couldn't be completed and was skipped.",

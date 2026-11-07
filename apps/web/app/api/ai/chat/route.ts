@@ -95,6 +95,9 @@ export async function POST(request: NextRequest) {
         ...(turn.plan ? { p_plan: turn.plan as unknown as Json } : {}),
       })
       const row = Array.isArray(data) ? data[0] : null
+      // A turn that couldn't be saved logs its error code and message only (the function's own
+      // words, never the question, the answer or the plan).
+      if (error) console.warn(JSON.stringify({ event: "roma_record_failed", code: error.code, message: error.message }))
       if (error || !row) return null
       return { conversationId: row.conversation_id, seq: row.seq }
     },

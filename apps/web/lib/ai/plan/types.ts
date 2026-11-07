@@ -15,6 +15,8 @@ export const tripPlanRequest = z
   .object({
     kind: z.literal("trip"),
     destination: z.string().trim().min(1).max(40).nullable(),
+    /** Where they travel from: the flight and carrier lookups need it; skipped, transport is no estimate. */
+    origin: z.string().trim().min(1).max(40).nullable(),
     month: month.nullable(),
     nights: z.number().int().min(1).max(30).nullable(),
     travellers: z.number().int().min(1).max(9).nullable(),

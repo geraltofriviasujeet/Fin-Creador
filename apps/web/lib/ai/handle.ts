@@ -20,7 +20,7 @@ import { spendingTool } from "./tools/spending"
 import type { FinanceTool, Figure, ToolContext, WebBlock } from "./tools/types"
 import { webPriceFiguresTool, webPriceLookupTool } from "./tools/web-prices"
 import { loadPlanRecords } from "./plan/records"
-import { type PlanRun, runPlan } from "./plan/run"
+import { PICK_OUTPUT_TOKENS, type PlanRun, runPlan } from "./plan/run"
 import { type CheckedPlan, checkedPlanSchema, planRequest } from "./plan/types"
 
 // POST /api/ai/chat, without the framework (Sprint 10.1; the remaining tools from 10.2). Order: signed in, Roma configured,
@@ -334,15 +334,15 @@ async function answerPlan(
     run = await (deps.runPlan ?? ((r, ctx, provider) => runPlan(r, { ctx, provider, records: (req) => loadPlanRecords(ctx, req) })))(a.request, context, a.provider)
   } catch {
     await finishWeb(web)
-    await deps.db.settle(requestId, 0, 0, microToUsd(unknownCallMicroUsd(model)))
+    await deps.db.settle(requestId, 0, 0, microToUsd(2 * unknownPlanCallMicroUsd(model)))
     return lookupsNoted(error("unavailable"), web)
   }
   await finishWeb(web)
-  if (run.calls === 0) await deps.db.release(requestId)
-  else {
-    const micro = callCostMicroUsd(model, run.usage) + run.unknownCalls * unknownCallMicroUsd(model)
-    await deps.db.settle(requestId, run.usage.inputTokens + run.usage.cacheReadTokens + run.usage.cacheWriteTokens, run.usage.outputTokens, microToUsd(micro))
-  }
+  // Settled even when no model call was made (nothing to pick): a released request can't be
+  // recorded (roma_record_turn takes a settled one), and a plan that can't be saved can't be
+  // reopened. Settled at its real cost, nothing when no call was sent.
+  const micro = callCostMicroUsd(model, run.usage) + run.unknownCalls * unknownPlanCallMicroUsd(model)
+  await deps.db.settle(requestId, run.usage.inputTokens + run.usage.cacheReadTokens + run.usage.cacheWriteTokens, run.usage.outputTokens, microToUsd(micro))
   // The plan is checked against the stored shape before it is shown or kept.
   const checked = checkedPlanSchema.safeParse(run.plan)
   if (!checked.success) return lookupsNoted(error("unavailable"), web)
@@ -404,6 +404,10 @@ const figureValue = (f: Figure) => (f.kind === "money" ? f.minor : f.kind === "p
 
 const unknownCallMicroUsd = (model: string) =>
   callCostMicroUsd(model, { inputTokens: UNKNOWN_CALL_INPUT_TOKENS, outputTokens: MAX_OUTPUT_TOKENS, cacheReadTokens: 0, cacheWriteTokens: 0 })
+
+/** A plan's pick call whose usage is unknown (up to two per plan, below the chat's worst case). */
+const unknownPlanCallMicroUsd = (model: string) =>
+  callCostMicroUsd(model, { inputTokens: UNKNOWN_CALL_INPUT_TOKENS, outputTokens: PICK_OUTPUT_TOKENS, cacheReadTokens: 0, cacheWriteTokens: 0 })
 
 /** The most one question can cost (roma_settings.reserve_usd must stay above it). */
 export const worstCaseQuestionMicroUsd = (model: string) => MAX_ROUNDS * unknownCallMicroUsd(model)

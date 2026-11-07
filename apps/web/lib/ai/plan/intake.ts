@@ -13,7 +13,8 @@ const MONTH_WORD = new RegExp(`\\bin\\s+(${MONTHS.map((m) => `${m.slice(0, 3)}(?
 
 const TRIP = /\b(?:plan|planning)\b[^.?!]*\b(?:trip|holiday|vacation|travel)\b|\b(?:trip|holiday|vacation)\b[^.?!]*\bplan\b/i
 const PURCHASE = /\b(?:can i|could i|should i)\s+(?:afford|buy|get)\b|\bplan(?:ning)?\s+(?:to\s+buy|buying|for\s+(?:a|an|my)\s+new)\b/i
-const DESTINATION = /\b(?:trip|holiday|vacation|travel(?:ling)?|go(?:ing)?|visit(?:ing)?)\s+to\s+([A-Za-z][A-Za-z .'-]{1,39}?)(?=\s+(?:in|for|with|on|this|next|over|during)\b|[,.?!]|$)/i
+const ORIGIN = /\bfrom\s+([A-Za-z][A-Za-z .'-]{1,39}?)(?=\s+(?:to|in|for|with|on|this|next|over|during)\b|[,.?!]|$)/i
+const DESTINATION = /\b(?:trip|holiday|vacation|travel(?:ling)?|go(?:ing)?|visit(?:ing)?)(?:\s+from\s+[A-Za-z .'-]{1,39}?)?\s+to\s+([A-Za-z][A-Za-z .'-]{1,39}?)(?=\s+(?:in|for|with|on|this|next|over|during)\b|[,.?!]|$)/i
 const ITEMS: [RegExp, PurchasePlanRequest["item"]][] = [
   [/\b(?:bike|motorbike|motorcycle|scooter|scooty)\b/i, "bike"],
   [/\b(?:car|suv|sedan|hatchback)\b/i, "car"],
@@ -34,6 +35,7 @@ export function monthIn(text: string, today: IsoDate): string | null {
 
 function tripFrom(text: string, today: IsoDate): TripPlanRequest {
   const place = DESTINATION.exec(text)?.[1]?.trim() ?? null
+  const from = ORIGIN.exec(text)?.[1]?.trim() ?? null
   const nights = /\b(\d{1,2})\s*nights?\b/i.exec(text)
   const days = /\b(\d{1,2})\s*days?\b/i.exec(text)
   const people = /\b(\d)\s*(?:people|persons|travell?ers|adults|of us)\b/i.exec(text)
@@ -50,6 +52,7 @@ function tripFrom(text: string, today: IsoDate): TripPlanRequest {
     kind: "trip",
     // A place the app's list doesn't have can't be looked up: it is asked again.
     destination: place && tripPlaceScope(place) ? place : null,
+    origin: from && tripPlaceScope(from) ? from : null,
     month: monthIn(text, today),
     nights: n !== null && n >= 1 && n <= 30 ? n : null,
     travellers: travellers !== null && travellers >= 1 && travellers <= 9 ? travellers : null,
@@ -85,7 +88,7 @@ export function detectPlan(question: string, today: IsoDate): PlanRequest | null
 }
 
 export type IntakeQuestion =
-  | { field: "destination"; kind: "text"; label: string; hint: string }
+  | { field: "destination" | "origin"; kind: "text"; label: string; hint: string; initial?: string }
   | { field: "month"; kind: "month"; label: string; min: string }
   | { field: "nights" | "travellers"; kind: "number"; label: string; min: number; max: number }
   | { field: "style"; kind: "choice"; label: string; options: { value: string; label: string }[] }
@@ -101,6 +104,8 @@ export function intakeQuestions(draft: PlanRequest, today: IsoDate): IntakeQuest
   const month = { field: "month", kind: "month", min: today.slice(0, 7) } as const
   if (draft.kind === "trip") {
     if (draft.destination === null) out.push({ field: "destination", kind: "text", label: "Where to?", hint: "A country, an Indian state or a city. Places not on the app's list can't be priced on the web." })
+    // Always asked, filled in when the question named it, so it can be changed.
+    out.push({ field: "origin", kind: "text", label: "Travelling from which city?", hint: "Flights and airlines are looked up from here. Skip it and transport shows no estimate.", ...(draft.origin ? { initial: draft.origin } : {}) })
     if (draft.month === null) out.push({ ...month, label: "Which month?" })
     if (draft.nights === null) out.push({ field: "nights", kind: "number", label: "How many nights?", min: 1, max: 30 })
     if (draft.travellers === null) out.push({ field: "travellers", kind: "number", label: "How many travellers?", min: 1, max: 9 })

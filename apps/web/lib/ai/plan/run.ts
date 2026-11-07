@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { type GoalProjection, currencyMinorDigits, formatMoney } from "@fin-creador/domain"
 import { DEADLINE_MS } from "../chat"
-import { LlmError, type LlmProvider, type LlmUsage, NO_USAGE, addUsage } from "../llm/types"
+import { LlmError, type LlmMessage, type LlmProvider, type LlmUsage, NO_USAGE, addUsage } from "../llm/types"
 import type { WebLookupInput } from "../search/query"
 import type { LookupOutcome, LookupRefusal } from "../search/session"
 import { addDecimals, compareDecimals, decimalToMinor, multiplyDecimal } from "../search/totals"
@@ -10,7 +10,7 @@ import { VERDICT_WORDS, monthName } from "../tools/goals"
 import type { ToolContext, TotalBound } from "../tools/types"
 import { webTotal } from "../web-format"
 import { lineWords } from "./format"
-import { type NameCandidate, carrierCandidates, hotelCandidates } from "./names"
+import { NAMES_PER_KIND, type NameCandidate, carrierCandidates, hotelCandidates } from "./names"
 import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanVerdict } from "./types"
 
 // One plan, run (10.9). In order:
@@ -30,8 +30,10 @@ import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPr
 
 /** The model's round gets what is left before the deadline, less this for the rest. */
 const MARGIN_MS = 2_000
-const PICK_OUTPUT_TOKENS = 800
-const PRICES_PER_LINE = 4
+/** The round's output. Thinking is asked off (it spent 3,000 tokens before the pick when on); this is room for the picks alone. */
+export const PICK_OUTPUT_TOKENS = 2_000
+/** Prices kept per line (the stored plan allows 6). */
+const PRICES_PER_LINE = 6
 export const BUFFER_PERCENT = 10
 
 export type PlanRecords = {
@@ -77,7 +79,7 @@ const REFUSALS: Record<LookupRefusal, string> = {
   unsafe: "This lookup couldn't be made.",
   off: "Web lookups are off right now.",
   monthly_cap: "Web lookups are used up for this month.",
-  daily_limit: "Today's web lookups are used up.",
+  daily_limit: "You've used your web lookups for today. This is FinCreador's own daily limit, not the search provider's, and it resets at midnight in your time zone.",
   question_limit: "This plan's web lookups were used up before this line.",
   failed: "The lookup couldn't be completed.",
   timeout: "The lookup took too long and was skipped.",
@@ -95,14 +97,14 @@ function lookupsFor(request: PlanRequest, goalLines: Partial<Record<PlanLineName
 
   if (request.kind === "trip") {
     const needs: Record<Exclude<PlanLineName, "buffer" | "price" | "extras">, (keyof typeof request)[]> = {
-      transport: ["destination", "month"],
+      transport: ["destination", "origin", "month"],
       stay: ["destination", "month", "style"],
       food: ["destination"],
       local_travel: ["destination"],
       sightseeing: ["destination"],
       shopping: ["destination"],
     }
-    const WORDS: Partial<Record<keyof typeof request, string>> = { destination: "the destination", month: "the month", style: "the travel style" }
+    const WORDS: Partial<Record<keyof typeof request, string>> = { destination: "the destination", origin: "where you travel from", month: "the month", style: "the travel style" }
     const base = {
       kind: "trip" as const,
       destination: request.destination ?? "",
@@ -116,10 +118,15 @@ function lookupsFor(request: PlanRequest, goalLines: Partial<Record<PlanLineName
       if ((goalLines[line] ?? 0) > 0) continue
       const missing = needs[line].filter((f) => request[f] === null)
       if (missing.length > 0) skipped(line, missing.map((f) => WORDS[f]!))
-      else lookups.push({ line, input: { ...base, cost_line: COST_LINE[line], ...(line === "stay" && request.style ? { style: request.style } : {}) } })
+      else
+        lookups.push({
+          line,
+          input: { ...base, cost_line: COST_LINE[line], ...(line === "stay" && request.style ? { style: request.style } : {}), ...(line === "transport" ? { origin: request.origin! } : {}) },
+        })
     }
     if (request.destination !== null) {
-      lookups.push({ line: "carriers", input: { ...base, cost_line: "carriers" } })
+      // Carriers for a route: only with the origin.
+      if (request.origin !== null) lookups.push({ line: "carriers", input: { ...base, cost_line: "carriers", origin: request.origin } })
       lookups.push({ line: "hotels", input: { ...base, cost_line: "hotels" } })
     }
     return { lookups, skips }
@@ -150,7 +157,7 @@ function lookupsFor(request: PlanRequest, goalLines: Partial<Record<PlanLineName
   return { lookups, skips }
 }
 
-const pickInput = z
+export const pickInput = z
   .object({
     lines: z
       .array(
@@ -159,13 +166,14 @@ const pickInput = z
             line: z.string().max(20),
             picks: z
               .array(z.object({ id: z.string().regex(/^w\d{1,3}$/), per: z.enum(["total", "night", "person", "person_night", "day_person"]) }).strict())
-              .max(PRICES_PER_LINE),
+              // As many as a lookup offers: more than are kept is trimmed after the checks, never a failed round.
+              .max(12),
           })
           .strict(),
       )
       .max(9),
-    carriers: z.array(z.string().regex(/^c\d{1,2}$/)).max(6),
-    hotels: z.array(z.string().regex(/^h\d{1,2}$/)).max(6),
+    carriers: z.array(z.string().regex(/^c\d{1,2}$/)).max(NAMES_PER_KIND),
+    hotels: z.array(z.string().regex(/^h\d{1,2}$/)).max(NAMES_PER_KIND),
   })
   .strict()
 type Picks = z.infer<typeof pickInput>
@@ -178,37 +186,51 @@ const PICK_TOOL = {
 }
 
 const PICK_SYSTEM = [
-  "You help build a cost plan. The app found prices and names on web pages, each with an id. Call plan_pick once with the ids that fit each cost line, and the carriers and hotels that fit. A price fits a line only when its own text is clearly that cost for that place. Say what each price covers (per) exactly as its text says: total, night, person, person_night or day_person. Write nothing else.",
+  "You help build a cost plan. The app found prices and names on web pages, each with an id. Call the plan_pick tool once with the ids that fit each cost line, and the carriers and hotels that fit. A price fits a line only when its own text is clearly that cost for that place. Say what each price covers (per) exactly as its text says: total, night, person, person_night or day_person. If nothing fits, call plan_pick with empty lists. Write nothing else, and no tags.",
 ]
 
-/** The model's round: picks by id, or why there are none. */
+/** Time a second ask needs; with less left, a reply without the tool call ends the round. */
+const RETRY_NEEDS_MS = 10_000
+
+/**
+ * The model's round: picks by id, or why there are none. A reply that ends without calling
+ * plan_pick (it happens with thinking off) is asked once more, while the deadline allows.
+ */
 async function pick(
   provider: LlmProvider,
   brief: unknown,
   deadline: number,
-): Promise<{ picks: Picks | null; outcome: PlanRun["picked"]; usage: LlmUsage; unknown: boolean }> {
-  const remaining = deadline - Date.now() - MARGIN_MS
-  if (remaining <= 0) return { picks: null, outcome: "timeout", usage: NO_USAGE, unknown: false }
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), remaining)
-  try {
-    const response = await provider.complete(
-      { system: PICK_SYSTEM, messages: [{ role: "user", text: JSON.stringify(brief) }], tools: [PICK_TOOL], maxOutputTokens: PICK_OUTPUT_TOKENS },
-      controller.signal,
-    )
-    const call = response.toolCalls.find((c) => c.name === PICK_TOOL.name)
-    const parsed = call ? pickInput.safeParse(call.input) : null
-    return parsed?.success
-      ? { picks: parsed.data, outcome: "picked", usage: response.usage, unknown: false }
-      : { picks: null, outcome: "failed", usage: response.usage, unknown: false }
-  } catch (error) {
-    // Aborted at the deadline, or failed: either way the plan goes on without picks.
-    const timedOut = controller.signal.aborted || (error instanceof LlmError && error.kind === "timeout")
-    const unknown = !(error instanceof LlmError) || error.billed === "unknown"
-    return { picks: null, outcome: timedOut ? "timeout" : "failed", usage: NO_USAGE, unknown }
-  } finally {
-    clearTimeout(timer)
+): Promise<{ picks: Picks | null; outcome: PlanRun["picked"]; usage: LlmUsage; unknown: boolean; calls: number }> {
+  const messages: LlmMessage[] = [{ role: "user", text: JSON.stringify(brief) }]
+  let usage = NO_USAGE
+  let calls = 0
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const remaining = deadline - Date.now() - MARGIN_MS
+    if (remaining <= 0) return { picks: null, outcome: "timeout", usage, unknown: false, calls }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), remaining)
+    calls++
+    try {
+      const response = await provider.complete({ system: PICK_SYSTEM, messages, tools: [PICK_TOOL], maxOutputTokens: PICK_OUTPUT_TOKENS, thinking: "off" }, controller.signal)
+      usage = addUsage(usage, response.usage)
+      const call = response.toolCalls.find((c) => c.name === PICK_TOOL.name)
+      if (call) {
+        const parsed = pickInput.safeParse(call.input)
+        return parsed.success ? { picks: parsed.data, outcome: "picked", usage, unknown: false, calls } : { picks: null, outcome: "failed", usage, unknown: false, calls }
+      }
+      if (response.stop !== "end" || deadline - Date.now() < RETRY_NEEDS_MS) return { picks: null, outcome: "failed", usage, unknown: false, calls }
+      messages.push({ role: "assistant", text: response.text, toolCalls: [], providerContent: response.providerContent })
+      messages.push({ role: "user", text: "Call plan_pick now with your picks. Write nothing else." })
+    } catch (error) {
+      // Aborted at the deadline, or failed: either way the plan goes on without picks.
+      const timedOut = controller.signal.aborted || (error instanceof LlmError && error.kind === "timeout")
+      const unknown = !(error instanceof LlmError) || error.billed === "unknown"
+      return { picks: null, outcome: timedOut ? "timeout" : "failed", usage, unknown, calls }
+    } finally {
+      clearTimeout(timer)
+    }
   }
+  return { picks: null, outcome: "failed", usage, unknown: false, calls }
 }
 
 /** How many times a price counts for the plan, or null when a skipped field is needed. */
@@ -343,8 +365,8 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     hotels: hotelNames.map(({ id, name, site, quote, stars }) => ({ id, name, site, stars, text: quote })),
   }
   const anything = brief.lines.length + brief.carriers.length + brief.hotels.length > 0
-  const round = anything ? await pick(deps.provider, brief, deadline) : { picks: null, outcome: "no_candidates" as const, usage: NO_USAGE, unknown: false }
-  const calls = anything ? 1 : 0
+  const round = anything ? await pick(deps.provider, brief, deadline) : { picks: null, outcome: "no_candidates" as const, usage: NO_USAGE, unknown: false, calls: 0 }
+  const { calls } = round
 
   // 4. Lines, from the goal, the checked picks, or no estimate.
   const nights = request.kind === "trip" ? request.nights : null
@@ -381,7 +403,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
       const other = web.candidates.get(p.id)?.rangeWith
       if (other && !withRanges.some((x) => x.id === other)) withRanges.push({ id: other, per: p.per })
     }
-    const prices = withRanges.flatMap((p) => keptPrice(line, p.id, p.per) ?? []).slice(0, 6)
+    const prices = withRanges.flatMap((p) => keptPrice(line, p.id, p.per) ?? []).slice(0, PRICES_PER_LINE)
     if (prices.length === 0) return none(line, `No estimate: ${NONE_PICKED}`, pagesOf(o))
     const amounts = lineAmounts(prices, nights, travellers)
     if (amounts.length === 0) {
@@ -416,6 +438,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     const o = found(kind)
     const what = kind === "carriers" ? "airlines" : "4- and 5-star hotels or resorts"
     if (request.destination === null) return { listed: [], note: `No ${what} looked up: the destination was skipped.` }
+    if (kind === "carriers" && request.origin === null) return { listed: [], note: "No airlines looked up: where you travel from was skipped." }
     if (!o) return { listed: [], note: `No ${what} looked up: web lookups are off right now.` }
     if (!o.ok) return { listed: [], note: `No ${what} could be confirmed: ${REFUSALS[o.reason]}` }
     if (candidates.length === 0) return { listed: [], note: `No ${what} could be confirmed on the pages looked up, so none is suggested.` }
@@ -426,6 +449,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
         const rate = c.rateId && kind === "hotels" ? keptHotelRate(c.rateId) : null
         return { name: c.name, site: c.site, url: c.url, ...(c.stars ? { stars: c.stars } : {}), ...(rate ? { rate } : {}) }
       })
+      .slice(0, 6)
     return listed.length > 0
       ? { listed, note: `Listed on the pages found, not Roma's recommendation. ${kind === "carriers" ? "Whether each flies this route in your month isn't checked." : "Rates are as listed, not live."}` }
       : { listed: [], note: `No ${what} on the pages found could be confirmed, so none is suggested.` }
@@ -470,7 +494,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     assumptions: planAssumptions(request, records, others.map((t) => t.currency)),
     sources,
   }
-  return { plan, answer: planAnswer(plan), calls, usage: addUsage(NO_USAGE, round.usage), unknownCalls: round.unknown ? 1 : 0, picked: round.outcome }
+  return { plan, answer: planAnswer(plan), calls, usage: round.usage, unknownCalls: round.unknown ? 1 : 0, picked: round.outcome }
 }
 
 function none(line: PlanLineName, how: string, pages: PlanLine["pages"] = []): PlanLine {
@@ -497,7 +521,8 @@ export function titleOf(r: PlanRequest): string {
   if (r.kind === "trip") {
     const where = r.destination ?? "a trip"
     const when = r.month ? ` in ${monthName(`${r.month}-01`)}` : ""
-    return `Plan: ${r.destination ? `trip to ${where}` : where}${when}`
+    const from = r.origin && r.destination ? ` from ${r.origin}` : ""
+    return `Plan: ${r.destination ? `trip${from} to ${where}` : where}${when}`
   }
   const what = r.item === "house" ? "a house" : [r.make, r.model].filter(Boolean).join(" ") || `a ${r.item}`
   return `Plan: buying ${what}${r.month ? ` in ${monthName(`${r.month}-01`)}` : ""}`
@@ -507,6 +532,7 @@ function intakeFields(r: PlanRequest, money: (minor: number) => string): Checked
   if (r.kind === "trip") {
     return [
       { label: "Destination", value: r.destination },
+      { label: "From", value: r.origin },
       { label: "Month", value: r.month ? monthName(`${r.month}-01`) : null },
       { label: "Nights", value: r.nights === null ? null : String(r.nights) },
       { label: "Travellers", value: r.travellers === null ? null : String(r.travellers) },

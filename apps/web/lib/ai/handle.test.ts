@@ -355,7 +355,7 @@ describe("detailed plans (10.9)", () => {
     model: "mock",
     complete: (_r, signal) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(new LlmError("timeout", "unknown", "cut off")))),
   }
-  const goa = { kind: "trip", destination: "Goa", month: "2027-01", nights: 4, travellers: 2, style: "comfort" } as const
+  const goa = { kind: "trip", destination: "Goa", origin: "Delhi", month: "2027-01", nights: 4, travellers: 2, style: "comfort" } as const
 
   it("answers a plan when the model's round hangs: the plan comes back, is stored, and the lookups' credits are settled", async () => {
     ledger.length = 0
@@ -373,7 +373,15 @@ describe("detailed plans (10.9)", () => {
     expect(d.db.ledger.settled).toHaveLength(1)
     expect(d.db.ledger.settled[0]!.costUsd).toBeGreaterThan(0)
     expect(d.history.recorded[0]).toMatchObject({ tools: ["trip_plan"], periods: [], plan: { v: 1, kind: "trip" } })
-    expect(res.body.status === "answer" && res.body.answer).toMatch(/^Plan: trip to Goa in January 2027\. 0 of 7 cost lines have an estimate\./)
+    expect(res.body.status === "answer" && res.body.answer).toMatch(/^Plan: trip from Delhi to Goa in January 2027\. 0 of 7 cost lines have an estimate\./)
+  })
+
+  it("saves a plan that made no model call (nothing to pick): the request is settled at nothing, never released", async () => {
+    const d = deps({ runPlan: (r, ctx, provider) => runPlan(r, { ctx, provider, records }) })
+    const res = await handleChat({ question: "Plan my trip", plan: { ...goa, destination: null } }, d)
+    expect(res.body).toMatchObject({ status: "answer", saved: true })
+    expect(d.db.ledger.released).toEqual([])
+    expect(d.db.ledger.settled).toEqual([{ id: "req-1", inputTokens: 0, outputTokens: 0, costUsd: 0 }])
   })
 
   it("refuses a plan request with a field it doesn't know", async () => {

@@ -15,12 +15,14 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await page.getByLabel("Your question").fill("Plan my trip to Goa in January for 2 people, 4 nights")
   await page.getByRole("button", { name: "Ask Roma" }).click()
 
-  // The intake, not an answer: only the stay style is missing.
+  // The intake, not an answer: where from (always asked) and the stay style.
   const intake = page.getByRole("form", { name: "Plan questions" })
   await expect(intake).toBeVisible()
   await expect(intake.getByText(/From your question: Goa, \d{4}-01, 4 nights, 2 travellers\./)).toBeVisible()
   await expect(intake.getByRole("combobox")).toHaveCount(1)
   await expect(intake.getByLabel("What kind of stay?", { exact: true })).toBeVisible()
+  await expect(intake.getByLabel("Travelling from which city?", { exact: true })).toHaveValue("")
+  await intake.getByLabel("Travelling from which city?", { exact: true }).fill("Delhi")
   await expect(page.getByRole("list", { name: "Roma's answers" })).toHaveCount(0)
 
   await intake.getByRole("button", { name: "Skip: What kind of stay?" }).click()
@@ -28,14 +30,14 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await intake.getByRole("button", { name: "Make the plan" }).click()
 
   const answers = page.getByRole("list", { name: "Roma's answers" })
-  await expect(answers.getByText(/^Plan: trip to Goa in January \d{4}\. 6 of 7 cost lines have an estimate\./)).toBeVisible()
+  await expect(answers.getByText(/^Plan: trip from Delhi to Goa in January \d{4}\. 6 of 7 cost lines have an estimate\./)).toBeVisible()
   await expect(answers.getByText(/These are estimates, not quotes or bookings\./)).toBeVisible()
   await expect(intake).toHaveCount(0)
 
   // The plan opens in a modal, from the checked plan: every line, where it came from, its sources.
   await answers.getByRole("button", { name: "Open the plan" }).click()
   const plan = page.getByRole("dialog")
-  await expect(plan.getByRole("heading", { name: /^Plan: trip to Goa in January \d{4}$/ })).toBeVisible()
+  await expect(plan.getByRole("heading", { name: /^Plan: trip from Delhi to Goa in January \d{4}$/ })).toBeVisible()
   await expect(plan.getByText(/^Estimates, not quotes or bookings\. Web prices are as pages listed them/)).toBeVisible()
   await expect(plan.locator('[data-line="stay"]')).toContainText("No estimate: the travel style was skipped.")
   await expect(plan.locator('[data-line="transport"]')).toContainText("Web estimate")
@@ -45,6 +47,7 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(plan.getByText("With web estimates, not your records", { exact: true })).toBeVisible()
   await expect(plan.getByRole("region", { name: "Sources" }).getByRole("link", { name: "https://example.test/hotels" })).toBeVisible()
   await expect(plan.getByRole("region", { name: "Airlines listed for this route" })).toContainText("No airlines could be confirmed on the pages looked up, so none is suggested.")
+  await expect(plan.getByRole("region", { name: "What the plan is for" })).toContainText("FromDelhi")
 
   // Save as PDF: the browser's print, showing only the plan's copy, every link written out.
   await page.evaluate(() => {
