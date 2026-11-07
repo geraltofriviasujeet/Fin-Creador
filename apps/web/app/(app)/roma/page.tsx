@@ -39,7 +39,7 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth.user) redirect("/sign-in?next=%2Froma")
 
-  const { data: profile, error } = await supabase.from("profiles").select("roma_enabled, display_name, time_zone").eq("id", auth.user.id).maybeSingle()
+  const { data: profile, error } = await supabase.from("profiles").select("roma_enabled, display_name, time_zone, currency").eq("id", auth.user.id).maybeSingle()
   if (error || !profile) {
     return (
       <FormMessage tone="error" className="max-w-2xl">
@@ -94,6 +94,7 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
     <RomaChat
       greeting={`${greeting(profile.display_name, profile.time_zone)}.`}
       timeZone={profile.time_zone}
+      currency={profile.currency}
       conversations={list.data.map((c) => ({ id: c.id, title: c.title, lastMessageAt: c.last_message_at }))}
       open={opened}
       missing={requested.success && opened === null}

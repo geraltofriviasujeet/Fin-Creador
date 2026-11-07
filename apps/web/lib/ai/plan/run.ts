@@ -9,6 +9,7 @@ import { type Bound, type PriceCandidate, SCALES, scaleUp, siteOf, verifyWebFigu
 import { VERDICT_WORDS, monthName } from "../tools/goals"
 import type { ToolContext, TotalBound } from "../tools/types"
 import { webTotal } from "../web-format"
+import { lineWords } from "./format"
 import { type NameCandidate, carrierCandidates, hotelCandidates } from "./names"
 import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanVerdict } from "./types"
 
@@ -67,18 +68,6 @@ export type PlanRun = {
 type Lookup = { line: PlanLineName | "carriers" | "hotels"; input: WebLookupInput }
 type Skip = { line: PlanLineName; how: string }
 
-const LINE_WORDS: Record<PlanLineName, string> = {
-  transport: "Transport",
-  stay: "Stay",
-  food: "Food",
-  local_travel: "Local travel",
-  sightseeing: "Sightseeing",
-  shopping: "Shopping",
-  buffer: "Buffer",
-  price: "Price",
-  extras: "Insurance and extras",
-}
-export const lineWords = (line: PlanLineName) => LINE_WORDS[line]
 
 const REFUSALS: Record<LookupRefusal, string> = {
   unlisted_place: "That place isn't on the app's list, so it wasn't looked up.",
