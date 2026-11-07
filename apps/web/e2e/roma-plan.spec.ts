@@ -32,6 +32,26 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(answers.getByText(/These are estimates, not quotes or bookings\./)).toBeVisible()
   await expect(intake).toHaveCount(0)
 
+  // The plan opens in a modal, from the checked plan: every line, where it came from, its sources.
+  await answers.getByRole("button", { name: "Open the plan" }).click()
+  const plan = page.getByRole("dialog")
+  await expect(plan.getByRole("heading", { name: /^Plan: trip to Goa in January \d{4}$/ })).toBeVisible()
+  await expect(plan.getByText(/^Estimates, not quotes or bookings\. Web prices are as pages listed them/)).toBeVisible()
+  await expect(plan.locator('[data-line="stay"]')).toContainText("No estimate: the travel style was skipped.")
+  await expect(plan.locator('[data-line="transport"]')).toContainText("Web estimate")
+  await expect(plan.locator('[data-line="transport"]')).toContainText("listed on example.test")
+  await expect(plan.locator('[data-line="buffer"]')).toContainText("Worked out by the app")
+  await expect(plan.getByText("From your records", { exact: true })).toBeVisible()
+  await expect(plan.getByText("With web estimates, not your records", { exact: true })).toBeVisible()
+  await expect(plan.getByRole("region", { name: "Sources" }).getByRole("link", { name: "https://example.test/hotels" })).toBeVisible()
+  await expect(plan.getByRole("region", { name: "Airlines listed for this route" })).toContainText("No airlines could be confirmed on the pages looked up, so none is suggested.")
+  await plan.getByRole("button", { name: "Close" }).click()
+
+  // Reopened from the conversation, it says when it was made and that prices may have changed.
+  await expect(page).toHaveURL(/\/roma\?c=/)
+  await page.reload()
+  await page.getByRole("list", { name: "Roma's answers" }).getByRole("button", { name: "Open the plan" }).click()
+  await expect(page.getByRole("dialog").getByText(/^Made on \d{4}-\d{2}-\d{2}\. Web prices may have changed since this plan was made\./)).toBeVisible()
 })
 
 test("a plan question can be sent as an ordinary question instead", async ({ page }) => {

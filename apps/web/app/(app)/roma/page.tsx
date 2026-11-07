@@ -15,6 +15,7 @@ import { fromDateRangeLiteral } from "@/lib/ai/history"
 import { ROMA_DATA_NOTICE } from "@/lib/ai/wording"
 import { greeting } from "@/lib/greeting"
 import { createClient } from "@/lib/supabase/server"
+import { checkedPlanSchema } from "@/lib/ai/plan/types"
 
 export const metadata: Metadata = { title: "Roma" }
 
@@ -108,7 +109,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
 async function loadConversation(supabase: Supabase, id: string): Promise<OpenConversation | null | "error"> {
   const [conversation, messages] = await Promise.all([
     supabase.from("ai_conversations").select("id").eq("id", id).maybeSingle(),
-    supabase.from("ai_messages").select("id, seq, question, answer, as_of, periods").eq("conversation_id", id).order("seq", { ascending: false }),
+    supabase.from("ai_messages").select("id, seq, question, answer, as_of, periods, plan").eq("conversation_id", id).order("seq", { ascending: false }),
   ])
   if (conversation.error || messages.error) return "error"
   if (!conversation.data) return null
@@ -126,6 +127,11 @@ async function loadConversation(supabase: Supabase, id: string): Promise<OpenCon
           const range = fromDateRangeLiteral(p)
           return range ? [{ from: range.start, to: range.end }] : []
         }),
+        // A stored plan (10.9) is read back like any stored data: shown only if it still parses.
+        ...(() => {
+          const plan = m.plan === null ? null : checkedPlanSchema.safeParse(m.plan)
+          return plan?.success ? { plan: plan.data } : {}
+        })(),
         conversationId: id,
         saved: true,
       },

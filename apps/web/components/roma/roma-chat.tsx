@@ -14,6 +14,7 @@ import { allowRomaDescriptionsAction } from "@/app/(app)/roma/actions"
 import { detectPlan } from "@/lib/ai/plan/intake"
 import type { PlanRequest } from "@/lib/ai/plan/types"
 import { PlanIntake } from "./plan-intake"
+import { OpenPlanButton, PlanModal } from "./plan-modal"
 import { type ConversationSummary, RomaHistory } from "./roma-history"
 import { cn } from "cn"
 
@@ -28,7 +29,8 @@ import { cn } from "cn"
 // prices sit in their own block after the records' figures, each with its site and link, and a
 // web-assisted verdict is a second, marked line under the records' verdict, never in its place.
 // From 10.9 a question asking for a plan ("plan my trip to Goa", "can I buy a car") first shows
-// the plan intake (questions written in code, each skippable) instead of being sent.
+// the plan intake (questions written in code, each skippable) instead of being sent; the plan
+// that comes back opens in a modal, from the checked plan only (also from a past conversation).
 
 export type Turn = {
   id: string
@@ -275,7 +277,7 @@ function Conversation({
               <li key={turn.id}>
                 <Card>
                   <p className="text-sm font-semibold text-ink">{turn.question}</p>
-                  <Reply reply={turn.reply} />
+                  <Reply reply={turn.reply} madeOn={turn.asOf ?? todayIn(timeZone)} reopened={turn.asOf !== undefined} />
                   {turn.asOf && (
                     <p className="mt-2 text-xs text-muted-foreground">Answered on {turn.asOf}. Ask again for today’s figures.</p>
                   )}
@@ -296,7 +298,8 @@ function Conversation({
   )
 }
 
-function Reply({ reply }: { reply: ChatResponseBody }) {
+function Reply({ reply, madeOn, reopened }: { reply: ChatResponseBody; madeOn: string; reopened: boolean }) {
+  const [planOpen, setPlanOpen] = useState(false)
   if (reply.status === "error") {
     return (
       <FormMessage tone={reply.code === "unverified" || reply.code === "tone" ? "info" : "error"} className="mt-3">
@@ -306,6 +309,15 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
   }
   return (
     <div className="mt-3 grid gap-3">
+      {reply.plan && (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <OpenPlanButton onOpen={() => setPlanOpen(true)} />
+            <span className="text-xs text-muted-foreground">Each cost line, how it was worked out, and its sources.</span>
+          </div>
+          <PlanModal plan={reply.plan} madeOn={madeOn} reopened={reopened} open={planOpen} onOpenChange={setPlanOpen} />
+        </>
+      )}
       {reply.checks?.map((c, i) => (
         <div key={i} className="rounded-lg border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
           <p className="text-xs font-semibold text-muted-foreground">
