@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { WEB_TRIP_LINES, type WebLookupFields, toLookup, webLookupInput } from "../search/query"
 import { addDecimals, compareDecimals, multiplyDecimal } from "../search/totals"
-import { type KeptWebFigure, verifyWebFigure } from "../search/verify"
+import { type KeptWebFigure, type PriceCandidate, verifyWebFigure } from "../search/verify"
 import { webPriceKey, webTotalKey } from "../placeholders"
 import { type FinanceTool, ToolError, type WebBlock, type WebTotal } from "./types"
 
@@ -13,6 +13,9 @@ import { type FinanceTool, ToolError, type WebBlock, type WebTotal } from "./typ
 // never converted. Both results are untrusted text: none of it can be quoted as a figure
 // unless a kept figure or a total carries it (chat.ts doesn't treat their strings as names).
 // The verdict stays the records-only one from trip_check or goal_projection.
+// A range found in a result (search/verify.ts) has two ids that know each other: keeping either
+// end keeps both, with the same label and basis, and the result offers the range placeholder
+// ("{web:12} to {web:13}"). A "from" or "up to" price carries that bound to the model and screen.
 
 export const webPriceLookupTool: FinanceTool<WebLookupFields> = {
   name: "web_price_lookup",
@@ -43,10 +46,17 @@ export const webPriceLookupTool: FinanceTool<WebLookupFields> = {
       data: {
         looked_up: outcome.subject,
         ...(input.kind === "trip" ? { cost_line: input.cost_line, nights: input.nights, travellers: input.travellers } : {}),
-        prices: outcome.prices.map((p) => ({ id: p.id, site: p.site, currency: p.currency, text: p.quote })),
+        prices: outcome.prices.map((p) => ({
+          id: p.id,
+          site: p.site,
+          currency: p.currency,
+          text: p.quote,
+          ...(p.rangeWith ? { range: p.range!.side === "low" ? `${p.id} to ${p.rangeWith}` : `${p.rangeWith} to ${p.id}` } : {}),
+          ...(p.bound ? { bound: p.bound } : {}),
+        })),
         next:
           outcome.prices.length > 0
-            ? "Pick each price you use with web_price_figures by its id, with a short label, what it covers (per) and its cost line. Never type an amount and never convert a currency. A price may be stated only after web_price_figures keeps it, by its placeholder; an amount seen in a result but not kept must not be written."
+            ? "Pick each price you use with web_price_figures by its id, with a short label, what it covers (per) and its cost line. Never type an amount and never convert a currency. A price may be stated only after web_price_figures keeps it, by its placeholder; an amount seen in a result but not kept must not be written. A range is kept whole by picking either end; a bound (from, up to) must be said with it."
             : "No prices were found in these results.",
       },
       figures: [],
@@ -122,6 +132,16 @@ export function webTotals(kept: readonly (KeptWebFigure & { cost_line: string })
   return [...byCurrency.entries()].map(([currency, c]) => ({ currency, lines: c.lines, costLines: c.costLines, low: addDecimals(...c.low), high: addDecimals(...c.high) }))
 }
 
+/** The kept ranges, low end first, each with its placeholder pair. */
+export function keptRanges(candidates: ReadonlyMap<string, PriceCandidate>, kept: readonly { id: string; label: string; per: string; cost_line: string }[]) {
+  return kept.flatMap((k) => {
+    const c = candidates.get(k.id)
+    if (c?.range?.side !== "low" || !c.rangeWith) return []
+    const high = kept.find((h) => h.id === c.rangeWith && h.per === k.per && h.cost_line === k.cost_line)
+    return high ? [{ write: `{${webPriceKey(k.id)}} to {${webPriceKey(high.id)}}`, label: k.label, per: k.per }] : []
+  })
+}
+
 export const webPriceFiguresTool: FinanceTool<WebFiguresInput> = {
   name: "web_price_figures",
   description:
@@ -131,7 +151,13 @@ export const webPriceFiguresTool: FinanceTool<WebFiguresInput> = {
     if (!ctx.web) throw new ToolError("Web lookups are off. Answer from the person's records only.")
     const { kept } = ctx.web
     const dropped: { label: string; reason: string }[] = []
+    // A range's other end goes with the end picked, labelled the same.
+    const picks = [...input.figures]
     for (const f of input.figures) {
+      const other = ctx.web.candidates.get(f.id)?.rangeWith
+      if (other && !picks.some((p) => p.id === other)) picks.push({ ...f, id: other })
+    }
+    for (const f of picks) {
       const found = ctx.web.candidates.get(f.id)
       if (!found) {
         dropped.push({ label: f.label, reason: "unknown_id" })
@@ -141,24 +167,44 @@ export const webPriceFiguresTool: FinanceTool<WebFiguresInput> = {
       const { currency, amount, scale, source_url, quote } = found
       const checked = verifyWebFigure({ label: f.label, amount, currency, scale, per: f.per, source_url, quote }, ctx.web.results)
       if (!checked.ok) dropped.push({ label: f.label, reason: checked.reason })
-      else if (!kept.some((k) => k.id === f.id && k.per === f.per && k.cost_line === f.cost_line)) kept.push({ ...checked.figure, id: f.id, cost_line: f.cost_line })
+      else if (!kept.some((k) => k.id === f.id && k.per === f.per && k.cost_line === f.cost_line)) {
+        kept.push({
+          ...checked.figure,
+          id: f.id,
+          cost_line: f.cost_line,
+          ...(found.bound ? { bound: found.bound } : {}),
+          ...(found.rangeWith ? { rangeWith: found.rangeWith } : {}),
+        })
+      }
     }
-    ctx.web.reported.figures += input.figures.length
+    ctx.web.reported.figures += picks.length
     ctx.web.reported.dropped += dropped.length
     const trip = ctx.web.trips.at(-1)
     const totals = webTotals(kept, trip)
     const web: WebBlock = {
-      figures: kept.map((f) => ({ id: f.id, label: f.label, amount: f.amount, scale: f.scale, value: f.value, currency: f.currency, per: f.per, site: f.site, url: f.source_url })),
+      figures: kept.map((f) => ({
+        id: f.id,
+        label: f.label,
+        amount: f.amount,
+        scale: f.scale,
+        value: f.value,
+        currency: f.currency,
+        per: f.per,
+        site: f.site,
+        url: f.source_url,
+        ...(f.bound ? { bound: f.bound } : {}),
+      })),
       totals,
       ...(trip ? { trip } : {}),
     }
     return {
       data: {
-        kept: web.figures.map(({ id, label, value, currency, per, site }) => ({ write: `{${webPriceKey(id)}}`, label, value, currency, per, site })),
+        kept: web.figures.map(({ id, label, value, currency, per, site, bound }) => ({ write: `{${webPriceKey(id)}}`, label, value, currency, per, site, ...(bound ? { bound } : {}) })),
+        ranges: keptRanges(ctx.web.candidates, kept),
         dropped,
         totals: totals.map((t) => ({ write: `{${webTotalKey(t.currency)}}`, currency: t.currency, cost_lines: t.lines, from: t.low, to: t.high })),
         ...(trip ? { for_trip: trip } : {}),
-        note: "These are web estimates, not the person's records. The verdict stays the one from their records. Write each price or total you state as its `write` placeholder, never as an amount.",
+        note: "These are web estimates, not the person's records. The verdict stays the one from their records. Write each price or total you state as its `write` placeholder, never as an amount; a range as its `write` in ranges, and a bound with its word (from, up to).",
       },
       figures: [],
       untrusted: true,

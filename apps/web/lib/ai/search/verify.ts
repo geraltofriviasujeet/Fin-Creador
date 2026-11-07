@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { normalizeNumber } from "../output"
+import { compareDecimals } from "./totals"
 import type { SearchResult } from "./types"
 
 // Web figures (Sprint 10.8). Prices are found in the results' text here, in code
@@ -13,6 +14,11 @@ import type { SearchResult } from "./types"
 // converts, and totals are computed in code from kept figures only. A scale written after the
 // number ("₹7.40 Lakh", measured on real results) must be reported as written; the full value
 // is worked out here, so "7.40" is never read as rupees.
+// Ranges and bounds (10.8 follow-up): "$40 to $60", "₹3,000-₹5,000", "40-60 USD", "₹3-5 lakh"
+// and "between $40 and $60" give both ends, each a price of its own, linked as a range (the
+// low end must be below the high end, or it isn't one); a single price after "from",
+// "starting at" or "as low as" (or before "onwards") is a lower bound, after "up to", "under"
+// or "below" an upper one. A range's two ends are quoted together.
 
 /** How a currency is written next to an amount. Codes are ISO 4217. */
 export const CURRENCY_MARKS: Readonly<Record<string, readonly string[]>> = {
@@ -94,7 +100,77 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 export type FoundPrice = { currency: string; amount: string; scale: Scale }
 
-type PriceMatch = FoundPrice & { start: number; end: number }
+/** A price that is only one end of what the page says: "from ₹X" or "up to ₹Y". */
+export type Bound = "from" | "up_to"
+/** One end of a range, with the other end. */
+export type RangeEnd = { side: "low" | "high"; other: FoundPrice }
+
+type PriceMatch = FoundPrice & { start: number; end: number; range?: RangeEnd; bound?: Bound }
+
+const NUM = "(\\d[\\d,]*(?:\\.\\d+)?)"
+/** After a price: the joining word and an unmarked high end ("-60", "to 5 lakh"). */
+const RANGE_AFTER = new RegExp(`^\\s?(-|to|and)\\s?${NUM}${SCALE_PATTERN}`, "i")
+/** Before a price: an unmarked low end ("40-" in "40-60 USD"). */
+const RANGE_BEFORE = new RegExp(`(?<![\\d.,])${NUM}\\s?(?:-|to)\\s?$`, "i")
+const JOIN = /^\s?(?:-|to|and)\s?$/i
+const FROM_BEFORE = /(?:\bfrom|starting (?:at|from)|starts (?:at|from)|as low as|\bmin(?:imum)?(?: of)?)\s*$/i
+const FROM_AFTER = /^\s*onwards?\b/i
+const UP_TO_BEFORE = /(?:\bup ?to|\bunder|\bbelow|less than|\bmax(?:imum)?(?: of)?|as much as)\s*$/i
+
+const found = (p: PriceMatch): FoundPrice => ({ currency: p.currency, amount: p.amount, scale: p.scale })
+const numberAt = (raw: string) => normalizeNumber(raw.replace(/,+$/, ""))
+
+/** Links two prices as a range when the first is below the second; a low end without a scale takes the high end's. */
+function pair(t: string, low: PriceMatch, high: PriceMatch, joined: string): boolean {
+  if (/and/i.test(joined) && !/between\s*$/i.test(t.slice(Math.max(0, low.start - 12), low.start))) return false
+  const lowScale = low.scale === "none" ? high.scale : low.scale
+  if (compareDecimals(scaleUp(low.amount, SCALES[lowScale]), scaleUp(high.amount, SCALES[high.scale])) >= 0) return false
+  low.scale = lowScale
+  const start = low.start
+  const end = high.end
+  low.start = high.start = start
+  low.end = high.end = end
+  low.range = { side: "low", other: found(high) }
+  high.range = { side: "high", other: found(low) }
+  return true
+}
+
+/** The prices with ranges linked (and unmarked ends added) and bounds marked. */
+function withRanges(t: string, marked: PriceMatch[]): PriceMatch[] {
+  const out = [...marked].sort((a, b) => a.start - b.start)
+  const taken = (s: number, e: number) => out.some((o) => s < o.end && o.start < e)
+  for (let i = 0; i < out.length; i++) {
+    const a = out[i]!
+    if (a.range) continue
+    const next = out[i + 1]
+    if (next && !next.range && next.currency === a.currency && JOIN.test(t.slice(a.end, next.start)) && pair(t, a, next, t.slice(a.end, next.start))) continue
+    const after = RANGE_AFTER.exec(t.slice(a.end))
+    if (after) {
+      const s = a.end + after[0].indexOf(after[2]!, after[1]!.length)
+      const scale = after[3] ? SCALE_WORDS[after[3].toLocaleLowerCase("en")]! : a.scale
+      const high: PriceMatch = { currency: a.currency, amount: numberAt(after[2]!), scale, start: s, end: a.end + after[0].length }
+      if (high.amount !== "0" && !taken(high.start, high.end) && pair(t, a, high, after[1]!)) {
+        out.push(high)
+        out.sort((x, y) => x.start - y.start)
+        continue
+      }
+    }
+    const lookback = Math.max(0, a.start - 24)
+    const before = RANGE_BEFORE.exec(t.slice(lookback, a.start))
+    if (before) {
+      const s = lookback + before.index
+      const low: PriceMatch = { currency: a.currency, amount: numberAt(before[1]!), scale: "none", start: s, end: s + before[1]!.length }
+      if (low.amount !== "0" && !taken(low.start, low.end) && pair(t, low, a, "-")) out.push(low)
+    }
+  }
+  for (const p of out) {
+    if (p.range) continue
+    const before = t.slice(Math.max(0, p.start - 24), p.start)
+    if (FROM_BEFORE.test(before) || FROM_AFTER.test(t.slice(p.end, p.end + 12))) p.bound = "from"
+    else if (UP_TO_BEFORE.test(before)) p.bound = "up_to"
+  }
+  return out.sort((a, b) => a.start - b.start || (a.range?.side === "high" ? 1 : -1))
+}
 
 /** Every amount written next to a currency mark in plain text (any case), with where it is; one per number. */
 function priceMatches(t: string): PriceMatch[] {
@@ -123,7 +199,7 @@ function priceMatches(t: string): PriceMatch[] {
       }
     }
   }
-  return out.sort((a, b) => a.start - b.start)
+  return withRanges(t, out)
 }
 
 /** Every amount written next to a currency mark in the text, with that currency and any scale word after it. */
@@ -132,7 +208,17 @@ export function pricesIn(text: string): FoundPrice[] {
 }
 
 /** A price found in code in one result: the model may pick it by id, never retype it. */
-export type PriceCandidate = FoundPrice & { value: string; source_url: string; site: string; title: string; quote: string }
+export type PriceCandidate = FoundPrice & {
+  value: string
+  source_url: string
+  site: string
+  title: string
+  quote: string
+  range?: RangeEnd
+  bound?: Bound
+  /** The id of the range's other end (set when ids are given, session.ts). */
+  rangeWith?: string
+}
 
 /** Characters of context kept before and after a price. */
 const BEFORE = 90
@@ -153,15 +239,23 @@ function around(t: string, start: number, end: number): string {
   return t.slice(from, to).trim()
 }
 
-/** The prices in a result's snippet, then its page text: at most `max`, each amount once. */
+/** The prices in a result's snippet, then its page text: at most `max` (a range's high end past it), each amount once. */
 export function priceCandidates(result: SearchResult, max = 4): PriceCandidate[] {
   const out: PriceCandidate[] = []
   for (const text of [result.snippet, result.content ?? ""]) {
     const t = plain(text)
     for (const p of priceMatches(t)) {
-      if (out.length >= max) return out
-      if (out.some((c) => c.currency === p.currency && c.amount === p.amount && c.scale === p.scale)) continue
+      const lowKept = p.range?.side === "high" && out.some((c) => c.range?.side === "low" && sameAmount(c, p.range!.other))
+      if (out.length >= max && !lowKept) return out
+      const have = out.find((c) => sameAmount(c, p))
+      if (have) {
+        // Seen before on its own: it keeps its place, and now knows its range or bound.
+        if (!have.range && !have.bound) Object.assign(have, p.range ? { range: p.range, quote: around(t, p.start, p.end) } : p.bound ? { bound: p.bound } : {})
+        continue
+      }
       out.push({
+        ...(p.range ? { range: p.range } : {}),
+        ...(p.bound ? { bound: p.bound } : {}),
         currency: p.currency,
         amount: p.amount,
         scale: p.scale,
@@ -173,6 +267,17 @@ export function priceCandidates(result: SearchResult, max = 4): PriceCandidate[]
       })
     }
   }
+  return out
+}
+
+const sameAmount = (a: FoundPrice, b: FoundPrice) => a.currency === b.currency && a.amount === b.amount && a.scale === b.scale
+
+/** The first `n` prices, with a range's high end added when its low end is the last one in. */
+export function firstPrices<P extends PriceCandidate>(prices: readonly P[], n: number): P[] {
+  const out = prices.slice(0, n)
+  const last = out.at(-1)
+  const next = prices[n]
+  if (last?.range?.side === "low" && next?.range?.side === "high" && next.source_url === last.source_url && sameAmount(next, last.range.other)) out.push(next)
   return out
 }
 

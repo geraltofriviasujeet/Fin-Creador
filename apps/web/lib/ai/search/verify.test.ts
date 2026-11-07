@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { SearchResult } from "./types"
-import { priceCandidates, pricesIn, scaleUp, verifyWebFigure, type WebFigureInput, webFigureInput } from "./verify"
+import { firstPrices, priceCandidates, pricesIn, scaleUp, verifyWebFigure, type WebFigureInput, webFigureInput } from "./verify"
 
 // Shapes from the snippet measurement (2026-11-06), with test data.
 const results: SearchResult[] = [
@@ -74,6 +74,54 @@ describe("prices in text", () => {
     expect(scaleUp("14.52", 5)).toBe("1452000")
     expect(scaleUp("1.234567", 3)).toBe("1234.567")
     expect(scaleUp("60", 0)).toBe("60")
+  })
+})
+
+describe("ranges and bounds", () => {
+  const candidates = (snippet: string) => priceCandidates({ title: "Test data", url: "https://r.example.test/", snippet }, 8)
+  const ends = (snippet: string) => candidates(snippet).map((c) => [c.currency, c.amount, c.scale, c.range?.side ?? c.bound ?? null])
+
+  it.each([
+    ["about $40 to $60 a night", [["USD", "40", "none", "low"], ["USD", "60", "none", "high"]]],
+    ["₹3,000–₹5,000 per person", [["INR", "3000", "none", "low"], ["INR", "5000", "none", "high"]]],
+    ["rooms 40-60 USD", [["USD", "40", "none", "low"], ["USD", "60", "none", "high"]]],
+    ["₹3-5 lakh", [["INR", "3", "lakh", "low"], ["INR", "5", "lakh", "high"]]],
+    ["between $40 and $60", [["USD", "40", "none", "low"], ["USD", "60", "none", "high"]]],
+    ["from ₹7.40 Lakh to ₹14.52 Lakh", [["INR", "7.4", "lakh", "low"], ["INR", "14.52", "lakh", "high"]]],
+  ] as const)("reads both ends of %s, linked", (text, want) => {
+    expect(ends(`Test data. ${text}.`)).toEqual(want)
+  })
+
+  it.each([
+    ["flights from ₹3,413", "from"],
+    ["starting at $99", "from"],
+    ["₹7.4 L onwards", "from"],
+    ["up to ₹5,000", "up_to"],
+    ["under $80 a night", "up_to"],
+  ] as const)("marks %s as a bound", (text, bound) => {
+    expect(candidates(`Test data. ${text}.`)[0]?.bound).toBe(bound)
+  })
+
+  it("isn't fooled by what only looks like a range", () => {
+    // Not rising, a number of nights, two prices joined by "and" without "between".
+    expect(ends("Test data. ₹5,000 - 4 nights.")).toEqual([["INR", "5000", "none", null]])
+    expect(ends("Test data. $60 to $40.")).toEqual([["USD", "60", "none", null], ["USD", "40", "none", null]])
+    expect(ends("Test data. Adults ₹500 and ₹300 for children.")).toEqual([["INR", "500", "none", null], ["INR", "300", "none", null]])
+  })
+
+  it("quotes a range whole, so the backstop accepts either end, even an unmarked one", () => {
+    const result: SearchResult = { title: "Test data", url: "https://r.example.test/", snippet: "Test data. Rooms cost 40-60 USD a night in January." }
+    for (const c of priceCandidates(result)) {
+      expect(c.quote).toContain("40-60 USD")
+      const reported = { label: "Room", amount: c.amount, currency: c.currency, scale: c.scale, per: "night", source_url: result.url, quote: c.quote } as const
+      expect(verifyWebFigure(reported, [result]).ok).toBe(true)
+    }
+  })
+
+  it("never cuts a range at the limit", () => {
+    const prices = candidates("Test data. ₹100, ₹200, ₹300, $40 to $60.")
+    expect(priceCandidates({ title: "Test data", url: "https://r.example.test/", snippet: "Test data. ₹100, ₹200, ₹300, $40 to $60." }, 4)).toHaveLength(5)
+    expect(firstPrices(prices, 4).map((p) => p.amount)).toEqual(["100", "200", "300", "40", "60"])
   })
 })
 

@@ -83,8 +83,8 @@ export type WebTotal = { currency: string; lines: number; costLines: string[]; l
 
 /** Web estimates for one answer (10.8): each price as found, with its site, and totals per currency. */
 export type WebBlock = {
-  /** `id`: the lookup's price id ("w3"), the answer's placeholder {web:3}. */
-  figures: { id: string; label: string; amount: string; scale: string; value: string; currency: string; per: string; site: string; url: string }[]
+  /** `id`: the lookup's price id ("w3"), the answer's placeholder {web:3}. `bound`: the page gave it as "from" or "up to". */
+  figures: { id: string; label: string; amount: string; scale: string; value: string; currency: string; per: string; site: string; url: string; bound?: "from" | "up_to" }[]
   totals: WebTotal[]
   trip?: { nights: number; travellers: number }
 }

@@ -22,9 +22,11 @@ export function webAmount(f: { amount: string; scale: string; currency: string }
   return `${f.currency} ${groupDigits(f.amount, f.currency)}${SCALE_WORDS[f.scale] ?? ""}`
 }
 
-/** A web price as found: "INR 7.4 Lakh", "GBP 60 a night". */
-export function webPrice(f: { amount: string; scale: string; currency: string; per: string }): string {
-  return `${webAmount(f)}${PER_WORDS[f.per] ?? ""}`
+const BOUND_WORDS: Record<string, string> = { from: "from ", up_to: "up to " }
+
+/** A web price as found: "INR 7.4 Lakh", "GBP 60 a night", "from INR 3,413 a person". */
+export function webPrice(f: { amount: string; scale: string; currency: string; per: string; bound?: string }): string {
+  return `${f.bound ? (BOUND_WORDS[f.bound] ?? "") : ""}${webAmount(f)}${PER_WORDS[f.per] ?? ""}`
 }
 
 /** A web total: one amount, or "low to high" when the cost lines' prices ranged. */

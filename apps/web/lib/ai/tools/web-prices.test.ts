@@ -329,8 +329,35 @@ describe("prices picked by id", () => {
     expect(seen.prices).toEqual([
       { id: "w1", site: "hotels.example.test", currency: "INR", text: "Test data. Mid-range rooms cost about ₹4,500 per night. Luxury suites ₹30,000." },
       { id: "w2", site: "hotels.example.test", currency: "INR", text: "Test data. Mid-range rooms cost about ₹4,500 per night. Luxury suites ₹30,000." },
-      { id: "w3", site: "flights.example.test", currency: "INR", text: "Test data. Return flights from ₹9,000 per person." },
+      { id: "w3", site: "flights.example.test", currency: "INR", text: "Test data. Return flights from ₹9,000 per person.", bound: "from" },
     ])
+  })
+
+  it("keeps both ends of a range when one is picked, and offers the range placeholder", async () => {
+    const ranged = [{ title: "Test data", url: "https://stay.example.test/goa", snippet: "Test data. A 3-star stay in Calangute is about $40 to $60 a night." }]
+    const context = contextWith(mockSearchProvider(() => ranged))
+    let figures: { kept: { write: string }[]; ranges: { write: string }[] } | undefined
+    let seenRange: unknown
+    const run = await ask((req, round) => {
+      const last = req.messages.at(-1)
+      const content = last?.role === "tool_results" ? JSON.parse(last.results[0]!.content) : {}
+      if (round === 0) return call(lookup("stay"))
+      if (round === 1) {
+        seenRange = content.prices
+        return call({ id: "f", name: "web_price_figures", input: { figures: [{ id: "w2", label: "3-star stay", per: "night", cost_line: "stay" }] } })
+      }
+      figures = content
+      return mockText("A 3-star stay is {web:1} to {web:2} a night (stay.example.test).")
+    }, context)
+    expect(seenRange).toMatchObject([
+      { id: "w1", range: "w1 to w2" },
+      { id: "w2", range: "w1 to w2" },
+    ])
+    expect(figures?.kept.map((k) => k.write)).toEqual(["{web:2}", "{web:1}"])
+    expect(figures?.ranges).toEqual([{ write: "{web:1} to {web:2}", label: "3-star stay", per: "night" }])
+    expect(run.result).toMatchObject({ kind: "answer", text: "A 3-star stay is USD 40 to USD 60 a night (stay.example.test)." })
+    // 4 nights: USD 160 to 240.
+    expect(run.result.kind === "answer" && run.result.web?.totals).toEqual([{ currency: "USD", lines: 1, costLines: ["stay"], low: "160", high: "240" }])
   })
 
   it("keeps a price found in two lookups under one id", async () => {
