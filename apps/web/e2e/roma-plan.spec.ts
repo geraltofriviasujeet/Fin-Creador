@@ -56,7 +56,7 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(printed).toBeVisible()
   await expect(page.getByRole("list", { name: "Roma's answers" })).toBeHidden()
   await expect(printed.getByText(/^Made on \d{4}-\d{2}-\d{2}\. Figures marked “From your goal”/)).toBeVisible()
-  await expect(printed.getByText(/^Estimates, not quotes or bookings\./)).toBeVisible()
+  await expect(printed.getByRole("note").filter({ hasText: /^Estimates, not quotes or bookings\./ })).toBeVisible()
   await expect(printed.locator('[data-line="stay"]')).toContainText("No estimate")
   const after = await printed.locator('[data-line="transport"] a').first().evaluate((a) => getComputedStyle(a, "::after").content)
   expect(after).toContain("https://example.test/")
