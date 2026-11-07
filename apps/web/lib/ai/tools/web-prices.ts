@@ -1,23 +1,22 @@
 import { z } from "zod"
 import { WEB_TRIP_LINES, type WebLookupFields, toLookup, webLookupInput } from "../search/query"
 import { addDecimals, compareDecimals, multiplyDecimal } from "../search/totals"
-import { type KeptWebFigure, siteOf, verifyWebFigure, webFigureInput } from "../search/verify"
+import { type KeptWebFigure, verifyWebFigure } from "../search/verify"
 import { type FinanceTool, ToolError, type WebBlock, type WebTotal } from "./types"
 
 // Web lookups (Sprint 10.8): web_price_lookup searches one cost line from a template built in
-// code (search/query.ts); web_price_figures takes the prices the model read and keeps only
-// those its own result states (search/verify.ts). Totals are worked out here, per currency,
+// code (search/query.ts) and hands the model the prices found in the results in code, each with
+// an id (search/verify.ts priceCandidates); web_price_figures takes the ids the model picks, with
+// its labels, and never an amount typed by the model. Each picked price is checked again against
+// its result as a backstop (verifyWebFigure). Totals are worked out here, per currency,
 // never converted. Both results are untrusted text: none of it can be quoted as a figure
 // unless a kept figure or a total carries it (chat.ts doesn't treat their strings as names).
 // The verdict stays the records-only one from trip_check or goal_projection.
 
-/** Snippet characters sent to the model per result. */
-const SNIPPET_CHARS = 600
-
 export const webPriceLookupTool: FinanceTool<WebLookupFields> = {
   name: "web_price_lookup",
   description:
-    "Looks up current prices on the web for one cost line of a trip (a listed destination) or for a listed vehicle. Only when the person asks what something would cost and their records can't say, or they ask for web prices. At most 3 per question. Then report the prices you read with web_price_figures.",
+    "Looks up current prices on the web for one cost line of a trip (a listed destination) or for a listed vehicle. Only when the person asks what something would cost and their records can't say, or they ask for web prices. At most 3 per question. It returns the prices found in the results, each with an id. Then pick the ones you use with web_price_figures.",
   input: webLookupInput,
   async run(ctx, fields) {
     if (!ctx.web) throw new ToolError("Web lookups are off. Answer from the person's records only.")
@@ -43,8 +42,11 @@ export const webPriceLookupTool: FinanceTool<WebLookupFields> = {
       data: {
         looked_up: outcome.subject,
         ...(input.kind === "trip" ? { cost_line: input.cost_line, nights: input.nights, travellers: input.travellers } : {}),
-        results: outcome.results.map((r) => ({ source_url: r.url, site: siteOf(r.url), title: r.title, snippet: r.snippet.slice(0, SNIPPET_CHARS) })),
-        next: "Report each price you use with web_price_figures: the amount and currency exactly as written, any scale word after it, the source_url, and the words that state it copied exactly. Never convert a currency.",
+        prices: outcome.prices.map((p) => ({ id: p.id, site: p.site, currency: p.currency, text: p.quote })),
+        next:
+          outcome.prices.length > 0
+            ? "Pick each price you use with web_price_figures by its id, with a short label, what it covers (per) and its cost line. Never type an amount and never convert a currency."
+            : "No prices were found in these results.",
       },
       figures: [],
       untrusted: true,
@@ -56,9 +58,14 @@ const figuresInput = z
   .object({
     figures: z
       .array(
-        webFigureInput.extend({
-          cost_line: z.enum([...WEB_TRIP_LINES, "vehicle"]).describe("The cost line this price is for ('vehicle' for a vehicle)."),
-        }),
+        z
+          .object({
+            id: z.string().trim().regex(/^w\d{1,3}$/).describe("The price's id from web_price_lookup."),
+            label: z.string().trim().min(1).max(80).describe("What the price is for, in a few words."),
+            per: z.enum(["total", "night", "person", "person_night", "day_person"]).describe("What the amount covers, as the page says."),
+            cost_line: z.enum([...WEB_TRIP_LINES, "vehicle"]).describe("The cost line this price is for ('vehicle' for a vehicle)."),
+          })
+          .strict(),
       )
       .min(1)
       .max(6),
@@ -117,16 +124,23 @@ export function webTotals(kept: readonly (KeptWebFigure & { cost_line: string })
 export const webPriceFiguresTool: FinanceTool<WebFiguresInput> = {
   name: "web_price_figures",
   description:
-    "Reports the web prices you read from this question's web_price_lookup results. Each is kept only if its source_url is one of those results and the quote, copied exactly, is on that page and states the amount. Returns the prices kept, the ones dropped and the totals worked out in code. Quote only kept prices and totals, as web estimates with their site.",
+    "Picks the web prices to use, by the ids web_price_lookup gave, each with a label, what it covers and its cost line. Returns the prices kept (all picked so far this question), any dropped and the totals worked out in code. Quote only kept prices and totals, as web estimates with their site.",
   input: figuresInput,
   async run(ctx, input) {
     if (!ctx.web) throw new ToolError("Web lookups are off. Answer from the person's records only.")
-    const kept: (KeptWebFigure & { cost_line: string })[] = []
+    const { kept } = ctx.web
     const dropped: { label: string; reason: string }[] = []
     for (const f of input.figures) {
-      const checked = verifyWebFigure(f, ctx.web.results)
-      if (checked.ok) kept.push({ ...checked.figure, cost_line: f.cost_line })
-      else dropped.push({ label: f.label, reason: checked.reason })
+      const found = ctx.web.candidates.get(f.id)
+      if (!found) {
+        dropped.push({ label: f.label, reason: "unknown_id" })
+        continue
+      }
+      // The backstop: the amount comes from code, and is still checked against its own result.
+      const { currency, amount, scale, source_url, quote } = found
+      const checked = verifyWebFigure({ label: f.label, amount, currency, scale, per: f.per, source_url, quote }, ctx.web.results)
+      if (!checked.ok) dropped.push({ label: f.label, reason: checked.reason })
+      else if (!kept.some((k) => k.id === f.id && k.per === f.per && k.cost_line === f.cost_line)) kept.push({ ...checked.figure, id: f.id, cost_line: f.cost_line })
     }
     ctx.web.reported.figures += input.figures.length
     ctx.web.reported.dropped += dropped.length

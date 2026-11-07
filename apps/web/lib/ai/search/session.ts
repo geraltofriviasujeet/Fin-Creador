@@ -1,5 +1,6 @@
 import { type PrivateTerms, type WebLookupInput, buildQuery } from "./query"
 import { SearchError, type SearchProvider, type SearchResult } from "./types"
+import { type KeptWebFigure, type PriceCandidate, priceCandidates } from "./verify"
 
 // One question's web lookups (Sprint 10.8). Credits are reserved in the database the first
 // time a lookup is about to be sent (roma_search_begin, on the question's own roma_usage
@@ -18,7 +19,10 @@ export type SearchDb = {
 /** Why a lookup didn't run, for the model and (the caps) for the person, in code's words. */
 export type LookupRefusal = "unlisted_place" | "unlisted_item" | "line_not_for_scope" | "private" | "unsafe" | "off" | "monthly_cap" | "daily_limit" | "question_limit" | "failed" | "timeout"
 
-export type LookupOutcome = { ok: true; subject: string; results: SearchResult[] } | { ok: false; reason: LookupRefusal }
+export type LookupOutcome = { ok: true; subject: string; results: SearchResult[]; prices: (PriceCandidate & { id: string })[] } | { ok: false; reason: LookupRefusal }
+
+/** Prices handed to the model per lookup, found in code. */
+const PRICES_PER_LOOKUP = 12
 
 export const WEB_NOTICES: Partial<Record<LookupRefusal, string>> = {
   monthly_cap: "Web lookups are used up for this month (they reset on the 1st). This answer uses your own records only.",
@@ -60,6 +64,10 @@ export class WebSession {
   /** Trip sizes looked up, for totals worked out in code. */
   readonly trips: { nights: number; travellers: number }[] = []
   readonly notices = new Set<string>()
+  /** Prices found in code in the results, by id: the only figures the model can pick. */
+  readonly candidates = new Map<string, PriceCandidate>()
+  /** Figures kept so far this question (every web_price_figures call adds to them). */
+  readonly kept: (KeptWebFigure & { id: string; cost_line: string })[] = []
   /** Web figures the model reported with web_price_figures, and how many of them were dropped. */
   readonly reported = { figures: 0, dropped: 0 }
   private grant: Promise<number> | null = null
@@ -89,7 +97,8 @@ export class WebSession {
       this.sent++
       for (const r of results) if (!this.results.some((have) => have.url === r.url)) this.results.push(r)
       if (input.kind === "trip") this.trips.push({ nights: input.nights, travellers: input.travellers })
-      return { ok: true, subject: built.subject, results }
+      const prices = results.flatMap((r) => priceCandidates(r)).slice(0, PRICES_PER_LOOKUP).map((p) => ({ ...p, id: this.idFor(p) }))
+      return { ok: true, subject: built.subject, results, prices }
     } catch (error) {
       if (error instanceof SearchError) {
         if (error.billed === "unknown") this.sent++
@@ -110,6 +119,16 @@ export class WebSession {
   }
 
   private refusal: LookupRefusal | null = null
+
+  /** One id per price per source for the whole question, so a price found twice keeps its id. */
+  private idFor(p: PriceCandidate): string {
+    for (const [id, have] of this.candidates) {
+      if (have.source_url === p.source_url && have.currency === p.currency && have.amount === p.amount && have.scale === p.scale) return id
+    }
+    const id = `w${this.candidates.size + 1}`
+    this.candidates.set(id, p)
+    return id
+  }
 
   private async begin(): Promise<number> {
     const { db, requestId, provider } = this.options

@@ -2,8 +2,10 @@ import { z } from "zod"
 import { normalizeNumber } from "../output"
 import type { SearchResult } from "./types"
 
-// Web figures (Sprint 10.8). The model reports each figure it read as label, amount, currency,
-// source URL and quote; one is kept only when, in this question's own results:
+// Web figures (Sprint 10.8). Prices are found in the results' text here, in code
+// (priceCandidates): amount, currency, scale word, the words around it and the source. The
+// model only picks candidates by id and labels them; it never types an amount. Each picked
+// figure is still checked as a backstop; one is kept only when, in this question's own results:
 //   * its URL is one of the results;
 //   * the quote is in that result's text (snippet or page text; spacing and case ignored);
 //   * the amount is a number in the quote, written next to the currency's sign or code.
@@ -73,10 +75,10 @@ export type WebFigureInput = z.infer<typeof webFigureInput>
 /** `value`: the amount with its scale applied, as a plain decimal, worked out in code. */
 export type KeptWebFigure = WebFigureInput & { value: string; site: string; title: string }
 
-export type DropReason = "unknown_url" | "quote_not_found" | "amount_not_in_quote"
+export type DropReason = "unknown_id" | "unknown_url" | "quote_not_found" | "amount_not_in_quote"
 
-/** Lower case, single spaces, typographic quotes and dashes made plain. */
-const flat = (text: string) =>
+/** Single spaces, typographic quotes and dashes made plain; case kept. */
+const plain = (text: string) =>
   text
     .normalize("NFKC")
     .replace(/[‘’]/g, "'")
@@ -84,16 +86,20 @@ const flat = (text: string) =>
     .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
     .trim()
-    .toLocaleLowerCase("en")
+
+/** The same, in lower case: what quotes are compared on. */
+const flat = (text: string) => plain(text).toLocaleLowerCase("en")
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 export type FoundPrice = { currency: string; amount: string; scale: Scale }
 
-/** Every amount written next to a currency mark in the text, with that currency and any scale word after it. */
-export function pricesIn(text: string): FoundPrice[] {
-  const t = flat(text)
-  const out: FoundPrice[] = []
+type PriceMatch = FoundPrice & { start: number; end: number }
+
+/** Every amount written next to a currency mark in plain text (any case), with where it is; one per number. */
+function priceMatches(t: string): PriceMatch[] {
+  const out: PriceMatch[] = []
+  const numbersAt = new Set<number>()
   for (const [currency, marks] of Object.entries(CURRENCY_MARKS)) {
     for (const mark of marks) {
       const m = escape(mark)
@@ -103,13 +109,68 @@ export function pricesIn(text: string): FoundPrice[] {
       const before = `(?<![a-z])${m}`
       const after = word ? `${m}(?![a-z])` : m
       const num = "(\\d[\\d,]*(?:\\.\\d+)?)"
-      const re = new RegExp(`${before}\\s?${num}${SCALE_PATTERN}|${num}${SCALE_PATTERN}\\s?${after}`, "g")
+      const re = new RegExp(`${before}\\s?${num}${SCALE_PATTERN}|${num}${SCALE_PATTERN}\\s?${after}`, "gi")
       for (const match of t.matchAll(re)) {
-        const raw = (match[1] ?? match[3] ?? "").replace(/,+$/, "")
-        const word = match[2] ?? match[4]
+        const written = match[1] ?? match[3] ?? ""
+        const raw = written.replace(/,+$/, "")
+        const scaleWord = (match[2] ?? match[4])?.toLocaleLowerCase("en")
         const amount = normalizeNumber(raw)
-        if (amount !== "0" && amount !== "") out.push({ currency, amount, scale: word ? SCALE_WORDS[word]! : "none" })
+        // "rs." and "rs" (or "$" and "us$") can find the same number: the first, longer mark wins.
+        const at = match.index + match[0].indexOf(written)
+        if (amount === "0" || amount === "" || numbersAt.has(at)) continue
+        numbersAt.add(at)
+        out.push({ currency, amount, scale: scaleWord ? SCALE_WORDS[scaleWord]! : "none", start: match.index, end: match.index + match[0].length })
       }
+    }
+  }
+  return out.sort((a, b) => a.start - b.start)
+}
+
+/** Every amount written next to a currency mark in the text, with that currency and any scale word after it. */
+export function pricesIn(text: string): FoundPrice[] {
+  return priceMatches(plain(text)).map(({ currency, amount, scale }) => ({ currency, amount, scale }))
+}
+
+/** A price found in code in one result: the model may pick it by id, never retype it. */
+export type PriceCandidate = FoundPrice & { value: string; source_url: string; site: string; title: string; quote: string }
+
+/** Characters of context kept before and after a price. */
+const BEFORE = 90
+const AFTER = 60
+
+/** The words around a match, cut at word boundaries, always holding the whole match. */
+function around(t: string, start: number, end: number): string {
+  let from = Math.max(0, start - BEFORE)
+  let to = Math.min(t.length, end + AFTER)
+  if (from > 0) {
+    const space = t.indexOf(" ", from)
+    from = space >= 0 && space < start ? space + 1 : from
+  }
+  if (to < t.length) {
+    const space = t.lastIndexOf(" ", to)
+    to = space > end ? space : to
+  }
+  return t.slice(from, to).trim()
+}
+
+/** The prices in a result's snippet, then its page text: at most `max`, each amount once. */
+export function priceCandidates(result: SearchResult, max = 4): PriceCandidate[] {
+  const out: PriceCandidate[] = []
+  for (const text of [result.snippet, result.content ?? ""]) {
+    const t = plain(text)
+    for (const p of priceMatches(t)) {
+      if (out.length >= max) return out
+      if (out.some((c) => c.currency === p.currency && c.amount === p.amount && c.scale === p.scale)) continue
+      out.push({
+        currency: p.currency,
+        amount: p.amount,
+        scale: p.scale,
+        value: scaleUp(p.amount, SCALES[p.scale]),
+        source_url: result.url,
+        site: siteOf(result.url),
+        title: result.title,
+        quote: around(t, p.start, p.end),
+      })
     }
   }
   return out

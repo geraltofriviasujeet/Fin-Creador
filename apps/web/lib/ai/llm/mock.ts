@@ -101,10 +101,13 @@ function webScript(request: LlmRequest): LlmResponse | null {
     return { stop: "tool_use", text: "", toolCalls: [lookup("stay"), lookup("transport")], usage: NO_USAGE }
   }
   if (!asked.includes("web_price_figures")) {
+    // Picks the mock search's two prices by the ids the lookups gave; never types an amount.
+    const prices = results.flatMap((m) => (m.role === "tool_results" ? m.results : [])).flatMap((r) => (JSON.parse(r.content) as { prices?: { id: string; text: string }[] }).prices ?? [])
+    const idOf = (word: RegExp) => prices.find((p) => word.test(p.text))?.id ?? "w0"
     return mockToolCall("web_price_figures", {
       figures: [
-        { label: "Mid-range hotel", amount: "4,500", currency: "INR", per: "night", cost_line: "stay", source_url: "https://example.test/hotels", quote: "Mid-range hotels cost about ₹4,500 per night" },
-        { label: "Return flight", amount: "18,000", currency: "INR", per: "person", cost_line: "transport", source_url: "https://example.test/flights", quote: "Return flights from about ₹18,000 per person" },
+        { id: idOf(/hotel/i), label: "Mid-range hotel", per: "night", cost_line: "stay" },
+        { id: idOf(/flight/i), label: "Return flight", per: "person", cost_line: "transport" },
       ],
     })
   }

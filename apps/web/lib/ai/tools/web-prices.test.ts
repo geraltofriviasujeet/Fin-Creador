@@ -30,8 +30,9 @@ function contextWith(provider = mockSearchProvider(() => RESULTS)): ToolContext 
 const lookup = (cost_line: string) => ({ id: `call-${cost_line}`, name: "web_price_lookup", input: { kind: "trip", destination: "Goa", month: "2027-01", nights: 4, travellers: 2, cost_line } })
 const call = (...calls: { id: string; name: string; input: unknown }[]) => ({ stop: "tool_use" as const, text: "", toolCalls: calls, usage: NO_USAGE })
 
-const hotel = { label: "Mid-range hotel", amount: "4,500", currency: "INR", per: "night", cost_line: "stay", source_url: "https://hotels.example.test/goa", quote: "Mid-range rooms cost about ₹4,500 per night" }
-const flight = { label: "Return flight", amount: "9,000", currency: "INR", per: "person", cost_line: "transport", source_url: "https://flights.example.test/goa", quote: "Return flights from ₹9,000 per person" }
+// The prices found in code in RESULTS: w1 ₹4,500 and w2 ₹30,000 (hotels), w3 ₹9,000 (flights).
+const hotel = { id: "w1", label: "Mid-range hotel", per: "night", cost_line: "stay" }
+const flight = { id: "w3", label: "Return flight", per: "person", cost_line: "transport" }
 
 const ask = (script: MockScript, context = contextWith()) =>
   runChat({ provider: mockProvider(script), tools: WEB_TOOLS, context, question: "What would a Goa trip cost on the web?" })
@@ -62,7 +63,7 @@ describe("web lookups in Roma's answers", () => {
   it("keeps verified prices, works out the totals in code, and lets the answer quote them", async () => {
     const run = await ask((_req, round) => {
       if (round === 0) return call(lookup("stay"), lookup("transport"))
-      if (round === 1) return call({ id: "f", name: "web_price_figures", input: { figures: [hotel, flight, { ...flight, label: "Made up", amount: "7,000", quote: "flights from ₹7,000" }] } })
+      if (round === 1) return call({ id: "f", name: "web_price_figures", input: { figures: [hotel, flight, { ...flight, id: "w99", label: "Made up" }] } })
       return mockText("Web estimates, to check at the source: about ₹4,500 a night (hotels.example.test) and ₹9,000 a person for flights (flights.example.test), ₹36,000 for 4 nights and 2 travellers.")
     })
     expect(run.result).toMatchObject({ kind: "answer" })
@@ -214,7 +215,7 @@ describe("the records' verdict and the web-assisted line", () => {
       provider: mockProvider((_req, round) => {
         if (round === 0) return call({ id: "t", name: "trip_check", input: {} })
         if (round === 1) return call(lookup("stay"))
-        if (round === 2) return call({ id: "f", name: "web_price_figures", input: { figures: [{ ...hotel, amount: "60", currency: "GBP", source_url: "https://uk.example.test/", quote: "Rooms about £60 per night" }] } })
+        if (round === 2) return call({ id: "f", name: "web_price_figures", input: { figures: [hotel] } })
         return mockText("Yes. From your records the trip costs about ₹20,000.")
       }),
       tools: [tripStandIn as FinanceTool, ...WEB_TOOLS],
@@ -282,7 +283,7 @@ describe("the assumptions line about outside prices", () => {
   })
 
   it("says a lookup ran and nothing could be confirmed when every reported price was dropped", async () => {
-    const run = await chat([call(trip), call(lookup("stay")), call(figures({ ...hotel, quote: "Rooms from ₹4,500 a night" }))])
+    const run = await chat([call(trip), call(lookup("stay")), call(figures({ ...hotel, id: "w99" }))])
     expect(lineOf(run)).toBe(
       "1 web lookup ran for this question and counts toward your allowance, but no price from it could be confirmed at its source, so none is shown. This answer uses your own records only.",
     )
@@ -297,7 +298,7 @@ describe("the assumptions line about outside prices", () => {
   })
 
   it("says prices are shown separately, and how many were dropped, when some were kept", async () => {
-    const run = await chat([call(trip), call(lookup("stay"), lookup("transport")), call(figures(hotel, { ...flight, quote: "Flights cost ₹9,000" }))])
+    const run = await chat([call(trip), call(lookup("stay"), lookup("transport")), call(figures(hotel, { ...flight, id: "w99" }))])
     expect(lineOf(run)).toBe(
       "2 web lookups ran for this question. Prices confirmed at their source are shown separately as web estimates; they don't change this verdict. 1 other price couldn't be confirmed at the source and isn't shown.",
     )
@@ -311,5 +312,65 @@ describe("the assumptions line about outside prices", () => {
 
   it("is null when no lookup was sent", () => {
     expect(lookupsLine(0, 0, { figures: 3, dropped: 3 })).toBeNull()
+  })
+})
+
+// The model picks prices found in code by id and never types an amount (10.8, after 2 in 5 live
+// Goa runs spent their lookups and showed nothing because typed prices failed the check).
+describe("prices picked by id", () => {
+  it("hands the model the prices found in code, with ids, and no page text", async () => {
+    let seen: { prices?: unknown; results?: unknown } = {}
+    await ask((req, round) => {
+      const last = req.messages.at(-1)
+      if (last?.role === "tool_results") seen = JSON.parse(last.results[0]!.content)
+      return round === 0 ? call(lookup("stay")) : mockText("No web prices used.")
+    })
+    expect(seen.results).toBeUndefined()
+    expect(seen.prices).toEqual([
+      { id: "w1", site: "hotels.example.test", currency: "INR", text: "Test data. Mid-range rooms cost about ₹4,500 per night. Luxury suites ₹30,000." },
+      { id: "w2", site: "hotels.example.test", currency: "INR", text: "Test data. Mid-range rooms cost about ₹4,500 per night. Luxury suites ₹30,000." },
+      { id: "w3", site: "flights.example.test", currency: "INR", text: "Test data. Return flights from ₹9,000 per person." },
+    ])
+  })
+
+  it("keeps a price found in two lookups under one id", async () => {
+    const context = contextWith()
+    await ask((_req, round) => (round === 0 ? call(lookup("stay"), lookup("transport")) : mockText("No web prices used.")), context)
+    expect([...context.web!.candidates.keys()]).toEqual(["w1", "w2", "w3"])
+  })
+
+  it("refuses a typed amount: the input takes ids only", async () => {
+    const run = await ask((req, round) => {
+      if (round === 0) return call(lookup("stay"))
+      if (round === 1) return call({ id: "f", name: "web_price_figures", input: { figures: [{ ...hotel, amount: "4,000" }] } })
+      const last = req.messages.at(-1)
+      return mockText(last?.role === "tool_results" && last.results[0]!.isError ? "No web prices used." : "Kept.")
+    })
+    expect(run.result).toMatchObject({ kind: "answer", text: "No web prices used." })
+    expect(run.result).not.toHaveProperty("web")
+  })
+
+  it("drops an id no lookup gave, and keeps the rest", async () => {
+    const run = await ask((_req, round) => {
+      if (round === 0) return call(lookup("stay"))
+      if (round === 1) return call({ id: "f", name: "web_price_figures", input: { figures: [hotel, { ...hotel, id: "w9", label: "Invented" }] } })
+      return mockText("About ₹4,500 a night (hotels.example.test).")
+    })
+    expect(run.result.kind === "answer" && run.result.web?.figures.map((f) => f.label)).toEqual(["Mid-range hotel"])
+  })
+
+  it("lets the answer quote a kept lakh price as written and in full, and shows every price kept this question", async () => {
+    const cars = [{ title: "Test data", url: "https://cars.example.test/creta", snippet: "Test data. Ex-showroom from ₹11.11 Lakh; top trim ₹20.5 lakh." }]
+    const run = await ask((_req, round) => {
+      if (round === 0) return call({ id: "l", name: "web_price_lookup", input: { kind: "vehicle", vehicle: "car", make: "Hyundai", model: "Creta", month: "2027-03" } })
+      if (round === 1) return call({ id: "f1", name: "web_price_figures", input: { figures: [{ id: "w1", label: "Base trim", per: "total", cost_line: "vehicle" }] } })
+      if (round === 2) return call({ id: "f2", name: "web_price_figures", input: { figures: [{ id: "w2", label: "Top trim", per: "total", cost_line: "vehicle" }] } })
+      return mockText("Web estimates: ₹11.11 lakh (₹11,11,000) for the base trim and ₹20.5 lakh for the top trim (cars.example.test).")
+    }, contextWith(mockSearchProvider(() => cars)))
+    expect(run.result).toMatchObject({ kind: "answer" })
+    expect(run.result.kind === "answer" && run.result.web?.figures.map((f) => [f.label, f.value])).toEqual([
+      ["Base trim", "1111000"],
+      ["Top trim", "2050000"],
+    ])
   })
 })

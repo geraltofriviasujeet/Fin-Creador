@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { SearchResult } from "./types"
-import { type WebFigureInput, pricesIn, scaleUp, verifyWebFigure, webFigureInput } from "./verify"
+import { priceCandidates, pricesIn, scaleUp, verifyWebFigure, type WebFigureInput, webFigureInput } from "./verify"
 
 // Shapes from the snippet measurement (2026-11-06), with test data.
 const results: SearchResult[] = [
@@ -106,5 +106,39 @@ describe("web figure check", () => {
   it("accepts only digits as an amount", () => {
     expect(webFigureInput.safeParse({ ...figure({}), amount: "£60" }).success).toBe(false)
     expect(webFigureInput.safeParse({ ...figure({}), amount: "about 60" }).success).toBe(false)
+  })
+})
+
+describe("prices found in code (priceCandidates)", () => {
+  const result = (snippet: string, content?: string) => ({ title: "Test data", url: "https://www.cars.example.test/creta", snippet, ...(content ? { content } : {}) })
+
+  it("finds amount, currency, scale and the words around it, case kept", () => {
+    const [c] = priceCandidates(result("Test data. The Creta's ex-showroom price starts at ₹11.11 Lakh in Delhi for the base trim."))
+    expect(c).toMatchObject({ currency: "INR", amount: "11.11", scale: "lakh", value: "1111000", site: "cars.example.test", source_url: "https://www.cars.example.test/creta" })
+    expect(c!.quote).toContain("starts at ₹11.11 Lakh in Delhi")
+  })
+
+  it("finds each amount once, even where two marks fit (Rs. and Rs)", () => {
+    expect(priceCandidates(result("Test data. Rooms Rs. 2,500 a night; suites Rs. 2,500 on weekdays; USD 40 abroad.")).map((c) => [c.currency, c.amount])).toEqual([
+      ["INR", "2500"],
+      ["USD", "40"],
+    ])
+  })
+
+  it("reads the snippet, then the page text, up to the limit", () => {
+    const r = result("Test data. From ₹900.", "Test data. Then ₹1,200, ₹1,500, ₹1,800 and ₹2,100.")
+    expect(priceCandidates(r).map((c) => c.amount)).toEqual(["900", "1200", "1500", "1800"])
+    expect(priceCandidates(r, 2).map((c) => c.amount)).toEqual(["900", "1200"])
+  })
+
+  it("gives a quote the backstop accepts, so a picked candidate is never dropped for its amount", () => {
+    const r = result("Test data. Budget stays from about ₹1,499/night, and premium resorts near ₹12,000 per night in December.")
+    for (const c of priceCandidates(r)) {
+      expect(verifyWebFigure({ label: "x", per: "night", ...c }, [r])).toMatchObject({ ok: true, figure: { value: c.value } })
+    }
+  })
+
+  it("finds nothing where no amount sits next to a currency", () => {
+    expect(priceCandidates(result("Test data. Rated 4.5 by 1,200 guests, 3 km from the beach."))).toEqual([])
   })
 })
