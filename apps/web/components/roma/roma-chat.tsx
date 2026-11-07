@@ -276,7 +276,9 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
           <p className="font-heading text-lg font-bold text-ink">{c.verdict}</p>
           {c.web && (
             <div className="mt-2 border-t border-dashed border-line pt-2" data-testid="web-verdict">
-              <p className="text-xs font-semibold text-muted-foreground">With web estimates, not your records</p>
+              <p className="text-xs font-semibold text-muted-foreground">
+                {c.web.webOnly ? "Web estimates only, no basis in your records" : "With web estimates, not your records"}
+              </p>
               <p className="text-sm text-ink">{c.web.summary}</p>
             </div>
           )}

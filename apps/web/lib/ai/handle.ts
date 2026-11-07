@@ -121,7 +121,7 @@ export type ChatResponseBody =
       descriptionsNotice?: true
       /** Goal and trip checks (10.4, 10.5): the verdict computed in code and its assumptions. */
       /** `web`: the separate web-assisted line (10.8), shown after the records' verdict, never instead of it. */
-      checks?: { kind?: "trip"; goal: string; verdict: string; assumptions: string[]; web?: { verdict: string; summary: string } }[]
+      checks?: { kind?: "trip"; goal: string; verdict: string; assumptions: string[]; web?: { verdict: string; summary: string; webOnly?: true } }[]
       /** Web estimates (10.8): prices as found with their site and link, totals per currency; never part of the verdict. */
       web?: WebBlock
       /** Why web lookups were skipped (caps, timeouts). */

@@ -280,7 +280,7 @@ test("goal check: too early to say with under 3 months of records (10.4)", async
 /** `day` of the month `offset` months from today's month in India. */
 const dayOf = (offset: number, day: number) => `${monthDay(offset).slice(0, 8)}${String(day).padStart(2, "0")}`
 
-test("trip check: can't estimate until a past trip is confirmed, then an estimate from either figure (10.5)", async ({ page }) => {
+test("trip check: no estimate until a past trip is confirmed, then an estimate from either figure (10.5)", async ({ page }) => {
   const email = uniqueEmail("roma-trip")
   await startWithRoma(page, "Kavya Rao", email)
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } })
@@ -315,7 +315,7 @@ test("trip check: can't estimate until a past trip is confirmed, then an estimat
 
   const none = await ask(page, question)
   await expect(none.getByText("Trip check · Kerala")).toBeVisible()
-  await expect(none.getByText("I can't estimate this from your records.", { exact: true })).toBeVisible()
+  await expect(none.getByText("No estimate from your records.", { exact: true })).toBeVisible()
   await expect(figure(none, `Travel run ${from} to ${to}: Travel category`)).toHaveText("₹9,000")
   await expect(
     figure(none, `Travel run ${from} to ${to}: all spending in those dates, which may include things unrelated to the trip`),
@@ -357,11 +357,15 @@ test("web estimates: the records' verdict first, a marked web-assisted line, pri
   // No trip in the records: the records can't estimate it; the web prices (mock search) can.
   const answer = await ask(page, `Web prices for a trip to Goa, ${month}, 4 nights, 2 travellers`)
   await expect(answer.getByText("Trip check · Goa · From your records")).toBeVisible()
-  await expect(answer.getByText("I can't estimate this from your records.", { exact: true })).toBeVisible()
+  await expect(answer.getByText("No estimate from your records.", { exact: true })).toBeVisible()
   const webLine = answer.getByTestId("web-verdict")
-  await expect(webLine.getByText("With web estimates, not your records")).toBeVisible()
+  await expect(webLine.getByText("Web estimates only, no basis in your records")).toBeVisible()
   // 4,500 × 4 nights + 18,000 × 2 travellers = 54,000, against ₹50,000 a month for 4 months.
-  await expect(webLine.getByText(/^Yes\. The web prices kept add up to ₹54,000 for stay, travel only, not the whole trip\./)).toBeVisible()
+  await expect(
+    webLine.getByText(
+      /^Yes\. Web-only estimate: it rests entirely on web prices, with no basis in your records\. The web prices kept add up to ₹54,000 for stay, travel only, not the whole trip\./,
+    ),
+  ).toBeVisible()
 
   const block = answer.getByRole("region", { name: "Web estimates" })
   await expect(block.getByText("Web estimates. Check the source.")).toBeVisible()
