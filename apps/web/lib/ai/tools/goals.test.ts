@@ -121,7 +121,9 @@ describe("goal_projection", () => {
     expect(out.check!.summary).toMatch(/^Yes\. At your current rate Car 2027 would be reached in October 2027/)
     expect(passes(out.check!.summary, out)).toBe(true)
     expect(passes("Yes. Car 2027 is reached in October 2027, with ₹10,000 free this month.", out)).toBe(true)
-    expect(passes("Yes. Car 2027 is reached in 2029.", out)).toBe(false)
+    // A bare year passes (10.8); the name's digits written as money are still refused.
+    expect(passes("Yes. Car 2027 is reached in 2029.", out)).toBe(true)
+    expect(passes("Yes. Car 2027 needs ₹2,029 more.", out)).toBe(false)
   })
 
   it("asks which goal, from code, when none is named: even with one goal it never picks it unasked (10.5)", async () => {

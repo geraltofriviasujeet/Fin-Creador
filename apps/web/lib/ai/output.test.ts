@@ -17,11 +17,10 @@ describe("numbers in an answer", () => {
 })
 
 describe("numbered lists (10.5)", () => {
-  it("doesn't read a list marker at the start of a line as a number", () => {
-    expect(numbersIn("I need:\n\n1. Which month?\n2) How many nights?\n  3. How many travellers?")).toEqual([])
+  it("lets list markers through: they are small bare integers", () => {
+    expect(checkAnswer("I need:\n\n1. Which month?\n2) How many nights?\n  3. How many travellers?", allowedNumbers([], []))).toMatchObject({ ok: true })
   })
-  it("still reads every figure on a list line, and numbers that aren't markers", () => {
-    expect(numbersIn("1. ₹5,000 on food\nUp 1. 2 people")).toEqual(["5000", "1", "2"])
+  it("still checks every money figure on a list line", () => {
     expect(numbersIn("1.5 lakh")).toEqual(["1.5"])
     expect(checkAnswer("1. You spent ₹9,000.", allowedNumbers([], []))).toEqual({ ok: false, reason: "unverified", unmatched: ["9000"] })
   })
@@ -90,12 +89,12 @@ describe("names a tool returned", () => {
 
   it("still refuses the same digits outside the name", () => {
     const literals = literalStrings(data)
-    expect(checkAnswer("Car 2027 by 2027.", allowed, literals)).toMatchObject({ ok: false, reason: "unverified", unmatched: ["2027"] })
-    expect(checkAnswer("Rent 2BHK, 2 rooms.", allowed, literals)).toMatchObject({ ok: false, unmatched: ["2"] })
+    expect(checkAnswer("Car 2027 costs ₹2,027.", allowed, literals)).toMatchObject({ ok: false, reason: "unverified", unmatched: ["2027"] })
+    expect(checkAnswer("Rent 2BHK, ₹2,000 more.", allowed, literals)).toMatchObject({ ok: false, unmatched: ["2000"] })
   })
 
-  it("without the tool's strings, the name's digits are refused", () => {
-    expect(checkAnswer("Car 2027 needs ₹500.", allowed)).toMatchObject({ ok: false, unmatched: ["2027"] })
+  it("without the tool's strings, a name's year-shaped digits pass as a year", () => {
+    expect(checkAnswer("Car 2027 needs ₹500.", allowed)).toMatchObject({ ok: true })
   })
 })
 
@@ -112,5 +111,53 @@ describe("the subject check (10.5)", () => {
     expect(checkSubjects("Yes.", "can I go vietnam?", [{ checked: "Assam Trip", goals: ["Assam Trip"] }], "")).toEqual({ ok: false, checked: "Assam Trip", goals: ["Assam Trip"] })
     expect(checkSubjects("No. Assam trip is fine though.", "can I go vietnam?", [vietnam], '{"trip":"Vietnam"}')).toMatchObject({ ok: false, checked: "Assam Trip" })
     expect(checkSubjects("No. Your Car saving comes first.", "can I go vietnam?", [vietnam], '{"other":"Car"}')).toEqual({ ok: true })
+  })
+})
+
+describe("only money-shaped figures and percentages must match a tool (10.8)", () => {
+  const fromTool = allowedNumbers([{ label: "Estimate", kind: "money", minor: 9_500_000, currency: "INR" }], [])
+  const none = allowedNumbers([], [])
+
+  it("lets small bare integers through: nights, travellers, options", () => {
+    expect(checkAnswer("5 nights for 2 people.", none)).toMatchObject({ ok: true })
+    expect(checkAnswer("There are 8 options.", none)).toMatchObject({ ok: true })
+  })
+
+  it("lets dates through", () => {
+    expect(checkAnswer("Book by 2027-03-15, or in December 2027.", none)).toMatchObject({ ok: true })
+  })
+
+  it("refuses money-shaped figures no tool gave", () => {
+    for (const [text, n] of [
+      ["It costs ₹42,000.", "42000"],
+      ["It costs 42000.", "42000"],
+      ["It costs 7.4 lakh.", "7.4"],
+      ["It costs Rs 900.", "900"],
+      ["It costs 900 rupees.", "900"],
+      ["It costs INR 900.", "900"],
+      ["About 2 Cr.", "2"],
+      ["About 3L.", "3"],
+      ["About 50K.", "50"],
+      ["About 12.5 a night.", "12.5"],
+    ]) {
+      expect(checkAnswer(text!, none), text).toEqual({ ok: false, reason: "unverified", unmatched: [n] })
+    }
+  })
+
+  it("passes a money figure a tool gave, written with separators", () => {
+    expect(checkAnswer("It costs ₹95,000.", fromTool)).toMatchObject({ ok: true })
+    expect(checkAnswer("It costs 95,000.", fromTool)).toMatchObject({ ok: true })
+  })
+
+  it("lets a bare year through, not the same digits written as money", () => {
+    expect(checkAnswer("You could go by 2027.", none)).toMatchObject({ ok: true })
+    expect(checkAnswer("It costs ₹2,027.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["2027"] })
+    expect(checkAnswer("It costs 2027 rupees.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["2027"] })
+    expect(checkAnswer("It costs 2101.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["2101"] })
+  })
+
+  it("refuses a percentage no tool gave", () => {
+    expect(checkAnswer("You saved 12% of your income.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["12"] })
+    expect(checkAnswer("You saved 12 percent of your income.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["12"] })
   })
 })

@@ -401,3 +401,39 @@ describe("domestic or international from the destination", () => {
     expect(out.data).toMatchObject({ scope: "international", scope_worked_out_from_destination: false })
   })
 })
+
+// The Goa question refused on dev (10.8): small bare integers such as nights and travellers
+// pass the figure check; a money amount still has to come from a tool.
+describe("trip answers under the money-shaped figure check", () => {
+  const goaPlan = goal({
+    ...goaGoal,
+    archivedAt: null,
+    targetDate: "2027-04-30",
+    details: { v: 1, scope: "domestic", place: "Goa", people: 3, days: 8, travelMode: "flight", stay: "hotel", costs: goaCosts },
+  })
+  const chat = (reply: (summary: string) => string) =>
+    runChat({
+      provider: mockProvider((req, round) => {
+        if (round === 0) return mockToolCall("trip_check", { goal: "Goa" })
+        const last = req.messages.at(-1)
+        const data = last?.role === "tool_results" ? (JSON.parse(last.results[0]!.content) as Record<string, unknown>) : {}
+        return mockText(reply(String(data.verdict_summary)))
+      }),
+      tools: [tripCheckTool as FinanceTool],
+      context: ctx,
+      question: "Can I afford my Goa trip? 5 nights for 2 people.",
+    })
+
+  beforeEach(() => setUp({ goals: [goaPlan] }))
+
+  it("5 nights for 2 people, repeated back, is shown", async () => {
+    const run = await chat((s) => `${s} You said 5 nights for 2 people.`)
+    expect(run.result).toMatchObject({ kind: "answer", checks: [{ goal: "Goa" }] })
+    expect(run.result.kind === "answer" && run.result.text).toMatch(/ You said 5 nights for 2 people\.$/)
+  })
+
+  it("a money amount the model invented is still refused", async () => {
+    const run = await chat((s) => `${s} Flights for 2 people will be about ₹7,350.`)
+    expect(run.result).toEqual({ kind: "unverified", unmatched: ["7350"] })
+  })
+})

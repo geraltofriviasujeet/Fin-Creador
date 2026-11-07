@@ -133,7 +133,7 @@ describe("category_breakdown", () => {
     const literals = literalStrings([out.data, out.figures.map((f) => f.label)])
     const allowed = allowedNumbers(out.figures, [TODAY, out.period!.start, out.period!.end])
     expect(checkAnswer("Rent 2BHK took ₹25,000 last month.", allowed, literals).ok).toBe(true)
-    expect(checkAnswer("Rent 2BHK took ₹25,000 for 2 rooms.", allowed, literals)).toMatchObject({ ok: false, unmatched: ["2"] })
+    expect(checkAnswer("Rent 2BHK took ₹25,000 plus ₹2,000 deposit.", allowed, literals)).toMatchObject({ ok: false, unmatched: ["2000"] })
   })
 
   it("puts the rest under Everything else", async () => {

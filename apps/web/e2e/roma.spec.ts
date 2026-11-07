@@ -332,3 +332,42 @@ test("trip check: can't estimate until a past trip is confirmed, then an estimat
   await expect(figure(allSpending, "Trip estimate")).toHaveText("₹16,000")
   await expect(allSpending.getByRole("listitem").filter({ hasText: "which may include things unrelated to the trip" })).toBeVisible()
 })
+
+test("web estimates: the records' verdict first, a marked web-assisted line, prices with their site and link (10.8)", async ({ page }) => {
+  const email = uniqueEmail("roma-web")
+  await startWithRoma(page, "Kavya Rao", email)
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } })
+  expect((await supabase.auth.signInWithPassword({ email, password: PASSWORD })).error).toBeNull()
+  const account = await supabase.from("accounts").select("id").eq("kind", "bank").single()
+  const salary = await supabase.from("categories").select("id").eq("kind", "income").limit(1).single()
+  expect(account.error ?? salary.error).toBeNull()
+  for (let offset = -6; offset <= -1; offset++) {
+    const { error } = await supabase.rpc("record_transaction", {
+      p_type: "income",
+      p_idempotency_key: crypto.randomUUID(),
+      p_amount_minor: 50_000_00,
+      p_occurred_on: monthDay(offset),
+      p_account_id: account.data!.id,
+      p_category_id: salary.data!.id,
+    })
+    expect(error).toBeNull()
+  }
+  const month = monthDay(3).slice(0, 7)
+
+  // No trip in the records: the records can't estimate it; the web prices (mock search) can.
+  const answer = await ask(page, `Web prices for a trip to Goa, ${month}, 4 nights, 2 travellers`)
+  await expect(answer.getByText("Trip check · Goa · From your records")).toBeVisible()
+  await expect(answer.getByText("I can't estimate this from your records.", { exact: true })).toBeVisible()
+  const webLine = answer.getByTestId("web-verdict")
+  await expect(webLine.getByText("With web estimates, not your records")).toBeVisible()
+  // 4,500 × 4 nights + 18,000 × 2 travellers = 54,000, against ₹50,000 a month for 4 months.
+  await expect(webLine.getByText(/^Yes\. The web prices kept add up to ₹54,000 for stay, travel only, not the whole trip\./)).toBeVisible()
+
+  const block = answer.getByRole("region", { name: "Web estimates" })
+  await expect(block.getByText("Web estimates. Check the source.")).toBeVisible()
+  await expect(block.getByRole("link", { name: "example.test" })).toHaveCount(2)
+  await expect(block.getByRole("link", { name: "example.test" }).first()).toHaveAttribute("href", "https://example.test/hotels")
+  await expect(block.getByText("INR 4,500 a night")).toBeVisible()
+  await expect(block.getByText("INR 18,000 a person")).toBeVisible()
+  await expect(block.getByText("INR 54,000")).toBeVisible()
+})

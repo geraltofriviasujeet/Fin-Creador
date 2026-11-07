@@ -4,12 +4,15 @@ import type { Figure } from "./tools/types"
 
 // Roma's output guard (Sprint 10). An answer is shown only when:
 //   * it passes the Zod envelope (non-empty text of bounded length);
-//   * every number in it matches a figure from this request's tool results, a count, or a
-//     date part of the periods and of today. One unmatched number and the whole answer is
+//   * every money-shaped number and every percentage in it matches a figure from this
+//     request's tool results or a date part of the periods and of today. A number is
+//     money-shaped when it carries a currency marker (₹, Rs, INR, "rupees"), a decimal part,
+//     thousands separators or a scale word (lakh, crore, L, Cr, K), or is 1000 or more. Other
+//     numbers (small bare integers: counts, nights, travellers, list markers), dates
+//     (2026-11-07, "December 2027") and bare years 1900 to 2100 ("by 2027") pass (10.8). One unmatched figure and the whole answer is
 //     refused: numbers are never stripped, rounded or corrected. Digits inside a string a tool
 //     returned (a goal, category or account name such as "Car 2027") are not figures: those
 //     strings are set aside, exactly as written (any case), before the numbers are read;
-//     A numbered-list marker at the start of a line ("1. ") is a position, not a figure (10.5);
 //   * it doesn't open with praise (Roma's rules).
 
 export const MAX_ANSWER_CHARS = 2000
@@ -26,12 +29,41 @@ export function normalizeNumber(raw: string): string {
   return f ? `${w}.${f}` : w
 }
 
-/** A numbered-list marker at the start of a line ("1. ", "2) "): a position, not a figure. */
-const LIST_MARKER = /^([ \t]*)\d{1,2}[.)](?=[ \t])/gm
-
-/** Every number written in the text (digits with optional grouping and decimals), normalized. List markers are not numbers. */
+/** Every number written in the text (digits with optional grouping and decimals), normalized. */
 export function numbersIn(text: string): string[] {
-  return [...text.replace(LIST_MARKER, "$1").matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => normalizeNumber(m[0].replace(/,+$/, "")))
+  return numbersWritten(text).map((n) => n.value)
+}
+
+/** Dates are not figures: ISO dates and a year after a month name. */
+const DATES = /\b\d{4}-\d{2}(?:-\d{2})?\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?\s+\d{4}\b/gi
+/** A currency sign or code just before a number: money. */
+const MONEY_BEFORE = /(?:[₹$€£¥]|\b(?:rs|inr|usd|eur|gbp|aed|sgd|thb|vnd)\.?)\s*$/i
+/** A currency code or word, or a scale word, just after a number: money. "L" only as a capital. */
+const MONEY_AFTER = /^\s*(?:inr|usd|eur|gbp|aed|sgd|thb|vnd|rupees?|dollars?|euros?|pounds?|lakhs?|crores?|cr|k)\b/i
+const LAKH_L = /^\s*L\b/
+const PERCENT_AFTER = /^\s*(?:%|percent\b|per cent\b)/i
+
+/** A bare four-digit 1900 to 2100 is a year (markers, decimals and separators are checked before this). */
+const isYear = (raw: string) => /^\d{4}$/.test(raw) && Number(raw) >= 1900 && Number(raw) <= 2100
+
+/** Every number written in the text, normalized, and whether it must match a tool figure (money-shaped or a percentage). */
+function numbersWritten(text: string): { value: string; checked: boolean }[] {
+  const rest = text.replace(DATES, " ")
+  return [...rest.matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => {
+    const raw = m[0].replace(/,+$/, "")
+    const value = normalizeNumber(raw)
+    const end = m.index + raw.length
+    const after = rest.slice(end, end + 10)
+    const checked =
+      MONEY_BEFORE.test(rest.slice(Math.max(0, m.index - 6), m.index)) ||
+      raw.includes(".") ||
+      raw.includes(",") ||
+      MONEY_AFTER.test(after) ||
+      LAKH_L.test(after) ||
+      PERCENT_AFTER.test(after) ||
+      (Number(value) >= 1000 && !isYear(raw))
+    return { value, checked }
+  })
 }
 
 /** The numbers an answer may contain: figure amounts, counts and rates (as the tool wrote them), and date parts. */
@@ -115,7 +147,7 @@ export function checkAnswer(raw: string, allowed: Set<string>, literals: readonl
   if (!parsed.success) return { ok: false, reason: "invalid" }
   const { text } = parsed.data
   if (PRAISE_OPENER.test(text)) return { ok: false, reason: "tone" }
-  const unmatched = [...new Set(numbersIn(withoutLiterals(text, literals)).filter((n) => !allowed.has(n)))]
+  const unmatched = [...new Set(numbersWritten(withoutLiterals(text, literals)).filter((n) => n.checked && !allowed.has(n.value)).map((n) => n.value))]
   if (unmatched.length > 0) return { ok: false, reason: "unverified", unmatched }
   return { ok: true, text }
 }

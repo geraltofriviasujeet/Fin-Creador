@@ -49,6 +49,7 @@ jobs:
           FC_CANARY_SERVER_ONLY: fc-canary-${{ github.run_id }}-not-a-secret
           SUPABASE_SERVICE_ROLE_KEY: fc-canary-${{ github.run_id }}-not-a-secret
           ANTHROPIC_API_KEY: fc-canary-${{ github.run_id }}-not-a-secret
+          TAVILY_API_KEY: fc-canary-${{ github.run_id }}-not-a-secret
 
       # Bundles the Expo app for iOS and Android (Hermes bytecode) without a device or
       # native build, so import, syntax and route errors fail here.

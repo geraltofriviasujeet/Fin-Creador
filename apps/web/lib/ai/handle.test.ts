@@ -6,6 +6,7 @@ import { type BeginOutcome, type ChatDeps, type RomaDb, type RomaHistory, type T
 import { MAX_TURNS, type StoredTurn } from "./history"
 import { mockProvider } from "./llm/mock"
 import { NO_USAGE } from "./llm/types"
+import { mockSearchProvider } from "./search/mock"
 
 // The request flow with a fake ledger: what is reserved, settled and released. Mock provider only.
 
@@ -310,5 +311,28 @@ describe("POST /api/ai/chat flow", () => {
       await handleChat(ask, d)
       expect(d.history.recorded).toEqual([])
     })
+  })
+})
+
+describe("web lookups spent on a question with no answer shown (10.8)", () => {
+  const search: NonNullable<ChatDeps["search"]> = {
+    db: { begin: async () => ({ outcome: "ok", credits: 3 }), settle: async () => true, release: async () => true },
+    makeProvider: () => mockSearchProvider(() => [{ title: "Test data", url: "https://hotels.example.test/goa", snippet: "Test data. Rooms ₹4,500 a night." }]),
+    loadTerms: async () => ({ terms: { names: [], phrases: [] }, countryCode: "IN" }),
+  }
+  const lookupThen = (result: ChatRun["result"]): ChatDeps["run"] => async (options) => {
+    await options.context.web!.lookup({ kind: "trip", destination: "Goa", month: "2027-01", nights: 4, travellers: 2, cost_line: "stay" }, new AbortController().signal)
+    return { result, calls: 2, usage: NO_USAGE, unknownCalls: 0 }
+  }
+
+  it("says the lookup was used when the answer is refused", async () => {
+    const res = await handleChat(ask, deps({ search, run: lookupThen({ kind: "unverified", unmatched: ["7350"] }) }))
+    expect(res.body).toMatchObject({ code: "unverified" })
+    expect(res.body.status === "error" && res.body.message).toMatch(/ 1 web lookup ran for this question and counts toward your allowance\.$/)
+  })
+
+  it("says nothing about lookups when none ran", async () => {
+    const res = await handleChat(ask, deps({ search, run: async () => ({ result: { kind: "failed", reason: "rejected" }, calls: 1, usage: NO_USAGE, unknownCalls: 0 }) }))
+    expect(res.body).toMatchObject({ code: "unavailable", message: "Roma couldn't answer just now. Try again in a moment." })
   })
 })

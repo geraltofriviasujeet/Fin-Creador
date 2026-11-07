@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { userToday } from "@fin-creador/api"
-import { readLlmConfig } from "@/lib/ai/config"
+import { readLlmConfig, readSearchConfig } from "@/lib/ai/config"
 import { type BeginOutcome, type RomaDb, type RomaHistory, handleChat } from "@/lib/ai/handle"
 import { type StoredTurn, fromDateRangeLiteral, toDateRangeLiteral } from "@/lib/ai/history"
 import { createProvider } from "@/lib/ai/llm"
+import { createSearchProvider } from "@/lib/ai/search"
+import type { SearchBeginOutcome, SearchDb } from "@/lib/ai/search/session"
 import { createClient } from "@/lib/supabase/server"
 
 // Roma (Sprint 10.1): one question, answered from the person's own records. Runs as the
@@ -12,7 +14,9 @@ import { createClient } from "@/lib/supabase/server"
 // through the sign-in redirect). Nothing about the question or the answer is logged; when the
 // figure check refuses an answer, only the numbers it couldn't match are (10.5). From
 // 10.3 the conversation's turns are read and recorded under the same session (RLS and
-// roma_record_turn), never with a service key.
+// roma_record_turn), never with a service key. From 10.8, with SEARCH_ENABLED, web lookups
+// are offered; their credits go through roma_search_begin / _settle / _release under the same
+// session, and the words a query must never carry are read here (RLS) and kept in memory.
 //
 // maxDuration is the hard stop; the chat loop's own 45 s deadline (lib/ai/chat.ts) ends a
 // slow answer first with a clear message. Vercel Hobby allows up to 300 s.
@@ -79,7 +83,8 @@ export async function POST(request: NextRequest) {
     async record(turn) {
       const { data, error } = await supabase.rpc("roma_record_turn", {
         p_request_id: turn.requestId,
-        p_conversation_id: turn.conversationId,
+        // Null starts a new conversation; generated argument types can't say a SQL argument takes null.
+        p_conversation_id: turn.conversationId as string,
         p_question: turn.question,
         p_answer: turn.answer,
         p_as_of: turn.asOf,
@@ -93,6 +98,24 @@ export async function POST(request: NextRequest) {
     },
   }
 
+  const searchDb: SearchDb = {
+    async begin(requestId, provider) {
+      const { data, error } = await supabase.rpc("roma_search_begin", { p_request_id: requestId, p_provider: provider })
+      const row = Array.isArray(data) ? data[0] : null
+      if (error || !row) return null
+      return { outcome: row.outcome as SearchBeginOutcome, credits: row.credits }
+    },
+    async settle(requestId, credits) {
+      const { data, error } = await supabase.rpc("roma_search_settle", { p_request_id: requestId, p_credits: credits })
+      return !error && data === true
+    },
+    async release(requestId) {
+      const { data, error } = await supabase.rpc("roma_search_release", { p_request_id: requestId })
+      return !error && data === true
+    },
+  }
+
+  const searchConfig = readSearchConfig(process.env)
   const config = readLlmConfig(process.env)
   const result = await handleChat(await request.json().catch(() => null), {
     signedIn: Boolean(auth.user),
@@ -104,6 +127,30 @@ export async function POST(request: NextRequest) {
       return createProvider(config)
     },
     onUnverified: (unmatched) => console.warn(JSON.stringify({ event: "roma_unverified", unmatched })),
+    ...(searchConfig.status === "on"
+      ? {
+          search: {
+            db: searchDb,
+            makeProvider: () => createSearchProvider(searchConfig),
+            async loadTerms() {
+              const [profile, accounts, categories, notes] = await Promise.all([
+                supabase.from("profiles").select("display_name, country").eq("id", auth.user?.id ?? "").maybeSingle(),
+                supabase.from("accounts").select("name"),
+                supabase.from("categories").select("name"),
+                supabase.from("transactions").select("note").not("note", "is", null).order("created_at", { ascending: false }).limit(300),
+              ])
+              if (profile.error || !profile.data || accounts.error || categories.error || notes.error) return null
+              return {
+                terms: {
+                  names: [profile.data.display_name ?? "", auth.user?.email ?? ""].filter(Boolean),
+                  phrases: [...accounts.data.map((a) => a.name), ...categories.data.map((c) => c.name), ...notes.data.flatMap((n) => (n.note ? [n.note] : []))],
+                },
+                countryCode: profile.data.country,
+              }
+            },
+          },
+        }
+      : {}),
     async loadContext() {
       const [today, profile] = await Promise.all([
         userToday(supabase),
