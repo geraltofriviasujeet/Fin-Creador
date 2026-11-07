@@ -1,6 +1,6 @@
 import { type PrivateTerms, type WebLookupInput, buildQuery } from "./query"
 import { SearchError, type SearchProvider, type SearchResult } from "./types"
-import { type KeptWebFigure, type PriceCandidate, priceCandidates } from "./verify"
+import { type Bound, type KeptWebFigure, type PriceCandidate, firstPrices, priceCandidates } from "./verify"
 
 // One question's web lookups (Sprint 10.8). Credits are reserved in the database the first
 // time a lookup is about to be sent (roma_search_begin, on the question's own roma_usage
@@ -67,7 +67,7 @@ export class WebSession {
   /** Prices found in code in the results, by id: the only figures the model can pick. */
   readonly candidates = new Map<string, PriceCandidate>()
   /** Figures kept so far this question (every web_price_figures call adds to them). */
-  readonly kept: (KeptWebFigure & { id: string; cost_line: string })[] = []
+  readonly kept: (KeptWebFigure & { id: string; cost_line: string; bound?: Bound; rangeWith?: string })[] = []
   /** Web figures the model reported with web_price_figures, and how many of them were dropped. */
   readonly reported = { figures: 0, dropped: 0 }
   private grant: Promise<number> | null = null
@@ -97,7 +97,15 @@ export class WebSession {
       this.sent++
       for (const r of results) if (!this.results.some((have) => have.url === r.url)) this.results.push(r)
       if (input.kind === "trip") this.trips.push({ nights: input.nights, travellers: input.travellers })
-      const prices = results.flatMap((r) => priceCandidates(r)).slice(0, PRICES_PER_LOOKUP).map((p) => ({ ...p, id: this.idFor(p) }))
+      const prices = firstPrices(results.flatMap((r) => priceCandidates(r)), PRICES_PER_LOOKUP).map((p) => ({ ...p, id: this.idFor(p) }))
+      // A range's two ends know each other's id, so keeping one keeps both (web-prices.ts).
+      for (const p of prices) {
+        if (!p.range) continue
+        const other = prices.find((o) => o.source_url === p.source_url && o.currency === p.range!.other.currency && o.amount === p.range!.other.amount && o.scale === p.range!.other.scale)
+        if (!other) continue
+        p.rangeWith = other.id
+        this.candidates.get(p.id)!.rangeWith = other.id
+      }
       return { ok: true, subject: built.subject, results, prices }
     } catch (error) {
       if (error instanceof SearchError) {

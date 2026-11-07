@@ -11,6 +11,7 @@ import { type SearchDb, WEB_NOTICES, WebSession, lookupsLine } from "../search/s
 import type { SearchResult } from "../search/types"
 import { webTripVerdict } from "./trip"
 import { type FinanceTool, type GoalCheck, NO_LOOKUPS, type ToolContext, toToolDef } from "./types"
+import { webTotal } from "../web-format"
 import { timesFor, webTotals } from "./web-prices"
 
 // Web lookups through the chat loop, on the mock model and mock search: no paid API, no credit.
@@ -72,8 +73,8 @@ describe("web lookups in Roma's answers", () => {
       ["Mid-range hotel", "4500", "hotels.example.test"],
       ["Return flight", "9000", "flights.example.test"],
     ])
-    // 4,500 × 4 nights + 9,000 × 2 travellers.
-    expect(run.result.web?.totals).toEqual([{ currency: "INR", lines: 2, costLines: ["stay", "transport"], low: "36000", high: "36000" }])
+    // 4,500 × 4 nights + 9,000 × 2 travellers; the flight is a "from" price, so the total is a minimum.
+    expect(run.result.web?.totals).toEqual([{ currency: "INR", lines: 2, costLines: ["stay", "transport"], low: "36000", high: "36000", bound: "at_least" }])
     // Web figures stay out of the records' figures.
     expect(run.result.figures).toEqual([])
   })
@@ -154,6 +155,88 @@ describe("web totals", () => {
       { currency: "INR", lines: 2, costLines: ["stay", "transport"], low: "30000", high: "36002" },
       { currency: "GBP", lines: 1, costLines: ["food"], low: "600", high: "600" },
     ])
+  })
+})
+
+describe("a total fed by a bound", () => {
+  const trip = { nights: 4, travellers: 2 }
+  const price = (value: string, cost_line: string, bound?: "from" | "up_to") => ({
+    label: "x",
+    amount: value,
+    scale: "none" as const,
+    value,
+    currency: "INR",
+    per: "total" as const,
+    cost_line,
+    source_url: "https://a.example.test",
+    quote: "x",
+    site: "a.example.test",
+    title: "x",
+    ...(bound ? { bound } : {}),
+  })
+
+  it("is a minimum when any price feeding it is a 'from' price, a maximum for 'up to', neither for both", () => {
+    expect(webTotals([price("9000", "transport", "from"), price("4000", "stay")], trip)[0]).toMatchObject({ low: "13000", high: "13000", bound: "at_least" })
+    expect(webTotals([price("9000", "transport", "up_to"), price("4000", "stay")], trip)[0]).toMatchObject({ bound: "at_most" })
+    expect(webTotals([price("9000", "transport", "from"), price("4000", "stay", "up_to")], trip)[0]).toMatchObject({ bound: "mixed" })
+    expect(webTotals([price("9000", "transport"), price("4000", "stay")], trip)[0]).not.toHaveProperty("bound")
+    // Only the currency the bound is in.
+    const two = webTotals([price("9000", "transport", "from"), { ...price("60", "stay"), currency: "USD" }], trip)
+    expect(two.map((t) => [t.currency, t.bound ?? null])).toEqual([["INR", "at_least"], ["USD", null]])
+  })
+
+  it("is written as 'at least' its low end or 'at most' its high end, never as an estimate", () => {
+    const total = { currency: "INR", low: "13000", high: "18000" }
+    expect(webTotal(total)).toBe("INR 13,000 to 18,000")
+    expect(webTotal({ ...total, bound: "at_least" })).toBe("at least INR 13,000")
+    expect(webTotal({ ...total, bound: "at_most" })).toBe("at most INR 18,000")
+    expect(webTotal({ ...total, bound: "mixed" })).toBe('INR 13,000 to 18,000 (mixes "from" and "up to" prices: neither a minimum nor a maximum)')
+  })
+
+  it("makes the web-assisted line a minimum, checked at that minimum, and fills its placeholder as one", async () => {
+    // A stand-in for trip_check: six months of ₹10,000 net, travel in January 2027 (₹30,000 free).
+    const months = Array.from({ length: 6 }, () => ({ incomeMinor: 20_000_00, expenseMinor: 10_000_00 }))
+    const money = (minor: number) => formatMoney(minor, { currency: "INR" })
+    const seen: number[] = []
+    const tripStandIn: FinanceTool<Record<string, never>> = {
+      name: "trip_check",
+      description: "Test stand-in.",
+      input: z.object({}).strict(),
+      async run() {
+        const check: GoalCheck = {
+          kind: "trip",
+          goal: "Goa",
+          verdict: "No estimate from your records.",
+          summary: "No estimate from your records.",
+          assumptions: [],
+          withTarget: (targetMinor, costLines, bound) => {
+            seen.push(targetMinor)
+            const projection = goalProjection({ today: "2026-11-06", targetMinor, savedMinor: 0, targetDate: "2027-01-01", months, claims: [], otherGoals: [] })
+            return webTripVerdict(projection, { targetMinor, costLines, travelMonth: "2027-01-01", money, webOnly: true, bound })
+          },
+        }
+        return { data: { verdict: check.verdict }, figures: [], check }
+      },
+    }
+    // w1 ₹4,500 a night (hotel) and w3 "from ₹9,000" a person (flight): at least ₹36,000.
+    const run = await runChat({
+      provider: mockProvider((_req, round) => {
+        if (round === 0) return call({ id: "t", name: "trip_check", input: {} })
+        if (round === 1) return call(lookup("stay"), lookup("transport"))
+        if (round === 2) return call({ id: "f", name: "web_price_figures", input: { figures: [hotel, flight] } })
+        return mockText("No estimate from your records. Flights and a hotel come to {web:total_inr} (example.test).")
+      }),
+      tools: [tripStandIn as FinanceTool, ...WEB_TOOLS],
+      context: contextWith(),
+      question: "Can I afford Goa? Check web prices too.",
+    })
+    expect(run.result.kind).toBe("answer")
+    if (run.result.kind !== "answer") return
+    expect(run.result.text).toBe("No estimate from your records. Flights and a hotel come to at least INR 36,000 (example.test).")
+    expect(seen).toEqual([36_000_00])
+    expect(run.result.checks[0]!.web?.summary).toBe(
+      'No. Web-only estimate: it rests entirely on web prices, with no basis in your records. The web prices kept add up to at least ₹36,000, a minimum because some prices are "from" prices, for stay, travel only, not the whole trip. At your current rate that wouldn\'t be covered by January 2027. Saving ₹2,000 more a month would cover it. At your current rate it is reached in February 2027.',
+    )
   })
 })
 
@@ -329,8 +412,35 @@ describe("prices picked by id", () => {
     expect(seen.prices).toEqual([
       { id: "w1", site: "hotels.example.test", currency: "INR", text: "Test data. Mid-range rooms cost about ₹4,500 per night. Luxury suites ₹30,000." },
       { id: "w2", site: "hotels.example.test", currency: "INR", text: "Test data. Mid-range rooms cost about ₹4,500 per night. Luxury suites ₹30,000." },
-      { id: "w3", site: "flights.example.test", currency: "INR", text: "Test data. Return flights from ₹9,000 per person." },
+      { id: "w3", site: "flights.example.test", currency: "INR", text: "Test data. Return flights from ₹9,000 per person.", bound: "from" },
     ])
+  })
+
+  it("keeps both ends of a range when one is picked, and offers the range placeholder", async () => {
+    const ranged = [{ title: "Test data", url: "https://stay.example.test/goa", snippet: "Test data. A 3-star stay in Calangute is about $40 to $60 a night." }]
+    const context = contextWith(mockSearchProvider(() => ranged))
+    let figures: { kept: { write: string }[]; ranges: { write: string }[] } | undefined
+    let seenRange: unknown
+    const run = await ask((req, round) => {
+      const last = req.messages.at(-1)
+      const content = last?.role === "tool_results" ? JSON.parse(last.results[0]!.content) : {}
+      if (round === 0) return call(lookup("stay"))
+      if (round === 1) {
+        seenRange = content.prices
+        return call({ id: "f", name: "web_price_figures", input: { figures: [{ id: "w2", label: "3-star stay", per: "night", cost_line: "stay" }] } })
+      }
+      figures = content
+      return mockText("A 3-star stay is {web:1} to {web:2} a night (stay.example.test).")
+    }, context)
+    expect(seenRange).toMatchObject([
+      { id: "w1", range: "w1 to w2" },
+      { id: "w2", range: "w1 to w2" },
+    ])
+    expect(figures?.kept.map((k) => k.write)).toEqual(["{web:2}", "{web:1}"])
+    expect(figures?.ranges).toEqual([{ write: "{web:1} to {web:2}", label: "3-star stay", per: "night" }])
+    expect(run.result).toMatchObject({ kind: "answer", text: "A 3-star stay is USD 40 to USD 60 a night (stay.example.test)." })
+    // 4 nights: USD 160 to 240.
+    expect(run.result.kind === "answer" && run.result.web?.totals).toEqual([{ currency: "USD", lines: 1, costLines: ["stay"], low: "160", high: "240" }])
   })
 
   it("keeps a price found in two lookups under one id", async () => {

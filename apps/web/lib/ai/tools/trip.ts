@@ -30,7 +30,7 @@ import {
   YEARS,
 } from "./goals"
 import { tripPlaceScope } from "@fin-creador/schemas"
-import { type Figure, type FinanceTool, type GoalCheck, NO_LOOKUPS, type ToolContext, ToolError, type WebVerdict } from "./types"
+import { type Figure, type FinanceTool, type GoalCheck, NO_LOOKUPS, type ToolContext, ToolError, type TotalBound, type WebVerdict } from "./types"
 
 // trip_check (Sprint 10.5): what a trip would cost, from the person's own records only, and
 // whether they can pay for it by the month they want. The estimate is tripEstimate and the
@@ -253,7 +253,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
       { label: "Days counted", kind: "count", value: size.days },
     ]
     const runDates = priced.flatMap((r) => [r.from, r.to])
-    const withTarget = (targetMinor: number, costLines: readonly string[], webOnly = false): WebVerdict =>
+    const withTarget = (targetMinor: number, costLines: readonly string[], bound?: TotalBound, webOnly = false): WebVerdict =>
       webTripVerdict(
         goalProjection({
           today,
@@ -264,7 +264,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
           claims: [...basis.claims.loans, ...basis.claims.dues],
           otherGoals: otherGoals(basis.goals.active, currency, null).map((g) => g.plan),
         }),
-        { targetMinor, costLines, travelMonth, money, webOnly },
+        { targetMinor, costLines, travelMonth, money, webOnly, bound },
       )
 
     if (!estimate) {
@@ -279,7 +279,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
         verdict: CANT_ESTIMATE,
         summary,
         assumptions: [...scopeAssumption, NO_LOOKUPS],
-        withTarget: (targetMinor, costLines) => withTarget(targetMinor, costLines, true),
+        withTarget: (targetMinor, costLines, bound) => withTarget(targetMinor, costLines, bound, true),
       }
       // With web lookups on, a trip the records can't price is the case they are most useful for.
       const lookups = ctx.web
@@ -425,15 +425,24 @@ const COST_LINE_WORDS: Record<string, string> = { transport: "travel", stay: "st
 /**
  * The web-assisted line (10.8): the trip check's projection run on a web total instead of the
  * records' estimate. Said as resting on web prices and covering only the costs looked up;
- * `webOnly` when the records gave no estimate at all.
+ * `webOnly` when the records gave no estimate at all; `bound` when the total is a minimum or maximum.
  */
 export function webTripVerdict(
   projection: GoalProjection,
-  a: { targetMinor: number; costLines: readonly string[]; travelMonth: IsoDate; money: (minor: number) => string; webOnly?: boolean },
+  a: { targetMinor: number; costLines: readonly string[]; travelMonth: IsoDate; money: (minor: number) => string; webOnly?: boolean; bound?: TotalBound },
 ): WebVerdict {
   const verdict = VERDICT_WORDS[projection.verdict]
   const lines = a.costLines.map((l) => COST_LINE_WORDS[l] ?? l).join(", ")
-  const total = `The web prices kept add up to ${a.money(a.targetMinor)} for ${lines} only, not the whole trip.`
+  // A total fed by "from" or "up to" prices is said as the minimum or maximum it is.
+  const amount =
+    a.bound === "at_least"
+      ? `at least ${a.money(a.targetMinor)}, a minimum because some prices are "from" prices,`
+      : a.bound === "at_most"
+        ? `at most ${a.money(a.targetMinor)}, a maximum because some prices are "up to" prices,`
+        : a.bound === "mixed"
+          ? `${a.money(a.targetMinor)}, neither a minimum nor a maximum because "from" and "up to" prices are mixed,`
+          : a.money(a.targetMinor)
+  const total = `The web prices kept add up to ${amount} for ${lines} only, not the whole trip.`
   const month = monthName(a.travelMonth)
   let outcome: string
   if (projection.verdict === "yes") outcome = `At your current rate that would be covered by ${month}.`
