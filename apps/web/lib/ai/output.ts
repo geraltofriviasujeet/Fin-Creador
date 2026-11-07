@@ -8,8 +8,8 @@ import type { Figure } from "./tools/types"
 //     request's tool results or a date part of the periods and of today. A number is
 //     money-shaped when it carries a currency marker (₹, Rs, INR, "rupees"), a decimal part,
 //     thousands separators or a scale word (lakh, crore, L, Cr, K), or is 1000 or more. Other
-//     numbers (small bare integers: counts, nights, travellers, list markers) and dates
-//     (2026-11-07, "December 2027") pass (10.8). One unmatched figure and the whole answer is
+//     numbers (small bare integers: counts, nights, travellers, list markers), dates
+//     (2026-11-07, "December 2027") and bare years 1900 to 2100 ("by 2027") pass (10.8). One unmatched figure and the whole answer is
 //     refused: numbers are never stripped, rounded or corrected. Digits inside a string a tool
 //     returned (a goal, category or account name such as "Car 2027") are not figures: those
 //     strings are set aside, exactly as written (any case), before the numbers are read;
@@ -43,6 +43,9 @@ const MONEY_AFTER = /^\s*(?:inr|usd|eur|gbp|aed|sgd|thb|vnd|rupees?|dollars?|eur
 const LAKH_L = /^\s*L\b/
 const PERCENT_AFTER = /^\s*(?:%|percent\b|per cent\b)/i
 
+/** A bare four-digit 1900 to 2100 is a year (markers, decimals and separators are checked before this). */
+const isYear = (raw: string) => /^\d{4}$/.test(raw) && Number(raw) >= 1900 && Number(raw) <= 2100
+
 /** Every number written in the text, normalized, and whether it must match a tool figure (money-shaped or a percentage). */
 function numbersWritten(text: string): { value: string; checked: boolean }[] {
   const rest = text.replace(DATES, " ")
@@ -58,7 +61,7 @@ function numbersWritten(text: string): { value: string; checked: boolean }[] {
       MONEY_AFTER.test(after) ||
       LAKH_L.test(after) ||
       PERCENT_AFTER.test(after) ||
-      Number(value) >= 1000
+      (Number(value) >= 1000 && !isYear(raw))
     return { value, checked }
   })
 }

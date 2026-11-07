@@ -89,12 +89,12 @@ describe("names a tool returned", () => {
 
   it("still refuses the same digits outside the name", () => {
     const literals = literalStrings(data)
-    expect(checkAnswer("Car 2027 by 2027.", allowed, literals)).toMatchObject({ ok: false, reason: "unverified", unmatched: ["2027"] })
+    expect(checkAnswer("Car 2027 costs ₹2,027.", allowed, literals)).toMatchObject({ ok: false, reason: "unverified", unmatched: ["2027"] })
     expect(checkAnswer("Rent 2BHK, ₹2,000 more.", allowed, literals)).toMatchObject({ ok: false, unmatched: ["2000"] })
   })
 
-  it("without the tool's strings, the name's digits are refused", () => {
-    expect(checkAnswer("Car 2027 needs ₹500.", allowed)).toMatchObject({ ok: false, unmatched: ["2027"] })
+  it("without the tool's strings, a name's year-shaped digits pass as a year", () => {
+    expect(checkAnswer("Car 2027 needs ₹500.", allowed)).toMatchObject({ ok: true })
   })
 })
 
@@ -147,6 +147,13 @@ describe("only money-shaped figures and percentages must match a tool (10.8)", (
   it("passes a money figure a tool gave, written with separators", () => {
     expect(checkAnswer("It costs ₹95,000.", fromTool)).toMatchObject({ ok: true })
     expect(checkAnswer("It costs 95,000.", fromTool)).toMatchObject({ ok: true })
+  })
+
+  it("lets a bare year through, not the same digits written as money", () => {
+    expect(checkAnswer("You could go by 2027.", none)).toMatchObject({ ok: true })
+    expect(checkAnswer("It costs ₹2,027.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["2027"] })
+    expect(checkAnswer("It costs 2027 rupees.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["2027"] })
+    expect(checkAnswer("It costs 2101.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["2101"] })
   })
 
   it("refuses a percentage no tool gave", () => {
