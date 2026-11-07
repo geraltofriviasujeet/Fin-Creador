@@ -54,8 +54,8 @@ select ok(
   and not has_table_privilege('authenticated', 'public.ai_messages', 'DELETE'),
   'signed-in users may only read messages');
 select ok(
-  has_function_privilege('authenticated', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean)', 'EXECUTE')
-  and not has_function_privilege('anon', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean)', 'EXECUTE'),
+  has_function_privilege('authenticated', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb)', 'EXECUTE'),
   'roma_record_turn: signed-in users only');
 select ok(
   not has_function_privilege('authenticated', 'public.roma_prune_conversations()', 'EXECUTE')
