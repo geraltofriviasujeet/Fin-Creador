@@ -1,5 +1,6 @@
 "use client"
 
+import { createPortal } from "react-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
@@ -11,7 +12,9 @@ import { webPrice } from "@/lib/ai/web-format"
 // A detailed plan (10.9), shown in a modal: built only from the checked plan the server
 // returned (or stored), the same object the chat answer was written from. A line that couldn't
 // be verified says "No estimate" and why; nothing is left out silently. Every web figure and
-// name shows the site it was listed on, linked; the PDF (print) writes every link out.
+// name shows the site it was listed on, linked. Save as PDF prints a copy of the same view
+// (the browser's print-to-PDF, styled in globals.css), with every link written out, the date
+// it was made and where each figure came from; it carries nothing the modal doesn't.
 
 type Props = {
   plan: CheckedPlan
@@ -27,15 +30,45 @@ export function PlanModal({ plan, madeOn, reopened, open, onOpenChange }: Props)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent eyebrow="Roma · Plan" title={plan.intake.title} description={`Made on ${madeOn}.`} className="max-w-3xl md:max-h-[90vh] md:overflow-y-auto">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <Button type="button" variant="secondary" onClick={saveAsPdf}>
+            Save as PDF
+          </Button>
+          <span className="text-xs text-muted-foreground">Opens your browser’s print window: choose Save as PDF.</span>
+        </div>
         <PlanView plan={plan} madeOn={madeOn} reopened={reopened} />
       </DialogContent>
+      {open && typeof document !== "undefined" && createPortal(<PrintCopy plan={plan} madeOn={madeOn} reopened={reopened} />, document.body)}
     </Dialog>
   )
 }
 
+/** Prints the plan's copy alone; the page comes back as it was after the print window closes. */
+function saveAsPdf() {
+  document.body.classList.add("printing-plan")
+  window.addEventListener("afterprint", () => document.body.classList.remove("printing-plan"), { once: true })
+  window.print()
+}
+
+/** What the PDF holds: the same view, headed with what it is, when it was made and how to read it. */
+function PrintCopy({ plan, madeOn, reopened }: { plan: CheckedPlan; madeOn: string; reopened: boolean }) {
+  return (
+    <div className="plan-print p-6 text-sm" data-testid="plan-print">
+      <p className="text-xs font-semibold uppercase">FinCreador · Roma plan</p>
+      <h1 className="font-heading text-2xl font-semibold">{plan.intake.title}</h1>
+      <p className="mb-4">
+        Made on {madeOn}. Figures marked “From your goal” or under “From your records” come from your own records in FinCreador; figures marked “Web estimate” come from
+        the pages linked beside them. These are estimates, not quotes or bookings.
+      </p>
+      <PlanView plan={plan} madeOn={madeOn} reopened={reopened} />
+    </div>
+  )
+}
+
 const linkClass = "text-ink underline underline-offset-2"
-const ExternalLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
-  <a href={href} target="_blank" rel="noopener noreferrer nofollow" className={linkClass} data-print-url={href}>
+/** A link to a source; printed with its address after it, unless its text is the address. */
+const ExternalLink = ({ href, children, isAddress = false }: { href: string; children: React.ReactNode; isAddress?: boolean }) => (
+  <a href={href} target="_blank" rel="noopener noreferrer nofollow" className={linkClass} {...(isAddress ? {} : { "data-print-url": href })}>
     {children}
   </a>
 )
@@ -133,7 +166,10 @@ export function PlanView({ plan, madeOn, reopened }: { plan: CheckedPlan; madeOn
           <ol className="mt-2 grid list-decimal gap-1 pl-5 break-all text-ink">
             {plan.sources.map((s) => (
               <li key={s.url}>
-                {s.site}: <ExternalLink href={s.url}>{s.url}</ExternalLink>
+                {s.site}:{" "}
+                <ExternalLink href={s.url} isAddress>
+                  {s.url}
+                </ExternalLink>
               </li>
             ))}
           </ol>

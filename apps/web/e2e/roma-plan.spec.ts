@@ -45,6 +45,22 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(plan.getByText("With web estimates, not your records", { exact: true })).toBeVisible()
   await expect(plan.getByRole("region", { name: "Sources" }).getByRole("link", { name: "https://example.test/hotels" })).toBeVisible()
   await expect(plan.getByRole("region", { name: "Airlines listed for this route" })).toContainText("No airlines could be confirmed on the pages looked up, so none is suggested.")
+
+  // Save as PDF: the browser's print, showing only the plan's copy, every link written out.
+  await page.evaluate(() => {
+    window.print = () => {}
+  })
+  await plan.getByRole("button", { name: "Save as PDF" }).click()
+  await page.emulateMedia({ media: "print" })
+  const printed = page.getByTestId("plan-print")
+  await expect(printed).toBeVisible()
+  await expect(page.getByRole("list", { name: "Roma's answers" })).toBeHidden()
+  await expect(printed.getByText(/^Made on \d{4}-\d{2}-\d{2}\. Figures marked “From your goal”/)).toBeVisible()
+  await expect(printed.getByText(/^Estimates, not quotes or bookings\./)).toBeVisible()
+  await expect(printed.locator('[data-line="stay"]')).toContainText("No estimate")
+  const after = await printed.locator('[data-line="transport"] a').first().evaluate((a) => getComputedStyle(a, "::after").content)
+  expect(after).toContain("https://example.test/")
+  await page.emulateMedia({ media: "screen" })
   await plan.getByRole("button", { name: "Close" }).click()
 
   // Reopened from the conversation, it says when it was made and that prices may have changed.
