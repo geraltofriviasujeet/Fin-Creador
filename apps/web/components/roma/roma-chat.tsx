@@ -11,6 +11,10 @@ import { webPrice, webTotal } from "@/lib/ai/web-format"
 import { MAX_QUESTION_CHARS } from "@/lib/ai/limits"
 import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL } from "@/lib/ai/wording"
 import { allowRomaDescriptionsAction } from "@/app/(app)/roma/actions"
+import { detectPlan } from "@/lib/ai/plan/intake"
+import type { PlanRequest } from "@/lib/ai/plan/types"
+import { PlanIntake } from "./plan-intake"
+import { OpenPlanButton, PlanModal } from "./plan-modal"
 import { type ConversationSummary, RomaHistory } from "./roma-history"
 import { cn } from "cn"
 
@@ -24,6 +28,9 @@ import { cn } from "cn"
 // (computed in code) above the answer and its assumptions under the figures. From 10.8 web
 // prices sit in their own block after the records' figures, each with its site and link, and a
 // web-assisted verdict is a second, marked line under the records' verdict, never in its place.
+// From 10.9 a question asking for a plan ("plan my trip to Goa", "can I buy a car") first shows
+// the plan intake (questions written in code, each skippable) instead of being sent; the plan
+// that comes back opens in a modal, from the checked plan only (also from a past conversation).
 
 export type Turn = {
   id: string
@@ -41,6 +48,8 @@ const OPENING = "I’m Roma, your Intelligent Finance Analyst. What do you want 
 type Props = {
   greeting: string
   timeZone: string
+  /** The profile currency, for a plan's trade-in or deposit. */
+  currency: string
   conversations: ConversationSummary[]
   /** A past conversation opened from the list (?c=), newest turn first. */
   open: OpenConversation | null
@@ -74,6 +83,7 @@ export function RomaChat(props: Props) {
 function Conversation({
   greeting,
   timeZone,
+  currency,
   conversations: initialConversations,
   open,
   missing = false,
@@ -90,6 +100,7 @@ function Conversation({
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [consent, setConsent] = useState<Consent>("ask")
+  const [intake, setIntake] = useState<{ question: string; draft: PlanRequest } | null>(null)
   // The props the server sent after the address moved (see RomaChat) replace what was shown.
   const [shown, setShown] = useState({ open, initialConversations })
   if (shown.open !== open || shown.initialConversations !== initialConversations) {
@@ -103,10 +114,21 @@ function Conversation({
   const inputId = useId()
   const formRef = useRef<HTMLFormElement>(null)
 
-  async function ask(event: React.FormEvent<HTMLFormElement>) {
+  function ask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const text = question.trim()
     if (!text || pending) return
+    // A plan asks its own questions first (10.9); nothing is sent until the intake is done.
+    const draft = detectPlan(text, todayIn(timeZone))
+    if (draft) {
+      setIntake({ question: text, draft })
+      return
+    }
+    void send(text)
+  }
+
+  async function send(text: string, plan?: PlanRequest) {
+    if (pending) return
     setPending(true)
     setFailure(null)
     setNotice(null)
@@ -114,12 +136,13 @@ function Conversation({
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text, conversationId }),
+        body: JSON.stringify({ question: text, conversationId, ...(plan ? { plan } : {}) }),
       })
       const reply = (await response.json()) as ChatResponseBody
       setTurns((t) => [{ id: crypto.randomUUID(), question: text, reply }, ...t])
       if (reply.status === "answer") {
         setQuestion("")
+        setIntake(null)
         if (reply.saved && reply.conversationId) recorded(reply.conversationId, text)
       } else if (reply.code === "conversation_missing" && conversationId) {
         forget(conversationId)
@@ -228,6 +251,24 @@ function Conversation({
           )}
         </Card>
 
+        {intake && (
+          <PlanIntake
+            key={intake.question}
+            question={intake.question}
+            draft={intake.draft}
+            today={todayIn(timeZone)}
+            currency={currency}
+            pending={pending}
+            onPlan={(plan) => void send(intake.question, plan)}
+            onAsk={() => {
+              const text = intake.question
+              setIntake(null)
+              void send(text)
+            }}
+            onCancel={() => setIntake(null)}
+          />
+        )}
+
         {turns.length === 0 ? (
           <p className="text-sm text-muted-foreground">Try “{EXAMPLE}”. Roma answers from your own records and says when she can’t see something.</p>
         ) : (
@@ -236,7 +277,7 @@ function Conversation({
               <li key={turn.id}>
                 <Card>
                   <p className="text-sm font-semibold text-ink">{turn.question}</p>
-                  <Reply reply={turn.reply} />
+                  <Reply reply={turn.reply} madeOn={turn.asOf ?? todayIn(timeZone)} reopened={turn.asOf !== undefined} />
                   {turn.asOf && (
                     <p className="mt-2 text-xs text-muted-foreground">Answered on {turn.asOf}. Ask again for today’s figures.</p>
                   )}
@@ -257,7 +298,8 @@ function Conversation({
   )
 }
 
-function Reply({ reply }: { reply: ChatResponseBody }) {
+function Reply({ reply, madeOn, reopened }: { reply: ChatResponseBody; madeOn: string; reopened: boolean }) {
+  const [planOpen, setPlanOpen] = useState(false)
   if (reply.status === "error") {
     return (
       <FormMessage tone={reply.code === "unverified" || reply.code === "tone" ? "info" : "error"} className="mt-3">
@@ -267,6 +309,15 @@ function Reply({ reply }: { reply: ChatResponseBody }) {
   }
   return (
     <div className="mt-3 grid gap-3">
+      {reply.plan && (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <OpenPlanButton onOpen={() => setPlanOpen(true)} />
+            <span className="text-xs text-muted-foreground">Each cost line, how it was worked out, and its sources.</span>
+          </div>
+          <PlanModal plan={reply.plan} madeOn={madeOn} reopened={reopened} open={planOpen} onOpenChange={setPlanOpen} />
+        </>
+      )}
       {reply.checks?.map((c, i) => (
         <div key={i} className="rounded-lg border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
           <p className="text-xs font-semibold text-muted-foreground">
@@ -355,6 +406,9 @@ function WebEstimates({ web }: { web: NonNullable<Extract<ChatResponseBody, { st
     </section>
   )
 }
+
+/** The person's today in their time zone (YYYY-MM-DD), for the intake's months. */
+const todayIn = (timeZone: string) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
 
 type Consent = "ask" | "saving" | "allowed" | "failed"
 

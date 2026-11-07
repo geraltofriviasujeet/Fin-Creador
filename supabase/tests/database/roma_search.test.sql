@@ -39,10 +39,10 @@ select ok(
      where has_table_privilege(r.role, 'public.roma_search_usage', p.priv)),
   'clients have no access to roma_search_usage');
 select ok(
-  not has_function_privilege('anon', 'public.roma_search_begin(uuid, text)', 'EXECUTE')
+  not has_function_privilege('anon', 'public.roma_search_begin(uuid, text, boolean)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.roma_search_settle(uuid, integer)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.roma_search_release(uuid)', 'EXECUTE')
-  and has_function_privilege('authenticated', 'public.roma_search_begin(uuid, text)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.roma_search_begin(uuid, text, boolean)', 'EXECUTE')
   and has_function_privilege('authenticated', 'public.roma_search_settle(uuid, integer)', 'EXECUTE')
   and has_function_privilege('authenticated', 'public.roma_search_release(uuid)', 'EXECUTE'),
   'search begin, settle and release: signed-in users only');
@@ -52,8 +52,8 @@ select ok(
 select is(
   (select array_agg(pg_get_function_identity_arguments(p.oid)) from pg_proc as p
     where p.oid = 'public.roma_search_begin'::regproc),
-  array['p_request_id uuid, p_provider text'],
-  'roma_search_begin takes no cap or credit count from the caller');
+  array['p_request_id uuid, p_provider text, p_plan boolean'],
+  'roma_search_begin takes no cap or credit count from the caller (only whether it is a plan)');
 
 select set_config('request.jwt.claims', '{"sub": "a1000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
 set local role authenticated;
@@ -69,8 +69,8 @@ select is(public.t_search('a2'), 'ok:2', 'daily cap 5 with 3 reserved: only 2 gr
 select is(public.roma_search_settle(public.t_id('a2'), 3), false, 'settling more credits than reserved is refused');
 select throws_ok(format($$ select public.roma_search_settle(%L, 0) $$, public.t_id('a2')),
   '22023', null, 'settling 0 credits is refused (nothing sent is a release)');
-select throws_ok(format($$ select public.roma_search_settle(%L, 4) $$, public.t_id('a2')),
-  '22023', null, 'settling more than 3 credits is refused');
+select throws_ok(format($$ select public.roma_search_settle(%L, 11) $$, public.t_id('a2')),
+  '22023', null, 'settling more than 10 credits is refused');
 select is(public.roma_search_settle(public.t_id('a2'), 2), true, 'searches sent: settled');
 select is(public.roma_search_settle(public.t_id('a2'), 1), false, 'a reservation is settled only once');
 select is(public.roma_search_release(public.t_id('a2')), false, 'a settled reservation can''t be released');
@@ -129,8 +129,8 @@ select is((select array[r.status, r.credits::text] from public.roma_search_usage
   array['settled', '2'], 'a2: the credits used replace the reservation');
 select throws_ok(
   format($$ insert into public.roma_search_usage (request_id, user_id, provider, reserved_credits)
-            values (%L, 'a1000000-0000-4000-8000-00000000000a', 'tavily', 4) $$, public.t_id('a5')),
-  '23514', null, 'a reservation of more than 3 credits breaks a constraint');
+            values (%L, 'a1000000-0000-4000-8000-00000000000a', 'tavily', 11) $$, public.t_id('a5')),
+  '23514', null, 'a reservation of more than 10 credits breaks a constraint');
 delete from auth.users where id = 'b1000000-0000-4000-8000-00000000000b';
 select is((select user_id from public.roma_search_usage where request_id = public.t_id('b1')), null,
   'a deleted account''s row stays, with no user, so the month''s count stays true');

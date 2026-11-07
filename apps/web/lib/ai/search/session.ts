@@ -11,7 +11,8 @@ import { type Bound, type KeptWebFigure, type PriceCandidate, firstPrices, price
 export type SearchBeginOutcome = "ok" | "disabled" | "no_request" | "monthly_cap" | "daily_limit"
 
 export type SearchDb = {
-  begin(requestId: string, provider: string): Promise<{ outcome: SearchBeginOutcome; credits: number } | null>
+  /** `plan`: a 10.9 plan, granted roma_settings.search_plan_reserve_credits instead. */
+  begin(requestId: string, provider: string, plan?: boolean): Promise<{ outcome: SearchBeginOutcome; credits: number } | null>
   settle(requestId: string, credits: number): Promise<boolean>
   release(requestId: string): Promise<boolean>
 }
@@ -26,7 +27,7 @@ const PRICES_PER_LOOKUP = 12
 
 export const WEB_NOTICES: Partial<Record<LookupRefusal, string>> = {
   monthly_cap: "Web lookups are used up for this month (they reset on the 1st). This answer uses your own records only.",
-  daily_limit: "You've used today's web lookups. This answer uses your own records only.",
+  daily_limit: "You've used your web lookups for today. This is FinCreador's own daily limit, not the search provider's, and it resets at midnight in your time zone. This answer uses your own records only.",
   off: "Web lookups are off right now. This answer uses your own records only.",
   timeout: "A web lookup took too long and was skipped.",
   failed: "A web lookup couldn't be completed and was skipped.",
@@ -38,6 +39,8 @@ type Options = {
   requestId: string
   terms: PrivateTerms
   countryCode: string | null
+  /** A 10.9 plan: its larger credit cap is asked for. */
+  plan?: boolean
 }
 
 /**
@@ -140,7 +143,7 @@ export class WebSession {
 
   private async begin(): Promise<number> {
     const { db, requestId, provider } = this.options
-    const begun = await db.begin(requestId, provider.name).catch(() => null)
+    const begun = await db.begin(requestId, provider.name, this.options.plan).catch(() => null)
     if (!begun || begun.outcome !== "ok") {
       this.refusal = begun?.outcome === "monthly_cap" || begun?.outcome === "daily_limit" ? begun.outcome : "off"
       return 0

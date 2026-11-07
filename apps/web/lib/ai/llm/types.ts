@@ -24,6 +24,8 @@ export type LlmRequest = {
   messages: LlmMessage[]
   tools: LlmToolDef[]
   maxOutputTokens: number
+  /** "off": a structured round that needs no reasoning (a plan's picks, 10.9); the adapter turns thinking off where the model allows it. */
+  thinking?: "off"
 }
 
 export type LlmUsage = { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }
