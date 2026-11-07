@@ -1,6 +1,7 @@
 import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber } from "./output"
+import { figureId, fillPlaceholders, formatFigure, webAmounts, withoutPlaceholders } from "./placeholders"
 import { ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
@@ -28,6 +29,9 @@ import {
 // From 10.8 the tools of one round run in parallel (up to 3 web lookups at once). Web text is
 // untrusted: its strings are never set aside as names, so a number from a page can be quoted
 // only as a kept web figure or a total worked out in code. The verdict stays the records' one.
+// Amounts by placeholder (10.8 follow-up, placeholders.ts): each figure of a tool result is
+// sent with its placeholder; the checks read the answer with placeholders blanked, and only
+// then is each one filled in with its formatted amount (an unknown one is marked left out).
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -100,7 +104,19 @@ export async function runChat({
   ]
   const figures: Figure[] = []
   const periods: DateRange[] = []
-  const found: Found = { dates: [], descriptionsWithheld: false, descriptionsSent: false, toolsRan: [], checks: [], literals: [], needs: [], subjects: [], subjectText: [], web: [] }
+  const found: Found = {
+    dates: [],
+    descriptionsWithheld: false,
+    descriptionsSent: false,
+    toolsRan: [],
+    checks: [],
+    literals: [],
+    needs: [],
+    subjects: [],
+    subjectText: [],
+    web: [],
+    amounts: new Map(),
+  }
   let usage = NO_USAGE
   let calls = 0
   let unknownCalls = 0
@@ -156,8 +172,9 @@ export async function runChat({
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
     const allowed = allowedNumbers(figures, dates)
     for (const n of webNumbers(found.web)) allowed.add(n)
-    const check = checkAnswer(response.text, allowed, found.literals)
+    const check = checkAnswer(withoutPlaceholders(response.text), allowed, found.literals)
     if (!check.ok) return done(check.reason === "unverified" ? { kind: "unverified", unmatched: check.unmatched ?? [] } : { kind: check.reason })
+    const filled = fillPlaceholders(response.text.trim(), new Map([...found.amounts, ...webAmounts(found.web.at(-1))]))
 
     // A goal or trip answer about something the person didn't ask about: refused, and a summary
     // built in code is shown instead (10.5).
@@ -177,7 +194,7 @@ export async function runChat({
     }
     return done({
       kind: "answer",
-      text: withVerdict(check.text, found.checks),
+      text: withVerdict(filled.text, found.checks),
       figures,
       periods,
       descriptionsWithheld: found.descriptionsWithheld,
@@ -203,6 +220,8 @@ type Found = {
   /** The results of the tools that had a subject, for the subject check. */
   subjectText: string[]
   web: WebBlock[]
+  /** Each tool figure's formatted amount by placeholder key ("fig:trip_estimate"). */
+  amounts: Map<string, string>
 }
 
 /** The numbers a web block lets an answer quote: prices as written and in full, totals, nights and travellers. */
@@ -270,6 +289,12 @@ function applyTool(run: ToolRun, figures: Figure[], periods: DateRange[], found:
   if ("error" in run) return { callId, content: JSON.stringify({ error: run.error }), isError: true }
   const { output } = run
   figures.push(...output.figures)
+  const placeholders = output.figures.map((f) => {
+    const key = `fig:${figureId(f.label, found.amounts)}`
+    const is = formatFigure(f)
+    found.amounts.set(key, is)
+    return { write: `{${key}}`, is, label: f.label }
+  })
   if (output.period) periods.push(output.period)
   if (output.dates) found.dates.push(...output.dates)
   if (output.descriptionsWithheld) found.descriptionsWithheld = true
@@ -283,5 +308,6 @@ function applyTool(run: ToolRun, figures: Figure[], periods: DateRange[], found:
   if (output.web) found.web.push(output.web)
   if (!output.untrusted) found.literals.push(...literalStrings(output.data), ...literalStrings(output.figures.map((f) => f.label)))
   found.toolsRan.push(run.tool)
-  return { callId, content: JSON.stringify(output.data) }
+  const content = placeholders.length > 0 ? { ...output.data, amounts: placeholders } : output.data
+  return { callId, content: JSON.stringify(content) }
 }

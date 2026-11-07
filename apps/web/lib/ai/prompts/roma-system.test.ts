@@ -25,7 +25,8 @@ describe("Roma's system prompt", () => {
 
   it("takes every figure from the tools, exactly, and never guesses", () => {
     expect(ROMA_SYSTEM_PROMPT).toContain("Every figure you state must come from a tool result")
-    expect(ROMA_SYSTEM_PROMPT).toContain("Never round, convert, estimate or work out a new figure yourself.")
+    expect(ROMA_SYSTEM_PROMPT).toContain("Never round, convert, estimate, give a range or work out a new figure yourself.")
+    expect(ROMA_SYSTEM_PROMPT).toContain("Never write a money amount or a percentage yourself.")
     expect(ROMA_SYSTEM_PROMPT).toContain("Never guess.")
   })
 

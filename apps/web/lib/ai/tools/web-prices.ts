@@ -2,6 +2,7 @@ import { z } from "zod"
 import { WEB_TRIP_LINES, type WebLookupFields, toLookup, webLookupInput } from "../search/query"
 import { addDecimals, compareDecimals, multiplyDecimal } from "../search/totals"
 import { type KeptWebFigure, verifyWebFigure } from "../search/verify"
+import { webPriceKey, webTotalKey } from "../placeholders"
 import { type FinanceTool, ToolError, type WebBlock, type WebTotal } from "./types"
 
 // Web lookups (Sprint 10.8): web_price_lookup searches one cost line from a template built in
@@ -147,17 +148,17 @@ export const webPriceFiguresTool: FinanceTool<WebFiguresInput> = {
     const trip = ctx.web.trips.at(-1)
     const totals = webTotals(kept, trip)
     const web: WebBlock = {
-      figures: kept.map((f) => ({ label: f.label, amount: f.amount, scale: f.scale, value: f.value, currency: f.currency, per: f.per, site: f.site, url: f.source_url })),
+      figures: kept.map((f) => ({ id: f.id, label: f.label, amount: f.amount, scale: f.scale, value: f.value, currency: f.currency, per: f.per, site: f.site, url: f.source_url })),
       totals,
       ...(trip ? { trip } : {}),
     }
     return {
       data: {
-        kept: web.figures.map(({ label, value, currency, per, site }) => ({ label, value, currency, per, site })),
+        kept: web.figures.map(({ id, label, value, currency, per, site }) => ({ write: `{${webPriceKey(id)}}`, label, value, currency, per, site })),
         dropped,
-        totals: totals.map((t) => ({ currency: t.currency, cost_lines: t.lines, from: t.low, to: t.high })),
+        totals: totals.map((t) => ({ write: `{${webTotalKey(t.currency)}}`, currency: t.currency, cost_lines: t.lines, from: t.low, to: t.high })),
         ...(trip ? { for_trip: trip } : {}),
-        note: "These are web estimates, not the person's records. The verdict stays the one from their records.",
+        note: "These are web estimates, not the person's records. The verdict stays the one from their records. Write each price or total you state as its `write` placeholder, never as an amount.",
       },
       figures: [],
       untrusted: true,

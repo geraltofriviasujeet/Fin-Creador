@@ -1,9 +1,9 @@
 import { z } from "zod"
-import { formatMoney, formatPercentFromBasisPoints } from "@fin-creador/domain"
 import { type ChatRun, MAX_OUTPUT_TOKENS, MAX_ROUNDS, runChat } from "./chat"
 import type { LlmConfig } from "./config"
 import { MAX_TURNS, type StoredTurn, buildHistory } from "./history"
 import { MAX_QUESTION_CHARS } from "./limits"
+import { formatFigure } from "./placeholders"
 import { callCostMicroUsd, microToUsd } from "./llm/prices"
 import type { LlmProvider } from "./llm/types"
 import type { PrivateTerms } from "./search/query"
@@ -332,12 +332,6 @@ async function recordQuietly(history: RomaHistory, turn: TurnToRecord): Promise<
 }
 
 const figureValue = (f: Figure) => (f.kind === "money" ? f.minor : f.kind === "percent" ? f.bps : f.value)
-
-function formatFigure(f: Figure): string {
-  if (f.kind === "money") return formatMoney(f.minor, { currency: f.currency })
-  if (f.kind === "percent") return formatPercentFromBasisPoints(f.bps)
-  return String(f.value)
-}
 
 const unknownCallMicroUsd = (model: string) =>
   callCostMicroUsd(model, { inputTokens: UNKNOWN_CALL_INPUT_TOKENS, outputTokens: MAX_OUTPUT_TOKENS, cacheReadTokens: 0, cacheWriteTokens: 0 })

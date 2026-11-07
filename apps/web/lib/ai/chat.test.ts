@@ -52,6 +52,27 @@ describe("Roma's chat loop", () => {
     expect(JSON.stringify(run.result)).not.toContain("a day")
   })
 
+  it("sends each figure with its placeholder, and fills the placeholders in after the checks", async () => {
+    let sent = ""
+    const run = await ask((req, round) => {
+      if (round === 0) return mockToolCall("spending_for_period", { period: "last_month" })
+      const last = req.messages.at(-1)
+      sent = last?.role === "tool_results" ? last.results[0]!.content : ""
+      return mockText("You spent ₹{fig:spent} across {fig:expenses} expenses, {fig:refunds_this_year} back.")
+    })
+    expect(JSON.parse(sent).amounts).toContainEqual({ write: "{fig:spent}", is: "₹12,345.50", label: "Spent" })
+    // The model's ₹ before a placeholder is dropped (the amount carries its own); an id this
+    // question's results don't have is marked left out, never guessed.
+    expect(run.result).toMatchObject({ kind: "answer", text: "You spent ₹12,345.50 across 17 expenses, [amount left out] back." })
+  })
+
+  it("still refuses a bare amount that matches no figure, beside placeholders", async () => {
+    const run = await ask((_req, round) =>
+      round === 0 ? mockToolCall("spending_for_period", { period: "last_month" }) : mockText("You spent {fig:spent}, about ₹1000 to ₹2000 a week."),
+    )
+    expect(run.result).toEqual({ kind: "unverified", unmatched: ["1000", "2000"] })
+  })
+
   it("refuses a figure stated without any tool call", async () => {
     const run = await ask(() => mockText("You spent ₹9,000 last month."))
     expect(run.result).toEqual({ kind: "unverified", unmatched: ["9000"] })

@@ -17,9 +17,14 @@ export function groupDigits(amount: string, currency: string): string {
   return fraction ? `${grouped}.${fraction}` : grouped
 }
 
+/** A web amount without what it covers: "INR 7.4 Lakh", "GBP 60". */
+export function webAmount(f: { amount: string; scale: string; currency: string }): string {
+  return `${f.currency} ${groupDigits(f.amount, f.currency)}${SCALE_WORDS[f.scale] ?? ""}`
+}
+
 /** A web price as found: "INR 7.4 Lakh", "GBP 60 a night". */
 export function webPrice(f: { amount: string; scale: string; currency: string; per: string }): string {
-  return `${f.currency} ${groupDigits(f.amount, f.currency)}${SCALE_WORDS[f.scale] ?? ""}${PER_WORDS[f.per] ?? ""}`
+  return `${webAmount(f)}${PER_WORDS[f.per] ?? ""}`
 }
 
 /** A web total: one amount, or "low to high" when the cost lines' prices ranged. */
