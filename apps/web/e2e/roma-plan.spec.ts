@@ -20,7 +20,7 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(intake).toBeVisible()
   await expect(intake.getByText(/From your question: Goa, \d{4}-01, 4 nights, 2 travellers\./)).toBeVisible()
   await expect(intake.getByRole("combobox")).toHaveCount(1)
-  await expect(intake.getByLabel("What kind of stay?")).toBeVisible()
+  await expect(intake.getByLabel("What kind of stay?", { exact: true })).toBeVisible()
   await expect(page.getByRole("list", { name: "Roma's answers" })).toHaveCount(0)
 
   await intake.getByRole("button", { name: "Skip: What kind of stay?" }).click()
@@ -31,6 +31,7 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(answers.getByText(/^Plan: trip to Goa in January \d{4}\. 6 of 7 cost lines have an estimate\./)).toBeVisible()
   await expect(answers.getByText(/These are estimates, not quotes or bookings\./)).toBeVisible()
   await expect(intake).toHaveCount(0)
+
 })
 
 test("a plan question can be sent as an ordinary question instead", async ({ page }) => {
@@ -43,10 +44,10 @@ test("a plan question can be sent as an ordinary question instead", async ({ pag
   await page.getByLabel("Your question").fill("Can I buy a car?")
   await page.getByRole("button", { name: "Ask Roma" }).click()
   const intake = page.getByRole("form", { name: "Plan questions" })
-  await expect(intake.getByLabel("Which make?")).toBeVisible()
-  await expect(intake.getByLabel("Which model?")).toBeDisabled()
-  await intake.getByLabel("Which make?").selectOption("Hyundai")
-  await expect(intake.getByLabel("Which model?")).toBeEnabled()
+  await expect(intake.getByLabel("Which make?", { exact: true })).toBeVisible()
+  await expect(intake.getByLabel("Which model?", { exact: true })).toBeDisabled()
+  await intake.getByLabel("Which make?", { exact: true }).selectOption("Hyundai")
+  await expect(intake.getByLabel("Which model?", { exact: true })).toBeEnabled()
   await intake.getByRole("button", { name: "Cancel" }).click()
   await expect(intake).toHaveCount(0)
   await expect(page.getByRole("list", { name: "Roma's answers" })).toHaveCount(0)
