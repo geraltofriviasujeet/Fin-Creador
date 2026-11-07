@@ -16,7 +16,17 @@ const PLACEHOLDER = /\{(fig|web):([a-z0-9_]{1,60})\}/g
 const CODES = "rs\\.?|inr|usd|eur|gbp|aed|sgd|thb|vnd|jpy|lkr|npr"
 const MARKER_BEFORE = new RegExp(`(?:[₹$€£¥]|\\b(?:${CODES}))\\s?(?=\\{(?:fig|web):)`, "gi")
 const MARKER_AFTER = new RegExp(`(?<=\\{(?:fig|web):[a-z0-9_]{1,60}\\})\\s?(?:${CODES}|rupees?)\\b`, "gi")
-const withoutMarkers = (text: string) => text.replace(MARKER_BEFORE, "").replace(MARKER_AFTER, "")
+/** Part of a code ("US" before "USD 127"): upper case only, so "costs in {web:3}" is left alone. */
+const PARTIAL_CODE = /\b(?:IN|US|EU|GB|AE|SG|TH|VN|JP|LK|NP)\$?\s?(?=\{(?:fig|web):)/g
+const withoutMarkers = (text: string) =>
+  text.replace(MARKER_BEFORE, "").replace(PARTIAL_CODE, "").replace(MARKER_AFTER, "")
+/**
+ * A bound the model wrote before an amount that already says one: "at least {web:total_inr}"
+ * filled in is "at least at least INR 7,026". The amount's own bound is kept (in the model's case).
+ */
+const BOUND_TWICE = /\b(?:at least|at most|up to|from|(?:a )?minimum of|(?:a )?maximum of|no less than|no more than)\s+(at (?:least|most) )(?=[A-Z]{3} \d)/gi
+const withoutBoundTwice = (text: string) =>
+  text.replace(BOUND_TWICE, (m, own: string) => (/^[A-Z]/.test(m) ? own[0]!.toUpperCase() + own.slice(1) : own))
 
 export function formatFigure(f: Figure): string {
   if (f.kind === "money") return formatMoney(f.minor, { currency: f.currency })
@@ -64,5 +74,5 @@ export function fillPlaceholders(text: string, amounts: ReadonlyMap<string, stri
     unknown.push(`${kind}:${id}`)
     return UNKNOWN_AMOUNT
   })
-  return { text: filled, unknown }
+  return { text: withoutBoundTwice(filled), unknown }
 }

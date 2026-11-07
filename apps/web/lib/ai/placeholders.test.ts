@@ -24,6 +24,24 @@ describe("amounts by placeholder", () => {
     expect(fillPlaceholders("{fig:Trip Estimate} {total}", amounts).text).toBe("{fig:Trip Estimate} {total}")
   })
 
+  it("drops a whole or partial currency code before a placeholder, upper case only for a partial one", () => {
+    const amounts = new Map([["web:3", "USD 127"]])
+    expect(fillPlaceholders("Flights US{web:3}, US {web:3}, US${web:3}, usd {web:3}.", amounts).text).toBe("Flights USD 127, USD 127, USD 127, USD 127.")
+    expect(fillPlaceholders("costs in {web:3}", amounts).text).toBe("costs in USD 127")
+  })
+
+  it("drops the model's bound before an amount that says its own, and keeps it before one that does not", () => {
+    const amounts = new Map([
+      ["web:total_inr", "at least INR 7,026"],
+      ["web:total_usd", "at most USD 300"],
+      ["web:3", "INR 4,500"],
+    ])
+    expect(fillPlaceholders("That is at least {web:total_inr}.", amounts).text).toBe("That is at least INR 7,026.")
+    expect(fillPlaceholders("At least ₹{web:total_inr}, up to {web:total_usd}.", amounts).text).toBe("At least INR 7,026, at most USD 300.")
+    expect(fillPlaceholders("a minimum of {web:total_inr}", amounts).text).toBe("at least INR 7,026")
+    expect(fillPlaceholders("rooms from {web:3} a night", amounts).text).toBe("rooms from INR 4,500 a night")
+  })
+
   it("blanks placeholders for the checks, so their digits are never read as figures", () => {
     expect(withoutPlaceholders("₹{fig:run_2026_03}, {web:12}")).toBe(" ,  ")
   })
