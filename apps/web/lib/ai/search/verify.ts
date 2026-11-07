@@ -113,7 +113,7 @@ const RANGE_AFTER = new RegExp(`^\\s?(-|to|and)\\s?${NUM}${SCALE_PATTERN}`, "i")
 /** Before a price: an unmarked low end ("40-" in "40-60 USD"). */
 const RANGE_BEFORE = new RegExp(`(?<![\\d.,])${NUM}\\s?(?:-|to)\\s?$`, "i")
 const JOIN = /^\s?(?:-|to|and)\s?$/i
-const FROM_BEFORE = /(?:\bfrom|starting (?:at|from)|starts (?:at|from)|as low as|\bmin(?:imum)?(?: of)?)\s*$/i
+const FROM_BEFORE = /(?:\bfrom|starting (?:at|from)|starts (?:at|from)|as low as|\bmin(?:imum)?(?: of)?)\s*(?:about|around|approx\.?|roughly)?\s*$/i
 const FROM_AFTER = /^\s*onwards?\b/i
 const UP_TO_BEFORE = /(?:\bup ?to|\bunder|\bbelow|less than|\bmax(?:imum)?(?: of)?|as much as)\s*$/i
 

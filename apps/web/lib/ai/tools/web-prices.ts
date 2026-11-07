@@ -1,9 +1,9 @@
 import { z } from "zod"
 import { WEB_TRIP_LINES, type WebLookupFields, toLookup, webLookupInput } from "../search/query"
 import { addDecimals, compareDecimals, multiplyDecimal } from "../search/totals"
-import { type KeptWebFigure, type PriceCandidate, verifyWebFigure } from "../search/verify"
+import { type Bound, type KeptWebFigure, type PriceCandidate, verifyWebFigure } from "../search/verify"
 import { webPriceKey, webTotalKey } from "../placeholders"
-import { type FinanceTool, ToolError, type WebBlock, type WebTotal } from "./types"
+import { type FinanceTool, type TotalBound, ToolError, type WebBlock, type WebTotal } from "./types"
 
 // Web lookups (Sprint 10.8): web_price_lookup searches one cost line from a template built in
 // code (search/query.ts) and hands the model the prices found in the results in code, each with
@@ -106,12 +106,18 @@ export function timesFor(per: KeptWebFigure["per"], trip: { nights: number; trav
  * times nights and travellers as its basis says, added up. Lines priced in another currency
  * are totalled separately, never converted or added across currencies.
  */
-export function webTotals(kept: readonly (KeptWebFigure & { cost_line: string })[], trip: { nights: number; travellers: number } | undefined): WebTotal[] {
+export function webTotals(
+  kept: readonly (KeptWebFigure & { cost_line: string; bound?: Bound })[],
+  trip: { nights: number; travellers: number } | undefined,
+): WebTotal[] {
+  // A "from" price makes the total a minimum, an "up to" one a maximum; both, neither.
+  const bounds = new Map<string, Set<Bound>>()
   const lines = new Map<string, { currency: string; low: string; high: string }>()
   for (const f of kept) {
     const times = timesFor(f.per, trip)
     if (times === null) continue
     const amount = multiplyDecimal(f.value, times)
+    if (f.bound) bounds.set(f.currency, (bounds.get(f.currency) ?? new Set()).add(f.bound))
     const key = `${f.currency}:${f.cost_line}`
     const line = lines.get(key)
     if (!line) lines.set(key, { currency: f.currency, low: amount, high: amount })
@@ -129,7 +135,18 @@ export function webTotals(kept: readonly (KeptWebFigure & { cost_line: string })
     c.high.push(line.high)
     byCurrency.set(line.currency, c)
   }
-  return [...byCurrency.entries()].map(([currency, c]) => ({ currency, lines: c.lines, costLines: c.costLines, low: addDecimals(...c.low), high: addDecimals(...c.high) }))
+  return [...byCurrency.entries()].map(([currency, c]) => {
+    const b = bounds.get(currency)
+    const bound: TotalBound | null = !b ? null : b.size > 1 ? "mixed" : b.has("from") ? "at_least" : "at_most"
+    return { currency, lines: c.lines, costLines: c.costLines, low: addDecimals(...c.low), high: addDecimals(...c.high), ...(bound ? { bound } : {}) }
+  })
+}
+
+/** What the model is told about a total fed by a bound; its placeholder carries the words. */
+const TOTAL_BOUND_NOTES: Record<TotalBound, string> = {
+  at_least: "a minimum, not an estimate: a 'from' price feeds it. Its placeholder reads 'at least ...'; say it as a minimum.",
+  at_most: "a maximum, not an estimate: an 'up to' price feeds it. Its placeholder reads 'at most ...'; say it as a maximum.",
+  mixed: "neither a minimum nor a maximum: 'from' and 'up to' prices both feed it. Say so.",
 }
 
 /** The kept ranges, low end first, each with its placeholder pair. */
@@ -202,7 +219,14 @@ export const webPriceFiguresTool: FinanceTool<WebFiguresInput> = {
         kept: web.figures.map(({ id, label, value, currency, per, site, bound }) => ({ write: `{${webPriceKey(id)}}`, label, value, currency, per, site, ...(bound ? { bound } : {}) })),
         ranges: keptRanges(ctx.web.candidates, kept),
         dropped,
-        totals: totals.map((t) => ({ write: `{${webTotalKey(t.currency)}}`, currency: t.currency, cost_lines: t.lines, from: t.low, to: t.high })),
+        totals: totals.map((t) => ({
+          write: `{${webTotalKey(t.currency)}}`,
+          currency: t.currency,
+          cost_lines: t.lines,
+          from: t.low,
+          to: t.high,
+          ...(t.bound ? { is: TOTAL_BOUND_NOTES[t.bound] } : {}),
+        })),
         ...(trip ? { for_trip: trip } : {}),
         note: "These are web estimates, not the person's records. The verdict stays the one from their records. Write each price or total you state as its `write` placeholder, never as an amount; a range as its `write` in ranges, and a bound with its word (from, up to).",
       },

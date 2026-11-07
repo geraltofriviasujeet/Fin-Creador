@@ -43,7 +43,7 @@ export type GoalCheck = {
    * 10.8: the same projection with only the target replaced by a web total (profile currency,
    * minor units), for the separate web-assisted line. Never changes `verdict`.
    */
-  withTarget?: (targetMinor: number, costLines: readonly string[]) => WebVerdict
+  withTarget?: (targetMinor: number, costLines: readonly string[], bound?: TotalBound) => WebVerdict
   /** The web-assisted verdict, when web prices were kept for this answer. */
   web?: WebVerdict
 }
@@ -79,7 +79,20 @@ export type ToolOutput = {
 }
 
 /** A web total for one currency (10.8): the cost lines' lowest and highest prices added up, as plain decimals. */
-export type WebTotal = { currency: string; lines: number; costLines: string[]; low: string; high: string }
+export type WebTotal = {
+  currency: string
+  lines: number
+  costLines: string[]
+  low: string
+  high: string
+  /**
+   * Set when a "from" or "up to" price feeds it: at least its low end (a minimum), at most its
+   * high end (a maximum), or "mixed" (both kinds: neither).
+   */
+  bound?: TotalBound
+}
+
+export type TotalBound = "at_least" | "at_most" | "mixed"
 
 /** Web estimates for one answer (10.8): each price as found, with its site, and totals per currency. */
 export type WebBlock = {

@@ -235,7 +235,8 @@ export function webNumbers(blocks: readonly WebBlock[]): string[] {
 
 /**
  * The question's web estimates (the last report wins) and notices. A check that offers a
- * web-assisted line gets one, from the web total in the person's own currency (its higher end);
+ * web-assisted line gets one, from the web total in the person's own currency (its higher end,
+ * or its low end when the total is a minimum);
  * a total in another currency is never converted, so it gives no web-assisted line.
  */
 function webPart(blocks: readonly WebBlock[], context: ToolContext, checks: GoalCheck[]): { web?: WebBlock; webNotices?: string[] } {
@@ -243,8 +244,9 @@ function webPart(blocks: readonly WebBlock[], context: ToolContext, checks: Goal
   const notices = context.web ? [...context.web.notices] : []
   const total = web?.totals.find((t) => t.currency === context.currency)
   if (total) {
-    const targetMinor = decimalToMinor(total.high, currencyMinorDigits(context.currency))
-    for (const check of checks) if (check.withTarget && targetMinor > 0) check.web = check.withTarget(targetMinor, total.costLines)
+    // A minimum is checked at the amount it states (its low end); otherwise the higher end.
+    const targetMinor = decimalToMinor(total.bound === "at_least" ? total.low : total.high, currencyMinorDigits(context.currency))
+    for (const check of checks) if (check.withTarget && targetMinor > 0) check.web = check.withTarget(targetMinor, total.costLines, total.bound)
   }
   // What the lookups did replaces the trip check's "none looked up"; with no trip check to carry
   // it, lookups that spent credits and show nothing are said as a notice: never silent.

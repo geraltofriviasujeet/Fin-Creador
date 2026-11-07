@@ -360,10 +360,11 @@ test("web estimates: the records' verdict first, a marked web-assisted line, pri
   await expect(answer.getByText("No estimate from your records.", { exact: true })).toBeVisible()
   const webLine = answer.getByTestId("web-verdict")
   await expect(webLine.getByText("Web estimates only, no basis in your records")).toBeVisible()
-  // 4,500 × 4 nights + 18,000 × 2 travellers = 54,000, against ₹50,000 a month for 4 months.
+  // 4,500 × 4 nights + 18,000 × 2 travellers = 54,000, against ₹50,000 a month for 4 months. The
+  // flight is "from about ₹18,000", so the total is a minimum.
   await expect(
     webLine.getByText(
-      /^Yes\. Web-only estimate: it rests entirely on web prices, with no basis in your records\. The web prices kept add up to ₹54,000 for stay, travel only, not the whole trip\./,
+      /^Yes\. Web-only estimate: it rests entirely on web prices, with no basis in your records\. The web prices kept add up to at least ₹54,000, a minimum because some prices are "from" prices, for stay, travel only, not the whole trip\./,
     ),
   ).toBeVisible()
 
@@ -372,6 +373,6 @@ test("web estimates: the records' verdict first, a marked web-assisted line, pri
   await expect(block.getByRole("link", { name: "example.test" })).toHaveCount(2)
   await expect(block.getByRole("link", { name: "example.test" }).first()).toHaveAttribute("href", "https://example.test/hotels")
   await expect(block.getByText("INR 4,500 a night")).toBeVisible()
-  await expect(block.getByText("INR 18,000 a person")).toBeVisible()
-  await expect(block.getByText("INR 54,000")).toBeVisible()
+  await expect(block.getByText("from INR 18,000 a person")).toBeVisible()
+  await expect(block.getByText("at least INR 54,000")).toBeVisible()
 })

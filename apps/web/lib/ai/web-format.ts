@@ -29,8 +29,16 @@ export function webPrice(f: { amount: string; scale: string; currency: string; p
   return `${f.bound ? (BOUND_WORDS[f.bound] ?? "") : ""}${webAmount(f)}${PER_WORDS[f.per] ?? ""}`
 }
 
-/** A web total: one amount, or "low to high" when the cost lines' prices ranged. */
-export function webTotal(t: { currency: string; low: string; high: string }): string {
+/**
+ * A web total: one amount, or "low to high" when the cost lines' prices ranged. Fed by a "from"
+ * price it is a minimum ("at least" its low end); by an "up to" price a maximum ("at most" its
+ * high end); by both, the range said as neither.
+ */
+export function webTotal(t: { currency: string; low: string; high: string; bound?: string }): string {
   const low = groupDigits(t.low, t.currency)
-  return t.low === t.high ? `${t.currency} ${low}` : `${t.currency} ${low} to ${groupDigits(t.high, t.currency)}`
+  const high = groupDigits(t.high, t.currency)
+  if (t.bound === "at_least") return `at least ${t.currency} ${low}`
+  if (t.bound === "at_most") return `at most ${t.currency} ${high}`
+  const amount = t.low === t.high ? `${t.currency} ${low}` : `${t.currency} ${low} to ${high}`
+  return t.bound === "mixed" ? `${amount} (mixes "from" and "up to" prices: neither a minimum nor a maximum)` : amount
 }

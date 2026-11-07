@@ -95,6 +95,7 @@ describe("ranges and bounds", () => {
   it.each([
     ["flights from ₹3,413", "from"],
     ["starting at $99", "from"],
+    ["return flights from about ₹18,000", "from"],
     ["₹7.4 L onwards", "from"],
     ["up to ₹5,000", "up_to"],
     ["under $80 a night", "up_to"],
