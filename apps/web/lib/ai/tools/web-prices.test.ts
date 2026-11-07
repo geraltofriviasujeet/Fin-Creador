@@ -7,10 +7,10 @@ import { ROMA_TOOLS, WEB_TOOLS } from "../handle"
 import { type MockScript, mockProvider, mockText } from "../llm/mock"
 import { NO_USAGE } from "../llm/types"
 import { mockSearchProvider } from "../search/mock"
-import { type SearchDb, WEB_NOTICES, WebSession } from "../search/session"
+import { type SearchDb, WEB_NOTICES, WebSession, lookupsLine } from "../search/session"
 import type { SearchResult } from "../search/types"
 import { webTripVerdict } from "./trip"
-import { type FinanceTool, type GoalCheck, type ToolContext, toToolDef } from "./types"
+import { type FinanceTool, type GoalCheck, NO_LOOKUPS, type ToolContext, toToolDef } from "./types"
 import { timesFor, webTotals } from "./web-prices"
 
 // Web lookups through the chat loop, on the mock model and mock search: no paid API, no credit.
@@ -248,5 +248,68 @@ describe("the records' verdict and the web-assisted line", () => {
       question: "What would a Goa hotel cost?",
     })
     expect(run.result).toMatchObject({ kind: "answer", webNotices: [WEB_NOTICES.daily_limit] })
+  })
+})
+
+// What the lookups did, in the trip check's assumptions (10.8, the Goa question on dev: a credit
+// spent, nothing shown, and "No outside prices are looked up." still there).
+describe("the assumptions line about outside prices", () => {
+  const tripWithLine: FinanceTool<Record<string, never>> = {
+    name: "trip_check",
+    description: "Test stand-in.",
+    input: z.object({}).strict(),
+    async run() {
+      const check: GoalCheck = { kind: "trip", goal: "Goa", verdict: "Yes.", summary: "Yes. A trip to Goa fits from your records.", assumptions: ["Past prices, not adjusted for price rises.", NO_LOOKUPS] }
+      return { data: { verdict: "Yes." }, figures: [], check }
+    },
+  }
+  const trip = { id: "t", name: "trip_check", input: {} }
+  const figures = (...f: unknown[]) => ({ id: "f", name: "web_price_figures", input: { figures: f } })
+  const ANSWER = "Yes. A trip to Goa fits from your records."
+  const chat = (rounds: ReturnType<typeof call>[], tools: FinanceTool[] = [tripWithLine as FinanceTool, ...WEB_TOOLS]) =>
+    runChat({
+      provider: mockProvider((_req, round) => rounds[round] ?? mockText(ANSWER)),
+      tools,
+      context: contextWith(),
+      question: "Can I afford Goa? Check web prices too.",
+    })
+  const lineOf = (run: Awaited<ReturnType<typeof chat>>) => (run.result.kind === "answer" ? run.result.checks[0]!.assumptions[1] : null)
+
+  it("keeps the line when no lookup ran", async () => {
+    const run = await chat([call(trip)])
+    expect(lineOf(run)).toBe("No outside prices were looked up.")
+    expect(run.result).not.toHaveProperty("webNotices")
+  })
+
+  it("says a lookup ran and nothing could be confirmed when every reported price was dropped", async () => {
+    const run = await chat([call(trip), call(lookup("stay")), call(figures({ ...hotel, quote: "Rooms from ₹4,500 a night" }))])
+    expect(lineOf(run)).toBe(
+      "1 web lookup ran for this question and counts toward your allowance, but no price from it could be confirmed at its source, so none is shown. This answer uses your own records only.",
+    )
+    expect(run.result).not.toHaveProperty("web")
+  })
+
+  it("says lookups ran and none was used when no price was reported", async () => {
+    const run = await chat([call(trip), call(lookup("stay"), lookup("transport"))])
+    expect(lineOf(run)).toBe(
+      "2 web lookups ran for this question and count toward your allowance, but no price from them was used, so none is shown. This answer uses your own records only.",
+    )
+  })
+
+  it("says prices are shown separately, and how many were dropped, when some were kept", async () => {
+    const run = await chat([call(trip), call(lookup("stay"), lookup("transport")), call(figures(hotel, { ...flight, quote: "Flights cost ₹9,000" }))])
+    expect(lineOf(run)).toBe(
+      "2 web lookups ran for this question. Prices confirmed at their source are shown separately as web estimates; they don't change this verdict. 1 other price couldn't be confirmed at the source and isn't shown.",
+    )
+    expect(run.result.kind === "answer" && run.result.web?.figures).toHaveLength(1)
+  })
+
+  it("with no trip check, a spent lookup that shows nothing is a notice", async () => {
+    const run = await chat([call(lookup("stay"))], WEB_TOOLS as FinanceTool[])
+    expect(run.result).toMatchObject({ kind: "answer", webNotices: [lookupsLine(1, 0, { figures: 0, dropped: 0 })] })
+  })
+
+  it("is null when no lookup was sent", () => {
+    expect(lookupsLine(0, 0, { figures: 3, dropped: 3 })).toBeNull()
   })
 })

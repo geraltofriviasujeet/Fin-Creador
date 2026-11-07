@@ -36,15 +36,40 @@ type Options = {
   countryCode: string | null
 }
 
+/**
+ * What became of this question's lookups, in the person's words (10.8): none ran; they ran and
+ * prices are shown; or they ran, credits were spent and nothing is shown. Null when none ran.
+ */
+export function lookupsLine(sent: number, shown: number, reported: { figures: number; dropped: number }): string | null {
+  if (sent === 0) return null
+  const ran = `${sent} web ${sent === 1 ? "lookup" : "lookups"} ran for this question`
+  if (shown > 0) {
+    const dropped = reported.dropped > 0 ? ` ${reported.dropped} other ${reported.dropped === 1 ? "price" : "prices"} couldn't be confirmed at the source and ${reported.dropped === 1 ? "isn't" : "aren't"} shown.` : ""
+    return `${ran}. Prices confirmed at their source are shown separately as web estimates; they don't change this verdict.${dropped}`
+  }
+  const why =
+    reported.figures > 0
+      ? `no price from ${sent === 1 ? "it" : "them"} could be confirmed at its source, so none is shown`
+      : `no price from ${sent === 1 ? "it" : "them"} was used, so none is shown`
+  return `${ran} and ${sent === 1 ? "counts" : "count"} toward your allowance, but ${why}. This answer uses your own records only.`
+}
+
 export class WebSession {
   /** Every result this question's lookups returned: the only sources a web figure may cite. */
   readonly results: SearchResult[] = []
   /** Trip sizes looked up, for totals worked out in code. */
   readonly trips: { nights: number; travellers: number }[] = []
   readonly notices = new Set<string>()
+  /** Web figures the model reported with web_price_figures, and how many of them were dropped. */
+  readonly reported = { figures: 0, dropped: 0 }
   private grant: Promise<number> | null = null
   private used = 0
   private sent = 0
+
+  /** Searches sent for this question (each spends a credit), including timed-out ones. */
+  get lookupsSent(): number {
+    return this.sent
+  }
 
   constructor(private readonly options: Options) {}
 

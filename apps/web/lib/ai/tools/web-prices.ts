@@ -128,6 +128,8 @@ export const webPriceFiguresTool: FinanceTool<WebFiguresInput> = {
       if (checked.ok) kept.push({ ...checked.figure, cost_line: f.cost_line })
       else dropped.push({ label: f.label, reason: checked.reason })
     }
+    ctx.web.reported.figures += input.figures.length
+    ctx.web.reported.dropped += dropped.length
     const trip = ctx.web.trips.at(-1)
     const totals = webTotals(kept, trip)
     const web: WebBlock = {

@@ -30,7 +30,7 @@ import {
   YEARS,
 } from "./goals"
 import { tripPlaceScope } from "@fin-creador/schemas"
-import { type Figure, type FinanceTool, type GoalCheck, type ToolContext, ToolError, type WebVerdict } from "./types"
+import { type Figure, type FinanceTool, type GoalCheck, NO_LOOKUPS, type ToolContext, ToolError, type WebVerdict } from "./types"
 
 // trip_check (Sprint 10.5): what a trip would cost, from the person's own records only, and
 // whether they can pay for it by the month they want. The estimate is tripEstimate and the
@@ -497,7 +497,8 @@ function tripAssumptions(used: readonly TripComparable[], tripScope: TripScope, 
   const list = [
     `The estimate is the median of what ${used.length} ${tripScope} ${used.length === 1 ? "trip" : "trips"} from your records scale to; ${tripScope === "domestic" ? "international" : "domestic"} trips aren't used. The destination itself isn't priced.`,
     `A trip of N nights is counted as N + 1 days. A trip goal's transport and visa/insurance scale per traveller and its other costs per traveller per day; a past travel run scales per traveller per day.`,
-    "Past prices, not adjusted for price rises. No outside prices are looked up.",
+    "Past prices, not adjusted for price rises.",
+    NO_LOOKUPS,
   ]
   if (used.length === 1) list.push("Only one trip to compare with, so the estimate is thin.")
   if (used.some((c) => c.kind === "goal")) list.push("A trip goal's costs are what was planned, not what was spent.")

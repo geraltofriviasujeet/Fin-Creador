@@ -2,8 +2,9 @@ import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber } from "./output"
 import { ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
+import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
-import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
+import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, NO_LOOKUPS, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
 import {
   LlmError,
   type LlmMessage,
@@ -226,7 +227,16 @@ function webPart(blocks: readonly WebBlock[], context: ToolContext, checks: Goal
     const targetMinor = decimalToMinor(total.high, currencyMinorDigits(context.currency))
     for (const check of checks) if (check.withTarget && targetMinor > 0) check.web = check.withTarget(targetMinor, total.costLines)
   }
-  return { ...(web && web.figures.length > 0 ? { web } : {}), ...(notices.length > 0 ? { webNotices: notices } : {}) }
+  // What the lookups did replaces the trip check's "none looked up"; with no trip check to carry
+  // it, lookups that spent credits and show nothing are said as a notice: never silent.
+  const shown = web?.figures.length ?? 0
+  const line = context.web ? lookupsLine(context.web.lookupsSent, shown, context.web.reported) : null
+  if (line) {
+    const carried = checks.filter((c) => c.assumptions.includes(NO_LOOKUPS))
+    for (const check of carried) check.assumptions = check.assumptions.map((a) => (a === NO_LOOKUPS ? line : a))
+    if (carried.length === 0 && shown === 0) notices.push(line)
+  }
+  return { ...(web && shown > 0 ? { web } : {}), ...(notices.length > 0 ? { webNotices: notices } : {}) }
 }
 
 /** Shown instead of an answer about a goal or trip the person didn't ask about. */

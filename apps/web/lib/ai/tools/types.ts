@@ -26,6 +26,9 @@ export type Figure = { label: string; hideWhenZero?: boolean } & (
   | { kind: "percent"; bps: number }
 )
 
+/** A trip check's line about outside prices; chat.ts replaces it with what the lookups did (10.8). */
+export const NO_LOOKUPS = "No outside prices were looked up."
+
 /** A goal check (10.4): the verdict computed in code, the same said in full, and its assumptions. */
 export type GoalCheck = {
   /** A trip check (10.5) labels the card "Trip check"; `goal` is then the destination. */

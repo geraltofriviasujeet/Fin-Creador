@@ -233,8 +233,10 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
     await finishWeb(web)
     // An unexpected failure mid-way: calls may have been sent, so charge the worst case.
     await deps.db.settle(requestId, 0, 0, microToUsd(worstCaseQuestionMicroUsd(model)))
-    return error("unavailable")
+    return lookupsNoted(error("unavailable"), web)
   }
+  // No answer shown, but web lookups were spent: the message says so (10.8).
+  const noted = (failure: { status: number; body: ChatResponseBody }) => lookupsNoted(failure, web)
 
   await finishWeb(web)
   if (run.calls === 0) {
@@ -282,26 +284,34 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
     case "unverified": {
       deps.onUnverified?.(result.unmatched)
       const shown = result.unmatched.slice(0, 3)
-      if (shown.length === 0) return error("unverified")
+      if (shown.length === 0) return noted(error("unverified"))
       const nums = shown.length === 1 ? shown[0]! : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`
       const more = result.unmatched.length > shown.length ? " and others" : ""
-      return {
+      return noted({
         status: STATUS.unverified,
         body: {
           status: "error",
           code: "unverified",
           message: `Roma's answer used ${nums}${more}, which she couldn't match to a figure from your records, so it isn't shown. Ask about one thing at a time and name the period, account, goal or trip details you mean.`,
         },
-      }
+      })
     }
     case "tone":
     case "invalid":
-      return error("tone")
+      return noted(error("tone"))
     case "failed":
-      if (result.reason === "timeout") return error("timeout")
-      if (result.reason === "refusal") return error("refusal")
-      return error("unavailable")
+      if (result.reason === "timeout") return noted(error("timeout"))
+      if (result.reason === "refusal") return noted(error("refusal"))
+      return noted(error("unavailable"))
   }
+}
+
+/** An error after web lookups were sent says they were used, so a spent lookup is never silent. */
+function lookupsNoted(failure: { status: number; body: ChatResponseBody }, web: WebSession | null): { status: number; body: ChatResponseBody } {
+  const sent = web?.lookupsSent ?? 0
+  if (sent === 0 || failure.body.status !== "error") return failure
+  const used = `${sent} web ${sent === 1 ? "lookup" : "lookups"} ran for this question and ${sent === 1 ? "counts" : "count"} toward your allowance.`
+  return { ...failure, body: { ...failure.body, message: `${failure.body.message} ${used}` } }
 }
 
 /** Search credits end with the question: a failure leaves the reservation counting, the safe side. */
