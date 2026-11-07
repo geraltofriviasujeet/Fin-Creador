@@ -97,6 +97,7 @@ export type Database = {
           created_at: string
           id: string
           periods: unknown[]
+          plan: Json | null
           question: string
           request_id: string | null
           sent_descriptions: boolean
@@ -111,6 +112,7 @@ export type Database = {
           created_at?: string
           id?: string
           periods?: unknown[]
+          plan?: Json | null
           question: string
           request_id?: string | null
           sent_descriptions?: boolean
@@ -125,6 +127,7 @@ export type Database = {
           created_at?: string
           id?: string
           periods?: unknown[]
+          plan?: Json | null
           question?: string
           request_id?: string | null
           sent_descriptions?: boolean
@@ -1390,6 +1393,7 @@ export type Database = {
           reserve_usd: number
           search_enabled: boolean
           search_monthly_credits: number
+          search_plan_reserve_credits: number
           search_reserve_credits: number
           search_user_daily_credits: number
           updated_at: string
@@ -1403,6 +1407,7 @@ export type Database = {
           reserve_usd?: number
           search_enabled?: boolean
           search_monthly_credits?: number
+          search_plan_reserve_credits?: number
           search_reserve_credits?: number
           search_user_daily_credits?: number
           updated_at?: string
@@ -1416,6 +1421,7 @@ export type Database = {
           reserve_usd?: number
           search_enabled?: boolean
           search_monthly_credits?: number
+          search_plan_reserve_credits?: number
           search_reserve_credits?: number
           search_user_daily_credits?: number
           updated_at?: string
@@ -2683,6 +2689,7 @@ export type Database = {
           p_as_of: string
           p_conversation_id: string
           p_periods: unknown[]
+          p_plan?: Json
           p_question: string
           p_request_id: string
           p_sent_descriptions: boolean
@@ -2695,7 +2702,7 @@ export type Database = {
       }
       roma_release_request: { Args: { p_request_id: string }; Returns: boolean }
       roma_search_begin: {
-        Args: { p_provider: string; p_request_id: string }
+        Args: { p_plan?: boolean; p_provider: string; p_request_id: string }
         Returns: {
           credits: number
           outcome: string
