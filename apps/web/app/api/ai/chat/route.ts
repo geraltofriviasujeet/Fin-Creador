@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { userToday } from "@fin-creador/api"
+import { type Json, userToday } from "@fin-creador/api"
 import { readLlmConfig, readSearchConfig } from "@/lib/ai/config"
 import { type BeginOutcome, type RomaDb, type RomaHistory, handleChat } from "@/lib/ai/handle"
 import { type StoredTurn, fromDateRangeLiteral, toDateRangeLiteral } from "@/lib/ai/history"
@@ -91,6 +91,8 @@ export async function POST(request: NextRequest) {
         p_periods: turn.periods.map(toDateRangeLiteral),
         p_tools: turn.tools,
         p_sent_descriptions: turn.sentDescriptions,
+        // The checked plan (10.9); the database checks its shape, size and keys again.
+        ...(turn.plan ? { p_plan: turn.plan as unknown as Json } : {}),
       })
       const row = Array.isArray(data) ? data[0] : null
       if (error || !row) return null
@@ -99,8 +101,8 @@ export async function POST(request: NextRequest) {
   }
 
   const searchDb: SearchDb = {
-    async begin(requestId, provider) {
-      const { data, error } = await supabase.rpc("roma_search_begin", { p_request_id: requestId, p_provider: provider })
+    async begin(requestId, provider, plan) {
+      const { data, error } = await supabase.rpc("roma_search_begin", { p_request_id: requestId, p_provider: provider, p_plan: plan === true })
       const row = Array.isArray(data) ? data[0] : null
       if (error || !row) return null
       return { outcome: row.outcome as SearchBeginOutcome, credits: row.credits }
