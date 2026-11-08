@@ -207,7 +207,7 @@ function BothSignals({ both }: { both: NonNullable<CheckedPlan["verdicts"]["both
         ).map(([label, s]) => (
           <div key={label}>
             <dt className="flex flex-wrap items-center gap-2 font-semibold text-ink">
-              {label} <Badge tone={s.met === "yes" ? "savings" : s.met === "no" ? "neutral" : "info"}>{SIGNAL_WORDS[s.met]}</Badge>
+              <span>{label}</span> <Badge tone={s.met === "yes" ? "savings" : s.met === "no" ? "neutral" : "info"}>{SIGNAL_WORDS[s.met]}</Badge>
             </dt>
             <dd className="text-ink">{s.summary}</dd>
           </div>
