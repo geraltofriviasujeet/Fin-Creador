@@ -8,9 +8,10 @@ import { type PriceCandidate, siteOf } from "../search/verify"
 //     snippet or page text). A name the list doesn't have is never offered.
 //   * Hotels: a run of capitalised words with a lodging word in it ("Taj Exotica Resort &
 //     Spa"), with "4-star" or "5-star" (or four-, five-star) written in the same sentence,
-//     within STAR_WINDOW characters of it, so one hotel's stars are never another's. Generic phrases ("Best Hotels", "Luxury Resorts") are
+//     within STAR_WINDOW characters of it, so one hotel's stars are never another's. For a
+//     budget plan the stars aren't required (budget hotels are named without them). Generic phrases ("Best Hotels", "Luxury Resorts") are
 //     not names. A nightly rate is attached only when a price found in code on that page has
-//     the name in its own quote. A name with a site or domain in it ("Mumbai Booking.com Hotel")
+//     this name as the hotel nearest it in its own quote (never a neighbour's rate). A name with a site or domain in it ("Mumbai Booking.com Hotel")
 //     is not a hotel's name; names are kept once, compared without "The", the place's own name
 //     or a trailing "Hotel" ("The Taj Mahal Palace" and "Taj Mahal Palace Mumbai" are one).
 
@@ -145,12 +146,15 @@ export function nameKey(name: string, destination: string | null): string {
 }
 
 /** Words of a booking page's buttons and filters, never part of a hotel's name ("Apply", "Filter By"). */
-export const PAGE_WORDS = new Set(["apply", "filter", "filters", "share", "sort", "book", "view", "deals", "deal", "price", "prices", "search", "login", "sign", "menu", "show", "select", "compare", "reviews", "photos", "map", "save", "offer", "offers", "tour", "tours"])
+export const PAGE_WORDS = new Set(["apply", "filter", "filters", "share", "sort", "book", "view", "deals", "deal", "price", "prices", "search", "login", "sign", "menu", "show", "select", "compare", "reviews", "photos", "map", "save", "offer", "offers", "tour", "tours", "cheap", "cheapest"])
 
 /** The name with a leading "The" kept only when it is part of it ("The Leela Palace"). */
 function cleanName(raw: string): string | null {
   let words = raw.replace(/\s+/g, " ").replace(/[.’'-]+$/, "").trim().split(" ")
-  // Page words before a name are cut ("Apply The Leela Palace"); one inside it means it isn't one.
+  // A sentence's end before a name is cut ("Calangute Beach. Moon Light Retreat"; "St." is kept),
+  // then page words before it ("Apply The Leela Palace"); one inside it means it isn't one.
+  const sentenceEnd = words.slice(0, -1).findLastIndex((w) => /^\p{L}{4,}\.$/u.test(w))
+  words = words.slice(sentenceEnd + 1)
   while (words.length > 0 && (PAGE_WORDS.has(words[0]!.toLowerCase()) || /^\p{Ll}/u.test(words[0]!))) words = words.slice(1)
   if (words.some((w) => PAGE_WORDS.has(w.toLowerCase()))) return null
   const name = words.join(" ")
@@ -167,7 +171,12 @@ function cleanName(raw: string): string | null {
  * 4- and 5-star hotels and resorts named in the results, each once; `prices` are the prices
  * found in code in the same results (with their ids), for a nightly rate quoted with the name.
  */
-export function hotelCandidates(results: readonly SearchResult[], prices: readonly (PriceCandidate & { id: string })[], destination: string | null = null): NameCandidate[] {
+export function hotelCandidates(
+  results: readonly SearchResult[],
+  prices: readonly (PriceCandidate & { id: string })[],
+  destination: string | null = null,
+  needStars = true,
+): NameCandidate[] {
   const out: NameCandidate[] = []
   for (const r of results) {
     for (const text of textsOf(r)) {
@@ -175,23 +184,45 @@ export function hotelCandidates(results: readonly SearchResult[], prices: readon
         const name = cleanName(m[0])
         if (!name || out.some((h) => nameKey(h.name, destination) === nameKey(name, destination))) continue
         const stars = starsNear(text, m.index, m.index + m[0].length)
-        if (!stars) continue
-        const rate = prices.find((p) => p.source_url === r.url && p.quote.includes(name))
-        out.push({ id: "", name, site: siteOf(r.url), url: r.url, quote: quoteAt(text, m.index, m[0].length), stars, ...(rate ? { rateId: rate.id } : {}) })
+        if (!stars && needStars) continue
+        const rate = prices.find((p) => p.source_url === r.url && hotelNameAt(p.quote, priceAt(p.quote, p.amount)) === name)
+        out.push({ id: "", name, site: siteOf(r.url), url: r.url, quote: quoteAt(text, m.index, m[0].length), ...(stars ? { stars } : {}), ...(rate ? { rateId: rate.id } : {}) })
       }
     }
   }
   return out.slice(0, NAMES_PER_KIND).map((h, i) => ({ ...h, id: `h${i + 1}` }))
 }
 
-/** The hotel named nearest a price in its quote (for a nightly rate's label), if any. */
+/** Where the price sits in its quote: the first number whose digits are the amount's. */
+export function priceAt(quote: string, amount: string): number {
+  const digits = amount.replace(/\D/g, "")
+  for (const m of quote.matchAll(/\d[\d,.]*/g)) if (m[0].replace(/\D/g, "").startsWith(digits)) return m.index
+  return Math.floor(quote.length / 2)
+}
+
+/**
+ * The hotel a price is for (a nightly rate's label), if any: one named in the price's own
+ * sentence first ("Taj Exotica ... from ₹18,000 a night. Novotel ..." is Taj Exotica's), then
+ * the nearest in its quote.
+ */
 export function hotelNameAt(quote: string, at: number): string | undefined {
-  let best: { d: number; name: string } | null = null
+  let start = 0
+  let stop = quote.length
+  for (const m of quote.matchAll(SENTENCE_END)) {
+    if (m.index < at) start = m.index + 1
+    else {
+      stop = m.index
+      break
+    }
+  }
+  let best: { own: boolean; d: number; name: string } | null = null
   for (const m of quote.matchAll(HOTEL_NAME)) {
     const name = cleanName(m[0])
     if (!name) continue
-    const d = m.index > at ? m.index - at : Math.max(0, at - (m.index + m[0].length))
-    if (!best || d < best.d) best = { d, name }
+    const end = m.index + m[0].length
+    const own = m.index >= start && end <= stop + 1
+    const d = m.index > at ? m.index - at : Math.max(0, at - end)
+    if (!best || (own && !best.own) || (own === best.own && d < best.d)) best = { own, d, name }
   }
   return best?.name
 }

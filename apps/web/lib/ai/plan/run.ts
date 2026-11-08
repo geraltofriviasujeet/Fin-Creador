@@ -11,8 +11,8 @@ import { VERDICT_WORDS, monthName } from "../tools/goals"
 import type { ToolContext, TotalBound } from "../tools/types"
 import { webTotal } from "../web-format"
 import { lineWords } from "./format"
-import { aboutPrice, dishesIn, placesIn, shoppingIn } from "./context"
-import { NAMES_PER_KIND, type NameCandidate, carrierCandidates, hotelCandidates } from "./names"
+import { type Mention, SUBJECT_WORDS, aboutPrice, dishesIn, placesIn, shoppingIn } from "./context"
+import { NAMES_PER_KIND, carrierCandidates, hotelCandidates, nameKey } from "./names"
 import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanVerdict } from "./types"
 
 // One plan, run (10.9). In order:
@@ -21,7 +21,10 @@ import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPr
 //   2. Lookups, sent by code (the intake gave every input), all at once: one per cost line
 //      a goal doesn't already cover, plus route carriers and hotels for a trip. A line whose
 //      field was skipped isn't looked up: it is "no estimate", and the plan still runs.
-//   3. One model round: the model picks, by id, the prices and names that fit each line. It
+//   3. One model round: the model picks, by id, the prices and names that fit each line. A
+//      trip line's price is offered only when code found what it is for next to it (the
+//      airline, the hotel, the kind of meal, the mode, the place or tour); the rest are dropped
+//      and counted on the line. Hotels named with a rate join the stay line as its prices. It
 //      writes no prose and never types an amount or a name; every pick is checked again in
 //      code against its own page. If the round fails or the deadline comes first, the plan is
 //      still returned: lines from goals stay, looked-up lines become "no estimate" with the
@@ -129,7 +132,7 @@ function lookupsFor(request: PlanRequest, goalLines: Partial<Record<PlanLineName
     if (request.destination !== null) {
       // Carriers for a route: only with the origin.
       if (request.origin !== null) lookups.push({ line: "carriers", input: { ...base, cost_line: "carriers", origin: request.origin } })
-      lookups.push({ line: "hotels", input: { ...base, cost_line: "hotels" } })
+      lookups.push({ line: "hotels", input: { ...base, cost_line: "hotels", ...(request.style ? { style: request.style } : {}) } })
     }
     return { lookups, skips }
   }
@@ -188,7 +191,7 @@ const PICK_TOOL = {
 }
 
 const PICK_SYSTEM = [
-  "You help build a cost plan. The app found prices and names on web pages, each with an id. Call the plan_pick tool once with the ids that fit each cost line, and the carriers and hotels that fit. A price fits a line only when its own text is clearly that cost for that place. Say what each price covers (per) exactly as its text says: total, night, person, person_night or day_person. If nothing fits, call plan_pick with empty lists. Write nothing else, and no tags.",
+  "You help build a cost plan. The app found prices and names on web pages, each with an id. Call the plan_pick tool once with the ids that fit each cost line, and the carriers and hotels that fit. A price fits a line only when its own text is clearly that cost for that place; 'for' is what the app found it is for, next to it on its page. Say what each price covers (per) exactly as its text says: total, night, person, person_night or day_person. If nothing fits, call plan_pick with empty lists. Write nothing else, and no tags.",
 ]
 
 /** Time a second ask needs; with less left, a reply without the tool call ends the round. */
@@ -360,6 +363,24 @@ export function inRange(p: PlanPrice, r: { low: number; high: number; unit: keyo
   return total >= r.low * 100 * units && total <= r.high * 100 * units
 }
 
+type Screened = { prices: (PriceCandidate & { id: string })[]; about: Map<string, string>; noSubject: number }
+
+/**
+ * A line's prices with what each is for (context.ts); one with nothing found isn't offered.
+ * A range's ends share what they are for. A purchase line needs none: its lookup names it.
+ */
+export function screenPrices(line: PlanLineName, prices: readonly (PriceCandidate & { id: string })[]): Screened {
+  if (!SUBJECT_WORDS[line]) return { prices: [...prices], about: new Map(), noSubject: 0 }
+  const about = new Map<string, string>()
+  for (const p of prices) {
+    const a = aboutPrice(line, p.quote, p.amount)
+    if (a) about.set(p.id, a)
+  }
+  for (const p of prices) if (!about.has(p.id) && p.rangeWith && about.has(p.rangeWith)) about.set(p.id, about.get(p.rangeWith)!)
+  const kept = prices.filter((p) => about.has(p.id))
+  return { prices: kept, about, noSubject: prices.length - kept.length }
+}
+
 export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<PlanRun> {
   const deadline = Date.now() + (deps.deadlineMs ?? DEADLINE_MS)
   const { ctx } = deps
@@ -389,17 +410,22 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   })()
   const hotelNames = (() => {
     const o = found("hotels")
-    return o?.ok ? hotelCandidates(o.results, o.prices, request.kind === "trip" ? request.destination : null) : []
+    return o?.ok ? hotelCandidates(o.results, o.prices, request.kind === "trip" ? request.destination : null, request.kind !== "trip" || request.style !== "budget") : []
   })()
+  const screened = new Map<PlanLineName, Screened>()
+  for (const o of outcomes) {
+    if (o.lookup.line !== "carriers" && o.lookup.line !== "hotels" && o.lookup.line !== "shopping" && o.outcome?.ok) screened.set(o.lookup.line, screenPrices(o.lookup.line, o.outcome.prices))
+  }
 
   // 3. The model's round, only when there is something to pick.
-  const priced = outcomes.filter((o): o is { lookup: Lookup & { line: PlanLineName }; outcome: Extract<LookupOutcome, { ok: true }> } => o.lookup.line !== "carriers" && o.lookup.line !== "hotels" && o.lookup.line !== "shopping" && !!o.outcome?.ok && o.outcome.prices.length > 0)
   const brief = {
     plan: request,
-    lines: priced.map((o) => ({
-      line: o.lookup.line,
-      prices: o.outcome.prices.map((p) => ({ id: p.id, site: p.site, currency: p.currency, text: p.quote, ...(p.bound ? { bound: p.bound } : {}) })),
-    })),
+    lines: [...screened]
+      .filter(([, s]) => s.prices.length > 0)
+      .map(([line, s]) => ({
+        line,
+        prices: s.prices.map((p) => ({ id: p.id, site: p.site, currency: p.currency, text: p.quote, ...(s.about.has(p.id) ? { for: s.about.get(p.id) } : {}), ...(p.bound ? { bound: p.bound } : {}) })),
+      })),
     carriers: carrierNames.map(({ id, name, site, quote }) => ({ id, name, site, text: quote })),
     hotels: hotelNames.map(({ id, name, site, quote, stars }) => ({ id, name, site, stars, text: quote })),
   }
@@ -414,12 +440,31 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   const travellers = request.kind === "trip" ? request.travellers : null
   const results = web?.results ?? []
   const keptPrice = (line: PlanLineName, id: string, per: PlanPrice["per"]): PlanPrice | null => {
-    const o = found(line)
-    if (!o?.ok || !o.prices.some((p) => p.id === id)) return null
+    const s = screened.get(line)
+    if (!s?.prices.some((p) => p.id === id)) return null
     const c = web!.candidates.get(id)
     if (!c) return null
     const checked = verifyWebFigure({ label: line, amount: c.amount, currency: c.currency, scale: c.scale, per, source_url: c.source_url, quote: c.quote }, results)
-    return checked.ok ? toPrice(c, per, aboutPrice(line, c.quote, c.amount, destination)) : null
+    return checked.ok ? toPrice(c, per, s.about.get(id)) : null
+  }
+  // A hotel's rate from the hotels lookup's own prices, checked against its page, with the hotel as what it is for.
+  const keptHotelRate = (id: string, name: string): PlanPrice | null => {
+    const o = found("hotels")
+    const c = web?.candidates.get(id)
+    if (!o?.ok || !c || !o.prices.some((p) => p.id === id)) return null
+    const checked = verifyWebFigure({ label: "hotel", amount: c.amount, currency: c.currency, scale: c.scale, per: "night", source_url: c.source_url, quote: c.quote }, results)
+    if (!checked.ok) return null
+    const rate = toPrice(c, "night", name)
+    return inRange(rate, rangeFor("stay", international)!, 1, 1) ? rate : null
+  }
+  // Hotels the model picked: one list with the stay line. A rate makes a stay price; a hotel
+  // without one is listed on the line as named, not priced.
+  const hotelRates: PlanPrice[] = []
+  const hotelsNamed: Mention[] = []
+  for (const c of round.picks ? hotelNames.filter((h) => round.picks!.hotels.includes(h.id)) : []) {
+    const rate = c.rateId ? keptHotelRate(c.rateId, c.name) : null
+    if (rate) hotelRates.push(rate)
+    hotelsNamed.push({ name: c.name, site: c.site, url: c.url })
   }
   const pagesOf = (o: LookupOutcome | null) => (o?.ok ? o.results.slice(0, 6).map((r) => ({ site: siteOf(r.url), url: r.url })) : [])
 
@@ -440,9 +485,20 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
       }
     }
     const built = priceLine(line)
-    // Named dishes (food) and well-known places (sightseeing) from the same lookup, priced or not.
+    // Named dishes (food) and well-known places (sightseeing) from the same lookup, priced or
+    // not; hotels picked but not priced on the line (stay), each once.
     const o = found(line)
-    const mentions = o?.ok ? (line === "food" ? dishesIn(o.results) : line === "sightseeing" ? placesIn(o.results) : []) : []
+    const priced = new Set(built.prices.flatMap((p) => (p.about ? [nameKey(p.about, destination)] : [])))
+    const mentions =
+      line === "stay"
+        ? hotelsNamed.filter((h) => !priced.has(nameKey(h.name, destination))).slice(0, 8)
+        : o?.ok
+          ? line === "food"
+            ? dishesIn(o.results)
+            : line === "sightseeing"
+              ? placesIn(o.results)
+              : []
+          : []
     return mentions.length > 0 ? { ...built, mentions } : built
   })
 
@@ -455,32 +511,50 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     if (skip) return none(line, skip.how)
     if (!web) return none(line, NO_WEB)
     const o = found(line)
-    if (!o) return none(line, NO_WEB)
-    if (!o.ok) return none(line, `No estimate: ${REFUSALS[o.reason]}`)
-    if (o.prices.length === 0) return none(line, "No estimate: no price was found on the pages looked up.", pagesOf(o))
-    if (!round.picks) return none(line, `No estimate: ${round.outcome === "timeout" ? NOT_CHECKED : "the prices found couldn't be checked, so none is used. The pages found are listed."}`, pagesOf(o))
-    const picks = round.picks.lines.find((l) => l.line === line)?.picks ?? []
-    // A range is kept whole: picking one end keeps the other, with the same basis.
-    const withRanges = [...picks]
-    for (const p of picks) {
-      const other = web.candidates.get(p.id)?.rangeWith
-      if (other && !withRanges.some((x) => x.id === other)) withRanges.push({ id: other, per: p.per })
+    const s = screened.get(line)
+    // Why the line's own lookup gave no price, in words after "No estimate:"; null when it did.
+    let why: string | null = null
+    let checked: PlanPrice[] = []
+    if (!o) why = NO_WEB
+    else if (!o.ok) why = REFUSALS[o.reason]
+    else if (o.prices.length === 0) why = "no price was found on the pages looked up."
+    else if (!s || s.prices.length === 0) why = ""
+    else if (!round.picks) why = round.outcome === "timeout" ? NOT_CHECKED : "the prices found couldn't be checked, so none is used. The pages found are listed."
+    else {
+      const picks = round.picks.lines.find((l) => l.line === line)?.picks ?? []
+      // A range is kept whole: picking one end keeps the other, with the same basis.
+      const withRanges = [...picks]
+      for (const p of picks) {
+        const other = web.candidates.get(p.id)?.rangeWith
+        if (other && !withRanges.some((x) => x.id === other)) withRanges.push({ id: other, per: p.per })
+      }
+      checked = withRanges.flatMap((p) => keptPrice(line, p.id, p.per) ?? [])
+      if (checked.length === 0) why = NONE_PICKED
     }
-    const checked = withRanges.flatMap((p) => keptPrice(line, p.id, p.per) ?? [])
-    if (checked.length === 0) return none(line, `No estimate: ${NONE_PICKED}`, pagesOf(o))
-    // Misreads out: a price outside the line's plausible range is dropped, and the line says so.
+    // Stay: the picked hotels' rates too, each hotel once.
+    if (line === "stay") {
+      const have = new Set(checked.flatMap((p) => (p.about ? [nameKey(p.about, destination)] : [])))
+      checked = [...checked, ...hotelRates.filter((h) => !have.has(nameKey(h.about!, destination)))]
+    }
+    // Prices that didn't say what they were for, then misreads: dropped, and the line says how many.
+    const noSubject = s?.noSubject ?? 0
+    const subjectWords =
+      noSubject === 0
+        ? ""
+        : ` ${noSubject} ${noSubject === 1 ? "price" : "prices"} found didn't say ${SUBJECT_WORDS[line]} ${noSubject === 1 ? "it was" : "they were"} for, so ${noSubject === 1 ? "it wasn't" : "they weren't"} used.`
     const range = rangeFor(line, international)
-    const prices = (range ? checked.filter((p) => inRange(p, range, nights, travellers)) : checked).slice(0, PRICES_PER_LINE)
-    const dropped = range ? checked.length - checked.filter((p) => inRange(p, range, nights, travellers)).length : 0
+    const inside = range ? checked.filter((p) => inRange(p, range, nights, travellers)) : checked
+    const prices = inside.slice(0, PRICES_PER_LINE)
+    const dropped = checked.length - inside.length
     const droppedWords = dropped === 0 || !range ? "" : ` ${dropped} ${dropped === 1 ? "price" : "prices"} outside ${rangeWords(range)} ${dropped === 1 ? "was" : "were"} dropped as implausible.`
-    if (prices.length === 0) return none(line, `No estimate:${droppedWords}`, pagesOf(o))
+    if (prices.length === 0) return none(line, `No estimate:${why ? ` ${why}` : ""}${subjectWords}${droppedWords}`, pagesOf(o))
     const amounts = lineAmounts(prices, nights, travellers)
     if (amounts.length === 0) {
       const needs = [nights === null ? "nights" : null, travellers === null ? "travellers" : null].filter(Boolean).join(" and ")
       return { line, from: "none", amounts: [], how: `No estimate: the prices found need the number of ${needs}, which ${needs.includes(" and ") ? "were" : "was"} skipped.`, prices, pages: [] }
     }
     const sites = [...new Set(prices.map((p) => p.site))].join(", ")
-    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${droppedWords}`, prices, pages: [] }
+    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${subjectWords}${droppedWords}`, prices, pages: [] }
   }
 
   // The buffer: the goal's own, or BUFFER_PERCENT of the lines with an estimate, per currency.
@@ -501,40 +575,21 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     } else lines.push(none("buffer", "No estimate: no other line has an estimate to work it out from."))
   }
 
-  // Names: only ids the model picked from the ones found; a rate only when its own page states it.
-  const names = (kind: "carriers" | "hotels", candidates: readonly NameCandidate[], picked: readonly string[] | undefined): PlanNames | null => {
+  // Airlines: only ids the model picked from the ones found.
+  const carriers = ((): PlanNames | null => {
     if (request.kind !== "trip") return null
-    const o = found(kind)
-    const what = kind === "carriers" ? "airlines" : "4- and 5-star hotels or resorts"
-    if (request.destination === null) return { listed: [], note: `No ${what} looked up: the destination was skipped.` }
-    if (kind === "carriers" && request.origin === null) return { listed: [], note: "No airlines looked up: where you travel from was skipped." }
-    if (!o) return { listed: [], note: `No ${what} looked up: web lookups are off right now.` }
-    if (!o.ok) return { listed: [], note: `No ${what} could be confirmed: ${REFUSALS[o.reason]}` }
-    if (candidates.length === 0) return { listed: [], note: `No ${what} could be confirmed on the pages looked up, so none is suggested.` }
-    if (!round.picks) return { listed: [], note: `The ${what} found couldn't be checked in time, so none is listed.` }
-    const listed = candidates
-      .filter((c) => picked?.includes(c.id))
-      .map((c) => {
-        const rate = c.rateId && kind === "hotels" ? keptHotelRate(c.rateId) : null
-        return { name: c.name, site: c.site, url: c.url, ...(c.stars ? { stars: c.stars } : {}), ...(rate ? { rate } : {}) }
-      })
-      .slice(0, 6)
+    const o = found("carriers")
+    if (request.destination === null) return { listed: [], note: "No airlines looked up: the destination was skipped." }
+    if (request.origin === null) return { listed: [], note: "No airlines looked up: where you travel from was skipped." }
+    if (!o) return { listed: [], note: "No airlines looked up: web lookups are off right now." }
+    if (!o.ok) return { listed: [], note: `No airlines could be confirmed: ${REFUSALS[o.reason]}` }
+    if (carrierNames.length === 0) return { listed: [], note: "No airlines could be confirmed on the pages looked up, so none is suggested." }
+    if (!round.picks) return { listed: [], note: "The airlines found couldn't be checked in time, so none is listed." }
+    const listed = carrierNames.filter((c) => round.picks!.carriers.includes(c.id)).map((c) => ({ name: c.name, site: c.site, url: c.url })).slice(0, 6)
     return listed.length > 0
-      ? { listed, note: `Listed on the pages found, not Roma's recommendation. ${kind === "carriers" ? "Whether each flies this route in your month isn't checked." : "Rates are as listed, not live."}` }
-      : { listed: [], note: `No ${what} on the pages found could be confirmed, so none is suggested.` }
-  }
-  // A hotel's rate from the hotels lookup's own prices, checked against its page.
-  const keptHotelRate = (id: string): PlanPrice | null => {
-    const o = found("hotels")
-    const c = web?.candidates.get(id)
-    if (!o?.ok || !c || !o.prices.some((p) => p.id === id)) return null
-    const checked = verifyWebFigure({ label: "hotel", amount: c.amount, currency: c.currency, scale: c.scale, per: "night", source_url: c.source_url, quote: c.quote }, results)
-    if (!checked.ok) return null
-    const rate = toPrice(c, "night")
-    return inRange(rate, rangeFor("stay", international)!, 1, 1) ? rate : null
-  }
-  const carriers = names("carriers", carrierNames, round.picks?.carriers)
-  const hotels = names("hotels", hotelNames, round.picks?.hotels)
+      ? { listed, note: "Listed on the pages found, not Roma's recommendation. Whether each flies this route in your month isn't checked." }
+      : { listed: [], note: "No airlines on the pages found could be confirmed, so none is suggested." }
+  })()
 
   // 5. Totals and verdicts.
   const totals = addAmounts(lines.flatMap((l) => l.amounts))
@@ -549,7 +604,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   // Every page used, and when nothing could be checked every page found: a spent lookup is never silent.
   const sources = uniqueSources([
     ...lines.flatMap((l) => [...l.prices.map(({ site, url }) => ({ site, url })), ...l.pages, ...(l.mentions ?? []).map(({ site, url }) => ({ site, url }))]),
-    ...[carriers, hotels].flatMap((n) => n?.listed.flatMap((x) => [{ site: x.site, url: x.url }, ...(x.rate ? [{ site: x.rate.site, url: x.rate.url }] : [])]) ?? []),
+    ...(carriers?.listed.map(({ site, url }) => ({ site, url })) ?? []),
     ...(round.picks ? [] : [...pagesOf(found("carriers")), ...pagesOf(found("hotels"))]),
   ])
   const plan: CheckedPlan = {
@@ -559,7 +614,8 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     lines,
     saved: saved ? { goal: saved.goal, minor: saved.minor, currency } : null,
     carriers,
-    hotels,
+    // Hotels are on the stay line (10.9 follow-up); older stored plans keep their own list.
+    hotels: null,
     verdicts: { totals, records: records.records, web: webVerdict },
     changes,
     assumptions: planAssumptions(request, records, others.map((t) => t.currency)),
@@ -683,6 +739,10 @@ function planAssumptions(r: PlanRequest, records: PlanRecords, otherCurrencies: 
   if (r.kind === "trip") {
     list.push(`The buffer is ${BUFFER_PERCENT}% of the lines with an estimate, for costs not listed.`)
     list.push("Visa and travel insurance aren't included. Shopping isn't estimated: it is your choice.")
+    list.push(
+      "A web price is used only when its page says what it is for, next to it: the airline, the hotel or property, the kind of meal, the way of getting around, or the place or tour. Prices that don't are dropped, and each line says how many.",
+    )
+    list.push("Hotels on the stay line are as listed on the pages found, not Roma's recommendation; their rates are as listed, not live.")
     list.push(
       `Prices in rupees outside a plausible range are dropped as misreads: ${(Object.keys(SANITY) as PlanLineName[])
         .map((l) => `${lineWords(l).toLowerCase()} ${rangeWords(rangeFor(l, false)!)}${SANITY[l]!.international ? ` (international ${rangeWords(rangeFor(l, true)!)})` : ""}`)

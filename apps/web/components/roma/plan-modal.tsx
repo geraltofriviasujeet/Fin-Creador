@@ -191,6 +191,7 @@ function Verdict({ heading, verdict, summary, dashed = false }: { heading: strin
 
 const MENTION_WORDS: Partial<Record<PlanLine["line"], string>> = {
   food: "Local dishes mentioned",
+  stay: "Also listed, no rate found",
   sightseeing: "Places mentioned",
   shopping: "Known for",
 }

@@ -17,7 +17,7 @@ export const WEB_TRIP_LINES = ["transport", "stay", "food", "activities", "visa"
 /** 10.9 plans add these; only plan code sends them (the model's web_price_lookup can't). */
 export const PLAN_TRIP_LINES = [...WEB_TRIP_LINES, "local_travel", "shopping", "carriers", "hotels"] as const
 export type WebTripLine = (typeof PLAN_TRIP_LINES)[number]
-/** A plan's travel style (10.9): which hotels the stay line looks up. */
+/** A plan's travel style (10.9): which hotels the stay and hotels lookups look for. */
 export const TRIP_STYLES = ["budget", "comfort", "luxury"] as const
 export type TripStyle = (typeof TRIP_STYLES)[number]
 
@@ -141,7 +141,8 @@ function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "intern
     case "carriers":
       return from ? `airlines flying from ${from} to ${place}` : `airlines with flights to ${place}`
     case "hotels":
-      return `four star and five star hotels and resorts in ${place} price per night`
+      // A budget plan's stay line takes its hotels from here too: budget hotels, by name.
+      return style === "budget" ? `budget hotels in ${place} with prices per night` : `four star and five star hotels and resorts in ${place} price per night`
   }
 }
 

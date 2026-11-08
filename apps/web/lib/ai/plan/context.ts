@@ -1,12 +1,13 @@
 import type { SearchResult } from "../search/types"
 import { siteOf } from "../search/verify"
-import { PAGE_WORDS, hotelNameAt, isSiteName } from "./names"
+import { CARRIERS, PAGE_WORDS, hotelNameAt, isSiteName, priceAt } from "./names"
 
 // What a plan's figures are for (10.9), found in code in the same result text as the price,
 // never written by the model:
-//   * a price's `about`: the hotel or area for a nightly rate, the kind of meal for food, the
-//     mode for local travel, the place for sightseeing; the words nearest the price in its own
-//     quote. Nothing found: the price is shown without it, never with a guess.
+//   * a price's `about`: the airline for transport, the hotel or property for a nightly rate,
+//     the kind of meal for food, the mode for local travel, the place or tour for sightseeing;
+//     the words nearest the price in its own quote. Nothing found: the price isn't used (a
+//     price without what it is for means nothing), never shown with a guess.
 //   * a line's `mentions`: named local dishes (food), well-known places (sightseeing) and what a
 //     place is known for buying (shopping), from the lists and patterns here, each with the
 //     page it was found on.
@@ -26,6 +27,11 @@ const MEAL_KINDS: [RegExp, string][] = [
   [/\b(?:local|roadside) (?:eateries|restaurants?|dhabas?)\b|\bdhabas?\b/i, "local eatery"],
 ]
 
+/** A daily food figure, only when no kind of meal is named in the quote ("food costs ₹800 a day"). */
+const DAILY_FOOD: [RegExp, string][] = [
+  [/\bdaily (?:food|meals?)\b|\b(?:food|meals?)\b[^.]{0,40}?\b(?:per|a) day\b|\b(?:per|a) day\b[^.]{0,20}?\bon (?:food|meals?)\b/i, "food for a day"],
+]
+
 const MODES: [RegExp, string][] = [
   [/\blocal trains?\b|\bsuburban trains?\b/i, "local train"],
   [/\bmetro\b|\bMRT\b|\bBTS\b|\bsubway\b/, "metro"],
@@ -33,8 +39,36 @@ const MODES: [RegExp, string][] = [
   [/\bauto[- ]?rickshaws?\b|\bautos?\b|\btuk[- ]?tuks?\b/i, "auto"],
   [/\bbus(?:es)?\b/i, "bus"],
   [/\bferr(?:y|ies)\b/i, "ferry"],
-  [/\b(?:scooter|bike|moped|two[- ]wheeler) (?:rental|hire)s?\b|\brent(?:ing)? a (?:scooter|bike)\b/i, "scooter rental"],
+  [/\b(?:scooter|bike|moped|two[- ]wheeler) (?:rental|hire)s?\b|\brent(?:ing)? a (?:scooter|bike)\b/i, "scooter hire"],
   [/\b(?:taxis?|cabs?|car hire|car rental)\b/i, "taxi"],
+]
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+/** Airlines, from the carriers list (longer names first there, so "Air India Express" isn't "Air India"). */
+const AIRLINES: [RegExp, string][] = CARRIERS.map((name) => [new RegExp(`(?<![\\p{L}\\p{N}])${escape(name)}(?![\\p{L}\\p{N}])`, "iu"), name])
+
+/** Tours and activities a sightseeing price can be for, when no place is named nearer. */
+const TOURS: [RegExp, string][] = [
+  [/\bsunset cruises?\b/i, "sunset cruise"],
+  [/\briver cruises?\b/i, "river cruise"],
+  [/\bdolphin (?:watching|trips?|tours?|cruises?)\b/i, "dolphin trip"],
+  [/\bspice (?:plantation|farm) (?:tours?|visits?)\b/i, "spice plantation tour"],
+  [/\bheritage walks?\b/i, "heritage walk"],
+  [/\bwalking tours?\b/i, "walking tour"],
+  [/\bcity tours?\b/i, "city tour"],
+  [/\bboat (?:tours?|rides?|trips?)\b/i, "boat tour"],
+  [/\bdesert safaris?\b/i, "desert safari"],
+  [/\b(?:jeep |wildlife )?safaris?\b/i, "safari"],
+  [/\bsnorkell?ing\b/i, "snorkelling"],
+  [/\bscuba diving\b/i, "scuba diving"],
+  [/\bparasailing\b/i, "parasailing"],
+  [/\b(?:white[- ]water )?rafting\b/i, "rafting"],
+  [/\bcable car\b|\bropeway\b/i, "cable car"],
+  [/\bhot[- ]air balloon\b/i, "hot-air balloon"],
+  [/\blight and sound show\b/i, "light and sound show"],
+  [/\bcooking class(?:es)?\b/i, "cooking class"],
+  [/\btrek(?:king)?\b/i, "trek"],
 ]
 
 /** Named dishes looked for in the food results (a list, so a name is never made up). */
@@ -60,21 +94,17 @@ const CAP = "[A-Z][\\p{L}'’.-]*"
 const ATTRACTION = new RegExp(`(?:${CAP}\\s+){0,3}(?:${ATTRACTION_WORDS})\\b(?:\\s+(?:of\\s+)?${CAP}){0,2}`, "gu")
 const GENERIC_FIRST = new Set(["best", "top", "popular", "famous", "the", "this", "these", "most", "visit", "explore", "a", "an", "our", "your", "every", "all", "many"])
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const textsOf = (r: SearchResult) => [r.title, r.snippet, r.content ?? ""]
-
-/** Where the price sits in its quote: the first number whose digits are the amount's. */
-function priceAt(quote: string, amount: string): number {
-  const digits = amount.replace(/\D/g, "")
-  for (const m of quote.matchAll(/\d[\d,.]*/g)) if (m[0].replace(/\D/g, "").startsWith(digits)) return m.index
-  return Math.floor(quote.length / 2)
-}
 
 /**
  * The label from `list` written nearest the price in its quote. The list goes from specific to
  * general: a match inside an earlier one's words ("cab" in "app cab") doesn't count.
  */
 function nearest(quote: string, at: number, list: readonly [RegExp, string][]): string | undefined {
+  return nearestAt(quote, at, list)?.label
+}
+
+function nearestAt(quote: string, at: number, list: readonly [RegExp, string][]): { d: number; label: string } | null {
   const taken: [number, number][] = []
   let best: { d: number; label: string } | null = null
   for (const [re, label] of list) {
@@ -87,11 +117,11 @@ function nearest(quote: string, at: number, list: readonly [RegExp, string][]): 
       if (!best || d < best.d) best = { d, label }
     }
   }
-  return best?.label
+  return best
 }
 
 /** A place name nearest the price in its quote ("Gateway of India", "Baga Beach"). */
-function attractionNear(quote: string, at: number): string | undefined {
+function attractionNear(quote: string, at: number): { d: number; name: string } | null {
   let best: { d: number; name: string } | null = null
   for (const m of quote.matchAll(ATTRACTION)) {
     const name = cleanPlace(m[0])
@@ -101,7 +131,7 @@ function attractionNear(quote: string, at: number): string | undefined {
     const d = end <= at ? at - end : Math.abs(m.index - at)
     if (!best || d < best.d) best = { d, name }
   }
-  return best?.name
+  return best
 }
 
 function cleanPlace(raw: string): string | null {
@@ -115,32 +145,34 @@ function cleanPlace(raw: string): string | null {
   return name
 }
 
-/** An area named with "in" before the price ("in Colaba"), when no hotel is. */
-function areaNear(quote: string, at: number): string | undefined {
-  let best: { d: number; name: string } | null = null
-  for (const m of quote.matchAll(/\bin ([A-Z][\p{L}'’-]+(?: [A-Z][\p{L}'’-]+)?)/gu)) {
-    const d = Math.abs(m.index - at)
-    if (!/^(?:January|February|March|April|May|June|July|August|September|October|November|December|India)$/.test(m[1]!) && (!best || d < best.d)) best = { d, name: m[1]! }
-  }
-  return best?.name
+/** What a line's price must say it is for, in words ("which airline"), for a line that needs one. */
+export const SUBJECT_WORDS: Partial<Record<string, string>> = {
+  transport: "which airline",
+  stay: "which hotel or property",
+  food: "what kind of meal or food",
+  local_travel: "which way of getting around",
+  sightseeing: "which place or tour",
 }
 
 /** What one price is for, from its own quote; undefined when nothing there says. */
-export function aboutPrice(line: string, quote: string, amount: string, destination: string | null): string | undefined {
+export function aboutPrice(line: string, quote: string, amount: string): string | undefined {
   const at = priceAt(quote, amount)
   switch (line) {
-    case "stay": {
-      const hotel = hotelNameAt(quote, at)
-      if (hotel) return hotel
-      const area = areaNear(quote, at)
-      return area && (!destination || area.toLowerCase() !== destination.toLowerCase()) ? area : undefined
-    }
+    case "transport":
+      return nearest(quote, at, AIRLINES)
+    case "stay":
+      return hotelNameAt(quote, at)
     case "food":
-      return nearest(quote, at, MEAL_KINDS)
+      return nearest(quote, at, MEAL_KINDS) ?? nearest(quote, at, DAILY_FOOD)
     case "local_travel":
       return nearest(quote, at, MODES)
-    case "sightseeing":
-      return attractionNear(quote, at)
+    case "sightseeing": {
+      // The place or the tour named nearer the price.
+      const place = attractionNear(quote, at)
+      const tour = nearestAt(quote, at, TOURS)
+      if (place && (!tour || place.d <= tour.d)) return place.name
+      return tour?.label
+    }
     default:
       return undefined
   }

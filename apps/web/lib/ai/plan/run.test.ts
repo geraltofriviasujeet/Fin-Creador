@@ -14,7 +14,7 @@ const page = (title: string, snippet: string): SearchResult => ({ title, url: `h
 
 /** One page per query, by the words the query template uses. */
 const PAGES: [RegExp, SearchResult][] = [
-  [/^flight ticket price from Delhi to Goa/, page("Goa flights", "Delhi to Goa flights cost ₹4,200 per person one way on average. Seat selection from ₹5 per person.")],
+  [/^flight ticket price from Delhi to Goa/, page("Goa flights", "IndiGo flights from Delhi to Goa cost ₹4,200 per person one way; IndiGo seat selection from ₹5 per person.")],
   [/hotel price per night/, page("Goa hotels", "Rooms at Novotel Goa Resort & Spa in Candolim cost ₹4,500 a night in January.")],
   [/daily food cost/, page("Goa food", "Street food meals in Goa cost about ₹800 per person per day; try the fish curry and bebinca.")],
   [/local taxi hire/, page("Goa taxis", "An app cab (Uber or Ola) in Goa costs ₹2,000 per day.")],
@@ -32,14 +32,14 @@ const PAGES: [RegExp, SearchResult][] = [
   [/insurance price/, page("Creta insurance", "Hyundai Creta insurance costs ₹45,000 for the first year.")],
 ]
 
-function fakeSearch(): SearchProvider & { queries: string[] } {
+function fakeSearch(pages = PAGES): SearchProvider & { queries: string[] } {
   const queries: string[] = []
   return {
     name: "fake",
     queries,
     async search(query) {
       queries.push(query)
-      return PAGES.filter(([re]) => re.test(query)).map(([, r]) => r)
+      return pages.filter(([re]) => re.test(query)).map(([, r]) => r)
     },
   }
 }
@@ -110,8 +110,8 @@ function fakeRecords(overrides: Partial<PlanRecords> = {}): () => Promise<PlanRe
 
 const goa = { kind: "trip", destination: "Goa", origin: "Delhi", month: "2027-01", nights: 4, travellers: 2, style: "comfort" } satisfies PlanRequest
 
-function setup() {
-  const search = fakeSearch()
+function setup(pages = PAGES) {
+  const search = fakeSearch(pages)
   const { db, calls } = fakeDb()
   const web = new WebSession({ provider: search, db, requestId: "r1", terms: { names: [], phrases: [] }, countryCode: "IN", plan: true })
   const ctx = { supabase: {} as UserClient, today: "2026-11-07", currency: "INR", descriptionsOk: false, web }
@@ -128,13 +128,15 @@ describe("a trip plan", () => {
     expect(run.plan.assumptions.some((a) => a.startsWith("Prices in rupees outside a plausible range are dropped as misreads: transport ₹1,500 to ₹40,000 a person (international ₹8,000 to ₹2,00,000 a person)"))).toBe(true)
     const by = Object.fromEntries(run.plan.lines.map((l) => [l.line, l]))
     expect(by.transport!.amounts).toEqual([{ currency: "INR", low: "8400", high: "8400" }])
-    expect(by.stay!.amounts[0]!.high).toBe("18000")
+    // Stay: the stay lookup's hotel and the hotels lookup's, one list, each hotel once.
+    expect(by.stay!.amounts).toEqual([{ currency: "INR", low: "18000", high: "72000", bound: "at_least" }])
+    expect(by.stay!.prices.map((p) => [p.about, p.amount])).toEqual([["Novotel Goa Resort & Spa", "4500"], ["Taj Exotica Resort & Spa", "18000"]])
+    expect(by.stay!.mentions).toBeUndefined()
     expect(by.food!.amounts[0]!.high).toBe("8000") // ₹800 × 5 days × 2
     // "₹5 per person" for a flight is a misread: dropped, and the line says so.
     expect(by.transport!.prices).toHaveLength(1)
     expect(by.transport!.how).toMatch(/1 price outside ₹1,500 to ₹40,000 a person was dropped as implausible\.$/)
     // What each price is for, found next to it on its page.
-    expect(by.stay!.prices[0]!.about).toBe("Novotel Goa Resort & Spa")
     expect(by.food!.prices[0]!.about).toBe("street food")
     expect(by.food!.mentions!.map((m) => m.name)).toEqual(["fish curry", "bebinca"])
     expect(by.local_travel!.prices[0]!.about).toBe("app cab")
@@ -143,23 +145,56 @@ describe("a trip plan", () => {
     // Shopping: never an amount, what the place is known for buying.
     expect(by.shopping).toMatchObject({ from: "not_estimated", amounts: [], prices: [] })
     expect(by.shopping!.mentions!.map((m) => m.name)).toEqual(["cashews", "spices", "feni"])
-    expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4540", high: "4540" }] })
-    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "49940", high: "49940" }])
+    expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4540", high: "9940", bound: "at_least" }] })
+    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "49940", high: "109340", bound: "at_least" }])
     expect(targets).toEqual([4_994_000])
     expect(run.answer).toMatch(/ 6 of 6 cost lines have an estimate\./)
-    expect(run.plan.verdicts.web.summary).toBe("No. With web estimates the plan adds up to ₹49,940. At your current rate that wouldn't be covered by January 2027.")
+    expect(run.plan.verdicts.web.summary).toBe(
+      'No. With web estimates the plan adds up to at least ₹49,940 (a minimum: some prices are "from" prices). At your current rate that wouldn\'t be covered by January 2027.',
+    )
     expect(run.plan.changes[0]).toMatch(/^Save ₹5,000(\.00)? more a month\.$/)
     // Every web line carries its page; names are only those found, each with where.
     expect(by.transport!.prices[0]).toMatchObject({ site: "goa-flights.example.test", per: "person" })
     expect(run.plan.carriers!.listed.map((c) => c.name)).toEqual(["Air India Express", "IndiGo", "Akasa Air", "SpiceJet"])
-    expect(run.plan.hotels!.listed).toEqual([
-      expect.objectContaining({ name: "Taj Exotica Resort & Spa", stars: 5, rate: expect.objectContaining({ amount: "18,000".replace(",", ""), bound: "from", per: "night" }) }),
-      expect.objectContaining({ name: "Novotel Goa Resort & Spa", stars: 4 }),
-    ])
-    expect(run.plan.hotels!.note).toMatch(/not Roma's recommendation/)
+    expect(run.plan.hotels).toBeNull()
+    expect(by.stay!.prices[1]).toMatchObject({ bound: "from", per: "night", site: "goa-luxury-stays.example.test" })
+    expect(run.plan.assumptions.some((a) => /Hotels on the stay line are as listed .* not Roma's recommendation/.test(a))).toBe(true)
     expect(checkedPlanSchema.safeParse(run.plan).success).toBe(true)
     await web.finish()
     expect(calls).toEqual(["begin:plan", "settle:8"])
+  })
+
+  it("drops a price that doesn't say what it is for, and says how many; no other price, no estimate", async () => {
+    const pages: typeof PAGES = [
+      ...PAGES.filter(([re]) => !/flight ticket/.test(re.source)),
+      [/^flight ticket price from Delhi to Goa/, page("Goa fares", "Return flights from Delhi to Goa cost ₹6,500 per person in January.")],
+    ]
+    const { ctx } = setup(pages)
+    const provider = pickingModel()
+    const run = await runPlan(goa, { ctx, provider, records: fakeRecords() })
+    const brief = JSON.parse((provider.requests[0]!.messages[0] as { text: string }).text) as Brief
+    expect(brief.lines.some((l) => l.line === "transport")).toBe(false)
+    expect(run.plan.lines.find((l) => l.line === "transport")).toMatchObject({
+      from: "none",
+      how: "No estimate: 1 price found didn't say which airline it was for, so it wasn't used.",
+      pages: [expect.objectContaining({ site: "goa-fares.example.test" })],
+    })
+  })
+
+  it("a budget plan looks up budget hotels by name: a rate joins the stay line, a hotel without one is listed on it", async () => {
+    const pages: typeof PAGES = [
+      ...PAGES.filter(([re]) => !/hotel/.test(re.source)),
+      [/budget hotel price per night/, page("Goa budget rooms", "Rooms in Goa cost ₹1,800 a night.")],
+      [/^budget hotels in Goa with prices/, page("Goa budget hotels", "Casa Anjuna Inn charges ₹2,200 a night. Sea Shell Guest Hotel is near Calangute beach, a short walk away from the market and the bus stand.")],
+    ]
+    const { search, ctx } = setup(pages)
+    const run = await runPlan({ ...goa, style: "budget" }, { ctx, provider: pickingModel(), records: fakeRecords() })
+    expect(search.queries).toContain("budget hotels in Goa with prices per night")
+    const stay = run.plan.lines.find((l) => l.line === "stay")!
+    expect(stay.prices.map((p) => [p.about, p.amount])).toEqual([["Casa Anjuna Inn", "2200"]])
+    expect(stay.how).toMatch(/1 price found didn't say which hotel or property it was for, so it wasn't used\.$/)
+    expect(stay.mentions!.map((m) => m.name)).toEqual(["Sea Shell Guest Hotel"])
+    expect(checkedPlanSchema.safeParse(run.plan).success).toBe(true)
   })
 
   it("comes back when the model's round hangs: lookups kept as pages, every web line no estimate, credits settled", async () => {
@@ -257,7 +292,7 @@ describe("a trip plan", () => {
     const run = await runPlan({ ...goa, destination: null }, { ctx, provider: pickingModel(), records: fakeRecords() })
     expect(search.queries).toHaveLength(0)
     expect(run.calls).toBe(0)
-    expect(run.plan.hotels!.note).toBe("No 4- and 5-star hotels or resorts looked up: the destination was skipped.")
+    expect(run.plan.hotels).toBeNull()
     expect(run.plan.lines.every((l) => l.from === (l.line === "shopping" ? "not_estimated" : "none"))).toBe(true)
   })
 })

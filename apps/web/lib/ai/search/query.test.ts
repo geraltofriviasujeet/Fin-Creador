@@ -23,6 +23,12 @@ describe("web lookup queries", () => {
     expect(buildQuery({ ...trip, destination: "₹ Goa" }, NONE, "IN")).toEqual({ ok: false, reason: "unlisted_place" })
   })
 
+  it("looks up budget hotels by name for a budget plan, 4- and 5-star ones otherwise", () => {
+    expect(buildQuery({ ...trip, cost_line: "hotels", style: "budget" }, NONE, "IN")).toMatchObject({ ok: true, query: "budget hotels in Goa with prices per night" })
+    expect(buildQuery({ ...trip, cost_line: "hotels", style: "comfort" }, NONE, "IN")).toMatchObject({ ok: true, query: "four star and five star hotels and resorts in Goa price per night" })
+    expect(buildQuery({ ...trip, cost_line: "hotels" }, NONE, "IN")).toMatchObject({ ok: true, query: "four star and five star hotels and resorts in Goa price per night" })
+  })
+
   it("looks up a visa only for an international trip", () => {
     expect(buildQuery({ ...trip, cost_line: "visa" }, NONE, "IN")).toEqual({ ok: false, reason: "line_not_for_scope" })
   })

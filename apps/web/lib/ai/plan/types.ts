@@ -67,7 +67,7 @@ const priceSchema = z
     currency: z.string().regex(/^[A-Z]{3}$/),
     per: z.enum(["total", "night", "person", "person_night", "day_person"]),
     bound: z.enum(["from", "up_to"]).optional(),
-    /** What the price is for (a hotel or area, a kind of meal, a mode, a place), found next to it on its page. */
+    /** What the price is for (an airline, a hotel, a kind of meal, a mode, a place or tour), found next to it on its page. Required for a new trip price; optional for older stored plans. */
     about: text(80).optional(),
     site,
     url,
@@ -86,8 +86,8 @@ const lineSchema = z
     prices: z.array(priceSchema).max(6),
     /** Pages found for a line that couldn't be checked in time: kept, so a spent lookup is never silent. */
     pages: z.array(z.object({ site, url }).strict()).max(6),
-    /** Named dishes (food), well-known places (sightseeing) or what a place is known for buying (shopping), each with its page. */
-    mentions: z.array(z.object({ name: text(60), site, url }).strict()).max(8).optional(),
+    /** Named dishes (food), well-known places (sightseeing), hotels named without a rate (stay) or what a place is known for buying (shopping), each with its page. */
+    mentions: z.array(z.object({ name: text(80), site, url }).strict()).max(8).optional(),
   })
   .strict()
 export type PlanLine = z.infer<typeof lineSchema>
@@ -125,6 +125,7 @@ export const checkedPlanSchema = z
     /** Already saved toward a matching goal (purchase), profile currency minor units; null when none. */
     saved: z.object({ goal: text(80), minor: z.number().int().min(0), currency: z.string().regex(/^[A-Z]{3}$/) }).strict().nullable(),
     carriers: namesSchema.nullable(),
+    /** Plans made before the follow-up only: hotels are now on the stay line. */
     hotels: namesSchema.nullable(),
     verdicts: z
       .object({

@@ -346,7 +346,8 @@ describe("detailed plans (10.9)", () => {
       settle: async (_r, credits) => (ledger.push(`settle:${credits}`), true),
       release: async () => (ledger.push("release"), true),
     },
-    makeProvider: () => mockSearchProvider(() => [{ title: "Test data", url: "https://hotels.example.test/goa", snippet: "Test data. Rooms ₹4,500 a night." }]),
+    // A rate with the hotel it is for: a price without one isn't offered to the model (10.9).
+    makeProvider: () => mockSearchProvider(() => [{ title: "Test data", url: "https://hotels.example.test/goa", snippet: "Test data. Rooms at the Sea Breeze Hotel are ₹4,500 a night." }]),
     loadTerms: async () => ({ terms: { names: [], phrases: [] }, countryCode: "IN" }),
   }
   const records = async () => ({ records: { verdict: "Too early to say.", summary: "Too early to say. Test records." }, goal: null, saved: null, project: null, assumptions: [] })

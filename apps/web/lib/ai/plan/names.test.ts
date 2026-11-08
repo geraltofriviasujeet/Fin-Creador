@@ -30,6 +30,21 @@ describe("names found in the results", () => {
     expect(hotelCandidates([result(text)], [{ ...price, quote: "Rooms cost ₹9,500 per night." }])[0]!.rateId).toBeUndefined()
   })
 
+  it("gives a rate to the hotel in its own sentence, never to a neighbour named near it; a budget plan needs no stars", () => {
+    const text = "Casa Anjuna Inn charges ₹2,200 a night. Sea Shell Guest Hotel is near the beach."
+    const price = { id: "w3", currency: "INR", amount: "2200", scale: "none" as const, value: "2200", source_url: "https://stays.example.test/goa", site: "stays.example.test", title: "Test data", quote: text }
+    expect(hotelCandidates([result(text)], [price], "Goa", false).map((h) => [h.name, h.rateId])).toEqual([
+      ["Casa Anjuna Inn", "w3"],
+      ["Sea Shell Guest Hotel", undefined],
+    ])
+    expect(hotelCandidates([result(text)], [price], "Goa")).toEqual([])
+  })
+
+  it("cuts a sentence's end before a name and drops a name with Cheap in it (seen on a live budget search)", () => {
+    const text = "Near Calangute Beach. Moon Light Retreat has rooms. Hotel Arya Niwas Cheap deals. St. Regis Hotel is by the sea."
+    expect(hotelCandidates([result(text)], [], "Goa", false).map((h) => h.name)).toEqual(["Moon Light Retreat", "St. Regis Hotel"])
+  })
+
   it("never takes a site's name for a hotel's, and keeps each hotel once", () => {
     const text =
       "Mumbai SHARE Filter By Hotel 5-star. Apply The Leela Palace Hotel is 5-star. Courtyard by Marriott Mumbai Hotel is a 4-star hotel. Mumbai Booking.com Hotel deals on 5-star stays. Taj Mahal Palace Mumbai is a 5-star hotel. The Taj Mahal Palace, a five-star landmark, is by the sea. TAJ MAHAL PALACE is a 5-star icon. Trident Hotel is a 5-star hotel at Nariman Point."
