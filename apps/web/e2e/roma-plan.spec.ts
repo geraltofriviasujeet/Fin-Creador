@@ -43,8 +43,8 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(plan.locator('[data-line="transport"]')).toContainText("Web estimate")
   await expect(plan.locator('[data-line="transport"]')).toContainText("IndiGo, from INR 18,000 a person")
   await expect(plan.locator('[data-line="transport"]')).toContainText("listed on example.test")
-  // A price that doesn't say what it is for isn't used: the test pages name no kind of meal.
-  await expect(plan.locator('[data-line="food"]')).toContainText("didn't say what kind of meal or food they were for, so they weren't used.")
+  // Food is a per-day line: the test pages' hotel and flight prices aren't per day, so they aren't used, and the line says why.
+  await expect(plan.locator('[data-line="food"]')).toContainText("2 prices weren't per day (1 per night, 1 no unit given), so they weren't used.")
   await expect(plan.getByText("The plan's verdict, from both signals", { exact: true })).toBeVisible()
   await expect(plan.getByText("Against your past trip", { exact: true })).toBeVisible()
   await expect(plan.locator('[data-line="buffer"]')).toContainText("Worked out by the app")
