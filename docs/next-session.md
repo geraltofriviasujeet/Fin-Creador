@@ -1,21 +1,17 @@
-# Next session: Sprint 10, the Roma assistant (step 10.1)
+# Next session: Sprint 10.9, purchase plans that suggest models
 
-**State (2026-11-05).** Sprints 1–9 and 10a are on `main` and deployed (Vercel Hobby, Supabase Free). Sprint 9 (statement import, web) is complete: 9a card statement PDFs (PR #46), 9b bank statements, PNB PDF and CSV (PR #47), 9c refunds (PR #48), 9d generic structure-based bank reader with endpoint reconciliation and a masked Copy layout (PR #49). Statements are read in the browser; the file and any password never leave the device. Details and decisions: `docs/sprint-plan.md` (Sprint 9 rows, Decisions 2026-10-29 to 2026-11-05). Mobile Overview, Goals, Investments, Loans, cards, borrowing, statutory dues, net worth, Reports, statement import and adding refunds are in the backlog.
+**State (2026-11-08).** Sprints 1–9, 10a and Roma steps 10.1–10.5 and 10.8 are on `main` and deployed (PRs #53–#63). **10.9 detailed plans are all on draft PR #64** (branch `sprint-10.9-plans`), unmerged: the plan, intake, modal and Save as PDF; the follow-ups (subject per price, conversion, two verdict signals); the last round of fixes (hotel listing pairs, per-km fares kept off per-day lines, food guides as a subject); and "Add to my goals" with intake errors that name the question and the reason (commit 7a6956e). Migrations `20261107180000_roma_plans.sql` and `20261108120000_goal_from_plan.sql` are on dev only, not prod. Full status, the approved plan below, decisions and known gaps: "10.9 detailed plans: status and handoff" in `docs/sprint-plan.md` (Sprint 10 section) and Decisions 2026-11-07 to 2026-11-08.
 
-**Sprint 10a (clarity pass, web) is complete** (PR #51 merged into `main`): "Repeat this?" on add income and add expense, sign-out after 2 hours without activity across tabs, plainer wording, four Overview cards, three Income cards, and income sources showing actual amounts with a rate only from recurring rules. Migration `20261105120000_entry_repeat.sql` (confirm on dev and prod with `supabase migration list --linked`). Details: the 10a row and Decisions 2026-11-05 in `docs/sprint-plan.md`.
+**Next: build the approved purchase-plan redesign** (8 points in `docs/sprint-plan.md`):
+1. Measure first: two live shortlist queries (`ROMA_LIVE=1`, `PLAN_RECORD`), report how many candidates come back with a price, before any UI.
+2. Intake: kind, budget or "from my records", main use, when, trade-in; make and model optional.
+3. Two fixed-template lookups (no budget figure in a query); candidates from `VEHICLE_CATALOGUE` paired with a price on the same listing card, checked in code; the model picks ids only.
+4. A comparison in the modal, a verdict per candidate, "Pick this model" runs today's model plan.
+5. Storage: a new top-level `candidates` key needs its own new migration (the plan-shape key list): `20261108120000` is applied on dev and can't be edited.
 
-**Known limitations (kept).**
-- 9a: two tabs saving the same lines at once can both report "saved" (each line is still posted once). A parser change that alters a line's parsed values gives it another key, so a line imported before the change shows as Possible duplicate rather than Already imported.
-- 9b: importing both sides of a transfer in two tabs at the same moment can post it twice; a transfer the two banks book on different days is not matched and can post twice.
-- 9c: refund suggestions are exact-amount only (part refunds are picked by hand); two refunds linked to one purchase in one review can pass the picker and the second is refused at save (FC055); a refund's link can't be changed after saving (void and add again).
-- 9d: a scanned PDF has no text; a page footer printed one line below the last row can merge into it.
+**Known gaps (kept).** Stay and food often have no estimate; budget trips name fewer hotels; no live fares or room rates; mobile has no plans; a home city on the profile is still backlog. Earlier sprints' limitations: `docs/sprint-plan.md` status rows.
 
-**Order (owner, 2026-11-05).**
-1. **Sprint 10, the Roma assistant: step 10.1.** Sprint 10 in `docs/sprint-plan.md` and CLAUDE.md section 7 (figures computed in code, never by the model; provider keys server-side; informational only; no financial actions). The step's exact scope comes from the owner at the start of the session.
-
-**Backlog (owner).** Card list: PNB cards first, from PNB's own pages only (verified, no guessing), then other public-sector and mid-size banks, as the next quarterly list refresh (January 2027, `docs/quarterly-list-refresh.md`, including `FD_BANKS` and `LENDERS`). Until then "Other" typed works. Statements: Excel (.xlsx) import; an SBI statement layout. Full list: Backlog in `docs/sprint-plan.md`.
-
-**Migrations.** All in `supabase/migrations/`, all on **dev and prod**: `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals · `20261027120000` instruments and investments · `20261027180000` price refresh run log and `pg_cron` job · `20261027200000` fixed deposits · `20261028120000` loans, due items and payments · `20261028180000` cards, statements, borrowing · `20261028210000` borrowing details, card products, digits in any script · `20261028230000` statutory dues · `20261029120000` account balances at a date. Sprint 9: `20261029180000` bank charges category · `20261104120000` refunds. Sprint 10a: `20261105120000` entry repeat. (Confirm each on dev and prod with `supabase migration list --linked`.)
+**Migrations.** All in `supabase/migrations/`, all on **dev and prod**: `20261021183415` profiles · `20261022150000` accounts and income · `20261022190000` one cash account · `20261023120000` expenses, transfers, edits · `20261023180000` drop `void_income` · `20261024120000` recurring rules · `20261026120000` dashboard breakdown · `20261026180000` goals and budgets · `20261026200000` vehicle type · `20261026210000` delete archived goals · `20261027120000` instruments and investments · `20261027180000` price refresh run log and `pg_cron` job · `20261027200000` fixed deposits · `20261028120000` loans, due items and payments · `20261028180000` cards, statements, borrowing · `20261028210000` borrowing details, card products, digits in any script · `20261028230000` statutory dues · `20261029120000` account balances at a date. Sprint 9: `20261029180000` bank charges category · `20261104120000` refunds. Sprint 10a: `20261105120000` entry repeat. Sprint 10: `20261105180000` roma usage · `20261106120000` roma conversations · `20261107120000` roma search (dev and prod); `20261107180000` roma plans · `20261108120000` goal from plan (**dev only**, prod after PR #64 merges and a backup). (Confirm each on dev and prod with `supabase migration list --linked`.)
 
 Check `supabase migration list --linked` against each project before any database work. Status, steps and decisions: `docs/sprint-plan.md`; deploy steps: `docs/deployment.md` (4a dev refresh, 4b prod refresh, 4c Sprint 8 record).
 
@@ -49,10 +45,9 @@ Check `supabase migration list --linked` against each project before any databas
 **Start prompt (paste into a fresh session):**
 
 ```text
-Next: Sprint 10, the Roma assistant, step 10.1 (see docs/next-session.md). Read CLAUDE.md, docs/sprint-plan.md and docs/next-session.md first.
-Branch from `main`; open draft PRs only, never merge, no prod access.
-Then give me a plan of at most 25 lines: scope, what already exists, the first step, and only the questions that block the work, each with your recommendation.
-Wait for my one reply. After it, work through everything that stays green without pausing.
-Stop only at: the SQL review (show migration SQL before any test or push), the db push (I run it), a rule the sprint plan doesn't cover, CI still red after two fix attempts, or before a PR is made ready.
+Next: Sprint 10.9, purchase plans that suggest models (see docs/next-session.md). Read CLAUDE.md, docs/sprint-plan.md (Sprint 10, "10.9 detailed plans: status and handoff") and docs/next-session.md first.
+Work on branch sprint-10.9-plans (draft PR #64); never merge, no prod access.
+Start with the live measurement (point 1), report it in at most 10 lines, and wait for my reply before building the UI.
+Stop only at: the SQL review (the new migration for the `candidates` key), the db push (I run it), a rule the sprint plan doesn't cover, CI still red after two fix attempts, or before a PR is made ready.
 Never mark a PR ready or merge it. Keep each report to at most 15 lines.
 ```
