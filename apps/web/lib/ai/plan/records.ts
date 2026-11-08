@@ -1,8 +1,8 @@
 import type { GoalItem } from "@fin-creador/api"
-import { divRoundHalfAway, goalProjection, monthStart } from "@fin-creador/domain"
+import { divRoundHalfAway, goalProjection, monthStart, pastTripRun } from "@fin-creador/domain"
 import { normalizePlace } from "@fin-creador/schemas"
 import { goalProjectionTool, loadProjectionBasis, otherGoals } from "../tools/goals"
-import { tripCheckTool } from "../tools/trip"
+import { loadTravelRuns, tripCheckTool } from "../tools/trip"
 import { NO_LOOKUPS, type ToolContext, ToolError, type ToolOutput } from "../tools/types"
 import type { PlanRecords } from "./run"
 import type { PlanLineName, PlanRequest } from "./types"
@@ -11,6 +11,7 @@ import type { PlanLineName, PlanRequest } from "./types"
 // tools as a question (trip_check, goal_projection), a matching goal's cost lines and what is
 // saved toward it, and a projection on the same months, claims and other goals to check the
 // plan's total with. No balance is taken: only the amount saved toward the matching goal.
+// A trip also takes the past trip it is compared with: one travel run as spent (pastTripRun).
 
 const same = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && normalizePlace(a) === normalizePlace(b)
 
@@ -46,6 +47,14 @@ export async function loadPlanRecords(ctx: ToolContext, request: PlanRequest): P
 
   if (request.kind === "trip") {
     const { destination, month, nights, travellers } = request
+    // Read alongside the records verdict; a failure leaves only this signal unknown.
+    const pastTrip: Promise<PlanRecords["pastTrip"]> = loadTravelRuns(ctx).then(
+      (runs) => {
+        const p = pastTripRun(runs, nights === null ? null : nights + 1)
+        return p ? { from: p.run.from, to: p.run.to, days: p.run.days, travelMinor: p.run.travelMinor, similar: p.similar } : null
+      },
+      () => "unreadable" as const,
+    )
     const missing = [destination === null ? "the destination" : null, month === null ? "the month" : null, nights === null ? "nights" : null, travellers === null ? "travellers" : null].filter(
       (x): x is string => x !== null,
     )
@@ -82,6 +91,7 @@ export async function loadPlanRecords(ctx: ToolContext, request: PlanRequest): P
     return {
       records,
       goal,
+      pastTrip: await pastTrip,
       saved: null,
       project: future ? (targetMinor) => goalProjection({ today, targetMinor, savedMinor: 0, targetDate: targetDate!, months: basis.complete, claims, otherGoals: others }) : null,
       assumptions: typeof out === "object" && out?.check ? out.check.assumptions.filter((a) => a !== NO_LOOKUPS) : [],

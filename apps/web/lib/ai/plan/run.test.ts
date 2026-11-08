@@ -181,6 +181,25 @@ describe("a trip plan", () => {
     })
   })
 
+  it("uses prices in the plan's currency only: a line priced only in USD has no estimate, a mixed line says what it left out, one total", async () => {
+    const pages: typeof PAGES = [
+      ...PAGES.filter(([re]) => !/flight ticket|daily food/.test(re.source)),
+      [/^flight ticket price from Delhi to Goa/, page("Goa fares", "IndiGo return flights from Delhi to Goa cost USD 598 per person.")],
+      [/daily food cost/, page("Goa food", "Street food meals in Goa cost about ₹800 per person per day. A thali at a beach shack is USD 12 per person per day.")],
+    ]
+    const { ctx } = setup(pages)
+    const provider = pickingModel()
+    const run = await runPlan(goa, { ctx, provider, records: fakeRecords() })
+    const brief = JSON.parse((provider.requests[0]!.messages[0] as { text: string }).text) as { lines: { line: string; prices: { currency: string }[] }[] }
+    expect(brief.lines.flatMap((l) => l.prices.map((p) => p.currency))).not.toContain("USD")
+    const by = Object.fromEntries(run.plan.lines.map((l) => [l.line, l]))
+    expect(by.transport).toMatchObject({ from: "none", how: "No estimate: prices found only in USD. They aren't converted." })
+    expect(by.food!.amounts).toEqual([{ currency: "INR", low: "8000", high: "8000" }])
+    expect(by.food!.how).toMatch(/ 1 price in USD wasn't used \(never converted\)\.$/)
+    expect(run.plan.verdicts.totals.map((t) => t.currency)).toEqual(["INR"])
+    expect(run.plan.assumptions).toContain("Only prices in INR are used. A line priced only in another currency has no estimate: nothing is converted, as the app has no exchange-rate source.")
+  })
+
   it("a budget plan looks up budget hotels by name: a rate joins the stay line, a hotel without one is listed on it", async () => {
     const pages: typeof PAGES = [
       ...PAGES.filter(([re]) => !/hotel/.test(re.source)),
@@ -297,6 +316,46 @@ describe("a trip plan", () => {
   })
 })
 
+describe("a trip plan's verdict from both signals", () => {
+  const projecting = (verdict: "yes" | "no" | "too_early") => () => ({ verdict, availableByTargetMinor: 3_000_000, extraMonthlyMinor: 500_000, reachMonth: "2027-04-01" }) as unknown as GoalProjection
+  const april = { from: "2026-04-01", to: "2026-04-05", days: 5, travelMinor: 6_000_000, similar: true }
+
+  it("money fails but the plan costs no more than the past trip: Not yet, the money is the constraint", async () => {
+    const { ctx } = setup()
+    const run = await runPlan(goa, { ctx, provider: pickingModel(), records: fakeRecords({ project: projecting("no"), pastTrip: april }) })
+    const both = run.plan.verdicts.both!
+    expect(both.verdict).toBe("Not yet.")
+    expect(both.summary).toBe("The money is the constraint, not the trip: the plan costs no more than your past trip did, but there isn't enough free money by January 2027.")
+    expect(both.money).toEqual({ met: "no", summary: "₹30,000 is free for it by January 2027 after your other goals (planned trips included), short of the plan's at least ₹49,940." })
+    expect(both.past).toEqual({ met: "yes", summary: "The plan's at least ₹49,940 is at or below your Travel spending from 2026-04-01 to 2026-04-05 (5 days): ₹60,000, as spent. Who went and where isn't known." })
+    expect(run.answer).toMatch(/The plan's verdict, from both signals: Not yet\. The money is the constraint/)
+    expect(checkedPlanSchema.safeParse(run.plan).success).toBe(true)
+  })
+
+  it("both fail: No, with the past trip's figure and that it isn't of similar length", async () => {
+    const { ctx } = setup()
+    const run = await runPlan(goa, { ctx, provider: pickingModel(), records: fakeRecords({ project: projecting("no"), pastTrip: { ...april, days: 12, travelMinor: 2_000_000, similar: false } }) })
+    const both = run.plan.verdicts.both!
+    expect(both.verdict).toBe("No.")
+    expect(both.summary).toBe("There isn't enough free money by January 2027. The plan costs more than your past trip did.")
+    expect(both.past.summary).toMatch(/is above your Travel spending from 2026-04-01 to 2026-04-05 \(12 days\): ₹20,000, as spent\. Who went and where isn't known; no past trip of similar length was found, so this is the most recent\.$/)
+  })
+
+  it("money holds: Yes, whatever the past trip", async () => {
+    const { ctx } = setup()
+    const run = await runPlan(goa, { ctx, provider: pickingModel(), records: fakeRecords({ project: projecting("yes"), pastTrip: { ...april, travelMinor: 2_000_000 } }) })
+    expect(run.plan.verdicts.both).toMatchObject({ verdict: "Yes.", summary: "There's enough free money by January 2027. The plan costs more than your past trip did.", money: { met: "yes" }, past: { met: "no" } })
+  })
+
+  it("no past trip or no money signal: says which can't be told", async () => {
+    const { ctx } = setup()
+    const none = await runPlan(goa, { ctx, provider: pickingModel(), records: fakeRecords({ project: projecting("no"), pastTrip: null }) })
+    expect(none.plan.verdicts.both).toMatchObject({ verdict: "No.", past: { met: "unknown", summary: "No past trip to compare with: no Travel spending in your records in the last 24 months." } })
+    const unread = await runPlan(goa, { ctx: setup().ctx, provider: pickingModel(), records: fakeRecords({ project: null, pastTrip: "unreadable" }) })
+    expect(unread.plan.verdicts.both).toMatchObject({ verdict: "No verdict.", money: { met: "unknown" }, past: { met: "unknown", summary: "Your past travel spending couldn't be read just now." } })
+  })
+})
+
 describe("a purchase plan", () => {
   it("prices the vehicle and its first-year insurance, takes off the deposit and says what is saved", async () => {
     const { search, ctx } = setup()
@@ -311,6 +370,7 @@ describe("a purchase plan", () => {
     expect(run.plan.saved).toEqual({ goal: "New car", minor: 20_000_000, currency: "INR" })
     expect(run.plan.verdicts.web.summary).toMatch(/already saved toward New car/)
     expect(run.plan.carriers).toBeNull()
+    expect(run.plan.verdicts.both).toBeUndefined()
   })
 
   it("doesn't look up a house: its lines are no estimate without a goal", async () => {

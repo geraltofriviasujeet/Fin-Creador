@@ -30,7 +30,7 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await intake.getByRole("button", { name: "Make the plan" }).click()
 
   const answers = page.getByRole("list", { name: "Roma's answers" })
-  await expect(answers.getByText(/^Plan: trip from Delhi to Goa in January \d{4}\. 5 of 6 cost lines have an estimate\./)).toBeVisible()
+  await expect(answers.getByText(/^Plan: trip from Delhi to Goa in January \d{4}\. 2 of 6 cost lines have an estimate\./)).toBeVisible()
   await expect(answers.getByText(/These are estimates, not quotes or bookings\./)).toBeVisible()
   await expect(intake).toHaveCount(0)
 
@@ -41,7 +41,12 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(plan.getByText(/^Estimates, not quotes or bookings\. Web prices are as pages listed them/)).toBeVisible()
   await expect(plan.locator('[data-line="stay"]')).toContainText("No estimate: the travel style was skipped.")
   await expect(plan.locator('[data-line="transport"]')).toContainText("Web estimate")
+  await expect(plan.locator('[data-line="transport"]')).toContainText("IndiGo, from INR 18,000 a person")
   await expect(plan.locator('[data-line="transport"]')).toContainText("listed on example.test")
+  // A price that doesn't say what it is for isn't used: the test pages name no kind of meal.
+  await expect(plan.locator('[data-line="food"]')).toContainText("didn't say what kind of meal or food they were for, so they weren't used.")
+  await expect(plan.getByText("The plan's verdict, from both signals", { exact: true })).toBeVisible()
+  await expect(plan.getByText("Against your past trip", { exact: true })).toBeVisible()
   await expect(plan.locator('[data-line="buffer"]')).toContainText("Worked out by the app")
   await expect(plan.getByText("From your records", { exact: true })).toBeVisible()
   await expect(plan.getByText("With web estimates, not your records", { exact: true })).toBeVisible()

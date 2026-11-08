@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { goalProjection } from "./goal-projection";
 import {
   TRIP_RUN_MAX_DAYS,
+  pastTripRun,
+  similarLength,
   type TripComparable,
   daysInclusive,
   findTravelRuns,
@@ -113,5 +115,29 @@ describe("goalProjection: available by the target month", () => {
   });
   it("is null without a target date", () => {
     expect(goalProjection({ ...input, targetDate: null }).availableByTargetMinor).toBeNull();
+  });
+});
+
+describe("the past trip a plan compares with", () => {
+  const run = (from: string, days: number, travelMinor: number) => ({ from: from as never, to: from as never, days, travelMinor });
+  // Newest first, as findTravelRuns gives them.
+  const runs = [run("2026-09-01", 2, 800_000), run("2026-04-01", 6, 4_500_000), run("2025-12-01", 5, 3_000_000)];
+
+  it("takes the most recent run of similar length", () => {
+    expect(pastTripRun(runs, 5)).toEqual({ run: runs[1], similar: true });
+  });
+
+  it("falls back to the most recent of any length, and says so", () => {
+    expect(pastTripRun(runs, 15)).toEqual({ run: runs[0], similar: false });
+    expect(pastTripRun(runs, null)).toEqual({ run: runs[0], similar: false });
+  });
+
+  it("skips a run with no Travel spending left, and has none without runs", () => {
+    expect(pastTripRun([run("2026-09-01", 5, 0), runs[2]!], 5)).toEqual({ run: runs[2], similar: true });
+    expect(pastTripRun([], 5)).toBeNull();
+  });
+
+  it("counts within 2 days, or 25% of the trip's days when more", () => {
+    expect([similarLength(7, 5), similarLength(8, 5), similarLength(13, 10), similarLength(14, 10)]).toEqual([true, false, true, false]);
   });
 });

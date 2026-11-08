@@ -161,6 +161,13 @@ async function priceRuns(ctx: ToolContext, runs: readonly TravelRun[], travelIds
   })
 }
 
+/** Travel runs in the look-back window, newest first (MAX_RUNS at most), each with both figures. */
+export async function loadTravelRuns(ctx: ToolContext): Promise<PricedRun[]> {
+  const categories = await travelCategories(ctx.supabase)
+  const runs = findTravelRuns(await travelDates(ctx, categories.map((c) => c.id), monthStart(ctx.today, -TRIP_LOOKBACK_MONTHS))).slice(0, MAX_RUNS)
+  return priceRuns(ctx, runs, new Set(categories.map((c) => c.id)))
+}
+
 /** Trip goals (active or done) in the currency, with at least one cost line. */
 export function goalComparables(items: readonly GoalItem[], currency: string): TripComparable[] {
   const out: TripComparable[] = []
@@ -226,9 +233,7 @@ export const tripCheckTool: FinanceTool<TripInput> = {
     const size: TripSize = { days: p.nights! + 1, travellers: p.travellers! }
 
     const lookback = monthStart(today, -TRIP_LOOKBACK_MONTHS)
-    const [basis, categories] = await Promise.all([loadProjectionBasis(ctx), travelCategories(ctx.supabase)])
-    const runs = findTravelRuns(await travelDates(ctx, categories.map((c) => c.id), lookback)).slice(0, MAX_RUNS)
-    const priced = await priceRuns(ctx, runs, new Set(categories.map((c) => c.id)))
+    const [basis, priced] = await Promise.all([loadProjectionBasis(ctx), loadTravelRuns(ctx)])
     const comparables = [...goalComparables([...basis.goals.active, ...basis.goals.archived], currency), ...confirmedRuns(p.past_trips, priced)]
     const estimate = tripEstimate(comparables, tripScope, size)
 

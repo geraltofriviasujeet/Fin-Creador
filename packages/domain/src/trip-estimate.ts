@@ -13,6 +13,10 @@
 //    per traveller-day. A run's amount per traveller-day. Each rounded half away from zero.
 //  - Only comparables of the same scope (domestic or international) are used. The estimate is
 //    the median of what each comparable scales to. None: no estimate.
+//  - A plan's past-trip signal (10.9 follow-up) compares the plan with one run as it was
+//    spent, unscaled (who went and where isn't known): the most recent run of similar length
+//    (within SIMILAR_DAYS_MIN days, or SIMILAR_DAYS_PERCENT% of the plan's days if more), else
+//    the most recent of any length. A run with no Travel spending left (refunds) isn't one.
 import { type IsoDate, parseIsoDate } from "./dates";
 import { medianMinor } from "./goal-projection";
 import { type TripCostLine, type TripDetails, divRoundHalfAway } from "./goals";
@@ -21,6 +25,8 @@ import { addMinor } from "./money";
 export const TRIP_RUN_GAP_DAYS = 3;
 export const TRIP_RUN_MAX_DAYS = 30;
 export const TRIP_LOOKBACK_MONTHS = 24;
+export const SIMILAR_DAYS_MIN = 2;
+export const SIMILAR_DAYS_PERCENT = 25;
 
 export type TripScope = TripDetails["scope"];
 
@@ -123,4 +129,21 @@ export function largestThatFits(
     best = n;
   }
   return best;
+}
+
+/** Whether a run's days are close enough to a trip's to compare with. */
+export function similarLength(runDays: number, tripDays: number): boolean {
+  const allowed = Math.max(SIMILAR_DAYS_MIN, Math.ceil((tripDays * SIMILAR_DAYS_PERCENT) / 100));
+  return Math.abs(runDays - tripDays) <= allowed;
+}
+
+/**
+ * The run a plan compares with: `runs` newest first (as findTravelRuns gives them); the most
+ * recent of similar length to `tripDays`, else the most recent. Null days: the most recent.
+ */
+export function pastTripRun<R extends TravelRun & { travelMinor: number }>(runs: readonly R[], tripDays: number | null): { run: R; similar: boolean } | null {
+  const spent = runs.filter((r) => r.travelMinor > 0);
+  const similar = tripDays === null ? undefined : spent.find((r) => similarLength(r.days, tripDays));
+  if (similar) return { run: similar, similar: true };
+  return spent[0] ? { run: spent[0], similar: false } : null;
 }

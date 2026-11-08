@@ -90,6 +90,7 @@ export function PlanView({ plan, madeOn, reopened }: { plan: CheckedPlan; madeOn
 
       <section aria-label="Verdicts" className="grid gap-3">
         <Verdict heading="From your records" verdict={verdicts.records.verdict} summary={verdicts.records.summary} />
+        {verdicts.both && <BothSignals both={verdicts.both} />}
         <Verdict heading="With web estimates, not your records" verdict={verdicts.web.verdict} summary={verdicts.web.summary} dashed />
         {plan.changes.length > 0 && (
           <div>
@@ -185,6 +186,33 @@ function Verdict({ heading, verdict, summary, dashed = false }: { heading: strin
       <p className="text-xs font-semibold text-muted-foreground">{heading}</p>
       <p className="font-heading text-lg font-bold text-ink">{verdict}</p>
       <p className="text-ink">{summary}</p>
+    </div>
+  )
+}
+
+const SIGNAL_WORDS = { yes: "Holds", no: "Doesn't hold", unknown: "Can't say" } as const
+
+function BothSignals({ both }: { both: NonNullable<CheckedPlan["verdicts"]["both"]> }) {
+  return (
+    <div className="rounded-lg border border-line border-l-4 border-l-brand-deep px-3 py-2">
+      <p className="text-xs font-semibold text-muted-foreground">The plan&apos;s verdict, from both signals</p>
+      <p className="font-heading text-lg font-bold text-ink">{both.verdict}</p>
+      <p className="text-ink">{both.summary}</p>
+      <dl className="mt-2 grid gap-2">
+        {(
+          [
+            ["Free money by the travel month", both.money],
+            ["Against your past trip", both.past],
+          ] as const
+        ).map(([label, s]) => (
+          <div key={label}>
+            <dt className="flex flex-wrap items-center gap-2 font-semibold text-ink">
+              {label} <Badge tone={s.met === "yes" ? "savings" : s.met === "no" ? "neutral" : "info"}>{SIGNAL_WORDS[s.met]}</Badge>
+            </dt>
+            <dd className="text-ink">{s.summary}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   )
 }

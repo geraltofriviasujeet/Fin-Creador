@@ -110,6 +110,10 @@ export type PlanNames = z.infer<typeof namesSchema>
 const verdictSchema = z.object({ verdict: text(40), summary: text(1200) }).strict()
 export type PlanVerdict = z.infer<typeof verdictSchema>
 
+/** One signal of a trip plan's verdict: whether it holds, with its figures in words. */
+const signalSchema = z.object({ met: z.enum(["yes", "no", "unknown"]), summary: text(600) }).strict()
+export type PlanSignal = z.infer<typeof signalSchema>
+
 export const checkedPlanSchema = z
   .object({
     v: z.literal(1),
@@ -133,6 +137,8 @@ export const checkedPlanSchema = z
         totals: z.array(amountSchema).max(4),
         records: verdictSchema,
         web: verdictSchema,
+        /** A trip's verdict from both signals: free money by the travel month, and the past trip's cost. Absent on purchases and older plans. */
+        both: z.object({ verdict: text(40), summary: text(600), money: signalSchema, past: signalSchema }).strict().optional(),
       })
       .strict(),
     changes: z.array(text(200)).max(6),

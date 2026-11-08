@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { type GoalProjection, currencyMinorDigits, formatMoney } from "@fin-creador/domain"
+import { type GoalProjection, TRIP_LOOKBACK_MONTHS, currencyMinorDigits, formatMoney } from "@fin-creador/domain"
 import { tripPlaceScope } from "@fin-creador/schemas"
 import { DEADLINE_MS } from "../chat"
 import { LlmError, type LlmMessage, type LlmProvider, type LlmUsage, NO_USAGE, addUsage } from "../llm/types"
@@ -13,7 +13,7 @@ import { webTotal } from "../web-format"
 import { lineWords } from "./format"
 import { type Mention, SUBJECT_WORDS, aboutPrice, dishesIn, placesIn, shoppingIn } from "./context"
 import { NAMES_PER_KIND, carrierCandidates, hotelCandidates, nameKey } from "./names"
-import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanVerdict } from "./types"
+import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanSignal, PlanVerdict } from "./types"
 
 // One plan, run (10.9). In order:
 //   1. The person's records: the records-only verdict, any matching goal's cost lines and
@@ -52,6 +52,8 @@ export type PlanRecords = {
   project: ((targetMinor: number) => GoalProjection) | null
   /** Assumptions the records' verdict rests on. */
   assumptions: string[]
+  /** A trip's past trip to compare with: one travel run as spent; null with none; "unreadable" when it couldn't be read. Absent for a purchase. */
+  pastTrip?: { from: string; to: string; days: number; travelMinor: number; similar: boolean } | null | "unreadable"
 }
 
 export type PlanDeps = {
@@ -363,23 +365,31 @@ export function inRange(p: PlanPrice, r: { low: number; high: number; unit: keyo
   return total >= r.low * 100 * units && total <= r.high * 100 * units
 }
 
-type Screened = { prices: (PriceCandidate & { id: string })[]; about: Map<string, string>; noSubject: number }
+type Screened = { prices: (PriceCandidate & { id: string })[]; about: Map<string, string>; noSubject: number; foreign: Map<string, number> }
 
 /**
- * A line's prices with what each is for (context.ts); one with nothing found isn't offered.
- * A range's ends share what they are for. A purchase line needs none: its lookup names it.
+ * A line's prices that can be used: in the plan's currency (others are counted, never
+ * converted: there is no rate source), and with what each is for (context.ts), one with
+ * nothing found isn't offered. A range's ends share what they are for. A purchase line needs
+ * no subject: its lookup names it.
  */
-export function screenPrices(line: PlanLineName, prices: readonly (PriceCandidate & { id: string })[]): Screened {
-  if (!SUBJECT_WORDS[line]) return { prices: [...prices], about: new Map(), noSubject: 0 }
+export function screenPrices(line: PlanLineName, prices: readonly (PriceCandidate & { id: string })[], currency: string): Screened {
+  const foreign = new Map<string, number>()
+  for (const p of prices) if (p.currency !== currency) foreign.set(p.currency, (foreign.get(p.currency) ?? 0) + 1)
+  const mine = prices.filter((p) => p.currency === currency)
+  if (!SUBJECT_WORDS[line]) return { prices: mine, about: new Map(), noSubject: 0, foreign }
   const about = new Map<string, string>()
-  for (const p of prices) {
+  for (const p of mine) {
     const a = aboutPrice(line, p.quote, p.amount)
     if (a) about.set(p.id, a)
   }
-  for (const p of prices) if (!about.has(p.id) && p.rangeWith && about.has(p.rangeWith)) about.set(p.id, about.get(p.rangeWith)!)
-  const kept = prices.filter((p) => about.has(p.id))
-  return { prices: kept, about, noSubject: prices.length - kept.length }
+  for (const p of mine) if (!about.has(p.id) && p.rangeWith && about.has(p.rangeWith)) about.set(p.id, about.get(p.rangeWith)!)
+  const kept = mine.filter((p) => about.has(p.id))
+  return { prices: kept, about, noSubject: mine.length - kept.length, foreign }
 }
+
+/** "USD" or "USD and EUR". */
+const currencyList = (codes: readonly string[]) => (codes.length === 1 ? codes[0]! : `${codes.slice(0, -1).join(", ")} and ${codes.at(-1)}`)
 
 export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<PlanRun> {
   const deadline = Date.now() + (deps.deadlineMs ?? DEADLINE_MS)
@@ -414,7 +424,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   })()
   const screened = new Map<PlanLineName, Screened>()
   for (const o of outcomes) {
-    if (o.lookup.line !== "carriers" && o.lookup.line !== "hotels" && o.lookup.line !== "shopping" && o.outcome?.ok) screened.set(o.lookup.line, screenPrices(o.lookup.line, o.outcome.prices))
+    if (o.lookup.line !== "carriers" && o.lookup.line !== "hotels" && o.lookup.line !== "shopping" && o.outcome?.ok) screened.set(o.lookup.line, screenPrices(o.lookup.line, o.outcome.prices, currency))
   }
 
   // 3. The model's round, only when there is something to pick.
@@ -453,7 +463,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     const c = web?.candidates.get(id)
     if (!o?.ok || !c || !o.prices.some((p) => p.id === id)) return null
     const checked = verifyWebFigure({ label: "hotel", amount: c.amount, currency: c.currency, scale: c.scale, per: "night", source_url: c.source_url, quote: c.quote }, results)
-    if (!checked.ok) return null
+    if (!checked.ok || c.currency !== currency) return null
     const rate = toPrice(c, "night", name)
     return inRange(rate, rangeFor("stay", international)!, 1, 1) ? rate : null
   }
@@ -518,7 +528,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     if (!o) why = NO_WEB
     else if (!o.ok) why = REFUSALS[o.reason]
     else if (o.prices.length === 0) why = "no price was found on the pages looked up."
-    else if (!s || s.prices.length === 0) why = ""
+    else if (!s || s.prices.length === 0) why = s && s.foreign.size > 0 && s.noSubject === 0 ? `prices found only in ${currencyList([...s.foreign.keys()])}. They aren't converted.` : ""
     else if (!round.picks) why = round.outcome === "timeout" ? NOT_CHECKED : "the prices found couldn't be checked, so none is used. The pages found are listed."
     else {
       const picks = round.picks.lines.find((l) => l.line === line)?.picks ?? []
@@ -542,19 +552,25 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
       noSubject === 0
         ? ""
         : ` ${noSubject} ${noSubject === 1 ? "price" : "prices"} found didn't say ${SUBJECT_WORDS[line]} ${noSubject === 1 ? "it was" : "they were"} for, so ${noSubject === 1 ? "it wasn't" : "they weren't"} used.`
+    // Prices in another currency, when the line has its own (or other words say why it has none).
+    const foreignCount = [...(s?.foreign.values() ?? [])].reduce((a, b) => a + b, 0)
+    const foreignWords =
+      foreignCount === 0 || why?.startsWith("prices found only in")
+        ? ""
+        : ` ${foreignCount} ${foreignCount === 1 ? "price" : "prices"} in ${currencyList([...s!.foreign.keys()])} ${foreignCount === 1 ? "wasn't" : "weren't"} used (never converted).`
     const range = rangeFor(line, international)
     const inside = range ? checked.filter((p) => inRange(p, range, nights, travellers)) : checked
     const prices = inside.slice(0, PRICES_PER_LINE)
     const dropped = checked.length - inside.length
     const droppedWords = dropped === 0 || !range ? "" : ` ${dropped} ${dropped === 1 ? "price" : "prices"} outside ${rangeWords(range)} ${dropped === 1 ? "was" : "were"} dropped as implausible.`
-    if (prices.length === 0) return none(line, `No estimate:${why ? ` ${why}` : ""}${subjectWords}${droppedWords}`, pagesOf(o))
+    if (prices.length === 0) return none(line, `No estimate:${why ? ` ${why}` : ""}${foreignWords}${subjectWords}${droppedWords}`, pagesOf(o))
     const amounts = lineAmounts(prices, nights, travellers)
     if (amounts.length === 0) {
       const needs = [nights === null ? "nights" : null, travellers === null ? "travellers" : null].filter(Boolean).join(" and ")
       return { line, from: "none", amounts: [], how: `No estimate: the prices found need the number of ${needs}, which ${needs.includes(" and ") ? "were" : "was"} skipped.`, prices, pages: [] }
     }
     const sites = [...new Set(prices.map((p) => p.site))].join(", ")
-    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${subjectWords}${droppedWords}`, prices, pages: [] }
+    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${foreignWords}${subjectWords}${droppedWords}`, prices, pages: [] }
   }
 
   // The buffer: the goal's own, or BUFFER_PERCENT of the lines with an estimate, per currency.
@@ -594,12 +610,12 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   // 5. Totals and verdicts.
   const totals = addAmounts(lines.flatMap((l) => l.amounts))
   const mine = totals.find((t) => t.currency === currency)
-  const others = totals.filter((t) => t.currency !== currency)
   const noEstimate = lines.filter((l) => l.from === "none").map((l) => lineWords(l.line).toLowerCase())
   const deposit = request.kind === "purchase" ? (request.depositMinor ?? 0) : 0
   const saved = records.saved
   const hasWeb = lines.some((l) => l.from === "web")
-  const { web: webVerdict, changes } = planVerdict({ request, records, mine, others, noEstimate, deposit, hasWeb, money, today })
+  const { web: webVerdict, changes, checked } = planVerdict({ request, records, mine, noEstimate, deposit, hasWeb, money, today })
+  const both = request.kind === "trip" ? bothSignals({ request, records, web: webVerdict, checked, noEstimate, money }) : null
 
   // Every page used, and when nothing could be checked every page found: a spent lookup is never silent.
   const sources = uniqueSources([
@@ -616,9 +632,9 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     carriers,
     // Hotels are on the stay line (10.9 follow-up); older stored plans keep their own list.
     hotels: null,
-    verdicts: { totals, records: records.records, web: webVerdict },
+    verdicts: { totals, records: records.records, web: webVerdict, ...(both ? { both } : {}) },
     changes,
-    assumptions: planAssumptions(request, records, others.map((t) => t.currency)),
+    assumptions: planAssumptions(request, records, currency),
     sources,
   }
   return { plan, answer: planAnswer(plan), calls, usage: round.usage, unknownCalls: round.unknown ? 1 : 0, picked: round.outcome }
@@ -680,17 +696,16 @@ function planVerdict(a: {
   request: PlanRequest
   records: PlanRecords
   mine: PlanAmount | undefined
-  others: PlanAmount[]
   noEstimate: string[]
   deposit: number
   hasWeb: boolean
   money: (minor: number) => string
   today: string
-}): { web: PlanVerdict; changes: string[] } {
+}): { web: PlanVerdict; changes: string[]; checked: Checked | null } {
   const { request, records, mine, money } = a
-  const none = (summary: string) => ({ web: { verdict: "No verdict.", summary }, changes: [] })
+  const none = (summary: string) => ({ web: { verdict: "No verdict.", summary }, changes: [], checked: null })
   if (!a.hasWeb) return none("No web estimates in this plan: no line could be priced from the web.")
-  if (!mine) return none(`No verdict with web estimates: no line is priced in your currency (prices in ${a.others.map((t) => t.currency).join(", ")} aren't converted).`)
+  if (!mine) return none("No verdict with web estimates: no line is priced in your currency.")
   if (!records.project) return none(`No verdict with web estimates: ${request.month === null ? "the month was skipped, so there is no date to save by" : "there is nothing in your records to project from"}.`)
 
   const digits = currencyMinorDigits(mine.currency)
@@ -710,7 +725,6 @@ function planVerdict(a: {
   const range = mine.low !== mine.high && !mine.bound ? ` The lines range from ${webTotal(mine)}; the higher end is checked.` : ""
   const deposit = a.deposit > 0 ? ` Less your trade-in or deposit of ${money(a.deposit)}, ${money(target)} is needed.` : ""
   const missing = a.noEstimate.length > 0 ? ` Lines with no estimate aren't included: ${a.noEstimate.join(", ")}.` : ""
-  const foreign = a.others.length > 0 ? ` Prices in ${a.others.map((t) => t.currency).join(", ")} aren't converted and aren't included.` : ""
   const saved = records.saved ? ` ${money(records.saved.minor)} is already saved toward ${records.saved.goal}.` : ""
   let outcome: string
   if (p.verdict === "yes") outcome = `At your current rate that would be covered by ${month}.`
@@ -726,12 +740,67 @@ function planVerdict(a: {
     } else if (a.deposit === 0) changes.push("A trade-in or deposit lowers what is needed.")
   }
   return {
-    web: { verdict, summary: `${verdict} With web estimates the plan adds up to ${amount}.${range}${deposit}${saved}${missing}${foreign} ${outcome}`.trim() },
+    web: { verdict, summary: `${verdict} With web estimates the plan adds up to ${amount}.${range}${deposit}${saved}${missing} ${outcome}`.trim() },
     changes,
+    checked: { projection: p, totalMinor, bound: mine.bound },
   }
 }
 
-function planAssumptions(r: PlanRequest, records: PlanRecords, otherCurrencies: string[]): string[] {
+/** The plan total the projection checked, and how it came out. */
+type Checked = { projection: GoalProjection; totalMinor: number; bound: PlanAmount["bound"] }
+
+/**
+ * A trip plan's verdict from both signals, in code:
+ *   money: is there enough free money by the travel month, after other goals (the projection);
+ *   past:  is the plan's total at or below the past trip it is compared with, as spent?
+ * Yes when money holds; when only past holds, "Not yet.": the money is the constraint, not
+ * the trip; both fail, No. Without the money signal, no verdict.
+ */
+function bothSignals(a: {
+  request: Extract<PlanRequest, { kind: "trip" }>
+  records: PlanRecords
+  web: PlanVerdict
+  checked: Checked | null
+  noEstimate: string[]
+  money: (minor: number) => string
+}): NonNullable<CheckedPlan["verdicts"]["both"]> {
+  const { request, checked, money } = a
+  const month = request.month ? monthName(`${request.month}-01`) : null
+  const figure = checked ? `${checked.bound === "at_least" ? "at least " : checked.bound === "at_most" ? "at most " : ""}${money(checked.totalMinor)}` : null
+  const missing = a.noEstimate.length > 0 ? " Lines with no estimate aren't in the plan's figure." : ""
+
+  let moneySignal: PlanSignal
+  const p = checked?.projection
+  const available = p?.availableByTargetMinor ?? null
+  if (!p || p.verdict === "too_early") moneySignal = { met: "unknown", summary: p ? "There aren't enough months in your records to say." : a.web.summary }
+  else if (p.verdict === "yes")
+    moneySignal = { met: "yes", summary: available === null ? `At your current rate the plan's ${figure} would be covered by ${month}, after your other goals.` : `${money(available)} is free for it by ${month} after your other goals (planned trips included), enough for the plan's ${figure}.` }
+  else
+    moneySignal = { met: "no", summary: available === null ? `At your current rate the plan's ${figure} wouldn't be covered by ${month}, after your other goals.` : `${money(available)} is free for it by ${month} after your other goals (planned trips included), short of the plan's ${figure}.` }
+
+  let past: PlanSignal
+  const trip = a.records.pastTrip
+  if (trip === "unreadable") past = { met: "unknown", summary: "Your past travel spending couldn't be read just now." }
+  else if (!trip) past = { met: "unknown", summary: `No past trip to compare with: no Travel spending in your records in the last ${TRIP_LOOKBACK_MONTHS} months.` }
+  else if (!checked) past = { met: "unknown", summary: `No plan figure in your currency to compare with your Travel spending from ${trip.from} to ${trip.to} (${money(trip.travelMinor)}).` }
+  else {
+    const met = checked.totalMinor <= trip.travelMinor
+    const length = trip.similar ? "" : `; no past trip of similar length was found, so this is the most recent`
+    past = {
+      met: met ? "yes" : "no",
+      summary: `The plan's ${figure} is ${met ? "at or below" : "above"} your Travel spending from ${trip.from} to ${trip.to} (${trip.days} ${trip.days === 1 ? "day" : "days"}): ${money(trip.travelMinor)}, as spent. Who went and where isn't known${length}.${missing}`,
+    }
+  }
+
+  const pastWords = past.met === "yes" ? " The plan costs no more than your past trip did." : past.met === "no" ? " The plan costs more than your past trip did." : ""
+  if (moneySignal.met === "yes") return { verdict: "Yes.", summary: `There's enough free money by ${month}.${pastWords}`, money: moneySignal, past }
+  if (moneySignal.met === "no" && past.met === "yes")
+    return { verdict: "Not yet.", summary: `The money is the constraint, not the trip: the plan costs no more than your past trip did, but there isn't enough free money by ${month}.`, money: moneySignal, past }
+  if (moneySignal.met === "no") return { verdict: "No.", summary: `There isn't enough free money by ${month}.${pastWords}`, money: moneySignal, past }
+  return { verdict: "No verdict.", summary: `No verdict without the free money by the travel month.${pastWords}`, money: moneySignal, past }
+}
+
+function planAssumptions(r: PlanRequest, records: PlanRecords, currency: string): string[] {
   const list = [
     "Estimates, not quotes or bookings. Web prices are as listed on the pages found when the plan was made, not live fares or room rates.",
     "The verdict from your records comes first; the one with web estimates never changes it.",
@@ -751,7 +820,7 @@ function planAssumptions(r: PlanRequest, records: PlanRecords, otherCurrencies: 
   } else {
     list.push(r.item === "house" ? "Registration, stamp duty and loan costs aren't included." : "Loan interest isn't included; insurance and extras are the first year's.")
   }
-  if (otherCurrencies.length > 0) list.push(`Prices in ${otherCurrencies.join(", ")} are shown as found, never converted.`)
+  list.push(`Only prices in ${currency} are used. A line priced only in another currency has no estimate: nothing is converted, as the app has no exchange-rate source.`)
   return [...list, ...records.assumptions].slice(0, 16)
 }
 
@@ -759,9 +828,11 @@ function planAssumptions(r: PlanRequest, records: PlanRecords, otherCurrencies: 
 export function planAnswer(plan: CheckedPlan): string {
   const priced = plan.lines.filter((l) => l.from !== "not_estimated")
   const estimated = priced.filter((l) => l.from !== "none").length
+  const both = plan.verdicts.both
   return [
     `${plan.intake.title}. ${estimated} of ${priced.length} cost lines have an estimate.`,
     `From your records: ${plan.verdicts.records.summary}`,
+    ...(both ? [`The plan's verdict, from both signals: ${both.verdict} ${both.summary}`] : []),
     `With web estimates: ${plan.verdicts.web.summary}`,
     "Open the plan for each cost line, how it was worked out and its sources. These are estimates, not quotes or bookings.",
   ].join("\n\n")
