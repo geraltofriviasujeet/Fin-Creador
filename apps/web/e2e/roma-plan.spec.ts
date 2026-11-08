@@ -51,7 +51,8 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(plan.getByText("From your records", { exact: true })).toBeVisible()
   await expect(plan.getByText("With web estimates, not your records", { exact: true })).toBeVisible()
   await expect(plan.getByRole("region", { name: "Sources" }).getByRole("link", { name: "https://example.test/hotels" })).toBeVisible()
-  await expect(plan.getByRole("region", { name: "Airlines listed for this route" })).toContainText("No airlines could be confirmed on the pages looked up, so none is suggested.")
+  // The test pages name IndiGo; the mock model picks no names, so none is suggested.
+  await expect(plan.getByRole("region", { name: "Airlines listed for this route" })).toContainText("No airlines on the pages found could be confirmed, so none is suggested.")
   await expect(plan.getByRole("region", { name: "What the plan is for" })).toContainText("FromDelhi")
 
   // Save as PDF: the browser's print, showing only the plan's copy, every link written out.
