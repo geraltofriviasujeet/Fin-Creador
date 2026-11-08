@@ -96,7 +96,8 @@ export class WebSession {
     this.used++
 
     try {
-      const results = await this.options.provider.search(built.query, signal)
+      // A domestic trip prefers Indian pages: their prices are in rupees.
+      const results = await this.options.provider.search(built.query, signal, built.scope === "domestic" ? { country: "india" } : undefined)
       this.sent++
       for (const r of results) if (!this.results.some((have) => have.url === r.url)) this.results.push(r)
       if (input.kind === "trip") this.trips.push({ nights: input.nights, travellers: input.travellers })

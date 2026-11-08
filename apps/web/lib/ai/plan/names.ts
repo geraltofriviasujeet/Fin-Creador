@@ -193,6 +193,19 @@ export function hotelCandidates(
   return out.slice(0, NAMES_PER_KIND).map((h, i) => ({ ...h, id: `h${i + 1}` }))
 }
 
+/**
+ * A hotel's own page's name, from its title's first part ("Hotel Savera, Chennai | Official
+ * Site" is "Hotel Savera"). A listing ("Hotels in Chennai", "10 Best Hotels in Chennai") or a
+ * name that is only the destination and lodging words isn't one.
+ */
+export function pageHotelName(title: string, destination: string | null): string | undefined {
+  const first = title.split(/\s+[|–—:-]\s+|,\s+/)[0]!.trim()
+  if (/\d/.test(first) || /\b(?:in|near|from|for|best|top|cheap|budget|deals?)\b/i.test(first) || /\b(?:Hotels|Resorts|Villas|Suites)\b$/.test(first)) return undefined
+  const m = first.match(new RegExp(`^${HOTEL_NAME.source}$`, "u"))
+  const name = m ? cleanName(m[0]) : null
+  return name && nameKey(name, destination) ? name : undefined
+}
+
 /** Where the price sits in its quote: the first number whose digits are the amount's. */
 export function priceAt(quote: string, amount: string): number {
   const digits = amount.replace(/\D/g, "")

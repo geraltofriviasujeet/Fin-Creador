@@ -1,6 +1,7 @@
 import { currencyMinorDigits, formatMoney } from "@fin-creador/domain"
 import { decimalToMinor } from "../search/totals"
-import type { PlanAmount, PlanLine, PlanLineName } from "./types"
+import { webPrice } from "../web-format"
+import type { PlanAmount, PlanLine, PlanLineName, PlanPrice } from "./types"
 
 // How a checked plan's figures are written on screen and in the PDF (10.9): one wording for
 // both, so the PDF says exactly what the modal says.
@@ -14,6 +15,9 @@ export function planAmount(a: PlanAmount): string {
   const range = a.low === a.high ? money(a.low, a.currency) : `${money(a.low, a.currency)} to ${money(a.high, a.currency)}`
   return a.bound === "mixed" ? `${range} (neither a minimum nor a maximum)` : range
 }
+
+/** A web price as its page listed it, with the converted figure beside it when there is one: "USD 152 a night (about ₹14,306)". */
+export const planPrice = (p: PlanPrice) => `${webPrice(p)}${p.converted ? ` (about ${money(p.converted.amount, p.converted.currency)})` : ""}`
 
 const LINE_WORDS: Record<PlanLineName, string> = {
   transport: "Transport",

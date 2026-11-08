@@ -22,7 +22,7 @@ type TavilyResult = { title?: unknown; url?: unknown; content?: unknown; raw_con
 export function tavilyProvider({ apiKey, fetch = globalThis.fetch }: Options): SearchProvider {
   return {
     name: "tavily",
-    async search(query: string, signal: AbortSignal): Promise<SearchResult[]> {
+    async search(query: string, signal: AbortSignal, options?: { country?: "india" }): Promise<SearchResult[]> {
       const timeout = AbortSignal.timeout(SEARCH_TIMEOUT_MS)
       let response: Response
       try {
@@ -36,6 +36,8 @@ export function tavilyProvider({ apiKey, fetch = globalThis.fetch }: Options): S
             include_answer: false,
             include_raw_content: "text",
             include_images: false,
+            // Boosts pages from the country (Tavily's "general" topic, the default); no extra credit.
+            ...(options?.country ? { country: options.country } : {}),
           }),
           signal: AbortSignal.any([signal, timeout]),
         })

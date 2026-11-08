@@ -125,7 +125,7 @@ describe("a trip plan", () => {
     const run = await runPlan(goa, { ctx, provider: pickingModel(), records: fakeRecords() })
     expect(search.queries).toHaveLength(8)
     expect(run.picked).toBe("picked")
-    expect(run.plan.assumptions.some((a) => a.startsWith("Prices in rupees outside a plausible range are dropped as misreads: transport ₹1,500 to ₹40,000 a person (international ₹8,000 to ₹2,00,000 a person)"))).toBe(true)
+    expect(run.plan.assumptions.some((a) => a.startsWith("Prices outside a plausible range in rupees (after any conversion) are dropped as misreads: transport ₹1,500 to ₹40,000 a person (international ₹8,000 to ₹2,00,000 a person)"))).toBe(true)
     const by = Object.fromEntries(run.plan.lines.map((l) => [l.line, l]))
     expect(by.transport!.amounts).toEqual([{ currency: "INR", low: "8400", high: "8400" }])
     // Stay: the stay lookup's hotel and the hotels lookup's, one list, each hotel once.
@@ -181,23 +181,45 @@ describe("a trip plan", () => {
     })
   })
 
-  it("uses prices in the plan's currency only: a line priced only in USD has no estimate, a mixed line says what it left out, one total", async () => {
+  it("converts a price with a rate into the plan's currency, original kept, range-checked after; one without a rate isn't used; one total", async () => {
     const pages: typeof PAGES = [
-      ...PAGES.filter(([re]) => !/flight ticket|daily food/.test(re.source)),
+      ...PAGES.filter(([re]) => !/flight ticket|daily food|tours and activities/.test(re.source)),
       [/^flight ticket price from Delhi to Goa/, page("Goa fares", "IndiGo return flights from Delhi to Goa cost USD 598 per person.")],
       [/daily food cost/, page("Goa food", "Street food meals in Goa cost about ₹800 per person per day. A thali at a beach shack is USD 12 per person per day.")],
+      [/tours and activities/, page("Goa tours", "The Dudhsagar Falls tour costs JPY 5,000 per person.")],
     ]
     const { ctx } = setup(pages)
     const provider = pickingModel()
     const run = await runPlan(goa, { ctx, provider, records: fakeRecords() })
     const brief = JSON.parse((provider.requests[0]!.messages[0] as { text: string }).text) as { lines: { line: string; prices: { currency: string }[] }[] }
-    expect(brief.lines.flatMap((l) => l.prices.map((p) => p.currency))).not.toContain("USD")
+    expect(brief.lines.flatMap((l) => l.prices.map((p) => p.currency))).not.toContain("JPY")
     const by = Object.fromEntries(run.plan.lines.map((l) => [l.line, l]))
-    expect(by.transport).toMatchObject({ from: "none", how: "No estimate: prices found only in USD. They aren't converted." })
-    expect(by.food!.amounts).toEqual([{ currency: "INR", low: "8000", high: "8000" }])
-    expect(by.food!.how).toMatch(/ 1 price in USD wasn't used \(never converted\)\.$/)
+    // USD 598 is about ₹56,282 a person: outside the domestic fare range once converted.
+    expect(by.transport).toMatchObject({ from: "none", how: "No estimate: 1 price outside ₹1,500 to ₹40,000 a person was dropped as implausible." })
+    // USD 12 × 94.1176 = ₹1,129.41 a person a day, × 5 days × 2.
+    expect(by.food!.amounts).toEqual([{ currency: "INR", low: "8000", high: "11294.1" }])
+    expect(by.food!.prices.find((p) => p.currency === "USD")).toMatchObject({ amount: "12", about: "thali", converted: { currency: "INR", amount: "1129.41" } })
+    expect(by.food!.how).toMatch(/ Prices in USD are converted to INR, approximately \(the rate is in the assumptions\)\.$/)
+    expect(by.sightseeing!.how).toBe("No estimate: prices found only in JPY, which the app has no exchange rate for.")
     expect(run.plan.verdicts.totals.map((t) => t.currency)).toEqual(["INR"])
-    expect(run.plan.assumptions).toContain("Only prices in INR are used. A line priced only in another currency has no estimate: nothing is converted, as the app has no exchange-rate source.")
+    expect(run.plan.assumptions).toContain(
+      "Prices in USD are converted to INR at fixed rates of 2026-11-08 (1 USD = INR 94.1176; open.er-api.com, checked against the ECB's reference rates). Conversion is approximate: each such price shows its original amount beside it.",
+    )
+    expect(run.plan.assumptions).toContain("A price in a currency the app has no exchange rate for isn't used.")
+    expect(checkedPlanSchema.safeParse(run.plan).success).toBe(true)
+  })
+
+  it("takes what a price is for from its page when its own words don't say: a taxi firm's page; a page about nothing, dropped", async () => {
+    const pages: typeof PAGES = [
+      ...PAGES.filter(([re]) => !/local taxi hire/.test(re.source)),
+      [/local taxi hire/, page("Drop Taxi Goa", "One way and round trip fares from ₹2,500 per day.")],
+      [/local taxi hire/, page("Goa guide", "Budget about ₹1,800 per day for getting around.")],
+    ]
+    const { ctx } = setup(pages)
+    const run = await runPlan(goa, { ctx, provider: pickingModel(), records: fakeRecords() })
+    const local = run.plan.lines.find((l) => l.line === "local_travel")!
+    expect(local.prices.map((p) => [p.about, p.amount, p.site])).toEqual([["taxi", "2500", "drop-taxi-goa.example.test"]])
+    expect(local.how).toMatch(/ 1 price found didn't say which way of getting around it was for, so it wasn't used\.$/)
   })
 
   it("a budget plan looks up budget hotels by name: a rate joins the stay line, a hotel without one is listed on it", async () => {
@@ -208,7 +230,7 @@ describe("a trip plan", () => {
     ]
     const { search, ctx } = setup(pages)
     const run = await runPlan({ ...goa, style: "budget" }, { ctx, provider: pickingModel(), records: fakeRecords() })
-    expect(search.queries).toContain("budget hotels in Goa with prices per night")
+    expect(search.queries).toContain("budget hotels in Goa with prices per night in rupees")
     const stay = run.plan.lines.find((l) => l.line === "stay")!
     expect(stay.prices.map((p) => [p.about, p.amount])).toEqual([["Casa Anjuna Inn", "2200"]])
     expect(stay.how).toMatch(/1 price found didn't say which hotel or property it was for, so it wasn't used\.$/)

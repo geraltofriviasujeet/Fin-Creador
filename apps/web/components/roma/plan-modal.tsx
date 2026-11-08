@@ -5,9 +5,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { formatMoney } from "@fin-creador/domain"
-import { LINE_SOURCE, PLAN_NOT_LIVE, PLAN_REOPENED, lineWords, planAmount } from "@/lib/ai/plan/format"
+import { LINE_SOURCE, PLAN_NOT_LIVE, PLAN_REOPENED, lineWords, planAmount, planPrice } from "@/lib/ai/plan/format"
 import type { CheckedPlan, PlanLine, PlanNames } from "@/lib/ai/plan/types"
-import { webPrice } from "@/lib/ai/web-format"
 
 // A detailed plan (10.9), shown in a modal: built only from the checked plan the server
 // returned (or stored), the same object the chat answer was written from. A line that couldn't
@@ -243,7 +242,7 @@ function LineRow({ line }: { line: PlanLine }) {
           {line.prices.map((p, i) => (
             <li key={i} className="text-ink">
               {p.about ? `${p.about}, ` : ""}
-              {webPrice(p)}, listed on <ExternalLink href={p.url}>{p.site}</ExternalLink>
+              {planPrice(p)}, listed on <ExternalLink href={p.url}>{p.site}</ExternalLink>
             </li>
           ))}
         </ul>
@@ -284,7 +283,7 @@ function Names({ heading, names }: { heading: string; names: PlanNames }) {
             <li key={n.name} className="text-ink">
               <span className="font-semibold">{n.name}</span>
               {n.stars ? ` · ${n.stars}-star` : ""}
-              {n.rate ? ` · ${webPrice(n.rate)}` : ""} · listed on <ExternalLink href={n.url}>{n.site}</ExternalLink>
+              {n.rate ? ` · ${planPrice(n.rate)}` : ""} · listed on <ExternalLink href={n.url}>{n.site}</ExternalLink>
             </li>
           ))}
         </ul>

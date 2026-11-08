@@ -1,13 +1,14 @@
 import type { SearchResult } from "../search/types"
 import { siteOf } from "../search/verify"
-import { CARRIERS, PAGE_WORDS, hotelNameAt, isSiteName, priceAt } from "./names"
+import { CARRIERS, PAGE_WORDS, hotelNameAt, isSiteName, pageHotelName, priceAt } from "./names"
 
 // What a plan's figures are for (10.9), found in code in the same result text as the price,
 // never written by the model:
 //   * a price's `about`: the airline for transport, the hotel or property for a nightly rate,
 //     the kind of meal for food, the mode for local travel, the place or tour for sightseeing;
-//     the words nearest the price in its own quote. Nothing found: the price isn't used (a
-//     price without what it is for means nothing), never shown with a guess.
+//     the words nearest the price in its own quote, else what its page is about, from the
+//     page's title and address (aboutPage). Nothing found: the price isn't used (a price
+//     without what it is for means nothing), never shown with a guess.
 //   * a line's `mentions`: named local dishes (food), well-known places (sightseeing) and what a
 //     place is known for buying (shopping), from the lists and patterns here, each with the
 //     page it was found on.
@@ -173,6 +174,53 @@ export function aboutPrice(line: string, quote: string, amount: string): string 
       if (place && (!tour || place.d <= tour.d)) return place.name
       return tour?.label
     }
+    default:
+      return undefined
+  }
+}
+
+/** Words of a page's address: its host without "www." and its top-level part, and its path. */
+function addressWords(url: string): { host: string; path: string } {
+  try {
+    const u = new URL(url)
+    const host = u.hostname.toLowerCase().replace(/^www\./, "").split(".").slice(0, -1).join(" ")
+    return { host, path: decodeURIComponent(u.pathname).replace(/[^\p{L}\p{N}]+/gu, " ") }
+  } catch {
+    return { host: "", path: "" }
+  }
+}
+
+/** Ways of getting around run together in a site's name ("droptaxi", "murugancabs"). */
+const HOST_MODES: [RegExp, string][] = [
+  [/taxi|cab(?!in)/, "taxi"],
+  [/metro/, "metro"],
+]
+
+/** A food page with no kind of meal named: its title or address is about food. */
+const FOOD_PAGE = /\b(?:food|foods|meals?|restaurants?|dining|eat(?:ing)?|eateries|street food)\b/i
+
+const first = (text: string, list: readonly [RegExp, string][]) => list.find(([re]) => re.test(text))?.[1]
+
+/**
+ * What a price is for when its own words don't say: what its page is about, from its title and
+ * address, of the kind the line's lookup asked for (a taxi firm's page for local travel, a
+ * hotel's own page for a stay, a "cost of food" guide for food). A page that names none of
+ * them says nothing, and the price stays unused.
+ */
+export function aboutPage(line: string, title: string, url: string, destination: string | null = null): string | undefined {
+  const { host, path } = addressWords(url)
+  const squashed = host.replace(/[^a-z]/g, "")
+  switch (line) {
+    case "transport":
+      return first(title, AIRLINES) ?? CARRIERS.find((c) => squashed.includes(c.toLowerCase().replace(/[^a-z]/g, "")))
+    case "stay":
+      return pageHotelName(title, destination)
+    case "food":
+      return first(title, MEAL_KINDS) ?? (FOOD_PAGE.test(title) || FOOD_PAGE.test(path) ? "food" : undefined)
+    case "local_travel":
+      return first(title, MODES) ?? first(path, MODES) ?? first(squashed, HOST_MODES)
+    case "sightseeing":
+      return attractionNear(title, 0)?.name ?? first(title, TOURS)
     default:
       return undefined
   }

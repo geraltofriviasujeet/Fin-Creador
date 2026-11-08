@@ -119,7 +119,15 @@ function placeForQuery(destination: string): string | null {
 
 const STAY_WORDS: Record<TripStyle, string> = { budget: "budget hotel", comfort: "average hotel", luxury: "luxury hotel" }
 
+/** Lines whose lookup asks for prices: a domestic one asks for them in rupees, so they need no conversion. */
+const PRICED_LINES = new Set<WebTripLine>(["transport", "stay", "food", "activities", "local_travel", "hotels"])
+
 function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "international", monthText: string, country: string | null, style?: TripStyle, origin?: string): string | null {
+  const query = tripQueryWords(line, place, scope, monthText, country, style, origin)
+  return query && scope === "domestic" && PRICED_LINES.has(line) ? `${query} in rupees` : query
+}
+
+function tripQueryWords(line: WebTripLine, place: string, scope: "domestic" | "international", monthText: string, country: string | null, style?: TripStyle, origin?: string): string | null {
   const from = origin ?? (scope === "international" ? country : null)
   switch (line) {
     case "transport":

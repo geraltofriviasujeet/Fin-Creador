@@ -69,6 +69,8 @@ const priceSchema = z
     bound: z.enum(["from", "up_to"]).optional(),
     /** What the price is for (an airline, a hotel, a kind of meal, a mode, a place or tour), found next to it on its page. Required for a new trip price; optional for older stored plans. */
     about: text(80).optional(),
+    /** The price in the plan's currency when found in another (rates.ts): worked out in code, approximate, always shown beside the original. */
+    converted: z.object({ currency: z.string().regex(/^[A-Z]{3}$/), amount: decimal }).strict().optional(),
     site,
     url,
   })
@@ -133,7 +135,7 @@ export const checkedPlanSchema = z
     hotels: namesSchema.nullable(),
     verdicts: z
       .object({
-        /** The plan's total per currency (lines with an estimate only), never converted. */
+        /** The plan's total per currency (lines with an estimate only); prices in another currency with a rate are converted first, so a new plan has one. */
         totals: z.array(amountSchema).max(4),
         records: verdictSchema,
         web: verdictSchema,
