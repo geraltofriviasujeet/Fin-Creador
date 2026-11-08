@@ -713,7 +713,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   const plan: CheckedPlan = {
     v: 1,
     kind: request.kind,
-    intake: { title: titleOf(request), fields: intakeFields(request, money) },
+    intake: { title: titleOf(request), fields: intakeFields(request, money), request },
     lines,
     saved: saved ? { goal: saved.goal, minor: saved.minor, currency } : null,
     carriers,

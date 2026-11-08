@@ -1,7 +1,7 @@
-import { type IsoDate, monthStart } from "@fin-creador/domain"
+import { AMOUNT_ERROR_MESSAGES, type IsoDate, monthStart, parseAmount } from "@fin-creador/domain"
 import { VEHICLE_CATALOGUE, tripPlaceScope, vehicleMakes } from "@fin-creador/schemas"
 import { TRIP_STYLES } from "../search/query"
-import type { PlanRequest, PurchasePlanRequest, TripPlanRequest } from "./types"
+import { type PlanRequest, type PurchasePlanRequest, type TripPlanRequest, planRequest } from "./types"
 
 // The plan intake (10.9), in code: a question that asks for a plan ("plan my trip to Goa",
 // "can I buy a car") is recognised here, what it already says is filled in, and only the
@@ -123,3 +123,76 @@ export function intakeQuestions(draft: PlanRequest, today: IsoDate): IntakeQuest
 
 /** Models of a make, for the model question. */
 export const modelsOf = (item: "bike" | "car", make: string | null): readonly string[] => (make ? (VEHICLE_CATALOGUE[item][make] ?? []) : [])
+
+/**
+ * A month as typed: "2027-03" (the month picker), or typed where the browser shows a text box
+ * (Safari): "03/2027", "3-2027", "March 2027", "Mar 27", or "March" (the next one). Null when
+ * it isn't a month.
+ */
+export function parseMonth(raw: string, today: IsoDate): string | null {
+  const text = raw.trim().toLowerCase()
+  const iso = /^(\d{4})-(\d{1,2})$/.exec(text)
+  const numeric = /^(\d{1,2})\s*[/.-]\s*(\d{4}|\d{2})$/.exec(text)
+  const named = /^([a-z]{3,9})\.?(?:\s*,?\s*(\d{4}|\d{2}))?$/.exec(text)
+  let year: number | null
+  let index: number
+  if (iso) [year, index] = [Number(iso[1]), Number(iso[2]) - 1]
+  else if (numeric) [year, index] = [Number(numeric[2]), Number(numeric[1]) - 1]
+  else if (named) {
+    index = named[1]!.length >= 3 ? MONTHS.findIndex((m) => m.startsWith(named[1]!)) : -1
+    year = named[2] ? Number(named[2]) : null
+  } else return null
+  if (index < 0 || index > 11) return null
+  if (year !== null && year < 100) year += 2000
+  if (year === null) {
+    const now = Number(today.slice(0, 4))
+    year = index + 1 < Number(today.slice(5, 7)) ? now + 1 : now
+  }
+  return `${year}-${String(index + 1).padStart(2, "0")}`
+}
+
+/** What can't be used, named by its question, and why; or the plan. */
+export type BuiltPlan = { plan: PlanRequest } | { error: string; field: string }
+
+/**
+ * The plan with each answer in. Every answer is checked here, so a message always names the
+ * question and the reason; a skipped or empty answer is null.
+ */
+export function buildPlan(draft: PlanRequest, answers: Readonly<Record<string, string>>, skipped: ReadonlySet<string>, currency: string, today: IsoDate): BuiltPlan {
+  const plan: Record<string, unknown> = { ...draft }
+  const questions = intakeQuestions(draft, today)
+  const fail = (q: IntakeQuestion, reason: string): BuiltPlan => ({ field: q.field, error: `${q.label} ${reason}` })
+  for (const q of questions) {
+    const raw = (answers[q.field] ?? "").trim()
+    if (skipped.has(q.field) || raw === "") {
+      plan[q.field] = null
+      continue
+    }
+    if (q.kind === "number") {
+      const n = Number(raw)
+      if (!Number.isInteger(n) || n < q.min || n > q.max) return fail(q, `Enter a whole number from ${q.min} to ${q.max}, or skip it.`)
+      plan[q.field] = n
+    } else if (q.kind === "amount") {
+      const parsed = parseAmount(raw, currency, { allowZero: true })
+      if (!parsed.ok) return fail(q, parsed.error === "invalid" ? `Enter it in ${currency} as a number, such as 600000, or skip it.` : `${AMOUNT_ERROR_MESSAGES[parsed.error]}. Change it, or skip it.`)
+      plan[q.field] = parsed.minor
+    } else if (q.kind === "month") {
+      const month = parseMonth(raw, today)
+      if (month === null) return fail(q, `“${raw.slice(0, 20)}” isn't a month. Enter one like March 2027 or 2027-03, or skip it.`)
+      if (month < q.min) return fail(q, "That month has passed. Choose this month or later, or skip it.")
+      plan[q.field] = month
+    } else if (q.kind === "text") {
+      if (raw.length > 40) return fail(q, "Keep it to 40 characters, or skip it.")
+      plan[q.field] = raw
+    } else plan[q.field] = raw
+  }
+  // A model belongs to its make: a new make clears a model chosen for another.
+  if (plan.kind === "purchase" && plan.item !== "house" && plan.make && plan.model && !modelsOf(plan.item as "bike" | "car", plan.make as string).includes(plan.model as string)) plan.model = null
+  const parsed = planRequest.safeParse(plan)
+  if (parsed.success) return { plan: parsed.data }
+  // Not expected after the checks above; still named by its question, with the schema's reason.
+  const issue = parsed.error.issues[0]!
+  const field = String(issue.path[0] ?? "")
+  const q = questions.find((x) => x.field === field)
+  return { field, error: `${q?.label ?? "An answer"} This answer can't be used (${issue.message.toLowerCase()}). Change it, or skip it.` }
+}

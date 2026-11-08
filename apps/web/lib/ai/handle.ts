@@ -68,7 +68,7 @@ export type RomaDb = {
   release(requestId: string): Promise<boolean>
 }
 
-export type RecordedTurn = { conversationId: string; seq: number }
+export type RecordedTurn = { conversationId: string; seq: number; /** The stored turn, for a plan (a goal added from it links to it); absent when it couldn't be read back. */ messageId?: string }
 
 export type TurnToRecord = Omit<StoredTurn, "seq"> & { requestId: string; conversationId: string | null; plan?: CheckedPlan }
 
@@ -118,6 +118,8 @@ export type ChatErrorCode =
   | "refusal"
   | "unavailable"
 
+export type PlanLink = { messageId: string; goal: { id: string; name: string } | null }
+
 export type ChatResponseBody =
   | {
       status: "answer"
@@ -135,6 +137,8 @@ export type ChatResponseBody =
       webNotices?: string[]
       /** A detailed plan (10.9): the checked plan the answer was written from, for the modal and the PDF. */
       plan?: CheckedPlan
+      /** The plan's stored turn, and the goal added from it (null until one is): "Add to my goals" links the goal to the turn. Absent when the plan couldn't be saved. */
+      planLink?: PlanLink
       /** The conversation the turn was recorded in (10.3); null when it couldn't be saved. */
       conversationId: string | null
       saved: boolean
@@ -368,6 +372,7 @@ async function answerPlan(
       figures: [],
       periods: [],
       plan,
+      ...(recorded?.messageId ? { planLink: { messageId: recorded.messageId, goal: null } } : {}),
       ...(notices.length > 0 ? { webNotices: notices } : {}),
       conversationId: recorded?.conversationId ?? null,
       saved: recorded !== null,

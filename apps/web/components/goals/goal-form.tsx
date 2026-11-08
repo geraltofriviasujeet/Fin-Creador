@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { type GoalItem, type WriteResult, newRequestKey } from "@fin-creador/api"
+import { type GoalItem, type GoalWriteResult, newRequestKey } from "@fin-creador/api"
 import { GOAL_TYPES, type GoalType, TRIP_COST_LINES, VEHICLE_KINDS, type VehicleKind, goalFigures, minorToInputString } from "@fin-creador/domain"
 import {
   EMI_ROUNDING_NOTE,
@@ -109,12 +109,27 @@ function valuesFrom(item: GoalItem): Values {
   return v
 }
 
-export function GoalForm({ currency, today, item, onDone }: { currency: string; today: string; item?: GoalItem; onDone: () => void }) {
+type Props = {
+  currency: string
+  today: string
+  item?: GoalItem
+  onDone: () => void
+  /** A new goal's starting answers (a Roma plan's prefill); the person changes anything before saving. */
+  initial?: Values
+  /** The Roma plan's turn a new goal is added from (the goal links to it). */
+  planMessageId?: string
+  /** After a new goal is saved, with what was saved. */
+  onSaved?: (goal: { id: string; name: string }) => void
+  /** Cancel without a dialog to close (the form shown inside another view). */
+  onCancel?: () => void
+}
+
+export function GoalForm({ currency, today, item, onDone, initial, planMessageId, onSaved, onCancel }: Props) {
   const editing = Boolean(item)
   const goalCurrency = item?.goal.currency ?? currency
   // One key per opened form; a retry after a failure reuses it, so the goal is added once.
   const [requestKey] = useState(newRequestKey)
-  const [values, setValues] = useState<Values>(() => (item ? valuesFrom(item) : { type: "trip", scope: "domestic", payment: "cash", vehicle: "car" }))
+  const [values, setValues] = useState<Values>(() => (item ? valuesFrom(item) : (initial ?? { type: "trip", scope: "domestic", payment: "cash", vehicle: "car" })))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -137,15 +152,16 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
     if (pending) return
     setPending(true)
     setFormError(null)
-    let result: WriteResult
+    let result: GoalWriteResult
     try {
-      result = await saveGoalAction({ ...values, goalId: item?.goal.id ?? "", idempotencyKey: editing ? "" : requestKey })
+      result = await saveGoalAction({ ...values, goalId: item?.goal.id ?? "", idempotencyKey: editing ? "" : requestKey, ...(planMessageId && !editing ? { planMessageId } : {}) })
     } catch {
       result = { status: "error", message: NETWORK }
     }
     setPending(false)
     if (result.status === "success") {
       toast.success(result.message)
+      onSaved?.({ id: result.goalId, name: (values.name ?? "").trim() })
       onDone()
       return
     }
@@ -415,7 +431,13 @@ export function GoalForm({ currency, today, item, onDone }: { currency: string; 
           )}
         </div>
         <div className="flex shrink-0 gap-2">
-          <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
+          {onCancel ? (
+            <Button type="button" variant="secondary" onClick={onCancel}>
+              Cancel
+            </Button>
+          ) : (
+            <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
+          )}
           <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
             {pending ? "Saving…" : editing ? "Save changes" : "Add goal"}
           </Button>

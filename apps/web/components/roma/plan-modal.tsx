@@ -1,11 +1,16 @@
 "use client"
 
+import { useState } from "react"
+import Link from "next/link"
 import { createPortal } from "react-dom"
+import { GoalForm } from "@/components/goals/goal-form"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { formatMoney } from "@fin-creador/domain"
+import type { PlanLink } from "@/lib/ai/handle"
 import { LINE_SOURCE, PLAN_NOT_LIVE, PLAN_REOPENED, lineWords, planAmount, planPrice } from "@/lib/ai/plan/format"
+import { goalFromPlan } from "@/lib/ai/plan/goal"
 import type { CheckedPlan, PlanLine, PlanNames } from "@/lib/ai/plan/types"
 
 // A detailed plan (10.9), shown in a modal: built only from the checked plan the server
@@ -14,6 +19,8 @@ import type { CheckedPlan, PlanLine, PlanNames } from "@/lib/ai/plan/types"
 // name shows the site it was listed on, linked. Save as PDF prints a copy of the same view
 // (the browser's print-to-PDF, styled in globals.css), with every link written out, the date
 // it was made and where each figure came from; it carries nothing the modal doesn't.
+// "Add to my goals" shows the normal goal form, prefilled from the plan (lib/ai/plan/goal.ts);
+// nothing is saved until the person adds it there, and the goal then links to the plan's turn.
 
 type Props = {
   plan: CheckedPlan
@@ -23,19 +30,56 @@ type Props = {
   reopened: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** The plan's stored turn and its goal; absent when the plan couldn't be saved (it can't be added as a goal). */
+  link?: PlanLink
+  /** The profile currency and the person's today, for the goal form. */
+  currency: string
+  today: string
 }
 
-export function PlanModal({ plan, madeOn, reopened, open, onOpenChange }: Props) {
+export function PlanModal({ plan, madeOn, reopened, open, onOpenChange, link, currency, today }: Props) {
+  const [view, setView] = useState<"plan" | "goal">("plan")
+  const [goal, setGoal] = useState(link?.goal ?? null)
+  const linked = goal ?? link?.goal ?? null
+  const change = (next: boolean) => {
+    if (!next) setView("plan")
+    onOpenChange(next)
+  }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent eyebrow="Roma · Plan" title={plan.intake.title} description={`Made on ${madeOn}.`} className="max-w-3xl md:max-h-[90vh] md:overflow-y-auto">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <Button type="button" variant="secondary" onClick={saveAsPdf}>
-            Save as PDF
-          </Button>
-          <span className="text-xs text-muted-foreground">Opens your browser’s print window: choose Save as PDF.</span>
-        </div>
-        <PlanView plan={plan} madeOn={madeOn} reopened={reopened} />
+    <Dialog open={open} onOpenChange={change}>
+      <DialogContent
+        eyebrow={view === "goal" ? "Roma · Plan · Add to my goals" : "Roma · Plan"}
+        title={plan.intake.title}
+        description={`Made on ${madeOn}.`}
+        className="max-w-3xl md:max-h-[90vh] md:overflow-y-auto"
+      >
+        {view === "goal" && link ? (
+          <AddGoal plan={plan} link={link} currency={currency} today={today} onSaved={setGoal} onClose={() => setView("plan")} />
+        ) : (
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <Button type="button" variant="secondary" onClick={saveAsPdf}>
+                Save as PDF
+              </Button>
+              {link && !linked && (
+                <Button type="button" variant="secondary" onClick={() => setView("goal")}>
+                  Add to my goals
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground">Save as PDF opens your browser’s print window: choose Save as PDF.</span>
+            </div>
+            {linked && (
+              <p className="mb-4 rounded-lg bg-canvas px-3 py-2 text-ink" role="status" data-testid="plan-goal">
+                Added to your goals as “{linked.name}”. Roma reads it like any other goal.{" "}
+                <Link href="/goals" className={linkClass}>
+                  Open Goals
+                </Link>
+              </p>
+            )}
+            {!link && <p className="mb-4 text-xs text-muted-foreground">This plan wasn’t saved, so it can’t be added to your goals. Ask again to make it once more.</p>}
+            <PlanView plan={plan} madeOn={madeOn} reopened={reopened} />
+          </>
+        )}
       </DialogContent>
       {open && typeof document !== "undefined" && createPortal(<PrintCopy plan={plan} madeOn={madeOn} reopened={reopened} />, document.body)}
     </Dialog>
@@ -290,6 +334,26 @@ function Names({ heading, names }: { heading: string; names: PlanNames }) {
       )}
       <p className="mt-1 text-muted-foreground">{names.note}</p>
     </section>
+  )
+}
+
+/** The normal goal form, prefilled from the plan; the person adds it, or goes back to the plan. */
+function AddGoal({ plan, link, currency, today, onSaved, onClose }: { plan: CheckedPlan; link: PlanLink; currency: string; today: string; onSaved: (g: { id: string; name: string }) => void; onClose: () => void }) {
+  const [prefill] = useState(() => goalFromPlan(plan, { currency, today }))
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-2 text-sm">
+        <p className="text-ink">Filled in from the plan. Check each answer and change anything you like: nothing is added until you press Add goal.</p>
+        {prefill.notes.length > 0 && (
+          <ul className="grid list-disc gap-1 pl-5 text-muted-foreground">
+            {prefill.notes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <GoalForm currency={currency} today={today} initial={prefill.values} planMessageId={link.messageId} onSaved={onSaved} onDone={onClose} onCancel={onClose} />
+    </div>
   )
 }
 

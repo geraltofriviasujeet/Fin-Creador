@@ -113,6 +113,13 @@ async function loadConversation(supabase: Supabase, id: string): Promise<OpenCon
   ])
   if (conversation.error || messages.error) return "error"
   if (!conversation.data) return null
+  // Goals added from this conversation's plans; a failed read only hides the link.
+  const planIds = messages.data.filter((m) => m.plan !== null).map((m) => m.id)
+  const linked = planIds.length > 0 ? await supabase.from("goals").select("id, name, plan_message_id").in("plan_message_id", planIds) : null
+  const goalOf = (messageId: string) => {
+    const g = linked?.data?.find((x) => x.plan_message_id === messageId)
+    return g ? { id: g.id, name: g.name } : null
+  }
   return {
     id,
     turns: messages.data.map((m) => ({
@@ -130,7 +137,7 @@ async function loadConversation(supabase: Supabase, id: string): Promise<OpenCon
         // A stored plan (10.9) is read back like any stored data: shown only if it still parses.
         ...(() => {
           const plan = m.plan === null ? null : checkedPlanSchema.safeParse(m.plan)
-          return plan?.success ? { plan: plan.data } : {}
+          return plan?.success ? { plan: plan.data, planLink: { messageId: m.id, goal: goalOf(m.id) } } : {}
         })(),
         conversationId: id,
         saved: true,

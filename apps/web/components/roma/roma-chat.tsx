@@ -277,7 +277,7 @@ function Conversation({
               <li key={turn.id}>
                 <Card>
                   <p className="text-sm font-semibold text-ink">{turn.question}</p>
-                  <Reply reply={turn.reply} madeOn={turn.asOf ?? todayIn(timeZone)} reopened={turn.asOf !== undefined} />
+                  <Reply reply={turn.reply} madeOn={turn.asOf ?? todayIn(timeZone)} reopened={turn.asOf !== undefined} currency={currency} today={todayIn(timeZone)} />
                   {turn.asOf && (
                     <p className="mt-2 text-xs text-muted-foreground">Answered on {turn.asOf}. Ask again for today’s figures.</p>
                   )}
@@ -298,7 +298,7 @@ function Conversation({
   )
 }
 
-function Reply({ reply, madeOn, reopened }: { reply: ChatResponseBody; madeOn: string; reopened: boolean }) {
+function Reply({ reply, madeOn, reopened, currency, today }: { reply: ChatResponseBody; madeOn: string; reopened: boolean; currency: string; today: string }) {
   const [planOpen, setPlanOpen] = useState(false)
   if (reply.status === "error") {
     return (
@@ -315,7 +315,16 @@ function Reply({ reply, madeOn, reopened }: { reply: ChatResponseBody; madeOn: s
             <OpenPlanButton onOpen={() => setPlanOpen(true)} />
             <span className="text-xs text-muted-foreground">Each cost line, how it was worked out, and its sources.</span>
           </div>
-          <PlanModal plan={reply.plan} madeOn={madeOn} reopened={reopened} open={planOpen} onOpenChange={setPlanOpen} />
+          <PlanModal
+            plan={reply.plan}
+            madeOn={madeOn}
+            reopened={reopened}
+            open={planOpen}
+            onOpenChange={setPlanOpen}
+            {...(reply.planLink ? { link: reply.planLink } : {})}
+            currency={currency}
+            today={today}
+          />
         </>
       )}
       {reply.checks?.map((c, i) => (

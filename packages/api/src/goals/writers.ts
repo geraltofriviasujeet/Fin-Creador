@@ -24,6 +24,14 @@ function dbError(error: { code?: string; message?: string }): WriteResult & { st
 const isDuplicateKey = (error: { code?: string; message?: string }) =>
   error.code === "23505" && (error.message ?? "").includes("goals_idempotency_unique")
 
+// A goal added from a Roma plan (migration 20261108120000): the plan's turn, checked by the
+// database (the person's own turn, holding a plan, one goal per plan).
+const PLAN_TAKEN = "This plan already has a goal. Find it on the Goals page."
+const PLAN_GONE = "That plan can't be found any more, so the goal can't be linked to it. Close the plan and try again."
+const planLinkError = (error: { code?: string; message?: string }): string | null =>
+  error.code === "FC058" ? PLAN_GONE : error.code === "23505" && (error.message ?? "").includes("goals_plan_message_unique") ? PLAN_TAKEN : null
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 async function profileCurrency(supabase: UserClient, userId: string): Promise<string | null> {
   const { data } = await supabase.from("profiles").select("currency").eq("id", userId).maybeSingle()
   return data?.currency ?? null
@@ -36,7 +44,8 @@ async function goalOf(supabase: UserClient, goalId: string) {
 
 /**
  * Adds a goal (no `goalId`; once per request key: a repeated submit returns the goal the
- * first one created) or saves an edit (`goalId`; the type stays the goal's own).
+ * first one created) or saves an edit (`goalId`; the type stays the goal's own). A new goal
+ * may name the plan it was added from (`planMessageId`); an edit never changes it.
  */
 export async function saveGoal(supabase: UserClient, input: FormInput): Promise<GoalWriteResult> {
   const day = await userToday(supabase)
@@ -50,6 +59,8 @@ export async function saveGoal(supabase: UserClient, input: FormInput): Promise<
   )
   if (!parsed.success) return { status: "error", message: FIX_FIELDS, fieldErrors: firstFieldErrors(parsed.error) }
   const g = parsed.data
+  const planMessageId = existing ? "" : (input.planMessageId ?? "").trim()
+  if (planMessageId && !UUID.test(planMessageId)) return { status: "error", message: PLAN_GONE }
 
   const fields = {
     name: g.name,
@@ -70,7 +81,7 @@ export async function saveGoal(supabase: UserClient, input: FormInput): Promise<
   const { data, error } = await supabase
     .from("goals")
     // No currency: the database sets it from the profile (clients have no grant on it).
-    .insert({ ...fields, type: g.type, idempotency_key: g.idempotencyKey! } as Database["public"]["Tables"]["goals"]["Insert"])
+    .insert({ ...fields, type: g.type, idempotency_key: g.idempotencyKey!, ...(planMessageId ? { plan_message_id: planMessageId } : {}) } as Database["public"]["Tables"]["goals"]["Insert"])
     .select("id")
     .single()
   if (error && isDuplicateKey(error)) {
@@ -78,6 +89,8 @@ export async function saveGoal(supabase: UserClient, input: FormInput): Promise<
     const { data: first } = await supabase.from("goals").select("id").eq("idempotency_key", g.idempotencyKey!).maybeSingle()
     if (first) return { status: "success", message: "Goal added.", goalId: first.id }
   }
+  const linkError = error ? planLinkError(error) : null
+  if (linkError) return { status: "error", message: linkError }
   if (error || !data) return dbError(error ?? {})
   return { status: "success", message: "Goal added.", goalId: data.id }
 }

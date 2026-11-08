@@ -126,6 +126,8 @@ export const checkedPlanSchema = z
       .object({
         title: text(160),
         fields: z.array(z.object({ label: text(40), value: text(80).nullable() }).strict()).max(8),
+        /** The request itself, for "Add to my goals" (goal.ts). Absent on plans made before it. */
+        request: planRequest.optional(),
       })
       .strict(),
     lines: z.array(lineSchema).max(PLAN_LINES.length),

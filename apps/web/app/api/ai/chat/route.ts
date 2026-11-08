@@ -99,7 +99,11 @@ export async function POST(request: NextRequest) {
       // words, never the question, the answer or the plan).
       if (error) console.warn(JSON.stringify({ event: "roma_record_failed", code: error.code, message: error.message }))
       if (error || !row) return null
-      return { conversationId: row.conversation_id, seq: row.seq }
+      if (!turn.plan) return { conversationId: row.conversation_id, seq: row.seq }
+      // A plan's turn, read back for "Add to my goals" (owner-only, RLS); without it the plan
+      // still shows, and can't be added as a goal.
+      const message = await supabase.from("ai_messages").select("id").eq("conversation_id", row.conversation_id).eq("seq", row.seq).maybeSingle()
+      return { conversationId: row.conversation_id, seq: row.seq, ...(message.data ? { messageId: message.data.id } : {}) }
     },
   }
 

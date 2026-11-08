@@ -78,6 +78,34 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await page.reload()
   await page.getByRole("list", { name: "Roma's answers" }).getByRole("button", { name: "Open the plan" }).click()
   await expect(page.getByRole("dialog").getByText(/^Made on \d{4}-\d{2}-\d{2}\. Web prices may have changed since this plan was made\./)).toBeVisible()
+
+  // Add to my goals: the normal goal form, filled in from the plan; nothing is added until the person adds it.
+  const reopened = page.getByRole("dialog")
+  await reopened.getByRole("button", { name: "Add to my goals" }).click()
+  await expect(reopened.getByText(/^Filled in from the plan\./)).toBeVisible()
+  await expect(reopened.getByLabel("Name", { exact: true })).toHaveValue("Trip to Goa")
+  await expect(reopened.getByLabel("People")).toHaveValue("2")
+  await expect(reopened.getByLabel("Days")).toHaveValue("5")
+  await expect(reopened.getByLabel("Transport")).not.toHaveValue("")
+  // Cancel goes back to the plan, and nothing was added.
+  await reopened.getByRole("button", { name: "Cancel" }).click()
+  await expect(reopened.getByRole("region", { name: "Cost lines" })).toBeVisible()
+  await reopened.getByRole("button", { name: "Add to my goals" }).click()
+  // The plan skipped the stay style and doesn't know how they travel: the person chooses, then adds.
+  await reopened.getByLabel("Name", { exact: true }).fill("Goa in January")
+  await reopened.getByLabel("Travel by").selectOption({ label: "Flight" })
+  await reopened.getByLabel("Stay type").selectOption({ label: "Hotel" })
+  await reopened.getByRole("button", { name: "Add goal" }).click()
+  await expect(reopened.getByTestId("plan-goal")).toContainText("Added to your goals as “Goa in January”.")
+  await expect(reopened.getByRole("button", { name: "Add to my goals" })).toHaveCount(0)
+
+  // Reopened again, the plan still shows its goal; the goal is an ordinary goal on the Goals page.
+  await page.reload()
+  await page.getByRole("list", { name: "Roma's answers" }).getByRole("button", { name: "Open the plan" }).click()
+  await expect(page.getByRole("dialog").getByTestId("plan-goal")).toContainText("“Goa in January”")
+  await page.getByRole("dialog").getByRole("link", { name: "Open Goals" }).click()
+  await expect(page).toHaveURL(/\/goals$/)
+  await expect(page.getByText("Goa in January").first()).toBeVisible()
 })
 
 test("a plan question can be sent as an ordinary question instead", async ({ page }) => {

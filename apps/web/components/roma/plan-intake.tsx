@@ -1,15 +1,14 @@
 "use client"
 
 import { useId, useState } from "react"
-import { parseAmount } from "@fin-creador/domain"
 import { tripPlaceScope } from "@fin-creador/schemas"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Field, FormMessage } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
-import { type IntakeQuestion, intakeQuestions, modelsOf } from "@/lib/ai/plan/intake"
-import { type PlanRequest, planRequest } from "@/lib/ai/plan/types"
+import { type IntakeQuestion, buildPlan, intakeQuestions, modelsOf } from "@/lib/ai/plan/intake"
+import type { PlanRequest } from "@/lib/ai/plan/types"
 
 // The plan intake (10.9): the questions still needed for a plan, written in code
 // (lib/ai/plan/intake.ts), each with Skip. A skipped answer is sent as null and the lines
@@ -36,6 +35,8 @@ export function PlanIntake({ question, draft, today, currency, pending, onPlan, 
   const [answers, setAnswers] = useState<Answers>(() => Object.fromEntries(questions.flatMap((q) => ("initial" in q && q.initial ? [[q.field, q.initial]] : []))))
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  /** The question the message is about: its field is marked and named. */
+  const [errorField, setErrorField] = useState<string | null>(null)
   const baseId = useId()
   const set = (field: string, value: string) => {
     setAnswers((a) => ({ ...a, [field]: value }))
@@ -47,39 +48,16 @@ export function PlanIntake({ question, draft, today, currency, pending, onPlan, 
   }
   const skip = (field: string) => setSkipped((s) => new Set(s).add(field))
 
-  /** The plan with each answer in, or a message for the first answer that can't be used. */
-  function build(): { plan: PlanRequest } | { error: string } {
-    const plan: Record<string, unknown> = { ...draft }
-    for (const q of questions) {
-      const raw = (answers[q.field] ?? "").trim()
-      if (skipped.has(q.field) || raw === "") {
-        plan[q.field] = null
-        continue
-      }
-      if (q.kind === "number") {
-        const n = Number(raw)
-        if (!Number.isInteger(n) || n < q.min || n > q.max) return { error: `${q.label} Enter a whole number from ${q.min} to ${q.max}, or skip it.` }
-        plan[q.field] = n
-      } else if (q.kind === "amount") {
-        const parsed = parseAmount(raw, currency, { allowZero: true })
-        if (!parsed.ok) return { error: `${q.label} Enter an amount, or skip it.` }
-        plan[q.field] = parsed.minor
-      } else if (q.kind === "month") {
-        if (raw < q.min) return { error: "That month has passed. Choose this month or later, or skip it." }
-        plan[q.field] = raw
-      } else plan[q.field] = raw
-    }
-    // A model belongs to its make: a new make clears a model chosen for another.
-    if (plan.kind === "purchase" && plan.item !== "house" && plan.make && plan.model && !modelsOf(plan.item as "bike" | "car", plan.make as string).includes(plan.model as string)) plan.model = null
-    const parsed = planRequest.safeParse(plan)
-    return parsed.success ? { plan: parsed.data } : { error: "Some answers couldn't be used. Check them, or skip them." }
-  }
-
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const built = build()
-    if ("error" in built) return setError(built.error)
+    const built = buildPlan(draft, answers, skipped, currency, today)
+    if ("error" in built) {
+      setError(built.error)
+      setErrorField(built.field)
+      return
+    }
     setError(null)
+    setErrorField(null)
     onPlan(built.plan)
   }
 
@@ -102,6 +80,7 @@ export function PlanIntake({ question, draft, today, currency, pending, onPlan, 
             q={q}
             value={answers[q.field] ?? ""}
             skipped={skipped.has(q.field)}
+            error={errorField === q.field ? (error ?? undefined) : undefined}
             make={draft.kind === "purchase" && draft.item !== "house" ? { item: draft.item, make: draft.make ?? answers.make ?? null } : null}
             currency={currency}
             onChange={(v) => set(q.field, v)}
@@ -133,6 +112,7 @@ function IntakeField({
   q,
   value,
   skipped,
+  error,
   make,
   currency,
   onChange,
@@ -142,6 +122,8 @@ function IntakeField({
   q: IntakeQuestion
   value: string
   skipped: boolean
+  /** Why this answer can't be used, shown under it. */
+  error: string | undefined
   make: { item: "bike" | "car"; make: string | null } | null
   currency: string
   onChange: (v: string) => void
@@ -155,14 +137,15 @@ function IntakeField({
     </Button>
   )
   return (
-    <Field id={id} label={q.label} hint={hint} labelAside={aside}>
+    <Field id={id} label={q.label} hint={hint} error={error} labelAside={aside}>
       {(aria) => {
         const common = { ...aria, value: skipped ? "" : value, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange(e.target.value) }
         switch (q.kind) {
           case "text":
             return <Input {...common} autoComplete="off" maxLength={40} />
           case "month":
-            return <Input {...common} type="month" min={q.min} />
+            // Safari shows a text box for a month: a typed month is read in code (parseMonth).
+            return <Input {...common} type="month" min={q.min} placeholder="e.g. March 2027" />
           case "number":
             return <Input {...common} type="number" inputMode="numeric" min={q.min} max={q.max} step={1} />
           case "amount":

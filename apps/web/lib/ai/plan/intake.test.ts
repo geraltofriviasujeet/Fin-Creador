@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { detectPlan, intakeQuestions, monthIn } from "./intake"
+import { buildPlan, detectPlan, intakeQuestions, monthIn, parseMonth } from "./intake"
 import { planRequest } from "./types"
 
 // The plan intake: which questions are plans, what they already say, and only the questions still needed.
@@ -47,5 +47,52 @@ describe("recognising a plan", () => {
     expect(monthIn("in Dec", TODAY)).toBe("2026-12")
     expect(monthIn("in November", TODAY)).toBe("2026-11")
     expect(monthIn("in May 2028", TODAY)).toBe("2028-05")
+  })
+})
+
+describe("checking the answers", () => {
+  const bike = { kind: "purchase", item: "bike", make: null, model: null, month: null, depositMinor: null } as const
+
+  it("a trade-in of 600000 is used as it is", () => {
+    const built = buildPlan(bike, { make: "Royal Enfield", model: "Classic 350", month: "2027-03", depositMinor: "600000" }, new Set(), "INR", TODAY)
+    expect(built).toEqual({ plan: { ...bike, make: "Royal Enfield", model: "Classic 350", month: "2027-03", depositMinor: 600_000_00 } })
+  })
+
+  it("a month typed as text (Safari has no month picker) is read, not refused", () => {
+    const built = buildPlan(bike, { month: "March 2027", depositMinor: "6,00,000" }, new Set(), "INR", TODAY)
+    expect(built).toMatchObject({ plan: { month: "2027-03", depositMinor: 600_000_00 } })
+  })
+
+  it("names the question and the reason for an answer that can't be used", () => {
+    expect(buildPlan(bike, { month: "soon", depositMinor: "600000" }, new Set(), "INR", TODAY)).toEqual({
+      field: "month",
+      error: "When do you want to buy it? “soon” isn't a month. Enter one like March 2027 or 2027-03, or skip it.",
+    })
+    expect(buildPlan(bike, { depositMinor: "6 lakh" }, new Set(), "INR", TODAY)).toEqual({
+      field: "depositMinor",
+      error: "Any trade-in or deposit? Enter it in INR as a number, such as 600000, or skip it.",
+    })
+    expect(buildPlan(bike, { depositMinor: "99999999999999999" }, new Set(), "INR", TODAY)).toMatchObject({ field: "depositMinor", error: expect.stringContaining("Amount is too large.") })
+    expect(buildPlan(bike, { month: "2026-10" }, new Set(), "INR", TODAY)).toMatchObject({ field: "month", error: expect.stringContaining("That month has passed") })
+  })
+
+  it("a skipped answer is null, whatever was typed", () => {
+    expect(buildPlan(bike, { depositMinor: "abc" }, new Set(["depositMinor"]), "INR", TODAY)).toMatchObject({ plan: { depositMinor: null } })
+  })
+})
+
+describe("parseMonth", () => {
+  it("reads the picker's value and typed months", () => {
+    expect(parseMonth("2027-03", TODAY)).toBe("2027-03")
+    expect(parseMonth("03/2027", TODAY)).toBe("2027-03")
+    expect(parseMonth("3-27", TODAY)).toBe("2027-03")
+    expect(parseMonth("Mar 2027", TODAY)).toBe("2027-03")
+    expect(parseMonth("September, 2027", TODAY)).toBe("2027-09")
+    expect(parseMonth("march", TODAY)).toBe("2027-03")
+    expect(parseMonth("december", TODAY)).toBe("2026-12")
+  })
+
+  it("refuses what isn't a month", () => {
+    for (const raw of ["soon", "13/2027", "ma 2027", "2027", ""]) expect(parseMonth(raw, TODAY)).toBeNull()
   })
 })

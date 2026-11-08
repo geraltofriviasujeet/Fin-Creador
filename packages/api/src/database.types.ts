@@ -783,6 +783,7 @@ export type Database = {
           id: string
           idempotency_key: string
           name: string
+          plan_message_id: string | null
           saved_amount_minor: number
           target_amount_minor: number
           target_date: string | null
@@ -798,6 +799,7 @@ export type Database = {
           id?: string
           idempotency_key: string
           name: string
+          plan_message_id?: string | null
           saved_amount_minor?: number
           target_amount_minor: number
           target_date?: string | null
@@ -813,6 +815,7 @@ export type Database = {
           id?: string
           idempotency_key?: string
           name?: string
+          plan_message_id?: string | null
           saved_amount_minor?: number
           target_amount_minor?: number
           target_date?: string | null
@@ -820,7 +823,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "goals_plan_message_id_fkey"
+            columns: ["plan_message_id"]
+            isOneToOne: false
+            referencedRelation: "ai_messages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       instruments: {
         Row: {
