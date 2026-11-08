@@ -158,7 +158,7 @@ function cleanName(raw: string): string | null {
   while (words.length > 0 && (PAGE_WORDS.has(words[0]!.toLowerCase()) || /^\p{Ll}/u.test(words[0]!))) words = words.slice(1)
   if (words.some((w) => PAGE_WORDS.has(w.toLowerCase()))) return null
   const name = words.join(" ")
-  if (isSiteName(name)) return null
+  if (isSiteName(name) || CARD_WORDS.has(words[0]!.toLowerCase())) return null
   if (words.length < 2 || words.length > 7 || name.length > 80) return null
   const first = words[0]!.toLowerCase()
   if (first === "the" ? words.length < 3 || GENERIC.has(words[1]!.toLowerCase()) : GENERIC.has(first)) return null
@@ -206,10 +206,89 @@ export function pageHotelName(title: string, destination: string | null): string
   return name && nameKey(name, destination) ? name : undefined
 }
 
+/** A rupee price in page text, to find where the card before a price ends. */
+const RUPEE_PRICE = /(?:₹|\brs\.?|\binr)\s?\d[\d,]*(?:\.\d+)?/gi
+/** How far back a listing card's name may be from its price. */
+const CARD_CHARS = 350
+
+/**
+ * The hotel a listing page's price is for (10.9 follow-up): the name nearest before it, in its
+ * own card (after the price before it). A listing card names its hotel twice, by its photo and
+ * its heading ("The Park Chennai - Chennai - Balcony The Park Chennai Chennai, TN, India ...
+ * ₹ 10,313+"), so a name repeated in the card is taken first, the longest; else a name with a
+ * lodging word ("Hotel Akmg Towers"). Nothing found: undefined, never a guess.
+ */
+export function listingHotelAt(text: string, at: number, destination: string | null): string | undefined {
+  const from = Math.max(0, at - CARD_CHARS)
+  let start = from
+  for (const m of text.slice(from, at).matchAll(RUPEE_PRICE)) start = from + m.index + m[0].length
+  const card = text.slice(start, at)
+  const lodging = lodgingNameIn(card)
+  // A listing's heading ("Chennai Hotels") is no hotel's name.
+  return repeatedName(card, destination) ?? (lodging && !/s$/.test(lodging) && nameKey(lodging, destination) ? lodging : undefined)
+}
+
+function repeatedName(card: string, destination: string | null): string | undefined {
+  const words = [...card.matchAll(/[\p{L}\p{N}][\p{L}\p{N}&'’.-]*/gu)].map((m) => ({ w: m[0], at: m.index, end: m.index + m[0].length }))
+  // Words next to each other with only spaces between: a name never runs across " - " or ",".
+  const joined = (i: number, n: number) => words.slice(i, i + n - 1).every((x, k) => /^ +$/.test(card.slice(x.end, words[i + k + 1]!.at)))
+  const phrase = (i: number, n: number) => words.slice(i, i + n).map((x) => x.w).join(" ")
+  // The name is repeated most (photo, its caption, heading: "Balcony The Park Chennai" twice,
+  // "The Park Chennai" three times), then the one written first ("The Raintree, St. Mary's
+  // Road"), then the longest ("Taj Club House", not "Club House").
+  let best: { name: string; times: number; first: number; n: number } | null = null
+  for (let n = 7; n >= 2; n--) {
+    for (let i = 0; i + n <= words.length; i++) {
+      if (!joined(i, n)) continue
+      const p = phrase(i, n)
+      let times = 0
+      for (let j = 0; j + n <= words.length; j++) {
+        if (!joined(j, n) || phrase(j, n) !== p) continue
+        times++
+        j += n - 1
+      }
+      if (times < 2 || !isCardName(p, destination)) continue
+      const first = words[i]!.at
+      if (!best || times > best.times || (times === best.times && (first < best.first || (first === best.first && n > best.n)))) best = { name: p, times, first, n }
+    }
+  }
+  return best?.name
+}
+
+/** Words that join a sentence, never inside a card's name ("in Chennai", "rates in Chennai"). */
+const JOINING = new Set(["in", "at", "for", "from", "to", "with", "on", "near", "is", "are", "was", "and", "or", "per", "a", "an", "rates", "price", "average"])
+
+/** A listing card's amenities and buttons, never its hotel's name. */
+const CARD_WORDS = new Set(["parking", "free", "wi-fi", "wifi", "pool", "spa", "pet-friendly", "breakfast", "gym", "availability", "cancellation", "airport", "shuttle", "very", "good", "wonderful", "excellent", "okay"])
+
+function isCardName(name: string, destination: string | null): boolean {
+  const words = name.split(" ")
+  const lower = words.map((w) => w.toLowerCase())
+  // "The" leads a name only before a word that isn't generic ("The Park Chennai", not "The best").
+  const lead = lower[0] === "the" ? lower[1] : lower[0]
+  if (!lead || /\d/.test(name) || isSiteName(name) || lower.some((w) => PAGE_WORDS.has(w) || JOINING.has(w)) || GENERIC.has(lead) || CARD_WORDS.has(lead)) return false
+  // A lower-case first word only in a brand of three words or more ("ibis Chennai Sipcot"), never "in Chennai".
+  if (/^\p{Ll}/u.test(words[0]!) && words.length < 3) return false
+  if (lower.filter((w) => CARD_WORDS.has(w)).length * 2 >= words.length) return false
+  // Mostly capitalised ("ibis Chennai Sipcot" is), and more than the destination and lodging words.
+  if (words.filter((w) => /^\p{Lu}/u.test(w)).length * 2 < words.length) return false
+  return nameKey(name, destination) !== ""
+}
+
+function lodgingNameIn(card: string): string | undefined {
+  let last: string | undefined
+  for (const m of card.matchAll(HOTEL_NAME)) last = cleanName(m[0]) ?? last
+  return last
+}
+
 /** Where the price sits in its quote: the first number whose digits are the amount's. */
 export function priceAt(quote: string, amount: string): number {
+  // The number that is the amount ("₹800", not the "₹8,000" before it), else one starting with its digits.
+  const numbers = [...quote.matchAll(/\d[\d,.]*/g)]
+  const exact = numbers.find((m) => m[0].replace(/,/g, "").replace(/\.$/, "").replace(/\.0+$/, "") === amount)
+  if (exact) return exact.index
   const digits = amount.replace(/\D/g, "")
-  for (const m of quote.matchAll(/\d[\d,.]*/g)) if (m[0].replace(/\D/g, "").startsWith(digits)) return m.index
+  for (const m of numbers) if (m[0].replace(/\D/g, "").startsWith(digits)) return m.index
   return Math.floor(quote.length / 2)
 }
 

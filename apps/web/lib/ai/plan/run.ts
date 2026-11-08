@@ -4,15 +4,16 @@ import { tripPlaceScope } from "@fin-creador/schemas"
 import { DEADLINE_MS } from "../chat"
 import { LlmError, type LlmMessage, type LlmProvider, type LlmUsage, NO_USAGE, addUsage } from "../llm/types"
 import type { WebLookupInput } from "../search/query"
-import type { LookupOutcome, LookupRefusal } from "../search/session"
+import type { LookupDepth, LookupOutcome, LookupRefusal } from "../search/session"
 import { addDecimals, compareDecimals, decimalToMinor, multiplyDecimal } from "../search/totals"
-import { type Bound, type PriceCandidate, SCALES, scaleUp, siteOf, verifyWebFigure } from "../search/verify"
+import type { SearchResult } from "../search/types"
+import { type Bound, type PriceCandidate, SCALES, plain, scaleUp, siteOf, verifyWebFigure } from "../search/verify"
 import { VERDICT_WORDS, monthName } from "../tools/goals"
 import type { ToolContext, TotalBound } from "../tools/types"
 import { webTotal } from "../web-format"
 import { lineWords } from "./format"
-import { type Mention, SUBJECT_WORDS, aboutPage, aboutPrice, dishesIn, placesIn, shoppingIn } from "./context"
-import { NAMES_PER_KIND, carrierCandidates, hotelCandidates, nameKey } from "./names"
+import { type Mention, type PriceUnit, SUBJECT_WORDS, aboutPage, aboutPrice, dishesIn, placesIn, shoppingIn, unitAt } from "./context"
+import { NAMES_PER_KIND, carrierCandidates, hotelCandidates, listingHotelAt, nameKey, priceAt } from "./names"
 import { RATES_ON, RATES_SOURCE, canConvert, convertDecimal, rateWords } from "./rates"
 import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanSignal, PlanVerdict } from "./types"
 
@@ -40,6 +41,11 @@ const MARGIN_MS = 2_000
 export const PICK_OUTPUT_TOKENS = 2_000
 /** Prices kept per line (the stored plan allows 6). */
 const PRICES_PER_LINE = 6
+/** Prices offered to the model per line, after code's screening. */
+const OFFERED_PER_LINE = 12
+/** Lines whose pages are listings and tariff tables (a price per hotel card, per car): read deeper, screened in code. */
+const DEEP_LINES = new Set<Lookup["line"]>(["stay", "food", "local_travel", "hotels"])
+const DEEP: LookupDepth = { perPage: 60, total: 150 }
 export const BUFFER_PERCENT = 10
 
 export type PlanRecords = {
@@ -173,7 +179,7 @@ export const pickInput = z
           .object({
             line: z.string().max(20),
             picks: z
-              .array(z.object({ id: z.string().regex(/^w\d{1,3}$/), per: z.enum(["total", "night", "person", "person_night", "day_person"]) }).strict())
+              .array(z.object({ id: z.string().regex(/^w\d{1,3}$/), per: z.enum(["total", "night", "person", "person_night", "day_person", "day"]) }).strict())
               // As many as a lookup offers: more than are kept is trimmed after the checks, never a failed round.
               .max(12),
           })
@@ -194,7 +200,7 @@ const PICK_TOOL = {
 }
 
 const PICK_SYSTEM = [
-  "You help build a cost plan. The app found prices and names on web pages, each with an id. Call the plan_pick tool once with the ids that fit each cost line, and the carriers and hotels that fit. A price fits a line only when its own text is clearly that cost for that place; 'for' is what the app found it is for, next to it on its page. Say what each price covers (per) exactly as its text says: total, night, person, person_night or day_person. If nothing fits, call plan_pick with empty lists. Write nothing else, and no tags.",
+  "You help build a cost plan. The app found prices and names on web pages, each with an id. Call the plan_pick tool once with the ids that fit each cost line, and the carriers and hotels that fit. A price fits a line only when its own text is clearly that cost for that place; 'for' is what the app found it is for, next to it on its page. Say what each price covers (per) exactly as its text says: total, night, person, person_night, day_person, or day (a day for the whole party, such as a car's day hire). 'unit' is what the app found written next to the price. If nothing fits, call plan_pick with empty lists. Write nothing else, and no tags.",
 ]
 
 /** Time a second ask needs; with less left, a reply without the tool call ends the round. */
@@ -254,6 +260,8 @@ export function timesFor(per: PlanPrice["per"], nights: number | null, traveller
       return nights === null || travellers === null ? null : nights * travellers
     case "day_person":
       return nights === null || travellers === null ? null : (nights + 1) * travellers
+    case "day":
+      return nights === null ? null : nights + 1
   }
 }
 
@@ -378,7 +386,38 @@ export function inRange(p: PlanPrice, r: { low: number; high: number; unit: keyo
   return total >= r.low * 100 * units && total <= r.high * 100 * units
 }
 
-type Screened = { prices: (PriceCandidate & { id: string })[]; about: Map<string, string>; noSubject: number; foreign: Map<string, number> }
+type Screened = {
+  prices: (PriceCandidate & { id: string })[]
+  about: Map<string, string>
+  /** The unit written next to each price, when one is. */
+  units: Map<string, PriceUnit | undefined>
+  noSubject: number
+  foreign: Map<string, number>
+  wrongUnit: Map<PriceUnit | "none", number>
+}
+
+/** Per-day lines: a price is used only when it is written as per day. */
+const DAY_LINES = new Set<PlanLineName>(["food", "local_travel"])
+/** A stay price written per km, hour, trip or month isn't a night's. */
+const NOT_A_NIGHT = new Set<PriceUnit>(["km", "hour", "trip", "month", "outstation", "add_on"])
+
+/** Whether a price's unit fits its line; a line without a unit rule takes any. */
+function unitFits(line: PlanLineName, unit: PriceUnit | undefined): boolean {
+  if (DAY_LINES.has(line)) return unit === "day"
+  if (line === "stay") return !unit || !NOT_A_NIGHT.has(unit)
+  return true
+}
+
+/** The hotel nearest before a price on its own page (a listing's card), from the page's full text. */
+function listingHotel(p: PriceCandidate, results: readonly SearchResult[], destination: string | null): string | undefined {
+  const r = results.find((x) => x.url === p.source_url)
+  for (const text of r ? [r.snippet, r.content ?? ""] : []) {
+    const t = plain(text)
+    const i = t.indexOf(p.quote)
+    if (i >= 0) return listingHotelAt(t, i + priceAt(p.quote, p.amount), destination)
+  }
+  return undefined
+}
 
 /**
  * A line's prices that can be used: in the plan's currency or one with a rate (rates.ts; others
@@ -392,19 +431,42 @@ export function screenPrices(
   prices: readonly (PriceCandidate & { id: string })[],
   currency: string,
   destination: string | null = null,
+  results: readonly SearchResult[] = [],
 ): Screened {
   const foreign = new Map<string, number>()
   for (const p of prices) if (!canConvert(p.currency, currency)) foreign.set(p.currency, (foreign.get(p.currency) ?? 0) + 1)
   const mine = prices.filter((p) => canConvert(p.currency, currency))
-  if (!SUBJECT_WORDS[line]) return { prices: mine, about: new Map(), noSubject: 0, foreign }
+  // The unit written next to each price (a range's ends share it); a per-km or per-trip fare is never a day's.
+  const units = new Map(mine.map((p) => [p.id, unitAt(p.quote, p.amount)]))
+  for (const p of mine) if (!units.get(p.id) && p.rangeWith && units.get(p.rangeWith)) units.set(p.id, units.get(p.rangeWith))
+  const wrongUnit = new Map<PriceUnit | "none", number>()
+  const fitting = mine.filter((p) => {
+    const unit = units.get(p.id)
+    if (unitFits(line, unit)) return true
+    wrongUnit.set(unit ?? "none", (wrongUnit.get(unit ?? "none") ?? 0) + 1)
+    return false
+  })
+  if (!SUBJECT_WORDS[line]) return { prices: fitting.slice(0, OFFERED_PER_LINE), about: new Map(), units, noSubject: 0, foreign, wrongUnit }
   const about = new Map<string, string>()
-  for (const p of mine) {
-    const a = aboutPrice(line, p.quote, p.amount) ?? aboutPage(line, p.title, p.source_url, destination)
+  for (const p of fitting) {
+    // Stay: the hotel in the price's own card first (a listing names it just before its rate), then its quote, then its page.
+    const a =
+      (line === "stay" ? listingHotel(p, results, destination) : undefined) ?? aboutPrice(line, p.quote, p.amount) ?? aboutPage(line, p.title, p.source_url, destination)
     if (a) about.set(p.id, a)
   }
-  for (const p of mine) if (!about.has(p.id) && p.rangeWith && about.has(p.rangeWith)) about.set(p.id, about.get(p.rangeWith)!)
-  const kept = mine.filter((p) => about.has(p.id))
-  return { prices: kept, about, noSubject: mine.length - kept.length, foreign }
+  for (const p of fitting) if (!about.has(p.id) && p.rangeWith && about.has(p.rangeWith)) about.set(p.id, about.get(p.rangeWith)!)
+  const kept = fitting.filter((p) => about.has(p.id))
+  return { prices: kept.slice(0, OFFERED_PER_LINE), about, units, noSubject: fitting.length - kept.length, foreign, wrongUnit }
+}
+
+const UNIT_WORDS_SHORT: Record<PriceUnit | "none", string> = { km: "per km", hour: "per hour", trip: "per trip", month: "per month", night: "per night", day: "per day", outstation: "outstation (intercity)", add_on: "an add-on charge", none: "no unit given" }
+
+/** " 3 prices weren't per day (2 per km, 1 per trip), so they weren't used." */
+function unitWords(line: PlanLineName, wrong: ReadonlyMap<PriceUnit | "none", number>): string {
+  const n = [...wrong.values()].reduce((a, b) => a + b, 0)
+  if (n === 0) return ""
+  const parts = [...wrong].map(([u, c]) => `${c} ${UNIT_WORDS_SHORT[u]}`).join(", ")
+  return ` ${n} ${n === 1 ? "price wasn't" : "prices weren't"} ${line === "stay" ? "per night" : "per day"} (${parts}), so ${n === 1 ? "it wasn't" : "they weren't"} used.`
 }
 
 /** "USD" or "USD and JPY". */
@@ -430,7 +492,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   const { lookups, skips } = lookupsFor(request, goalLines, today)
   const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now() - MARGIN_MS))
   const outcomes: { lookup: Lookup; outcome: LookupOutcome | null }[] = await Promise.all(
-    lookups.map(async (lookup) => ({ lookup, outcome: web ? await web.lookup(lookup.input, signal) : null })),
+    lookups.map(async (lookup) => ({ lookup, outcome: web ? await web.lookup(lookup.input, signal, DEEP_LINES.has(lookup.line) ? DEEP : undefined) : null })),
   )
   const found = (line: Lookup["line"]) => outcomes.find((o) => o.lookup.line === line)?.outcome ?? null
   const carrierNames = (() => {
@@ -443,7 +505,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   })()
   const screened = new Map<PlanLineName, Screened>()
   for (const o of outcomes) {
-    if (o.lookup.line !== "carriers" && o.lookup.line !== "hotels" && o.lookup.line !== "shopping" && o.outcome?.ok) screened.set(o.lookup.line, screenPrices(o.lookup.line, o.outcome.prices, currency, request.kind === "trip" ? request.destination : null))
+    if (o.lookup.line !== "carriers" && o.lookup.line !== "hotels" && o.lookup.line !== "shopping" && o.outcome?.ok) screened.set(o.lookup.line, screenPrices(o.lookup.line, o.outcome.prices, currency, request.kind === "trip" ? request.destination : null, o.outcome.results))
   }
 
   // 3. The model's round, only when there is something to pick.
@@ -453,7 +515,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
       .filter(([, s]) => s.prices.length > 0)
       .map(([line, s]) => ({
         line,
-        prices: s.prices.map((p) => ({ id: p.id, site: p.site, currency: p.currency, text: p.quote, ...(s.about.has(p.id) ? { for: s.about.get(p.id) } : {}), ...(p.bound ? { bound: p.bound } : {}) })),
+        prices: s.prices.map((p) => ({ id: p.id, site: p.site, currency: p.currency, text: p.quote, ...(s.about.has(p.id) ? { for: s.about.get(p.id) } : {}), ...(s.units.get(p.id) ? { unit: s.units.get(p.id) } : {}), ...(p.bound ? { bound: p.bound } : {}) })),
       })),
     carriers: carrierNames.map(({ id, name, site, quote }) => ({ id, name, site, text: quote })),
     hotels: hotelNames.map(({ id, name, site, quote, stars }) => ({ id, name, site, stars, text: quote })),
@@ -468,12 +530,16 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   const nights = request.kind === "trip" ? request.nights : null
   const travellers = request.kind === "trip" ? request.travellers : null
   const results = web?.results ?? []
-  const keptPrice = (line: PlanLineName, id: string, per: PlanPrice["per"]): PlanPrice | null => {
+  const keptPrice = (line: PlanLineName, id: string, picked: PlanPrice["per"]): PlanPrice | null => {
     const s = screened.get(line)
     if (!s?.prices.some((p) => p.id === id)) return null
     const c = web!.candidates.get(id)
     if (!c) return null
-    const checked = verifyWebFigure({ label: line, amount: c.amount, currency: c.currency, scale: c.scale, per, source_url: c.source_url, quote: c.quote }, results)
+    // A per-day line's price is written per day (screenPrices): counted per day, whatever the
+    // model said; a day for each traveller (food) or for the party (a car's day hire).
+    const per = DAY_LINES.has(line) && picked !== "day" && picked !== "day_person" ? (line === "food" ? "day_person" : "day") : picked
+    // The check reads only the amount and its quote; "day" is the plan's own basis.
+    const checked = verifyWebFigure({ label: line, amount: c.amount, currency: c.currency, scale: c.scale, per: per === "day" ? "total" : per, source_url: c.source_url, quote: c.quote }, results)
     return checked.ok ? converted(toPrice(c, per, s.about.get(id)), currency) : null
   }
   // A hotel's rate from the hotels lookup's own prices, checked against its page, with the hotel as what it is for.
@@ -546,7 +612,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     if (!o) why = NO_WEB
     else if (!o.ok) why = REFUSALS[o.reason]
     else if (o.prices.length === 0) why = "no price was found on the pages looked up."
-    else if (!s || s.prices.length === 0) why = s && s.foreign.size > 0 && s.noSubject === 0 ? `prices found only in ${currencyList([...s.foreign.keys()])}, which the app has no exchange rate for.` : ""
+    else if (!s || s.prices.length === 0) why = s && s.foreign.size > 0 && s.noSubject === 0 && s.wrongUnit.size === 0 ? `prices found only in ${currencyList([...s.foreign.keys()])}, which the app has no exchange rate for.` : ""
     else if (!round.picks) why = round.outcome === "timeout" ? NOT_CHECKED : "the prices found couldn't be checked, so none is used. The pages found are listed."
     else {
       const picks = round.picks.lines.find((l) => l.line === line)?.picks ?? []
@@ -576,12 +642,13 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
       foreignCount === 0 || why?.startsWith("prices found only in")
         ? ""
         : ` ${foreignCount} ${foreignCount === 1 ? "price" : "prices"} in ${currencyList([...s!.foreign.keys()])} ${foreignCount === 1 ? "wasn't" : "weren't"} used (no exchange rate).`
+    const wrongUnitWords = s ? unitWords(line, s.wrongUnit) : ""
     const range = rangeFor(line, international)
     const inside = range ? checked.filter((p) => inRange(p, range, nights, travellers)) : checked
     const prices = inside.slice(0, PRICES_PER_LINE)
     const dropped = checked.length - inside.length
     const droppedWords = dropped === 0 || !range ? "" : ` ${dropped} ${dropped === 1 ? "price" : "prices"} outside ${rangeWords(range)} ${dropped === 1 ? "was" : "were"} dropped as implausible.`
-    if (prices.length === 0) return none(line, `No estimate:${why ? ` ${why}` : ""}${foreignWords}${subjectWords}${droppedWords}`, pagesOf(o))
+    if (prices.length === 0) return none(line, `No estimate:${why ? ` ${why}` : ""}${foreignWords}${wrongUnitWords}${subjectWords}${droppedWords}`, pagesOf(o))
     const amounts = lineAmounts(prices, nights, travellers)
     if (amounts.length === 0) {
       const needs = [nights === null ? "nights" : null, travellers === null ? "travellers" : null].filter(Boolean).join(" and ")
@@ -590,7 +657,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     const sites = [...new Set(prices.map((p) => p.site))].join(", ")
     const from = [...new Set(prices.flatMap((p) => (p.converted ? [p.currency] : [])))]
     const convertedWords = from.length === 0 ? "" : ` Prices in ${currencyList(from)} are converted to ${currency}, approximately (the rate is in the assumptions).`
-    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${convertedWords}${foreignWords}${subjectWords}${droppedWords}`, prices, pages: [] }
+    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${convertedWords}${foreignWords}${wrongUnitWords}${subjectWords}${droppedWords}`, prices, pages: [] }
   }
 
   // The buffer: the goal's own, or BUFFER_PERCENT of the lines with an estimate, per currency.
@@ -675,7 +742,7 @@ function scaling(prices: readonly PlanPrice[], nights: number | null, travellers
   const pers = new Set(prices.map((p) => p.per))
   const parts: string[] = []
   if ((pers.has("night") || pers.has("person_night")) && nights !== null) parts.push(`${nights} ${nights === 1 ? "night" : "nights"}`)
-  if (pers.has("day_person") && nights !== null) parts.push(`${nights + 1} days`)
+  if ((pers.has("day_person") || pers.has("day")) && nights !== null) parts.push(`${nights + 1} days`)
   if ((pers.has("person") || pers.has("person_night") || pers.has("day_person")) && travellers !== null) parts.push(`${travellers} ${travellers === 1 ? "traveller" : "travellers"}`)
   return parts.length > 0 ? `, times ${parts.join(" and ")}` : ""
 }

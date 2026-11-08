@@ -196,8 +196,13 @@ const HOST_MODES: [RegExp, string][] = [
   [/metro/, "metro"],
 ]
 
-/** A food page with no kind of meal named: its title or address is about food. */
-const FOOD_PAGE = /\b(?:food|foods|meals?|restaurants?|dining|eat(?:ing)?|eateries|street food)\b/i
+/**
+ * A food page with no kind of meal named: its title or address is about food, or it is a
+ * cost-of-living or food-cost guide ("cost of food in X", "food prices in X", "budget for meals
+ * in X", "cost of living in X"), where per-day food figures are. A guide's rent or bus fare is
+ * still dropped: food is a per-day line, and those aren't per day (unitAt).
+ */
+const FOOD_PAGE = /\b(?:food|foods|meals?|restaurants?|dining|eat(?:ing)?|eateries|street food|cost[- ]of[- ]living|living costs?)\b/i
 
 const first = (text: string, list: readonly [RegExp, string][]) => list.find(([re]) => re.test(text))?.[1]
 
@@ -224,6 +229,77 @@ export function aboutPage(line: string, title: string, url: string, destination:
     default:
       return undefined
   }
+}
+
+/** What a price is charged per, as written next to it. */
+export type PriceUnit = "day" | "night" | "km" | "hour" | "trip" | "month" | "outstation" | "add_on"
+
+/** A unit written right after a price ("₹2,000 per day", "₹1,400 / 4 hrs"); "a person" or "per head" before it is skipped. */
+const UNIT_AFTER: [RegExp, PriceUnit | "hours"][] = [
+  [/^(?:per|\/|a|each)\s?(?:km|kms|kilomet)/, "km"],
+  [/^(?:\/|for|per)\s?(\d{1,2})\s?(?:hrs?|hours?)\b/, "hours"],
+  [/^(?:per|\/|an?|each)\s?(?:hr|hour)/, "hour"],
+  [/^(?:per|\/|a|each)\s?day\b|^daily\b/, "day"],
+  [/^(?:per|\/|a|each)\s?(?:room\s)?night\b|^nightly\b/, "night"],
+  [/^(?:per|\/|a)\s?month\b|^monthly\b/, "month"],
+  [/^(?:per|\/|a)\s?(?:trip|ride|transfer|drop)\b|^one[- ]way\b/, "trip"],
+]
+
+/** A unit in the words just before a price, in its own table cell or clause ("Price per kilometer | Rs 25", "Driver batta / day ₹600"). */
+const UNIT_BEFORE: [RegExp, PriceUnit | "hours"][] = [
+  [/\b(?:per|extra|add(?:itional)?|\/)\s?(?:km|kms|kilomet\w*)\b/g, "km"],
+  // A package: "8 hrs / 80 km", "8 hrs & 80 kms".
+  [/\b(\d{1,2})\s?(?:hrs?|hours?)\s*[/&·,]\s*\d+\s?kms?\b/g, "hours"],
+  [/\b(?:per|extra|\/)\s?(?:hr|hour)s?\b|\bwaiting\b|\bhourly\b/g, "hour"],
+  [/\bbase (?:fee|fare)\b|\bminimum fare\b|\bper (?:trip|ride|transfer|drop)\b|\bone[- ]way\b|\bairport (?:drop|transfer|pick-?up)\b/g, "trip"],
+  [/\bmonthly\b|\b(?:per|\/|a)\s?month\b/g, "month"],
+  [/\b(?:per|\/|a)\s?day\b|\bdaily\b|\bfull[- ]day\b|\bday rate\b/g, "day"],
+  [/\b(?:per|\/|a)\s?night\b|\bnightly\b/g, "night"],
+]
+
+/** A package of so many hours: 8 or more is a day's hire (the "8 hrs / 80 km" day), fewer is by the hour. */
+const hours = (n: string): PriceUnit => (Number(n) >= 8 ? "day" : "hour")
+
+const PRICE_MARK = /(?:₹|\brs\.?|\binr)\s?\d[\d,]*(?:\.\d+)?/gi
+
+/**
+ * The unit written next to a price in its quote: right after it, else in the words just before
+ * it (back to the price or cell before); undefined when none is written there. An outstation
+ * rate or an add-on charge named just before it is that, whatever unit follows.
+ */
+export function unitAt(quote: string, amount: string): PriceUnit | undefined {
+  const at = priceAt(quote, amount)
+  const number = /\d[\d,]*(?:\.\d+)?/.exec(quote.slice(at))
+  const end = at + (number ? number[0].length : 0)
+  // Before: from the last price (or sentence end) before this one, the last two table cells.
+  const window = quote.slice(Math.max(0, at - 60), at)
+  // This price's own mark ("₹", "Rs") is at the window's end; a price before it ends earlier.
+  const previous = [...window.matchAll(PRICE_MARK)].filter((m) => m.index + m[0].length < window.length - 4).at(-1)
+  let before = previous ? window.slice(previous.index + previous[0].length) : window
+  before = before.split(/[.!?]\s+(?=[A-Z])|·/).at(-1)!
+  before = before.split("|").map((c) => c.trim()).filter((c) => c && !/^-+$/.test(c)).slice(-2).join(" | ").toLowerCase()
+  // An outstation (intercity) rate is per day too, but not for getting around the place itself.
+  if (/\boutstation\b|\bintercity\b/.test(before)) return "outstation"
+  // A charge on top of the fare (the driver's allowance, tolls) isn't the hire itself.
+  if (/\bbatta\b|\bdriver(?:'s)? allowance\b|\btolls?\b|\b(?:hill station|night|toll|parking|permit|waiting) charges?\b/.test(before)) return "add_on"
+  const after = quote
+    .slice(end, end + 40)
+    .toLowerCase()
+    .split(/[|·₹]|\brs\b|\binr\b|\.\s/)[0]!
+    .replace(/^\s*(?:\/-|\+|\)|onwards|only)?\s*/, "")
+    .replace(/^(?:(?:per|a|each)\s(?:person|head|adult)|pp)\s*,?\s*/, "")
+  for (const [re, unit] of UNIT_AFTER) {
+    const m = re.exec(after)
+    if (m) return unit === "hours" ? hours(m[1]!) : unit
+  }
+  let best: { end: number; unit: PriceUnit } | null = null
+  for (const [re, unit] of UNIT_BEFORE) {
+    for (const m of before.matchAll(re)) {
+      const e = m.index + m[0].length
+      if (!best || e > best.end) best = { end: e, unit: unit === "hours" ? hours(m[1]!) : unit }
+    }
+  }
+  return best?.unit
 }
 
 export type Mention = { name: string; site: string; url: string }

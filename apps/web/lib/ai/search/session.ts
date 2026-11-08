@@ -22,8 +22,12 @@ export type LookupRefusal = "unlisted_place" | "unlisted_item" | "line_not_for_s
 
 export type LookupOutcome = { ok: true; subject: string; results: SearchResult[]; prices: (PriceCandidate & { id: string })[] } | { ok: false; reason: LookupRefusal }
 
-/** Prices handed to the model per lookup, found in code. */
+/** Prices handed to the model per lookup, found in code, and per page. */
 const PRICES_PER_LOOKUP = 12
+const PRICES_PER_PAGE = 4
+
+/** A lookup that reads deeper into its pages (a plan's listing and tariff pages): more prices per page and in all, for code to screen before any reach the model. */
+export type LookupDepth = { perPage: number; total: number }
 
 export const WEB_NOTICES: Partial<Record<LookupRefusal, string>> = {
   monthly_cap: "Web lookups are used up for this month (they reset on the 1st). This answer uses your own records only.",
@@ -84,7 +88,7 @@ export class WebSession {
 
   constructor(private readonly options: Options) {}
 
-  async lookup(input: WebLookupInput, signal: AbortSignal): Promise<LookupOutcome> {
+  async lookup(input: WebLookupInput, signal: AbortSignal, depth?: LookupDepth): Promise<LookupOutcome> {
     const built = buildQuery(input, this.options.terms, this.options.countryCode)
     if (!built.ok) return { ok: false, reason: built.reason }
 
@@ -101,7 +105,10 @@ export class WebSession {
       this.sent++
       for (const r of results) if (!this.results.some((have) => have.url === r.url)) this.results.push(r)
       if (input.kind === "trip") this.trips.push({ nights: input.nights, travellers: input.travellers })
-      const prices = firstPrices(results.flatMap((r) => priceCandidates(r)), PRICES_PER_LOOKUP).map((p) => ({ ...p, id: this.idFor(p) }))
+      const prices = firstPrices(
+        results.flatMap((r) => priceCandidates(r, depth?.perPage ?? PRICES_PER_PAGE)),
+        depth?.total ?? PRICES_PER_LOOKUP,
+      ).map((p) => ({ ...p, id: this.idFor(p) }))
       // A range's two ends know each other's id, so keeping one keeps both (web-prices.ts).
       for (const p of prices) {
         if (!p.range) continue

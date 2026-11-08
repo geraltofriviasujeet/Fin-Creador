@@ -63,7 +63,7 @@ function fakeDb() {
   return { db, calls }
 }
 
-const PER: Record<string, string> = { transport: "person", stay: "night", food: "day_person", local_travel: "night", sightseeing: "person", shopping: "total", price: "total", extras: "total" }
+const PER: Record<string, string> = { transport: "person", stay: "night", food: "day_person", local_travel: "day", sightseeing: "person", shopping: "total", price: "total", extras: "total" }
 
 /** Picks every price of every line with the basis its page states, and every name. */
 function pickingModel(override?: (brief: Brief) => unknown): LlmProvider & { requests: LlmRequest[] } {
@@ -145,12 +145,12 @@ describe("a trip plan", () => {
     // Shopping: never an amount, what the place is known for buying.
     expect(by.shopping).toMatchObject({ from: "not_estimated", amounts: [], prices: [] })
     expect(by.shopping!.mentions!.map((m) => m.name)).toEqual(["cashews", "spices", "feni"])
-    expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4540", high: "9940", bound: "at_least" }] })
-    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "49940", high: "109340", bound: "at_least" }])
-    expect(targets).toEqual([4_994_000])
+    expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4740", high: "10140", bound: "at_least" }] })
+    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "52140", high: "111540", bound: "at_least" }])
+    expect(targets).toEqual([5_214_000])
     expect(run.answer).toMatch(/ 6 of 6 cost lines have an estimate\./)
     expect(run.plan.verdicts.web.summary).toBe(
-      'No. With web estimates the plan adds up to at least ₹49,940 (a minimum: some prices are "from" prices). At your current rate that wouldn\'t be covered by January 2027.',
+      'No. With web estimates the plan adds up to at least ₹52,140 (a minimum: some prices are "from" prices). At your current rate that wouldn\'t be covered by January 2027.',
     )
     expect(run.plan.changes[0]).toMatch(/^Save ₹5,000(\.00)? more a month\.$/)
     // Every web line carries its page; names are only those found, each with where.
@@ -220,6 +220,33 @@ describe("a trip plan", () => {
     const local = run.plan.lines.find((l) => l.line === "local_travel")!
     expect(local.prices.map((p) => [p.about, p.amount, p.site])).toEqual([["taxi", "2500", "drop-taxi-goa.example.test"]])
     expect(local.how).toMatch(/ 1 price found didn't say which way of getting around it was for, so it wasn't used\.$/)
+  })
+
+  it("uses only per-day prices on a per-day line: per-km, per-trip, per-hour and unstated ones are dropped, with the reason", async () => {
+    const pages: typeof PAGES = [
+      ...PAGES.filter(([re]) => !/local taxi hire/.test(re.source)),
+      [/local taxi hire/, page("Goa Taxi Tariff", "Base fee | Rs 130 | | Price per kilometer | Rs 25 | | Waiting (per hour) | Rs 145 | | Sedan 8 hrs / 80 km | Rs 2,600 | | Airport cab | Rs 900 |")],
+    ]
+    const { ctx } = setup(pages)
+    // The model says "total"; the page says per day, so it counts each day (5 days).
+    const totals = (b: Brief) => ({ lines: b.lines.map((l) => ({ line: l.line, picks: l.prices.map((p) => ({ id: p.id, per: "total" })) })), carriers: [], hotels: [] })
+    const run = await runPlan(goa, { ctx, provider: pickingModel(totals), records: fakeRecords() })
+    const local = run.plan.lines.find((l) => l.line === "local_travel")!
+    expect(local.prices.map((p) => [p.about, p.amount, p.per])).toEqual([["taxi", "2600", "day"]])
+    expect(local.amounts).toEqual([{ currency: "INR", low: "13000", high: "13000" }])
+    expect(local.how).toMatch(/ 4 prices weren't per day \(1 per trip, 1 per km, 1 per hour, 1 no unit given\), so they weren't used\.$/)
+  })
+
+  it("pairs each price on a hotel listing page with the hotel named in its own card", async () => {
+    const listing = page(
+      "Goa Hotels from ₹ 900/night",
+      "Hotels in Goa. Taj Holiday Village - Goa - Pool Taj Holiday Village Goa, India 9.0 Free Wi-Fi ₹ 14,200+ View availability Lemon Tree Amarante - Goa - Room Lemon Tree Amarante Goa, India 8.1 Parking Free Wi-Fi Pool ₹ 6,300+ View availability",
+    )
+    const pages: typeof PAGES = [...PAGES.filter(([re]) => !/hotel price per night/.test(re.source)), [/hotel price per night/, listing]]
+    const { ctx } = setup(pages)
+    const run = await runPlan(goa, { ctx, provider: pickingModel(), records: fakeRecords() })
+    const stay = run.plan.lines.find((l) => l.line === "stay")!
+    expect(stay.prices.map((p) => [p.about, p.amount])).toEqual(expect.arrayContaining([["Taj Holiday Village", "14200"], ["Lemon Tree Amarante", "6300"]]))
   })
 
   it("a budget plan looks up budget hotels by name: a rate joins the stay line, a hotel without one is listed on it", async () => {
@@ -348,8 +375,8 @@ describe("a trip plan's verdict from both signals", () => {
     const both = run.plan.verdicts.both!
     expect(both.verdict).toBe("Not yet.")
     expect(both.summary).toBe("The money is the constraint, not the trip: the plan costs no more than your past trip did, but there isn't enough free money by January 2027.")
-    expect(both.money).toEqual({ met: "no", summary: "₹30,000 is free for it by January 2027 after your other goals (planned trips included), short of the plan's at least ₹49,940." })
-    expect(both.past).toEqual({ met: "yes", summary: "The plan's at least ₹49,940 is at or below your Travel spending from 2026-04-01 to 2026-04-05 (5 days): ₹60,000, as spent. Who went and where isn't known." })
+    expect(both.money).toEqual({ met: "no", summary: "₹30,000 is free for it by January 2027 after your other goals (planned trips included), short of the plan's at least ₹52,140." })
+    expect(both.past).toEqual({ met: "yes", summary: "The plan's at least ₹52,140 is at or below your Travel spending from 2026-04-01 to 2026-04-05 (5 days): ₹60,000, as spent. Who went and where isn't known." })
     expect(run.answer).toMatch(/The plan's verdict, from both signals: Not yet\. The money is the constraint/)
     expect(checkedPlanSchema.safeParse(run.plan).success).toBe(true)
   })

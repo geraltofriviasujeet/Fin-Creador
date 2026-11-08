@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { aboutPage, aboutPrice, dishesIn, placesIn, shoppingIn } from "./context"
+import { aboutPage, aboutPrice, dishesIn, placesIn, shoppingIn, unitAt } from "./context"
 
 // What a price is for, found in code next to it in its own page text; nothing found, nothing said.
 
@@ -56,10 +56,41 @@ describe("what a price is for, from its page when its own words don't say", () =
     expect(aboutPage("food", "Best thali in Chennai", "https://example.test/")).toBe("thali")
     expect(aboutPage("food", "Chennai on a budget", "https://example.test/chennai-food-prices")).toBe("food")
     expect(aboutPage("food", "Chennai on a budget", "https://example.test/")).toBeUndefined()
+    expect(aboutPage("food", "Cost of Living in Chennai 2026 for Families", "https://example.test/")).toBe("food")
+    expect(aboutPage("food", "Food prices in India for budget travellers", "https://example.test/")).toBe("food")
+    expect(aboutPage("food", "Budget for meals in Chennai", "https://example.test/")).toBe("food")
     expect(aboutPage("transport", "Book flights", "https://www.goindigo.in/")).toBe("IndiGo")
     expect(aboutPage("transport", "Air India Express | Delhi to Chennai", "https://example.test/")).toBe("Air India Express")
     expect(aboutPage("sightseeing", "Fort St George Chennai: timings and entry fee", "https://example.test/")).toBe("Fort St George")
     expect(aboutPage("sightseeing", "Things to do in Chennai", "https://example.test/")).toBeUndefined()
+  })
+})
+
+describe("the unit written next to a price", () => {
+  it("right after it, a person or head skipped", () => {
+    expect(unitAt("An app cab costs ₹2,000 per day.", "2000")).toBe("day")
+    expect(unitAt("Street food costs ₹800 per person per day.", "800")).toBe("day")
+    expect(unitAt("Autos charge ₹18/km in the city.", "18")).toBe("km")
+    expect(unitAt("Sedan from ₹1,400 / 4 hrs · 40 km", "1400")).toBe("hour")
+    expect(unitAt("Rooms from ₹4,500 a night.", "4500")).toBe("night")
+    expect(unitAt("A PG costs ₹7,000 per month.", "7000")).toBe("month")
+  })
+
+  it("else in its own table cell or clause just before it", () => {
+    const table = "Base fee | Rs 130.00 | | Price per kilometer | Rs 25.00 | | Stand-/Waiting (per hour) | Rs 145.00 |"
+    expect(unitAt(table, "130")).toBe("trip")
+    expect(unitAt(table, "25")).toBe("km")
+    expect(unitAt(table, "145")).toBe("hour")
+    expect(unitAt("Sedan from ₹1,400 / 4 hrs · 40 km 8 hrs / 80 km₹2,800 Extra km₹15", "2800")).toBe("day")
+    expect(unitAt("Sedan from ₹1,400 / 4 hrs · 40 km 8 hrs / 80 km₹2,800 Extra km₹15", "15")).toBe("km")
+    expect(unitAt("You can eat three meals a day for under ₹300 if you choose local places.", "300")).toBe("day")
+    expect(unitAt("A thali costs ₹250.", "250")).toBeUndefined()
+  })
+
+  it("an outstation rate or an add-on charge is that, whatever follows", () => {
+    expect(unitAt("Extra hour₹250 Outstation (min 250 km/day)₹3,750 Outstation extra km₹15", "3750")).toBe("outstation")
+    expect(unitAt("Round trips - Driver batta is Rs. 500/- per day", "500")).toBe("add_on")
+    expect(unitAt("1 day means 1 calendar day (00:00 hrs to 23:59 hrs) Hill station charges - Rs. 300 for sedan", "300")).toBe("add_on")
   })
 })
 

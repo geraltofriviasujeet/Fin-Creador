@@ -84,7 +84,7 @@ export type KeptWebFigure = WebFigureInput & { value: string; site: string; titl
 export type DropReason = "unknown_id" | "unknown_url" | "quote_not_found" | "amount_not_in_quote"
 
 /** Single spaces, typographic quotes and dashes made plain; case kept. */
-const plain = (text: string) =>
+export const plain = (text: string) =>
   text
     .normalize("NFKC")
     .replace(/[‘’]/g, "'")
@@ -179,10 +179,11 @@ function priceMatches(t: string): PriceMatch[] {
   for (const [currency, marks] of Object.entries(CURRENCY_MARKS)) {
     for (const mark of marks) {
       const m = escape(mark)
-      // A mark never follows a letter ("rs" in "hours", "$" in "s$"); a word mark must also
-      // end there, while a sign may touch the number.
+      // A word mark or a dollar never follows a letter ("rs" in "hours", "$" in "s$"); a sign
+      // like ₹ may ("80 km₹2,800" on a tariff card). A word mark must also end there, while a
+      // sign may touch the number.
       const word = /^[a-z.]+$/.test(mark)
-      const before = `(?<![a-z])${m}`
+      const before = word || mark.includes("$") ? `(?<![a-z])${m}` : m
       const after = word ? `${m}(?![a-z])` : m
       const num = "(\\d[\\d,]*(?:\\.\\d+)?)"
       const re = new RegExp(`${before}\\s?${num}${SCALE_PATTERN}|${num}${SCALE_PATTERN}\\s?${after}`, "gi")

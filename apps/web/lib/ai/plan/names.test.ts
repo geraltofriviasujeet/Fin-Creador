@@ -1,9 +1,36 @@
 import { describe, expect, it } from "vitest"
-import { carrierCandidates, hotelCandidates } from "./names"
+import { carrierCandidates, hotelCandidates, listingHotelAt, priceAt } from "./names"
 
 // Names are found in code in the pages retrieved, never typed by the model.
 
 const result = (snippet: string, url = "https://stays.example.test/goa") => ({ title: "Test data", url, snippet })
+
+// A listing page as a hotel site's cards read in its text (test data, after a real layout).
+const CARDS =
+  "Best Chennai hotels. Average rates in Chennai are ₹ 7,002/night, rates in Chennai vary. " +
+  "The Park Chennai - Chennai - Balcony The Park Chennai - Chennai - Balcony The Park Chennai Chennai, TN, India 8.0Very Good(5165) Free Wi-Fi ₹ 10,313+ View availability " +
+  "The Raintree, St. Mary's Road - Chennai - Lobby The Raintree, St. Mary's Road - Chennai - Lobby The Raintree, St. Mary's Road Chennai, TN, India 8.7Very Good(1915) Parking Free Wi-Fi Pool Spa ₹ 11,608+ View availability " +
+  "ibis Chennai Sipcot - Chennai - Building ibis Chennai Sipcot Chennai, TN, India Parking Free Wi-Fi Pool Spa ₹ 4,650+ View availability " +
+  "Hotel Akmg Towers Chennai, TN, India 6.8Okay(27) ₹ 1,424+ View availability"
+
+describe("a listing page's hotel for each price", () => {
+  const hotelFor = (price: string) => listingHotelAt(CARDS, CARDS.indexOf(price), "Chennai")
+  it("takes the name the card repeats most, then the one written first; never an amenity or a sentence", () => {
+    expect(hotelFor("10,313")).toBe("The Park Chennai")
+    expect(hotelFor("11,608")).toBe("The Raintree")
+    expect(hotelFor("4,650")).toBe("ibis Chennai Sipcot")
+    expect(hotelFor("7,002")).toBeUndefined()
+  })
+
+  it("takes a name with a lodging word when the card names it once; only in its own card", () => {
+    expect(hotelFor("1,424")).toBe("Hotel Akmg Towers Chennai")
+    expect(listingHotelAt("Chennai Hotels from ₹ 570 a night", 19, "Chennai")).toBeUndefined()
+  })
+
+  it("finds the price itself, not a longer number that starts with its digits", () => {
+    expect(priceAt("15 hrs / 150 km₹8,000 Extra hour₹800 Outstation", "800")).toBe(33)
+  })
+})
 
 describe("names found in the results", () => {
   it("finds carriers on the list only, each once, the longer name first", () => {

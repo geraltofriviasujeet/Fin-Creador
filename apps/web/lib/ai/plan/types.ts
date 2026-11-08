@@ -65,7 +65,8 @@ const priceSchema = z
     amount: decimal,
     scale: z.enum(["none", "thousand", "lakh", "crore", "million"]),
     currency: z.string().regex(/^[A-Z]{3}$/),
-    per: z.enum(["total", "night", "person", "person_night", "day_person"]),
+    /** day: a day for the whole party (a car's day hire); day_person: a day for each traveller. */
+    per: z.enum(["total", "night", "person", "person_night", "day_person", "day"]),
     bound: z.enum(["from", "up_to"]).optional(),
     /** What the price is for (an airline, a hotel, a kind of meal, a mode, a place or tour), found next to it on its page. Required for a new trip price; optional for older stored plans. */
     about: text(80).optional(),

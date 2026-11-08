@@ -8,6 +8,7 @@ const PER_WORDS: Record<string, string> = {
   person: " a person",
   person_night: " a person a night",
   day_person: " a person a day",
+  day: " a day",
 }
 
 /** "1234567.5" as "12,34,567.5" for INR, "1,234,567.5" otherwise. */
