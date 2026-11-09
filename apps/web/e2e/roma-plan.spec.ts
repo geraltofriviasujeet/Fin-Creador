@@ -50,7 +50,7 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(verdict.getByTestId("plan-status")).toHaveText(/^(Fits|Needs adjustment|Can't say)$/)
   await expect(plan.getByRole("region", { name: "Plan figures" })).toContainText("Estimated trip cost")
   await expect(plan.getByRole("region", { name: "Plan figures" })).toContainText("Extra saving needed")
-  await page.screenshot({ path: `${SHOTS}/roma-plan-modal.png` })
+  await page.screenshot({ path: `${SHOTS}/roma-plan-modal.png`, animations: "disabled" })
   // A line with no estimate says why without being opened.
   await expect(plan.locator('[data-line="stay"]')).toContainText("No estimate: the travel style was skipped.")
   await expect(plan.locator('[data-line="transport"]')).toContainText("Web estimate")
@@ -64,15 +64,15 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(verdict.getByText("Against your past trip", { exact: true })).toBeVisible()
   await expect(verdict.getByText("With web estimates, not your records", { exact: true })).toBeVisible()
   await expect(plan.locator('[data-line="buffer"]')).toContainText("Calculated")
-  await verdict.screenshot({ path: `${SHOTS}/roma-plan-verdict-open.png` })
-  await plan.getByRole("region", { name: "Cost breakdown" }).screenshot({ path: `${SHOTS}/roma-plan-breakdown-open.png` })
+  await verdict.screenshot({ path: `${SHOTS}/roma-plan-verdict-open.png`, animations: "disabled" })
+  await plan.getByRole("region", { name: "Cost breakdown" }).screenshot({ path: `${SHOTS}/roma-plan-breakdown-open.png`, animations: "disabled" })
   await plan.getByRole("button", { name: "View data sources" }).click()
   await expect(plan.getByRole("region", { name: "Sources" }).getByRole("link", { name: "https://example.test/hotels" })).toBeVisible()
-  await plan.getByRole("region", { name: "Data sources" }).screenshot({ path: `${SHOTS}/roma-plan-sources.png` })
+  await plan.getByRole("region", { name: "Data sources" }).screenshot({ path: `${SHOTS}/roma-plan-sources.png`, animations: "disabled" })
   // Phone width: a bottom sheet, the figures stacked, the footer kept in view.
   await page.setViewportSize({ width: 390, height: 844 })
   await plan.getByRole("region", { name: "Roma's verdict" }).scrollIntoViewIfNeeded()
-  await page.screenshot({ path: `${SHOTS}/roma-plan-modal-mobile.png` })
+  await page.screenshot({ path: `${SHOTS}/roma-plan-modal-mobile.png`, animations: "disabled" })
   await page.setViewportSize({ width: 1440, height: 900 })
   // The test pages name IndiGo; the mock model picks no names, so none is suggested.
   await expect(plan.getByRole("region", { name: "Airlines listed for this route" })).toContainText("No airlines on the pages found could be confirmed, so none is suggested.")
@@ -89,7 +89,7 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(page.getByRole("list", { name: "Roma's answers" })).toBeHidden()
   await expect(printed.getByText(/^Made on \d{4}-\d{2}-\d{2}\. Figures marked “From your records”/)).toBeVisible()
   await expect(printed.getByText(/^Delhi to Goa · January \d{4}$/)).toBeVisible()
-  await printed.screenshot({ path: `${SHOTS}/roma-plan-pdf.png` })
+  await printed.screenshot({ path: `${SHOTS}/roma-plan-pdf.png`, animations: "disabled" })
   // The open modal hides the rest of the page from assistive technology, so the copy is found by CSS, not role.
   await expect(printed.locator('[role="note"]').filter({ hasText: /^Estimates, not quotes or bookings\./ })).toBeVisible()
   await expect(printed.locator('[data-line="stay"]')).toContainText("No estimate")
