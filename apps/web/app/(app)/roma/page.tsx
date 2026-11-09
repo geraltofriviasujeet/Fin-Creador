@@ -7,6 +7,7 @@ import { redirect } from "next/navigation"
 import { z } from "zod"
 import { PageHeader } from "@/components/shell/app-shell"
 import { type OpenConversation, RomaChat } from "@/components/roma/roma-chat"
+import type { ConversationKind } from "@/components/roma/roma-history"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
@@ -90,13 +91,22 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
     )
   }
 
+  // Which listed conversations hold a plan, and of what kind, for the list's type marker. Only
+  // the plan's kind is read, never the plan; a failed read only shows them as questions.
+  const ids = list.data.map((c) => c.id)
+  const plans = ids.length > 0 ? await supabase.from("ai_messages").select("conversation_id, kind:plan->>kind").not("plan", "is", null).in("conversation_id", ids) : null
+  const kindOf = (id: string): ConversationKind => {
+    const kind = plans?.data?.find((m) => m.conversation_id === id)?.kind
+    return kind === "trip" || kind === "purchase" ? kind : "question"
+  }
+
   // Static text, not a model call: it costs nothing and needs no output check.
   return (
     <RomaChat
       greeting={`${greeting(profile.display_name, profile.time_zone)}.`}
       timeZone={profile.time_zone}
       currency={profile.currency}
-      conversations={list.data.map((c) => ({ id: c.id, title: c.title, lastMessageAt: c.last_message_at }))}
+      conversations={list.data.map((c) => ({ id: c.id, title: c.title, lastMessageAt: c.last_message_at, kind: kindOf(c.id) }))}
       open={opened}
       missing={requested.success && opened === null}
     />
@@ -148,7 +158,7 @@ async function loadConversation(supabase: Supabase, id: string): Promise<OpenCon
 
 function RomaSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading Roma" className="grid gap-6 lg:grid-cols-[minmax(0,42rem)_16rem]">
+    <div aria-busy="true" aria-label="Loading Roma" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <Card className="grid gap-4">
         <span className="h-5 w-40 rounded bg-canvas" />
         <span className="h-20 w-full rounded-lg bg-canvas" />

@@ -53,7 +53,13 @@ test("turn Roma on, ask what I spent this month, find entries, allow description
   const answers = page.getByRole("list", { name: "Roma's answers" })
   await expect(answers.getByText(/^You spent ₹1,634\.50 from \d{4}-\d{2}-01 to \d{4}-\d{2}-\d{2}, across 2 expenses\./)).toBeVisible()
   await expect(answers.getByText("From your records", { exact: false })).toBeVisible()
-  await expect(answers.getByRole("definition").first()).toHaveText("₹1,634.50")
+  // The figures are a table, with where they came from and the period under it.
+  await expect(answers.getByRole("cell").first()).toHaveText("₹1,634.50")
+  await expect(answers.getByRole("columnheader", { name: "Figure" })).toBeVisible()
+  await page.screenshot({ path: "e2e-screenshots/roma-page-answer.png", fullPage: true, animations: "disabled" })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.screenshot({ path: "e2e-screenshots/roma-page-answer-mobile.png", fullPage: true, animations: "disabled" })
+  await page.setViewportSize({ width: 1440, height: 900 })
   await expect(page.getByText("Informational only, not financial advice.", { exact: false })).toBeVisible()
   // The opening lines give way once a question is asked; the send button stays.
   await expect(page.getByText(/^Good (morning|afternoon|evening), Meera\.$/)).toHaveCount(0)
@@ -129,6 +135,8 @@ test("conversations: follow up, reopen, start a new one, delete one, delete all 
   await expect(answers.getByText(/^You spent ₹0(\.00)? from /)).toBeVisible()
   await expect(history.getByRole("link")).toHaveCount(1)
   await expect(history.getByRole("link", { name: "What did I spend this month?" })).toHaveAttribute("aria-current", "page")
+  // Each conversation is a card with its type and date.
+  await expect(history.getByRole("listitem").first()).toContainText(/^What did I spend this month\?Question · \d{1,2} [A-Z][a-z]{2} \d{4}/)
 
   // Reopened: the stored answers, newest first, dated; no figures panel for stored turns.
   await page.reload()
@@ -208,7 +216,7 @@ async function ask(page: Page, question: string) {
 }
 
 const figure = (answer: ReturnType<Page["locator"]>, label: string) =>
-  answer.locator("dl > div").filter({ has: answer.page().getByText(label, { exact: true }) }).getByRole("definition")
+  answer.getByRole("row").filter({ has: answer.page().getByRole("rowheader", { name: label, exact: true }) }).getByRole("cell")
 
 test("goal check: Yes for a goal within reach, No with what to change, the verdict, figures and assumptions shown (10.4)", async ({ page }) => {
   const email = uniqueEmail("roma-goals")

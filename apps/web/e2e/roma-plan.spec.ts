@@ -32,10 +32,21 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(intake.getByText("Skipped: this shows as no estimate.")).toBeVisible()
   await intake.getByRole("button", { name: "Make the plan" }).click()
 
+  // In the chat, a summary card only: status, headline, estimated cost, lines with an estimate, and the button.
   const answers = page.getByRole("list", { name: "Roma's answers" })
-  await expect(answers.getByText(/^Plan: trip from Delhi to Goa in January \d{4}\. 2 of 6 cost lines have an estimate\./)).toBeVisible()
-  await expect(answers.getByText(/These are estimates, not quotes or bookings\./)).toBeVisible()
+  const summary = answers.getByTestId("plan-summary")
+  await expect(summary.getByTestId("plan-summary-status")).toHaveText(/^(Fits|Needs adjustment|Can't say)$/)
+  await expect(summary.getByText(/^(This trip fits your current plan\.|This trip does not fit your current plan yet\.|Roma can't say yet whether this trip fits\.)$/)).toBeVisible()
+  await expect(summary).toContainText("Estimated cost")
+  await expect(summary).toContainText("2 of 6")
+  await expect(answers.getByText(/^Plan: trip from Delhi to Goa/)).toHaveCount(0)
   await expect(intake).toHaveCount(0)
+  // The conversation is marked as a travel plan in the list.
+  await expect(page.getByRole("navigation", { name: "Past conversations" }).getByRole("listitem").first()).toContainText("Travel plan ·")
+  await page.screenshot({ path: `${SHOTS}/roma-page-plan.png`, fullPage: true, animations: "disabled" })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.screenshot({ path: `${SHOTS}/roma-page-plan-mobile.png`, fullPage: true, animations: "disabled" })
+  await page.setViewportSize({ width: 1440, height: 900 })
 
   // The plan opens in a modal, from the checked plan: the verdict card, the figures, every line, where it came from, its sources.
   await answers.getByRole("button", { name: "Open the plan" }).click()

@@ -568,11 +568,51 @@ function AddGoal({ plan, link, currency, today, onSaved, onClose }: { plan: Chec
   )
 }
 
-/** The button that opens a plan from its answer. */
-export function OpenPlanButton({ onOpen }: { onOpen: () => void }) {
+/**
+ * A plan's answer in the chat (2026-11-09): its status, the headline, the estimated cost and how
+ * many lines have an estimate, and the button that opens it. The detail is only in the modal.
+ */
+export function PlanSummary({ plan, onOpen }: { plan: CheckedPlan; onOpen: () => void }) {
+  const card = planVerdictCard(plan)
+  const priced = plan.lines.filter((l) => l.from !== "not_estimated")
+  const estimated = priced.filter((l) => l.from !== "none").length
+  const web = plan.lines.some((l) => l.from === "web")
+  const totals = plan.verdicts.totals
+  const total = totals.length === 1 ? totalFigure(totals[0]!, web) : totals.length > 1 ? { value: totals.map(planAmount).join(" + "), caption: "In more than one currency" } : null
+  const Icon = plan.kind === "trip" ? Send : Target
   return (
-    <Button type="button" variant="brand" onClick={onOpen}>
-      Open the plan
-    </Button>
+    <section aria-label="Plan summary" className="grid gap-4 rounded-2xl border border-line p-4" data-testid="plan-summary">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand text-ink">
+            <Icon className="size-5" />
+          </span>
+          <div className="grid min-w-0 gap-0.5">
+            <p className="text-xs font-semibold tracking-(--fc-tracking-eyebrow) text-muted-foreground uppercase">{plan.kind === "trip" ? "Travel plan" : "Purchase plan"}</p>
+            <p className="font-heading text-lg font-semibold text-ink">{card.headline}</p>
+          </div>
+        </div>
+        <Badge tone={card.status === "fits" ? "positive" : card.status === "adjust" ? "negative" : "neutral"} data-testid="plan-summary-status">
+          {STATUS_WORDS[card.status]}
+        </Badge>
+      </div>
+      <dl className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-line p-3">
+          <dt className="text-xs text-muted-foreground">Estimated cost</dt>
+          <dd className="font-heading text-xl font-semibold text-ink tabular-nums">{total?.value ?? "No estimate"}</dd>
+          <dd className="text-xs text-muted-foreground">{total?.caption ?? "No line could be priced"}</dd>
+        </div>
+        <div className="rounded-xl border border-line p-3">
+          <dt className="text-xs text-muted-foreground">Cost lines with an estimate</dt>
+          <dd className="font-heading text-xl font-semibold text-ink tabular-nums">
+            {estimated} of {priced.length}
+          </dd>
+          <dd className="text-xs text-muted-foreground">{estimated < priced.length ? "The plan says why for the others" : "Every line has one"}</dd>
+        </div>
+      </dl>
+      <Button type="button" variant="primary" className="justify-self-start" onClick={onOpen}>
+        Open the plan
+      </Button>
+    </section>
   )
 }

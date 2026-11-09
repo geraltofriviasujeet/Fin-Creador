@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
@@ -14,8 +15,8 @@ import { allowRomaDescriptionsAction } from "@/app/(app)/roma/actions"
 import { detectPlan } from "@/lib/ai/plan/intake"
 import type { PlanRequest } from "@/lib/ai/plan/types"
 import { PlanIntake } from "./plan-intake"
-import { OpenPlanButton, PlanModal } from "./plan-modal"
-import { type ConversationSummary, RomaHistory } from "./roma-history"
+import { PlanModal, PlanSummary } from "./plan-modal"
+import { type ConversationKind, type ConversationSummary, RomaHistory } from "./roma-history"
 import { cn } from "cn"
 
 // Roma's page (Sprint 10.1): a static greeting, then one question at a time. An answer is
@@ -31,6 +32,9 @@ import { cn } from "cn"
 // From 10.9 a question asking for a plan ("plan my trip to Goa", "can I buy a car") first shows
 // the plan intake (questions written in code, each skippable) instead of being sent; the plan
 // that comes back opens in a modal, from the checked plan only (also from a past conversation).
+// Layout from docs/design/roma (2026-11-09): each turn is a card, the question in a dark bubble
+// and Roma's reply beside her mark; a plan's reply is a summary card (the detail is in the
+// modal); an answer's figures are a table, with the period and sources under it.
 
 export type Turn = {
   id: string
@@ -143,7 +147,7 @@ function Conversation({
       if (reply.status === "answer") {
         setQuestion("")
         setIntake(null)
-        if (reply.saved && reply.conversationId) recorded(reply.conversationId, text)
+        if (reply.saved && reply.conversationId) recorded(reply.conversationId, text, reply.plan?.kind ?? "question")
       } else if (reply.code === "conversation_missing" && conversationId) {
         forget(conversationId)
         setConversationId(null)
@@ -157,12 +161,14 @@ function Conversation({
   }
 
   // The answer was stored: list the conversation first, and keep its address for a reload.
-  function recorded(id: string, text: string) {
+  function recorded(id: string, text: string, kind: ConversationKind) {
     const now = new Date().toISOString()
     setConversations((list) => {
       const existing = list.find((c) => c.id === id)
       const title = existing?.title ?? text.replace(/\s+/g, " ").slice(0, 80)
-      return [{ id, title, lastMessageAt: now }, ...list.filter((c) => c.id !== id)]
+      // A plan marks the conversation; a later question doesn't unmark it.
+      const marked = existing && existing.kind !== "question" ? existing.kind : kind
+      return [{ id, title, lastMessageAt: now, kind: marked }, ...list.filter((c) => c.id !== id)]
     })
     if (id !== conversationId) {
       setConversationId(id)
@@ -205,9 +211,9 @@ function Conversation({
   )
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,42rem)_16rem] lg:items-start">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
       <div className="grid min-w-0 gap-4">
-        <details className="rounded-lg border border-line bg-surface p-3 lg:hidden">
+        <details className="rounded-2xl border border-line bg-surface p-4 lg:hidden">
           <summary className="cursor-pointer text-sm font-semibold text-ink">Past conversations ({conversations.length})</summary>
           <div className="mt-3">{history}</div>
         </details>
@@ -220,9 +226,12 @@ function Conversation({
         )}
         <Card>
           <form ref={formRef} onSubmit={ask} className="grid gap-3">
-            <label htmlFor={inputId} className="text-sm font-semibold text-ink">
-              Your question
-            </label>
+            <div className="flex items-center gap-3">
+              <RomaMark />
+              <label htmlFor={inputId} className="font-heading text-base font-semibold text-ink">
+                Your question
+              </label>
+            </div>
             <textarea
               id={inputId}
               name="question"
@@ -232,16 +241,16 @@ function Conversation({
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={sendOnEnter}
               placeholder={EXAMPLE}
-              className={cn(controlClasses, "h-auto py-2")}
+              className={cn(controlClasses, "h-auto rounded-xl py-2")}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">{ROMA_INFORMATIONAL}</p>
-              <Button type="submit" disabled={pending || question.trim() === ""}>
+              <Button type="submit" variant="primary" disabled={pending || question.trim() === ""}>
                 {pending ? "Asking…" : "Ask Roma"}
               </Button>
             </div>
           </form>
-          <p aria-live="polite" className="mt-3 text-sm text-muted-foreground">
+          <p aria-live="polite" className="mt-3 text-sm text-muted-foreground empty:hidden">
             {pending ? "Roma is checking your records…" : ""}
           </p>
           {failure && (
@@ -275,26 +284,52 @@ function Conversation({
           <ol className="grid gap-4" aria-label="Roma's answers">
             {turns.map((turn) => (
               <li key={turn.id}>
-                <Card>
-                  <p className="text-sm font-semibold text-ink">{turn.question}</p>
-                  <Reply reply={turn.reply} madeOn={turn.asOf ?? todayIn(timeZone)} reopened={turn.asOf !== undefined} currency={currency} today={todayIn(timeZone)} />
-                  {turn.asOf && (
-                    <p className="mt-2 text-xs text-muted-foreground">Answered on {turn.asOf}. Ask again for today’s figures.</p>
-                  )}
-                  {turn.reply.status === "answer" && !turn.reply.saved && !turn.asOf && (
-                    <p className="mt-2 text-xs text-muted-foreground">This answer couldn’t be saved to your conversations.</p>
-                  )}
-                  {turn.reply.status === "answer" && turn.reply.descriptionsNotice && turn.id === latestNotice && (
-                    <DescriptionsNotice consent={consent} setConsent={setConsent} />
-                  )}
+                <Card className="grid gap-4">
+                  <div className="on-dark grid max-w-[85%] gap-1 justify-self-end rounded-2xl bg-brand-deep px-4 py-3 text-nav-text">
+                    <p className="text-xs text-nav-muted">You</p>
+                    <p className="text-sm break-words whitespace-pre-line text-white">{turn.question}</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <RomaMark />
+                    <div className="grid min-w-0 flex-1 gap-3">
+                      <p className="flex flex-wrap items-center gap-x-2 text-sm">
+                        <span className="font-semibold text-ink">Roma</span>
+                        {turn.reply.status === "answer" && (
+                          <span className="inline-flex items-center gap-1 text-xs text-success">
+                            <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
+                            Checked against your records
+                          </span>
+                        )}
+                      </p>
+                      <Reply reply={turn.reply} madeOn={turn.asOf ?? todayIn(timeZone)} reopened={turn.asOf !== undefined} currency={currency} today={todayIn(timeZone)} />
+                      {turn.asOf && <p className="text-xs text-muted-foreground">Answered on {turn.asOf}. Ask again for today’s figures.</p>}
+                      {turn.reply.status === "answer" && !turn.reply.saved && !turn.asOf && (
+                        <p className="text-xs text-muted-foreground">This answer couldn’t be saved to your conversations.</p>
+                      )}
+                      {turn.reply.status === "answer" && turn.reply.descriptionsNotice && turn.id === latestNotice && (
+                        <DescriptionsNotice consent={consent} setConsent={setConsent} />
+                      )}
+                    </div>
+                  </div>
                 </Card>
               </li>
             ))}
           </ol>
         )}
       </div>
-      <aside className="hidden lg:sticky lg:top-4 lg:block">{history}</aside>
+      <aside className="hidden lg:sticky lg:top-4 lg:block">
+        <Card>{history}</Card>
+      </aside>
     </div>
+  )
+}
+
+/** Roma's mark: the sparkle on lime, beside her replies and the question box. */
+function RomaMark() {
+  return (
+    <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand text-ink">
+      <Sparkles className="size-4" />
+    </span>
   )
 }
 
@@ -302,33 +337,34 @@ function Reply({ reply, madeOn, reopened, currency, today }: { reply: ChatRespon
   const [planOpen, setPlanOpen] = useState(false)
   if (reply.status === "error") {
     return (
-      <FormMessage tone={reply.code === "unverified" || reply.code === "tone" ? "info" : "error"} className="mt-3">
+      <FormMessage tone={reply.code === "unverified" || reply.code === "tone" ? "info" : "error"}>
         {reply.message}
       </FormMessage>
     )
   }
+  // A plan: the summary card only; every line, verdict and source is in the modal.
+  if (reply.plan) {
+    return (
+      <>
+        <PlanSummary plan={reply.plan} onOpen={() => setPlanOpen(true)} />
+        <PlanModal
+          plan={reply.plan}
+          madeOn={madeOn}
+          reopened={reopened}
+          open={planOpen}
+          onOpenChange={setPlanOpen}
+          {...(reply.planLink ? { link: reply.planLink } : {})}
+          currency={currency}
+          today={today}
+        />
+      </>
+    )
+  }
+  const period = reply.periods.map((p) => `${p.from} to ${p.to}`).join(", ")
   return (
-    <div className="mt-3 grid gap-3">
-      {reply.plan && (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <OpenPlanButton onOpen={() => setPlanOpen(true)} />
-            <span className="text-xs text-muted-foreground">Each cost line, how it was worked out, and its sources.</span>
-          </div>
-          <PlanModal
-            plan={reply.plan}
-            madeOn={madeOn}
-            reopened={reopened}
-            open={planOpen}
-            onOpenChange={setPlanOpen}
-            {...(reply.planLink ? { link: reply.planLink } : {})}
-            currency={currency}
-            today={today}
-          />
-        </>
-      )}
+    <div className="grid gap-3">
       {reply.checks?.map((c, i) => (
-        <div key={i} className="rounded-lg border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
+        <div key={i} className="rounded-xl border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
           <p className="text-xs font-semibold text-muted-foreground">
             {c.kind === "trip" ? "Trip check" : "Goal check"} · {c.goal}
             {c.web ? " · From your records" : ""}
@@ -346,20 +382,37 @@ function Reply({ reply, madeOn, reopened, currency, today }: { reply: ChatRespon
       ))}
       <p className="text-sm whitespace-pre-line text-ink">{reply.answer}</p>
       {reply.figures.length > 0 && (
-        <div className="rounded-lg bg-canvas p-3">
-          <p className="text-xs font-semibold text-muted-foreground">
-            From your records
-            {reply.periods.map((p) => ` · ${p.from} to ${p.to}`).join("")}
-          </p>
-          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-            {reply.figures.map((f, i) => (
-              <div key={i} className="contents">
-                <dt className="text-muted-foreground">{f.label}</dt>
-                <dd className="text-right font-semibold text-ink tabular-nums">{f.value}</dd>
-              </div>
-            ))}
-          </dl>
+        <div className="overflow-x-auto rounded-xl border border-line">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Figures from your records</caption>
+            <thead className="bg-canvas text-xs text-muted-foreground">
+              <tr>
+                <th scope="col" className="px-3 py-2 text-left font-semibold">
+                  Figure
+                </th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
+                  Value
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {reply.figures.map((f, i) => (
+                <tr key={i}>
+                  <th scope="row" className="px-3 py-2 text-left font-normal text-muted-foreground">
+                    {f.label}
+                  </th>
+                  <td className="px-3 py-2 text-right font-semibold text-ink tabular-nums">{f.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      )}
+      {(reply.figures.length > 0 || period) && (
+        <p className="text-xs text-muted-foreground">
+          From your records{period ? ` · ${period}` : ""}
+          {reply.web ? " · Web estimates below, each with its source" : ""}
+        </p>
       )}
       {reply.web && <WebEstimates web={reply.web} />}
       {reply.webNotices?.map((n) => (
@@ -370,7 +423,7 @@ function Reply({ reply, madeOn, reopened, currency, today }: { reply: ChatRespon
       {reply.checks?.map(
         (c, i) =>
           c.assumptions.length > 0 && (
-            <div key={i} className="rounded-lg border border-line p-3">
+            <div key={i} className="rounded-xl border border-line p-3">
               <p className="text-xs font-semibold text-muted-foreground">Assumptions{reply.checks!.length > 1 ? ` · ${c.goal}` : ""}</p>
               <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-ink">
                 {c.assumptions.map((a, j) => (
@@ -387,7 +440,7 @@ function Reply({ reply, madeOn, reopened, currency, today }: { reply: ChatRespon
 /** Web prices kept for this answer (10.8), apart from the records: each with its site and a link to check it. */
 function WebEstimates({ web }: { web: NonNullable<Extract<ChatResponseBody, { status: "answer" }>["web"]> }) {
   return (
-    <section className="rounded-lg border border-dashed border-line p-3" aria-label="Web estimates">
+    <section className="rounded-xl border border-dashed border-line p-3" aria-label="Web estimates">
       <p className="text-xs font-semibold text-muted-foreground">Web estimates. Check the source.</p>
       <ul className="mt-2 grid gap-2 text-sm">
         {web.figures.map((f, i) => (
@@ -433,13 +486,13 @@ function DescriptionsNotice({ consent, setConsent }: { consent: Consent; setCons
 
   if (consent === "allowed") {
     return (
-      <FormMessage tone="success" className="mt-3">
+      <FormMessage tone="success">
         Descriptions allowed. Ask again to include them. You can stop this by turning Roma off in Settings.
       </FormMessage>
     )
   }
   return (
-    <div className="mt-3 grid gap-2 rounded-lg border border-line p-3">
+    <div className="grid gap-2 rounded-xl border border-line p-3">
       <p className="text-sm text-ink">Roma left out the descriptions of these entries. {ROMA_DATA_NOTICE}</p>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" variant="secondary" onClick={allow} disabled={consent === "saving"}>
