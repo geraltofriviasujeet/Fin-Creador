@@ -50,7 +50,16 @@ const vehicleLookup = z
   })
   .strict()
 
-export type WebLookupInput = z.infer<typeof tripLookup> | z.infer<typeof vehicleLookup>
+/** A purchase plan's main use and price band (10.9 model shortlists), each from a list in code. */
+export const PURCHASE_USES = ["commute", "touring", "family", "first"] as const
+export type PurchaseUse = (typeof PURCHASE_USES)[number]
+export const PRICE_BANDS = ["entry-level", "mid-range", "premium"] as const
+export type PriceBand = (typeof PRICE_BANDS)[number]
+
+/** A model shortlist's lookup (10.9 follow-up), sent only by plan code: by main use, or by price band. */
+type ModelsLookup = { kind: "models"; vehicle: "bike" | "car"; month: string | null } & ({ by: "use"; use: PurchaseUse | null } | { by: "band"; band: PriceBand | null })
+
+export type WebLookupInput = z.infer<typeof tripLookup> | z.infer<typeof vehicleLookup> | ModelsLookup
 
 /** Only the fields that were given: the per-kind schemas are strict. */
 const given = (v: Record<string, unknown>) => Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined))
@@ -116,6 +125,8 @@ function placeForQuery(destination: string): string | null {
   if (!/^[\p{L}][\p{L} .'-]{0,39}$/u.test(cleaned) || cleaned.split(" ").length > 4) return null
   return cleaned
 }
+
+const USE_WORDS: Record<PurchaseUse, string> = { commute: "city commute", touring: "touring", family: "family", first: "first time buyer" }
 
 const STAY_WORDS: Record<TripStyle, string> = { budget: "budget hotel", comfort: "average hotel", luxury: "luxury hotel" }
 
@@ -184,13 +195,24 @@ function isSafeQuery(query: string, allowedDigits: readonly string[]): boolean {
 export function buildQuery(input: WebLookupInput, terms: PrivateTerms, countryCode: string | null): BuiltQuery {
   // countryName gives the code back for an unlisted one: then no country is written.
   const country = countryCode && countryName(countryCode) !== countryCode ? countryName(countryCode) : null
-  const monthText = monthName(input.month)
+  const monthText = input.month ? monthName(input.month) : ""
   let query: string | null
   let subject: string
   let scope: "domestic" | "international" | undefined
   let allowedDigits: string[] = []
 
-  if (input.kind === "trip") {
+  if (input.kind === "models") {
+    // Fixed templates: the use or band word from a list, the month's name, never a budget figure.
+    const kinds = input.vehicle === "bike" ? "bikes" : "cars"
+    const where = country ?? "India"
+    query =
+      input.by === "use"
+        ? `best ${input.use ? `${USE_WORDS[input.use]} ` : ""}${kinds} in ${where}${input.month ? ` ${monthName(input.month)}` : ""} price list`
+        : `${input.band ?? "best selling"} ${kinds} price list ${where}`
+    subject = kinds
+    // Listing pages from India price in rupees (the session asks for Indian pages for a domestic scope).
+    if (where === "India") scope = "domestic"
+  } else if (input.kind === "trip") {
     scope = tripPlaceScope(input.destination) ?? undefined
     const place = placeForQuery(input.destination)
     if (!scope || !place) return { ok: false, reason: "unlisted_place" }
@@ -220,3 +242,4 @@ export function buildQuery(input: WebLookupInput, terms: PrivateTerms, countryCo
   if (!isSafeQuery(query, allowedDigits)) return { ok: false, reason: "unsafe" }
   return { ok: true, query, subject, ...(scope ? { scope } : {}) }
 }
+

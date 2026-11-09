@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { createPortal } from "react-dom"
-import { ChevronDown, ChevronRight, type LucideIcon, Send, Sparkles, Target, Wallet } from "lucide-react"
+import { Bike, Car, ChevronDown, ChevronRight, type LucideIcon, Send, Sparkles, Target, Wallet } from "lucide-react"
 import { GoalForm } from "@/components/goals/goal-form"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,9 +26,11 @@ import {
   recordsLine,
   shortMonth,
   totalFigure,
+  shortlistFigures,
+  candidatePrice,
 } from "@/lib/ai/plan/format"
 import { goalFromPlan } from "@/lib/ai/plan/goal"
-import type { CheckedPlan, PlanLine, PlanNames, PlanSignal } from "@/lib/ai/plan/types"
+import type { CheckedPlan, PlanCandidate, PlanCandidates, PlanLine, PlanNames, PlanRequest, PlanSignal } from "@/lib/ai/plan/types"
 
 // A detailed plan (10.9), shown in a modal (layout from docs/design/roma, 2026-11-09): built only from the checked plan the server
 // returned (or stored), the same object the chat answer was written from. A line that couldn't
@@ -38,6 +40,9 @@ import type { CheckedPlan, PlanLine, PlanNames, PlanSignal } from "@/lib/ai/plan
 // it was made and where each figure came from; it carries nothing the modal doesn't.
 // "Create travel goal" ("Create goal" for a purchase) shows the normal goal form, prefilled from the plan (lib/ai/plan/goal.ts);
 // nothing is saved until the person adds it there, and the goal then links to the plan's turn.
+// A model shortlist (a bike or car asked for without a model) shows candidate cards instead of
+// cost lines: each model as listed on its page, not Roma's recommendation, with "Pick this
+// model", which makes that model's usual plan (a new question). A shortlist isn't a goal.
 
 type Props = {
   plan: CheckedPlan
@@ -52,9 +57,11 @@ type Props = {
   /** The profile currency and the person's today, for the goal form. */
   currency: string
   today: string
+  /** A shortlist's "Pick this model": the model's plan request and its words for the chat. */
+  onPickModel?: (plan: PlanRequest, words: string) => void
 }
 
-export function PlanModal({ plan, madeOn, reopened, open, onOpenChange, link, currency, today }: Props) {
+export function PlanModal({ plan, madeOn, reopened, open, onOpenChange, link, currency, today, onPickModel }: Props) {
   const [view, setView] = useState<"plan" | "goal">("plan")
   const [goal, setGoal] = useState(link?.goal ?? null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
@@ -102,15 +109,29 @@ export function PlanModal({ plan, madeOn, reopened, open, onOpenChange, link, cu
                 </Link>
               </p>
             )}
-            <PlanView plan={plan} madeOn={madeOn} reopened={reopened} sourcesOpen={sourcesOpen} onSourcesOpenChange={setSourcesOpen} />
+            <PlanView
+              plan={plan}
+              madeOn={madeOn}
+              reopened={reopened}
+              sourcesOpen={sourcesOpen}
+              onSourcesOpenChange={setSourcesOpen}
+              {...(onPickModel
+                ? {
+                    onPickModel: (r: PlanRequest, words: string) => {
+                      change(false)
+                      onPickModel(r, words)
+                    },
+                  }
+                : {})}
+            />
             <div className="sticky bottom-0 z-10 -mx-5 mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface px-5 py-3 md:-mx-6 md:px-6 md:py-4">
               <button type="button" onClick={showSources} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-deep underline-offset-2 hover:underline">
                 View data sources <ChevronRight aria-hidden="true" className="size-4" />
               </button>
               <div className="flex flex-wrap items-center gap-2">
-                {!link && <span className="text-xs text-muted-foreground">Not saved, so it can’t be added to your goals. Ask again to make it once more.</span>}
+                {!link && !plan.candidates && <span className="text-xs text-muted-foreground">Not saved, so it can’t be added to your goals. Ask again to make it once more.</span>}
                 <DialogClose render={<Button type="button" variant="secondary" />}>Close</DialogClose>
-                {link && !linked && (
+                {link && !linked && !plan.candidates && (
                   <Button type="button" variant="primary" onClick={() => setView("goal")}>
                     {createWords}
                   </Button>
@@ -166,6 +187,7 @@ type ViewProps = {
   expandAll?: boolean
   sourcesOpen?: boolean
   onSourcesOpenChange?: (open: boolean) => void
+  onPickModel?: (plan: PlanRequest, words: string) => void
 }
 
 /**
@@ -173,7 +195,7 @@ type ViewProps = {
  * in plain words), three figures, ways to make it fit, the cost breakdown (each line opens to its
  * prices and pages), then the data sources. Every figure is the checked plan's own.
  */
-export function PlanView({ plan, madeOn, reopened, expandAll = false, sourcesOpen = false, onSourcesOpenChange }: ViewProps) {
+export function PlanView({ plan, madeOn, reopened, expandAll = false, sourcesOpen = false, onSourcesOpenChange, onPickModel }: ViewProps) {
   const [ownSourcesOpen, setOwnSourcesOpen] = useState(false)
   const showSources = expandAll || (onSourcesOpenChange ? sourcesOpen : ownSourcesOpen)
   const toggleSources = () => (onSourcesOpenChange ?? setOwnSourcesOpen)(!showSources)
@@ -188,7 +210,7 @@ export function PlanView({ plan, madeOn, reopened, expandAll = false, sourcesOpe
       )}
 
       <VerdictCard plan={plan} expandAll={expandAll} />
-      <StatCards plan={plan} />
+      {plan.candidates ? <ShortlistStats plan={plan} candidates={plan.candidates} /> : <StatCards plan={plan} />}
 
       {plan.changes.length > 0 && (
         <Panel icon={Sparkles} title="Ways to make it fit" subtitle="Adjust one or combine several options." label="Ways to make it fit">
@@ -211,52 +233,56 @@ export function PlanView({ plan, madeOn, reopened, expandAll = false, sourcesOpe
         </Panel>
       )}
 
-      <Panel
-        icon={Wallet}
-        title="Cost breakdown"
-        subtitle="Estimates are clearly separated from your own records."
-        label="Cost breakdown"
-        aside={
-          verdicts.totals.length > 0 && (
-            <span className="font-heading text-base font-semibold text-ink tabular-nums">{verdicts.totals.map((t) => totalFigure(t, web).value).join(" + ")} total</span>
-          )
-        }
-      >
-        <ul className="grid divide-y divide-line border-t border-line">
-          {plan.lines.map((l) => (
-            <LineRow key={l.line} line={l} plan={plan} expandAll={expandAll} />
-          ))}
-        </ul>
-        <div className="grid gap-1 border-t border-line pt-3">
-          {verdicts.totals.length === 0 ? (
-            <p className="text-ink">
-              <span className="font-semibold">Total:</span> no estimate. No line could be priced.
+      {plan.candidates ? (
+        <Shortlist plan={plan} candidates={plan.candidates} expandAll={expandAll} {...(onPickModel ? { onPickModel } : {})} />
+      ) : (
+        <Panel
+          icon={Wallet}
+          title="Cost breakdown"
+          subtitle="Estimates are clearly separated from your own records."
+          label="Cost breakdown"
+          aside={
+            verdicts.totals.length > 0 && (
+              <span className="font-heading text-base font-semibold text-ink tabular-nums">{verdicts.totals.map((t) => totalFigure(t, web).value).join(" + ")} total</span>
+            )
+          }
+        >
+          <ul className="grid divide-y divide-line border-t border-line">
+            {plan.lines.map((l) => (
+              <LineRow key={l.line} line={l} plan={plan} expandAll={expandAll} />
+            ))}
+          </ul>
+          <div className="grid gap-1 border-t border-line pt-3">
+            {verdicts.totals.length === 0 ? (
+              <p className="text-ink">
+                <span className="font-semibold">Total:</span> no estimate. No line could be priced.
+              </p>
+            ) : (
+              verdicts.totals.map((t) => {
+                const total = totalFigure(t, web)
+                return (
+                  <div key={t.currency} className="grid gap-0.5">
+                    <p className="flex flex-wrap justify-between gap-x-4 text-ink">
+                      <span className="font-semibold">Total{verdicts.totals.length > 1 ? `, in ${t.currency}` : ""}, lines with an estimate only</span>
+                      <span className="font-semibold tabular-nums">{total.value}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">{total.caption}</p>
+                  </div>
+                )
+              })
+            )}
+            {plan.saved && (
+              <p className="flex flex-wrap justify-between gap-x-4 text-ink">
+                <span>Already saved toward {plan.saved.goal} (your records)</span>
+                <span className="tabular-nums">{formatMoney(plan.saved.minor, { currency: plan.saved.currency })}</span>
+              </p>
+            )}
+            <p className="mt-2 rounded-lg bg-chip-blue px-3 py-2 text-ink" role="note">
+              {PLAN_NOT_LIVE}
             </p>
-          ) : (
-            verdicts.totals.map((t) => {
-              const total = totalFigure(t, web)
-              return (
-                <div key={t.currency} className="grid gap-0.5">
-                  <p className="flex flex-wrap justify-between gap-x-4 text-ink">
-                    <span className="font-semibold">Total{verdicts.totals.length > 1 ? `, in ${t.currency}` : ""}, lines with an estimate only</span>
-                    <span className="font-semibold tabular-nums">{total.value}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">{total.caption}</p>
-                </div>
-              )
-            })
-          )}
-          {plan.saved && (
-            <p className="flex flex-wrap justify-between gap-x-4 text-ink">
-              <span>Already saved toward {plan.saved.goal} (your records)</span>
-              <span className="tabular-nums">{formatMoney(plan.saved.minor, { currency: plan.saved.currency })}</span>
-            </p>
-          )}
-          <p className="mt-2 rounded-lg bg-chip-blue px-3 py-2 text-ink" role="note">
-            {PLAN_NOT_LIVE}
-          </p>
-        </div>
-      </Panel>
+          </div>
+        </Panel>
+      )}
 
       <section id={SOURCES_ID} aria-label="Data sources" className="scroll-mt-4 rounded-2xl border border-line">
         <h3>
@@ -454,6 +480,80 @@ function Stat({ label, value, caption, negative = false }: { label: string; valu
   )
 }
 
+const FIT_WORDS = { yes: "Fits", no: "Short", unknown: "Can't say" } as const
+const FIT_TONE = { yes: "positive", no: "negative", unknown: "neutral" } as const
+
+/** A shortlist's figures: models listed, free money by the month, and how many fit. */
+function ShortlistStats({ plan, candidates }: { plan: CheckedPlan; candidates: PlanCandidates }) {
+  const f = shortlistFigures(plan, candidates)
+  return (
+    <section aria-label="Shortlist figures" className="grid gap-3 md:grid-cols-3">
+      <Stat label="Models listed" value={String(candidates.listed.length)} caption={f.range ?? "None could be confirmed"} />
+      <Stat label={f.freeLabel} value={f.free ?? "No figure"} negative={f.negative} caption={f.free ? "After your other goals" : f.noFigure} />
+      <Stat label={f.fitLabel} value={f.fit ?? "No figure"} caption={f.fit ? "At each model's higher price" : f.noFigure} />
+    </section>
+  )
+}
+
+/** The models, one card each: name, price, what its card says, whether it fits, and the page it's listed on. */
+function Shortlist({ plan, candidates, expandAll, onPickModel }: { plan: CheckedPlan; candidates: PlanCandidates; expandAll: boolean; onPickModel?: (plan: PlanRequest, words: string) => void }) {
+  const r = plan.intake.request
+  const Icon = r?.kind === "purchase" && r.item === "car" ? Car : Bike
+  return (
+    <Panel icon={Icon} title="Models to consider" subtitle="Listed on the pages found, not Roma’s recommendation." label="Models to consider">
+      {candidates.listed.length === 0 ? (
+        <p className="text-muted-foreground">{candidates.note}</p>
+      ) : (
+        <>
+          <ul className="grid gap-3 md:grid-cols-2" data-testid="plan-candidates">
+            {candidates.listed.map((c) => (
+              <CandidateCard key={`${c.make} ${c.model}`} c={c} {...(onPickModel && r?.kind === "purchase" && !expandAll ? { onPick: () => onPickModel({ ...withoutShortlist(r), make: c.make, model: c.model }, `Plan: buying a ${c.make} ${c.model}`) } : {})} />
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">{candidates.note}</p>
+        </>
+      )}
+      <p className="rounded-lg bg-chip-blue px-3 py-2 text-ink" role="note">
+        Prices are as each page listed them when the plan was made, not quotes. Pick a model for its price and first year’s insurance, checked the usual way.
+      </p>
+    </Panel>
+  )
+}
+
+/** A model's own plan request: the shortlist's month and trade-in, without its use and budget. */
+function withoutShortlist(r: Extract<PlanRequest, { kind: "purchase" }>): Extract<PlanRequest, { kind: "purchase" }> {
+  const { use: _use, budgetMinor: _budget, ...rest } = r
+  return rest
+}
+
+function CandidateCard({ c, onPick }: { c: PlanCandidate; onPick?: () => void }) {
+  const descriptor = [...c.facts, c.exShowroom ? "ex-showroom" : null].filter(Boolean).join(" · ")
+  return (
+    <li className="grid content-start gap-2 rounded-xl border border-line p-3" data-testid="plan-candidate">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="font-heading text-base font-semibold text-ink">
+          {c.make} {c.model}
+        </p>
+        <Badge tone={FIT_TONE[c.fit.met]}>{FIT_WORDS[c.fit.met]}</Badge>
+      </div>
+      <p className="font-semibold text-ink tabular-nums">{candidatePrice(c)}</p>
+      {descriptor && <p className="text-xs text-muted-foreground">{descriptor}</p>}
+      <p className="text-xs text-ink">{c.fit.summary}</p>
+      <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge tone="info">
+          <ExternalLink href={c.url}>{c.site}</ExternalLink>
+        </Badge>
+        Listed on {c.site}, not Roma’s recommendation.
+      </p>
+      {onPick && (
+        <Button type="button" variant="secondary" size="sm" className="justify-self-start print:hidden" onClick={onPick}>
+          Pick this model
+        </Button>
+      )}
+    </li>
+  )
+}
+
 const MENTION_WORDS: Partial<Record<PlanLine["line"], string>> = {
   food: "Local dishes mentioned",
   stay: "Also listed, no rate found",
@@ -610,23 +710,45 @@ export function PlanSummary({ plan, onOpen }: { plan: CheckedPlan; onOpen: () =>
           {STATUS_WORDS[card.status]}
         </Badge>
       </div>
-      <dl className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl border border-line p-3">
-          <dt className="text-xs text-muted-foreground">Estimated cost</dt>
-          <dd className="font-heading text-xl font-semibold text-ink tabular-nums">{total?.value ?? "No estimate"}</dd>
-          <dd className="text-xs text-muted-foreground">{total?.caption ?? "No line could be priced"}</dd>
-        </div>
-        <div className="rounded-xl border border-line p-3">
-          <dt className="text-xs text-muted-foreground">Cost lines with an estimate</dt>
-          <dd className="font-heading text-xl font-semibold text-ink tabular-nums">
-            {estimated} of {priced.length}
-          </dd>
-          <dd className="text-xs text-muted-foreground">{estimated < priced.length ? "The plan says why for the others" : "Every line has one"}</dd>
-        </div>
-      </dl>
+      {plan.candidates ? (
+        <ShortlistSummary plan={plan} candidates={plan.candidates} />
+      ) : (
+        <dl className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-line p-3">
+            <dt className="text-xs text-muted-foreground">Estimated cost</dt>
+            <dd className="font-heading text-xl font-semibold text-ink tabular-nums">{total?.value ?? "No estimate"}</dd>
+            <dd className="text-xs text-muted-foreground">{total?.caption ?? "No line could be priced"}</dd>
+          </div>
+          <div className="rounded-xl border border-line p-3">
+            <dt className="text-xs text-muted-foreground">Cost lines with an estimate</dt>
+            <dd className="font-heading text-xl font-semibold text-ink tabular-nums">
+              {estimated} of {priced.length}
+            </dd>
+            <dd className="text-xs text-muted-foreground">{estimated < priced.length ? "The plan says why for the others" : "Every line has one"}</dd>
+          </div>
+        </dl>
+      )}
       <Button type="button" variant="primary" className="justify-self-start" onClick={onOpen}>
         Open the plan
       </Button>
     </section>
+  )
+}
+
+function ShortlistSummary({ plan, candidates }: { plan: CheckedPlan; candidates: PlanCandidates }) {
+  const f = shortlistFigures(plan, candidates)
+  return (
+    <dl className="grid gap-3 md:grid-cols-2">
+      <div className="rounded-xl border border-line p-3">
+        <dt className="text-xs text-muted-foreground">Models listed</dt>
+        <dd className="font-heading text-xl font-semibold text-ink tabular-nums">{candidates.listed.length}</dd>
+        <dd className="text-xs text-muted-foreground">{f.range ?? "None could be confirmed"}</dd>
+      </div>
+      <div className="rounded-xl border border-line p-3">
+        <dt className="text-xs text-muted-foreground">{f.fitLabel}</dt>
+        <dd className="font-heading text-xl font-semibold text-ink tabular-nums">{f.fit ?? "No figure"}</dd>
+        <dd className="text-xs text-muted-foreground">{f.fit ? "At each model's higher price" : f.noFigure}</dd>
+      </div>
+    </dl>
   )
 }

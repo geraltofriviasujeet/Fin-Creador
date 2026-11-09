@@ -7,13 +7,15 @@ import { Card } from "@/components/ui/card"
 import { Field, FormMessage } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
-import { type IntakeQuestion, buildPlan, intakeQuestions, modelsOf } from "@/lib/ai/plan/intake"
+import { type IntakeQuestion, buildPlan, canShortlist, intakeQuestions, modelsOf } from "@/lib/ai/plan/intake"
 import type { PlanRequest } from "@/lib/ai/plan/types"
 
 // The plan intake (10.9): the questions still needed for a plan, written in code
 // (lib/ai/plan/intake.ts), each with Skip. A skipped answer is sent as null and the lines
 // that need it come back as "no estimate"; the plan still runs. Nothing here reaches Roma
 // until "Make the plan" is pressed (each plan spends one question and its web lookups).
+// A bike or car without a make asks for its main use and budget and gets a model shortlist;
+// "I already know the model" asks for the make and model instead (the usual model plan).
 
 type Answers = Record<string, string>
 
@@ -30,7 +32,9 @@ type Props = {
 }
 
 export function PlanIntake({ question, draft, today, currency, pending, onPlan, onAsk, onCancel }: Props) {
-  const questions = intakeQuestions(draft, today)
+  const [knowModel, setKnowModel] = useState(false)
+  const shortlist = canShortlist(draft)
+  const questions = intakeQuestions(draft, today, knowModel)
   // A question filled in from what was said (the origin) starts with that answer, to change or skip.
   const [answers, setAnswers] = useState<Answers>(() => Object.fromEntries(questions.flatMap((q) => ("initial" in q && q.initial ? [[q.field, q.initial]] : []))))
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
@@ -50,7 +54,7 @@ export function PlanIntake({ question, draft, today, currency, pending, onPlan, 
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const built = buildPlan(draft, answers, skipped, currency, today)
+    const built = buildPlan(draft, answers, skipped, currency, today, knowModel)
     if ("error" in built) {
       setError(built.error)
       setErrorField(built.field)
@@ -68,11 +72,29 @@ export function PlanIntake({ question, draft, today, currency, pending, onPlan, 
         <div className="grid gap-1">
           <p className="text-sm font-semibold text-ink">{question}</p>
           <p className="text-sm text-muted-foreground">
-            Roma can make an itemised plan: each cost with where it came from, then whether it fits.
+            {shortlist && !knowModel
+              ? "Roma can suggest models: each with its price and the page it’s listed on, then whether it fits."
+              : "Roma can make an itemised plan: each cost with where it came from, then whether it fits."}
             {known ? ` From your question: ${known}.` : ""}
             {questions.length > 0 ? " A few details first. Skip any you don’t know: those costs will show as no estimate." : ""}
           </p>
         </div>
+        {shortlist && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="justify-self-start"
+            aria-pressed={knowModel}
+            onClick={() => {
+              setKnowModel(!knowModel)
+              setError(null)
+              setErrorField(null)
+            }}
+          >
+            {knowModel ? "Suggest models instead" : "I already know the model"}
+          </Button>
+        )}
         {questions.map((q) => (
           <IntakeField
             key={q.field}
@@ -187,5 +209,5 @@ function describe(d: PlanRequest): string {
       .filter(Boolean)
       .join(", ")
   }
-  return [d.item, d.make, d.model, d.month].filter(Boolean).join(", ")
+  return [d.item, d.make, d.model, d.use, d.month].filter(Boolean).join(", ")
 }

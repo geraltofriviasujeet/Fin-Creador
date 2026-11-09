@@ -1,6 +1,6 @@
 import { AMOUNT_ERROR_MESSAGES, type IsoDate, monthStart, parseAmount } from "@fin-creador/domain"
 import { VEHICLE_CATALOGUE, tripPlaceScope, vehicleMakes } from "@fin-creador/schemas"
-import { TRIP_STYLES } from "../search/query"
+import { PURCHASE_USES, type PurchaseUse, TRIP_STYLES } from "../search/query"
 import { type PlanRequest, type PurchasePlanRequest, type TripPlanRequest, planRequest } from "./types"
 
 // The plan intake (10.9), in code: a question that asks for a plan ("plan my trip to Goa",
@@ -102,12 +102,22 @@ function vehicleIn(text: string, kinds: readonly ("bike" | "car")[]): { item: "b
   return null
 }
 
+/** A main use the question names: "for my office commute", "for touring", "for the family", "my first bike". */
+const USES: [RegExp, PurchaseUse][] = [
+  [/\b(?:commut\w*|office|daily ride|city ride|in the city)\b/i, "commute"],
+  [/\b(?:tour\w*|long rides?|road trips?|highway)\b/i, "touring"],
+  [/\b(?:family|kids|children)\b/i, "family"],
+  [/\b(?:first (?:bike|car|vehicle)|beginner|learner)\b/i, "first"],
+]
+
 function purchaseFrom(text: string, today: IsoDate): PurchasePlanRequest | null {
   const named = ITEMS.find(([re]) => re.test(text))?.[1] ?? null
   const vehicle = named === "house" ? null : vehicleIn(text, named ? [named] : ["car", "bike"])
   const item = vehicle?.item ?? named
   if (!item) return null
-  return { kind: "purchase", item, make: vehicle?.make ?? null, model: vehicle?.model ?? null, month: monthIn(text, today), depositMinor: null }
+  const base = { kind: "purchase" as const, item, make: vehicle?.make ?? null, model: vehicle?.model ?? null, month: monthIn(text, today), depositMinor: null }
+  // A bike or car without a make gets a shortlist: its main use, if the question says it.
+  return item === "house" || base.make !== null ? base : { ...base, use: USES.find(([re]) => re.test(text))?.[1] ?? null, budgetMinor: null }
 }
 
 /** The plan a question asks for, with what it already says; null when it isn't one. */
@@ -128,14 +138,23 @@ export type IntakeQuestion =
   | { field: "month"; kind: "month"; label: string; min: string; hint: string; skipped: string }
   | { field: "nights" | "travellers"; kind: "number"; label: string; min: number; max: number }
   | { field: "style"; kind: "choice"; label: string; options: { value: string; label: string }[] }
-  | { field: "make"; kind: "choice"; label: string; options: { value: string; label: string }[] }
+  | { field: "make" | "use"; kind: "choice"; label: string; options: { value: string; label: string }[] }
   | { field: "model"; kind: "model"; label: string }
-  | { field: "depositMinor"; kind: "amount"; label: string; hint: string }
+  | { field: "depositMinor" | "budgetMinor"; kind: "amount"; label: string; hint: string }
+
+const USE_CHOICES: Record<PurchaseUse, string> = { commute: "City commute", touring: "Touring", family: "Family", first: "First vehicle" }
 
 const STYLE_LABELS: Record<(typeof TRIP_STYLES)[number], string> = { budget: "Budget", comfort: "Comfort (3–4 star)", luxury: "Luxury (5 star)" }
 
-/** The questions for the fields still missing, and only those. */
-export function intakeQuestions(draft: PlanRequest, today: IsoDate): IntakeQuestion[] {
+/** Whether the intake can offer a shortlist (a bike or car whose make the question didn't name). */
+export const canShortlist = (draft: PlanRequest) => draft.kind === "purchase" && draft.item !== "house" && draft.make === null
+
+/**
+ * The questions for the fields still missing, and only those. A bike or car without a make
+ * asks for its main use and budget (a shortlist), or, with `knowModel` ("I already know the
+ * model"), for the make and model.
+ */
+export function intakeQuestions(draft: PlanRequest, today: IsoDate, knowModel = false): IntakeQuestion[] {
   const out: IntakeQuestion[] = []
   const month = { field: "month", kind: "month", min: today.slice(0, 7) } as const
   // The verdict is worked out for a month, and so are a trip's fares: skipping it quietly empties both, so it says so.
@@ -153,7 +172,15 @@ export function intakeQuestions(draft: PlanRequest, today: IsoDate): IntakeQuest
     if (draft.style === null) out.push({ field: "style", kind: "choice", label: "What kind of stay?", options: TRIP_STYLES.map((s) => ({ value: s, label: STYLE_LABELS[s] })) })
     return out
   }
-  if (draft.item !== "house") {
+  if (canShortlist(draft) && !knowModel) {
+    if (!draft.use) out.push({ field: "use", kind: "choice", label: "What will you mainly use it for?", options: PURCHASE_USES.map((u) => ({ value: u, label: USE_CHOICES[u] })) })
+    out.push({
+      field: "budgetMinor",
+      kind: "amount",
+      label: "What's your budget?",
+      hint: "Skip it and Roma works it out from your records: free money by the month after your other goals, plus savings and any trade-in.",
+    })
+  } else if (draft.item !== "house") {
     if (draft.make === null) out.push({ field: "make", kind: "choice", label: "Which make?", options: vehicleMakes(draft.item).map((m) => ({ value: m, label: m })) })
     if (draft.model === null) out.push({ field: "model", kind: "model", label: "Which model?" })
   }
@@ -199,9 +226,9 @@ export type BuiltPlan = { plan: PlanRequest } | { error: string; field: string }
  * The plan with each answer in. Every answer is checked here, so a message always names the
  * question and the reason; a skipped or empty answer is null.
  */
-export function buildPlan(draft: PlanRequest, answers: Readonly<Record<string, string>>, skipped: ReadonlySet<string>, currency: string, today: IsoDate): BuiltPlan {
+export function buildPlan(draft: PlanRequest, answers: Readonly<Record<string, string>>, skipped: ReadonlySet<string>, currency: string, today: IsoDate, knowModel = false): BuiltPlan {
   const plan: Record<string, unknown> = { ...draft }
-  const questions = intakeQuestions(draft, today)
+  const questions = intakeQuestions(draft, today, knowModel)
   const fail = (q: IntakeQuestion, reason: string): BuiltPlan => ({ field: q.field, error: `${q.label} ${reason}` })
   for (const q of questions) {
     const raw = (answers[q.field] ?? "").trim()
@@ -226,6 +253,14 @@ export function buildPlan(draft: PlanRequest, answers: Readonly<Record<string, s
       if (raw.length > 40) return fail(q, "Keep it to 40 characters, or skip it.")
       plan[q.field] = raw
     } else plan[q.field] = raw
+  }
+  // A known model's plan has no shortlist fields; a shortlist's has both (null when skipped).
+  if (knowModel && plan.make) {
+    delete plan.use
+    delete plan.budgetMinor
+  } else if (canShortlist(draft) && !knowModel) {
+    plan.use ??= null
+    plan.budgetMinor ??= null
   }
   // A model belongs to its make: a new make clears a model chosen for another.
   if (plan.kind === "purchase" && plan.item !== "house" && plan.make && plan.model && !modelsOf(plan.item as "bike" | "car", plan.make as string).includes(plan.model as string)) plan.model = null

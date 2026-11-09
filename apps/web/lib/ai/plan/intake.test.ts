@@ -32,8 +32,11 @@ describe("recognising a plan", () => {
     expect(intakeQuestions(draft!, TODAY).map((q) => q.field)).toEqual(["depositMinor"])
   })
 
-  it("asks make and model for a vehicle the question doesn't name, and neither for a house", () => {
-    expect(intakeQuestions(detectPlan("Can I afford a bike?", TODAY)!, TODAY).map((q) => q.field)).toEqual(["make", "model", "month", "depositMinor"])
+  it("asks use and budget for a vehicle the question doesn't name (a shortlist), make and model only behind 'I already know the model', and neither for a house", () => {
+    const draft = detectPlan("Can I afford a bike?", TODAY)!
+    expect(draft).toEqual({ kind: "purchase", item: "bike", make: null, model: null, month: null, depositMinor: null, use: null, budgetMinor: null })
+    expect(intakeQuestions(draft, TODAY).map((q) => q.field)).toEqual(["use", "budgetMinor", "month", "depositMinor"])
+    expect(intakeQuestions(draft, TODAY, true).map((q) => q.field)).toEqual(["make", "model", "month", "depositMinor"])
     expect(intakeQuestions(detectPlan("Can I buy a house in March 2028?", TODAY)!, TODAY).map((q) => q.field)).toEqual(["depositMinor"])
   })
 
@@ -90,7 +93,7 @@ describe("checking the answers", () => {
   const bike = { kind: "purchase", item: "bike", make: null, model: null, month: null, depositMinor: null } as const
 
   it("a trade-in of 600000 is used as it is", () => {
-    const built = buildPlan(bike, { make: "Royal Enfield", model: "Classic 350", month: "2027-03", depositMinor: "600000" }, new Set(), "INR", TODAY)
+    const built = buildPlan(bike, { make: "Royal Enfield", model: "Classic 350", month: "2027-03", depositMinor: "600000" }, new Set(), "INR", TODAY, true)
     expect(built).toEqual({ plan: { ...bike, make: "Royal Enfield", model: "Classic 350", month: "2027-03", depositMinor: 600_000_00 } })
   })
 
@@ -110,6 +113,22 @@ describe("checking the answers", () => {
     })
     expect(buildPlan(bike, { depositMinor: "99999999999999999" }, new Set(), "INR", TODAY)).toMatchObject({ field: "depositMinor", error: expect.stringContaining("Amount is too large.") })
     expect(buildPlan(bike, { month: "2026-10" }, new Set(), "INR", TODAY)).toMatchObject({ field: "month", error: expect.stringContaining("That month has passed") })
+  })
+
+  it("a shortlist takes its use and budget; a skipped budget is null (worked out from the records)", () => {
+    const draft = detectPlan("which bike should I buy for my office commute?", TODAY)!
+    expect(draft).toMatchObject({ item: "bike", make: null, use: "commute" })
+    expect(intakeQuestions(draft, TODAY).map((q) => q.field)).toEqual(["budgetMinor", "month", "depositMinor"])
+    const built = buildPlan(draft, { budgetMinor: "150000", month: "2027-01" }, new Set(["depositMinor"]), "INR", TODAY)
+    expect(built).toEqual({ plan: { kind: "purchase", item: "bike", make: null, model: null, month: "2027-01", depositMinor: null, use: "commute", budgetMinor: 150_000_00 } })
+    expect(buildPlan(detectPlan("can I buy a car", TODAY)!, { use: "family" }, new Set(["budgetMinor"]), "INR", TODAY)).toMatchObject({ plan: { use: "family", budgetMinor: null } })
+    expect(buildPlan(draft, { budgetMinor: "1.5 lakh" }, new Set(), "INR", TODAY)).toEqual({ field: "budgetMinor", error: "What's your budget? Enter it in INR as a number, such as 600000, or skip it." })
+  })
+
+  it("'I already know the model' gives the usual model plan, without the shortlist's fields", () => {
+    const draft = detectPlan("which bike should I buy for my office commute?", TODAY)!
+    const built = buildPlan(draft, { make: "Honda", model: "Shine", month: "2027-01" }, new Set(), "INR", TODAY, true)
+    expect(built).toEqual({ plan: { kind: "purchase", item: "bike", make: "Honda", model: "Shine", month: "2027-01", depositMinor: null } })
   })
 
   it("a skipped answer is null, whatever was typed", () => {

@@ -105,7 +105,7 @@ export type Bound = "from" | "up_to"
 /** One end of a range, with the other end. */
 export type RangeEnd = { side: "low" | "high"; other: FoundPrice }
 
-type PriceMatch = FoundPrice & { start: number; end: number; range?: RangeEnd; bound?: Bound }
+export type PriceMatch = FoundPrice & { start: number; end: number; range?: RangeEnd; bound?: Bound }
 
 const NUM = "(\\d[\\d,]*(?:\\.\\d+)?)"
 /** After a price: the joining word and an unmarked high end ("-60", "to 5 lakh"). */
@@ -202,6 +202,9 @@ function priceMatches(t: string): PriceMatch[] {
   }
   return withRanges(t, out)
 }
+
+/** Every price in already-plain text, with where it is, its range and bound (10.9 model shortlists pair them with names). */
+export const priceMatchesIn = (t: string): readonly Readonly<PriceMatch>[] => priceMatches(t)
 
 /** Every amount written next to a currency mark in the text, with that currency and any scale word after it. */
 export function pricesIn(text: string): FoundPrice[] {
