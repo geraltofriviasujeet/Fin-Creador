@@ -28,6 +28,7 @@ import {
   totalFigure,
   shortlistFigures,
   candidatePrice,
+  noPriceWords,
 } from "@/lib/ai/plan/format"
 import { goalFromPlan } from "@/lib/ai/plan/goal"
 import type { CheckedPlan, PlanCandidate, PlanCandidates, PlanLine, PlanNames, PlanRequest, PlanSignal } from "@/lib/ai/plan/types"
@@ -255,7 +256,7 @@ export function PlanView({ plan, madeOn, reopened, expandAll = false, sourcesOpe
           <div className="grid gap-1 border-t border-line pt-3">
             {verdicts.totals.length === 0 ? (
               <p className="text-ink">
-                <span className="font-semibold">Total:</span> no estimate. No line could be priced.
+                <span className="font-semibold">Total:</span> no estimate. {noPriceWords(plan, "No line could be priced.")}
               </p>
             ) : (
               verdicts.totals.map((t) => {
@@ -453,7 +454,7 @@ function StatCards({ plan }: { plan: CheckedPlan }) {
       <Stat
         label={plan.kind === "trip" ? "Estimated trip cost" : "Estimated cost"}
         value={total?.value ?? "No estimate"}
-        caption={total ? `${total.caption}${missing > 0 ? ` · ${missing} ${missing === 1 ? "line has" : "lines have"} none` : ""}` : "No line could be priced"}
+        caption={total ? `${total.caption}${missing > 0 ? ` · ${missing} ${missing === 1 ? "line has" : "lines have"} none` : ""}` : noPriceWords(plan, "No line could be priced")}
       />
       <Stat
         label={figures?.month ? `Free money by ${shortMonth(figures.month)}` : "Free money by the month"}
@@ -488,7 +489,7 @@ function ShortlistStats({ plan, candidates }: { plan: CheckedPlan; candidates: P
   const f = shortlistFigures(plan, candidates)
   return (
     <section aria-label="Shortlist figures" className="grid gap-3 md:grid-cols-3">
-      <Stat label="Models listed" value={String(candidates.listed.length)} caption={f.range ?? "None could be confirmed"} />
+      <Stat label="Models listed" value={String(candidates.listed.length)} caption={f.range ?? noPriceWords(plan, "None could be confirmed")} />
       <Stat label={f.freeLabel} value={f.free ?? "No figure"} negative={f.negative} caption={f.free ? "After your other goals" : f.noFigure} />
       <Stat label={f.fitLabel} value={f.fit ?? "No figure"} caption={f.fit ? "At each model's higher price" : f.noFigure} />
     </section>
@@ -717,7 +718,7 @@ export function PlanSummary({ plan, onOpen }: { plan: CheckedPlan; onOpen: () =>
           <div className="rounded-xl border border-line p-3">
             <dt className="text-xs text-muted-foreground">Estimated cost</dt>
             <dd className="font-heading text-xl font-semibold text-ink tabular-nums">{total?.value ?? "No estimate"}</dd>
-            <dd className="text-xs text-muted-foreground">{total?.caption ?? "No line could be priced"}</dd>
+            <dd className="text-xs text-muted-foreground">{total?.caption ?? noPriceWords(plan, "No line could be priced")}</dd>
           </div>
           <div className="rounded-xl border border-line p-3">
             <dt className="text-xs text-muted-foreground">Cost lines with an estimate</dt>
@@ -742,7 +743,7 @@ function ShortlistSummary({ plan, candidates }: { plan: CheckedPlan; candidates:
       <div className="rounded-xl border border-line p-3">
         <dt className="text-xs text-muted-foreground">Models listed</dt>
         <dd className="font-heading text-xl font-semibold text-ink tabular-nums">{candidates.listed.length}</dd>
-        <dd className="text-xs text-muted-foreground">{f.range ?? "None could be confirmed"}</dd>
+        <dd className="text-xs text-muted-foreground">{f.range ?? noPriceWords(plan, "None could be confirmed")}</dd>
       </div>
       <div className="rounded-xl border border-line p-3">
         <dt className="text-xs text-muted-foreground">{f.fitLabel}</dt>

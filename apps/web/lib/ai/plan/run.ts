@@ -92,7 +92,7 @@ const REFUSALS: Record<LookupRefusal, string> = {
   private: "This lookup couldn't be made.",
   unsafe: "This lookup couldn't be made.",
   off: "Web lookups are off right now.",
-  monthly_cap: "Web lookups are used up for this month.",
+  monthly_cap: "Web lookups are used up for this month. They reset on the 1st of next month.",
   daily_limit: "You've used your web lookups for today. This is FinCreador's own daily limit, not the search provider's, and it resets at midnight in your time zone.",
   question_limit: "This plan's web lookups were used up before this line.",
   failed: "The lookup couldn't be completed.",
@@ -102,6 +102,17 @@ const REFUSALS: Record<LookupRefusal, string> = {
 const NOT_CHECKED = "The prices found couldn't be checked in time, so none is used. The pages found are listed."
 const NONE_PICKED = "No price on the pages found could be confirmed for this line."
 const NO_WEB = "Web lookups are off right now, so this line wasn't looked up."
+const RECORDS_ONLY = "Not looked up: you chose to make this plan from your records only."
+/** Why a plan has no web lookups at all, or null when one ran (or none was asked for). */
+type WebOff = NonNullable<CheckedPlan["verdicts"]["webOff"]>
+function webOffOf(request: PlanRequest, web: unknown, outcomes: readonly (LookupOutcome | null)[]): WebOff | null {
+  if (request.recordsOnly) return { reason: "records_only", message: "Made from your records only: no web lookups ran, as you chose." }
+  if (outcomes.length === 0) return null
+  if (!web) return { reason: "off", message: "Web lookups are off right now, so nothing was looked up." }
+  if (outcomes.some((o) => o?.ok)) return null
+  const capped = outcomes.find((o): o is Extract<LookupOutcome, { ok: false }> => !!o && !o.ok && (o.reason === "daily_limit" || o.reason === "monthly_cap" || o.reason === "off"))
+  return capped ? { reason: capped.reason as WebOff["reason"], message: REFUSALS[capped.reason] } : null
+}
 
 /** What the plan asks for, lookups and skipped lines. */
 function lookupsFor(request: PlanRequest, goalLines: Partial<Record<PlanLineName, number>>, today: string): { lookups: Lookup[]; skips: Skip[] } {
@@ -630,13 +641,13 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     }
     const skip = skips.find((s) => s.line === line)
     if (skip) return none(line, skip.how)
-    if (!web) return none(line, NO_WEB)
+    if (!web) return none(line, request.recordsOnly ? RECORDS_ONLY : NO_WEB)
     const o = found(line)
     const s = screened.get(line)
     // Why the line's own lookup gave no price, in words after "No estimate:"; null when it did.
     let why: string | null = null
     let checked: PlanPrice[] = []
-    if (!o) why = NO_WEB
+    if (!o) why = request.recordsOnly ? RECORDS_ONLY : NO_WEB
     else if (!o.ok) why = REFUSALS[o.reason]
     else if (o.prices.length === 0) why = "no price was found on the pages looked up."
     else if (!s || s.prices.length === 0) why = s && s.foreign.size > 0 && s.noSubject === 0 && s.wrongUnit.size === 0 ? `prices found only in ${currencyList([...s.foreign.keys()])}, which the app has no exchange rate for.` : ""
@@ -729,7 +740,8 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   const deposit = request.kind === "purchase" ? (request.depositMinor ?? 0) : 0
   const saved = records.saved
   const hasWeb = lines.some((l) => l.from === "web")
-  const { web: webVerdict, changes, checked, figures } = planVerdict({ request, records, mine, noEstimate, deposit, hasWeb, money, today })
+  const webOff = webOffOf(request, web, outcomes.map((o) => o.outcome))
+  const { web: webVerdict, changes, checked, figures } = planVerdict({ request, records, mine, noEstimate, deposit, hasWeb, money, today, webOff })
   const both = request.kind === "trip" ? bothSignals({ request, records, web: webVerdict, checked, noEstimate, money }) : null
 
   // Every page used, and when nothing could be checked every page found: a spent lookup is never silent.
@@ -747,7 +759,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     carriers,
     // Hotels are on the stay line (10.9 follow-up); older stored plans keep their own list.
     hotels: null,
-    verdicts: { totals, records: records.records, web: webVerdict, ...(both ? { both } : {}), ...(figures ? { figures } : {}) },
+    verdicts: { totals, records: records.records, web: webVerdict, ...(both ? { both } : {}), ...(figures ? { figures } : {}), ...(webOff ? { webOff } : {}) },
     changes,
     assumptions: planAssumptions(request, records, currency, [...new Set(lines.flatMap((l) => l.prices.flatMap((p) => (p.converted ? [p.currency] : []))))]),
     sources,
@@ -825,10 +837,11 @@ function planVerdict(a: {
   hasWeb: boolean
   money: (minor: number) => string
   today: string
+  webOff: WebOff | null
 }): { web: PlanVerdict; changes: PlanChange[]; checked: Checked | null; figures: PlanFigures | null } {
   const { request, records, mine, money } = a
   const none = (summary: string) => ({ web: { verdict: "No verdict.", summary }, changes: [], checked: null, figures: null })
-  if (!a.hasWeb) return none("No web estimates in this plan: no line could be priced from the web.")
+  if (!a.hasWeb) return none(a.webOff ? `No web estimates in this plan. ${a.webOff.message}` : "No web estimates in this plan: no line could be priced from the web.")
   if (!mine) return none("No verdict with web estimates: no line is priced in your currency.")
   if (!records.project) return none(`No verdict with web estimates: ${request.month === null ? "the month was skipped, so there is no date to save by" : "there is nothing in your records to project from"}.`)
 
@@ -1014,13 +1027,15 @@ async function runShortlist(request: PurchasePlanRequest & { item: "bike" | "car
   const savedMinor = records.saved?.minor ?? 0
   // Free money by the month: the projection on a target just past what is saved (a reached target has no figure).
   const freeMinor = records.project ? (records.project(savedMinor + 1).availableByTargetMinor ?? null) : null
+  // Records that leave nothing free by the month give no budget to keep to: every model is listed, each with its fit.
+  const nothingFree = (request.budgetMinor ?? null) === null && freeMinor !== null && freeMinor <= 0
   const budget: PlanCandidates["budget"] =
     request.budgetMinor !== null && request.budgetMinor !== undefined
       ? { currency, minor: request.budgetMinor, from: "intake" }
-      : freeMinor !== null
-        ? { currency, minor: Math.max(0, freeMinor) + savedMinor + deposit, from: "records" }
+      : freeMinor !== null && !nothingFree
+        ? { currency, minor: freeMinor + savedMinor + deposit, from: "records" }
         : null
-  const band = bandFor(request.item, budget?.minor ?? null, currency)
+  const band = nothingFree ? "entry-level" : bandFor(request.item, budget?.minor ?? null, currency)
 
   // 2. Both lookups at once.
   const month = request.month
@@ -1037,8 +1052,9 @@ async function runShortlist(request: PurchasePlanRequest & { item: "bike" | "car
   // 3. Candidates in code, kept to the budget (rupees only: listing prices are in rupees).
   const found = modelCandidates(results, request.item, PURCHASE_SANITY[request.item])
   const budgetRupees = budget && currency === "INR" ? minorToDecimal(budget.minor, currency) : null
-  const affordable = budgetRupees === null ? found.candidates : found.candidates.filter((c) => compareDecimals(c.low, budgetRupees) <= 0)
-  const overBudget = found.candidates.length - affordable.length
+  const within = budgetRupees === null ? found.candidates : found.candidates.filter((c) => compareDecimals(c.low, budgetRupees) <= 0)
+  const overBudget = found.candidates.length - within.length
+  const affordable = within.slice(0, CANDIDATES_OFFERED)
   const brief = {
     plan: { kind: "purchase", item: request.item, use: request.use ?? null },
     models: affordable.map((c) => ({ id: c.id, name: `${c.make} ${c.model}`, site: c.site, facts: c.facts, text: c.quote })),
@@ -1082,13 +1098,17 @@ async function runShortlist(request: PurchasePlanRequest & { item: "bike" | "car
   ].filter(Boolean)
   const droppedWords = dropped.length > 0 ? ` ${dropped.join("; ")}.`.replace(/^ (.)/, (_, c: string) => ` ${c.toUpperCase()}`) : ""
   let note: string
-  if (!web) note = `No models looked up: ${NO_WEB.charAt(0).toLowerCase()}${NO_WEB.slice(1)}`
+  const webOff = webOffOf(request, web, web ? outcomes : [null])
+  if (webOff) note = `No models looked up. ${webOff.message}`
   else if (results.length === 0) note = `No models looked up: ${refused.length > 0 ? REFUSALS[refused[0]!] : "the lookups found no pages."}`
   else if (found.candidates.length === 0) note = `No model with a price could be confirmed on the pages found, so none is suggested.${droppedWords}`
   else if (affordable.length === 0) note = `No model listed on the pages found is priced${budgetWords}, so none is suggested.${droppedWords}`
   else if (!round.picks) note = round.outcome === "timeout" ? "The models found couldn't be checked in time, so none is listed. The pages found are in the sources." : "The models found couldn't be checked, so none is listed. The pages found are in the sources."
   else if (listed.length === 0) note = `No model on the pages found suits the main use, so none is suggested.${droppedWords}`
-  else note = `${PLAN_SHORTLIST_NOTE} ${kinds.charAt(0).toUpperCase()}${kinds.slice(1)} with a price on their own listing${budgetWords}.${droppedWords}`
+  else
+    note = `${PLAN_SHORTLIST_NOTE} ${kinds.charAt(0).toUpperCase()}${kinds.slice(1)} with a price on their own listing${budgetWords}.${
+      nothingFree ? ` Your records leave nothing free by ${monthName(`${request.month}-01`)} after your other goals, so the list isn't kept to a budget; each model says whether it fits.` : ""
+    }${droppedWords}`
 
   const fits = listed.filter((c) => c.fit.met === "yes").length
   const known = listed.filter((c) => c.fit.met !== "unknown").length
@@ -1126,6 +1146,7 @@ async function runShortlist(request: PurchasePlanRequest & { item: "bike" | "car
       records: records.records,
       web: webVerdict,
       figures: { currency, month: request.month, freeMinor, extraMonthlyMinor: null },
+      ...(webOff ? { webOff } : {}),
     },
     changes,
     assumptions: [

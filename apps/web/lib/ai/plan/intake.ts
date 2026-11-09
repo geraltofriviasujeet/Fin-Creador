@@ -1,4 +1,5 @@
-import { AMOUNT_ERROR_MESSAGES, type IsoDate, monthStart, parseAmount } from "@fin-creador/domain"
+import { z } from "zod"
+import { AMOUNT_ERROR_MESSAGES, type IsoDate, formatMoney, monthStart, parseAmount } from "@fin-creador/domain"
 import { VEHICLE_CATALOGUE, tripPlaceScope, vehicleMakes } from "@fin-creador/schemas"
 import { PURCHASE_USES, type PurchaseUse, TRIP_STYLES } from "../search/query"
 import { type PlanRequest, type PurchasePlanRequest, type TripPlanRequest, planRequest } from "./types"
@@ -110,6 +111,32 @@ const USES: [RegExp, PurchaseUse][] = [
   [/\b(?:first (?:bike|car|vehicle)|beginner|learner)\b/i, "first"],
 ]
 
+const BUDGET_SCALES: Record<string, number> = { k: 3, thousand: 3, l: 5, lakh: 5, lakhs: 5, lac: 5, lacs: 5, cr: 7, crore: 7, crores: 7 }
+const BUDGET_NUMBER = String.raw`(?:₹|rs\.?|inr)?\s?(\d[\d,]*(?:\.\d+)?)\s?(lakhs?|lacs?|l|k|thousand|crores?|cr)?\b`
+/** "under 12 lakh", "below ₹1,50,000", "budget of 8 lakh", "12 lakh budget": the figure and its scale word. */
+const BUDGET = new RegExp(
+  `\\b(?:under|below|within|up ?to|less than|not more than|max(?:imum)?(?: of)?|budget(?: of| is)?)\\s+${BUDGET_NUMBER}|${BUDGET_NUMBER}\\s+(?:budget|max(?:imum)?)\\b`,
+  "i",
+)
+
+/**
+ * A budget the question names, in minor units (two decimals), worked out exactly; null when it
+ * names none, or a bare number under 1,000 ("under 5" isn't a price). Shown in the budget field
+ * for the person to check and correct.
+ */
+export function budgetIn(text: string): number | null {
+  const m = BUDGET.exec(text)
+  if (!m) return null
+  const raw = (m[1] ?? m[3])!.replace(/,/g, "")
+  const word = (m[2] ?? m[4])?.toLowerCase()
+  const zeros = word ? BUDGET_SCALES[word]! : 0
+  const [whole = "0", fraction = ""] = raw.split(".")
+  if (fraction.length > zeros + 2) return null
+  const minor = BigInt(whole + fraction.padEnd(zeros + 2, "0"))
+  if (minor < 100_000n || minor > 10_000_000_000_000n) return null
+  return Number(minor)
+}
+
 function purchaseFrom(text: string, today: IsoDate): PurchasePlanRequest | null {
   const named = ITEMS.find(([re]) => re.test(text))?.[1] ?? null
   const vehicle = named === "house" ? null : vehicleIn(text, named ? [named] : ["car", "bike"])
@@ -117,7 +144,7 @@ function purchaseFrom(text: string, today: IsoDate): PurchasePlanRequest | null 
   if (!item) return null
   const base = { kind: "purchase" as const, item, make: vehicle?.make ?? null, model: vehicle?.model ?? null, month: monthIn(text, today), depositMinor: null }
   // A bike or car without a make gets a shortlist: its main use, if the question says it.
-  return item === "house" || base.make !== null ? base : { ...base, use: USES.find(([re]) => re.test(text))?.[1] ?? null, budgetMinor: null }
+  return item === "house" || base.make !== null ? base : { ...base, use: USES.find(([re]) => re.test(text))?.[1] ?? null, budgetMinor: budgetIn(text) }
 }
 
 /** The plan a question asks for, with what it already says; null when it isn't one. */
@@ -135,12 +162,12 @@ export function detectPlan(question: string, today: IsoDate): PlanRequest | null
 export type IntakeQuestion =
   | { field: "destination" | "origin"; kind: "text"; label: string; hint: string; initial?: string }
   /** `hint`: what skipping it costs, shown beside it before and after a skip (the person still chooses). */
-  | { field: "month"; kind: "month"; label: string; min: string; hint: string; skipped: string }
-  | { field: "nights" | "travellers"; kind: "number"; label: string; min: number; max: number }
+  | { field: "month"; kind: "month"; label: string; min: string; hint: string; skipped: string; initial?: string }
+  | { field: "nights" | "travellers"; kind: "number"; label: string; min: number; max: number; hint?: string; initial?: string }
   | { field: "style"; kind: "choice"; label: string; options: { value: string; label: string }[] }
   | { field: "make" | "use"; kind: "choice"; label: string; options: { value: string; label: string }[] }
   | { field: "model"; kind: "model"; label: string }
-  | { field: "depositMinor" | "budgetMinor"; kind: "amount"; label: string; hint: string }
+  | { field: "depositMinor" | "budgetMinor"; kind: "amount"; label: string; hint: string; initial?: string }
 
 const USE_CHOICES: Record<PurchaseUse, string> = { commute: "City commute", touring: "Touring", family: "Family", first: "First vehicle" }
 
@@ -149,42 +176,54 @@ const STYLE_LABELS: Record<(typeof TRIP_STYLES)[number], string> = { budget: "Bu
 /** Whether the intake can offer a shortlist (a bike or car whose make the question didn't name). */
 export const canShortlist = (draft: PlanRequest) => draft.kind === "purchase" && draft.item !== "house" && draft.make === null
 
+const MONTH_WORDS = (month: string) => `${MONTHS[Number(month.slice(5, 7)) - 1]!.replace(/^./, (c) => c.toUpperCase())} ${month.slice(0, 4)}`
+/** What the intake says beside a figure read from the question: it was read, as what, and can be changed. */
+const readAs = (words: string) => `Read from your question as ${words}. Change it if that's wrong.`
+
 /**
- * The questions for the fields still missing, and only those. A bike or car without a make
- * asks for its main use and budget (a shortlist), or, with `knowModel` ("I already know the
- * model"), for the make and model.
+ * The questions for the fields still missing, and for every figure the question gave (month,
+ * nights, travellers, budget), filled in with what was read and saying so, so a misreading can
+ * be seen and corrected. A bike or car without a make asks for its main use and budget (a
+ * shortlist), or, with `knowModel` ("I already know the model"), for the make and model.
  */
 export function intakeQuestions(draft: PlanRequest, today: IsoDate, knowModel = false): IntakeQuestion[] {
   const out: IntakeQuestion[] = []
-  const month = { field: "month", kind: "month", min: today.slice(0, 7) } as const
+  const month = { field: "month", kind: "month", min: today.slice(0, 7), ...(draft.month ? { initial: draft.month } : {}) } as const
+  const count = (n: number | null) => (n === null ? {} : { initial: String(n), hint: readAs(String(n)) })
   // The verdict is worked out for a month, and so are a trip's fares: skipping it quietly empties both, so it says so.
   const monthCost =
     draft.kind === "trip"
       ? { hint: "Skip it and the plan has no verdict and no transport estimate: both are worked out for the travel month.", skipped: "Skipped: the plan will have no verdict and no transport estimate." }
       : { hint: "Skip it and the plan has no verdict: it is worked out for the month you buy.", skipped: "Skipped: the plan will have no verdict." }
+  if (draft.month) monthCost.hint = readAs(MONTH_WORDS(draft.month))
   if (draft.kind === "trip") {
     if (draft.destination === null) out.push({ field: "destination", kind: "text", label: "Where to?", hint: "A country, an Indian state or a city. Places not on the app's list can't be priced on the web." })
     // Always asked, filled in when the question named it, so it can be changed.
     out.push({ field: "origin", kind: "text", label: "Travelling from which city?", hint: "Flights and airlines are looked up from here. Skip it and transport shows no estimate.", ...(draft.origin ? { initial: draft.origin } : {}) })
-    if (draft.month === null) out.push({ ...month, ...monthCost, label: "Which month?" })
-    if (draft.nights === null) out.push({ field: "nights", kind: "number", label: "How many nights?", min: 1, max: 30 })
-    if (draft.travellers === null) out.push({ field: "travellers", kind: "number", label: "How many travellers?", min: 1, max: 9 })
+    out.push({ ...month, ...monthCost, label: "Which month?" })
+    out.push({ field: "nights", kind: "number", label: "How many nights?", min: 1, max: 30, ...count(draft.nights) })
+    out.push({ field: "travellers", kind: "number", label: "How many travellers?", min: 1, max: 9, ...count(draft.travellers) })
     if (draft.style === null) out.push({ field: "style", kind: "choice", label: "What kind of stay?", options: TRIP_STYLES.map((s) => ({ value: s, label: STYLE_LABELS[s] })) })
     return out
   }
   if (canShortlist(draft) && !knowModel) {
     if (!draft.use) out.push({ field: "use", kind: "choice", label: "What will you mainly use it for?", options: PURCHASE_USES.map((u) => ({ value: u, label: USE_CHOICES[u] })) })
+    const read = draft.budgetMinor ?? null
     out.push({
       field: "budgetMinor",
       kind: "amount",
       label: "What's your budget?",
-      hint: "Skip it and Roma works it out from your records: free money by the month after your other goals, plus savings and any trade-in.",
+      hint:
+        read === null
+          ? "Skip it and Roma works it out from your records: free money by the month after your other goals, plus savings and any trade-in."
+          : readAs(formatMoney(read, { currency: "INR" })),
+      ...(read === null ? {} : { initial: formatMoney(read, { currency: "INR" }).replace(/^[^\d]+/, "") }),
     })
   } else if (draft.item !== "house") {
     if (draft.make === null) out.push({ field: "make", kind: "choice", label: "Which make?", options: vehicleMakes(draft.item).map((m) => ({ value: m, label: m })) })
     if (draft.model === null) out.push({ field: "model", kind: "model", label: "Which model?" })
   }
-  if (draft.month === null) out.push({ ...month, ...monthCost, label: "When do you want to buy it?" })
+  out.push({ ...month, ...monthCost, label: "When do you want to buy it?" })
   if (draft.depositMinor === null) out.push({ field: "depositMinor", kind: "amount", label: "Any trade-in or deposit?", hint: "What you'll put in from a trade-in or an existing deposit. Skip if none." })
   return out
 }
@@ -271,4 +310,34 @@ export function buildPlan(draft: PlanRequest, answers: Readonly<Record<string, s
   const field = String(issue.path[0] ?? "")
   const q = questions.find((x) => x.field === field)
   return { field, error: `${q?.label ?? "An answer"} This answer can't be used (${issue.message.toLowerCase()}). Change it, or skip it.` }
+}
+
+/** Web lookups left for the caller (roma_search_remaining): advice for the intake, read before the form is filled in. */
+export const lookupsLeft = z.object({
+  outcome: z.enum(["ok", "disabled", "monthly_cap", "daily_limit"]),
+  credits: z.number().int().min(0),
+  limitedBy: z.enum(["day", "month"]).nullable(),
+})
+export type LookupsLeft = z.infer<typeof lookupsLeft>
+
+/** The most lookups a plan of this kind sends (run.ts): a trip's 8 (6 cost lines, airlines, hotels); a bike or car's 2; a house's none. */
+export function lookupsNeeded(draft: PlanRequest): number {
+  if (draft.kind === "trip") return 8
+  return draft.item === "house" ? 0 : 2
+}
+
+/**
+ * What the intake says before the form when the plan's lookups can't all run, or null when
+ * they can (or nothing is known): the plan would otherwise spend the last ones and show
+ * "No estimate".
+ */
+export function lookupsNotice(left: LookupsLeft | null, draft: PlanRequest): string | null {
+  const needed = lookupsNeeded(draft)
+  if (!left || needed === 0) return null
+  const needs = `a ${draft.kind === "trip" ? "trip plan needs up to" : "plan needs"} ${needed}`
+  if (left.outcome === "disabled") return `Web lookups are off right now; ${needs}.`
+  if (left.credits >= needed) return null
+  const month = left.limitedBy === "month"
+  const count = left.credits === 0 ? "No web lookups" : `Only ${left.credits} web ${left.credits === 1 ? "lookup" : "lookups"}`
+  return `${count} left ${month ? "this month" : "today"}; ${needs}. ${month ? "They reset on the 1st of next month." : "They reset at midnight in your time zone."}`
 }

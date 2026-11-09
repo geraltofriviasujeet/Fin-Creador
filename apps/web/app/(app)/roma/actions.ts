@@ -1,6 +1,8 @@
 "use server"
 
 import { z } from "zod"
+import { readSearchConfig } from "@/lib/ai/config"
+import { type LookupsLeft, lookupsLeft } from "@/lib/ai/plan/intake"
 import { createClient } from "@/lib/supabase/server"
 
 // Agreeing, in Roma, to transaction descriptions being sent (Sprint 10.2). The database sets
@@ -37,4 +39,19 @@ export async function deleteAllRomaConversationsAction(): Promise<{ ok: boolean 
   if (!auth.user) return { ok: false }
   const { error } = await supabase.from("ai_conversations").delete().eq("user_id", auth.user.id)
   return { ok: !error }
+}
+
+// Web lookups left for the caller (10.9 follow-up), for the plan intake to say before the form
+// is filled in. Advice only: roma_search_begin decides when a lookup is sent. Null when it
+// can't be read (the intake then goes on as before; the plan still says what happened).
+export async function romaLookupsLeftAction(): Promise<LookupsLeft | null> {
+  if (readSearchConfig(process.env).status === "off") return { outcome: "disabled", credits: 0, limitedBy: null }
+  const supabase = await createClient()
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) return null
+  const { data, error } = await supabase.rpc("roma_search_remaining")
+  const row = data?.[0]
+  if (error || !row) return null
+  const parsed = lookupsLeft.safeParse({ outcome: row.outcome, credits: row.credits, limitedBy: row.limited_by })
+  return parsed.success ? parsed.data : null
 }

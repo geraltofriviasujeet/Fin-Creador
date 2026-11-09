@@ -21,6 +21,8 @@ export const tripPlanRequest = z
     nights: z.number().int().min(1).max(30).nullable(),
     travellers: z.number().int().min(1).max(9).nullable(),
     style: z.enum(TRIP_STYLES).nullable(),
+    /** Made from the records only, by choice at the intake (lookups used up): no web lookups run. */
+    recordsOnly: z.literal(true).optional(),
   })
   .strict()
 
@@ -39,6 +41,8 @@ export const purchasePlanRequest = z
     /** A shortlist (a bike or car with no make): its main use, and the budget in the profile currency's minor units (null: worked out from the records). Absent on plans made before shortlists. */
     use: z.enum(PURCHASE_USES).nullable().optional(),
     budgetMinor: z.number().int().min(0).max(1e13).nullable().optional(),
+    /** As a trip's: made from the records only, by choice at the intake. */
+    recordsOnly: z.literal(true).optional(),
   })
   .strict()
 
@@ -194,6 +198,12 @@ export const checkedPlanSchema = z
           .object({ currency: z.string().regex(/^[A-Z]{3}$/), month: month.nullable(), freeMinor: z.number().int().nullable(), extraMonthlyMinor: z.number().int().min(0).nullable() })
           .strict()
           .optional(),
+        /**
+         * Why no web lookup ran, when none could: the daily or monthly allowance used up, lookups
+         * off, or the person chose the records only. In code's words, with when it resets. Absent
+         * when lookups ran, and on older plans.
+         */
+        webOff: z.object({ reason: z.enum(["daily_limit", "monthly_cap", "off", "records_only"]), message: text(300) }).strict().optional(),
       })
       .strict(),
     /** What would make it fit: a title and one line each (older plans: one sentence each). */

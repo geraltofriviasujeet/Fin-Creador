@@ -129,10 +129,13 @@ export function planVerdictCard(plan: CheckedPlan): { status: PlanStatus; headli
         : status === "unknown"
           ? `Roma can't say yet whether these models fit.`
           : `${fits} of ${listed.length} ${listed.length === 1 ? "model fits" : "models fit"} your current plan.`
-    return { status, headline, reason: listed.length === 0 ? plan.candidates.note : v.summary.replace(/^(?:Yes|No|No verdict)\.\s*/, "") }
+    return { status, headline, reason: listed.length === 0 ? (plan.verdicts.webOff?.message ?? plan.candidates.note) : v.summary.replace(/^(?:Yes|No|No verdict)\.\s*/, "") }
   }
   const headline =
     status === "fits" ? `This ${thing} fits your current plan.` : status === "adjust" ? `This ${thing} does not fit your current plan yet.` : `Roma can't say yet whether this ${thing} fits.`
+  // No lookup could run (the allowance used up, lookups off, or records only by choice): that is the reason, with when it resets.
+  const off = plan.verdicts.webOff
+  if (off && status === "unknown") return { status, headline, reason: off.message }
   // A trip's summary is one or two short sentences; the web one is the long account, so its verdict word is dropped.
   const reason = plan.verdicts.both ? v.summary : v.summary.replace(/^(?:Yes|No|Too early to say|No verdict)\.\s*/, "")
   return { status, headline, reason }
@@ -164,6 +167,9 @@ export function totalFigure(a: PlanAmount, web: boolean): { value: string; capti
 
 /** "Dec 2026" from "2026-12", for the stat card's label. */
 export const shortMonth = (month: string) => new Date(`${month}-01T00:00:00Z`).toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" })
+
+/** Why no line or model has a web price, for a figure's caption: why no lookup ran, else none could be priced. */
+export const noPriceWords = (plan: CheckedPlan, otherwise: string) => plan.verdicts.webOff?.message ?? otherwise
 
 /** A model's price as listed: "₹93,169", "₹10,91,000 to ₹20,46,000", "from ₹1,00,000". */
 export function candidatePrice(c: PlanCandidate): string {

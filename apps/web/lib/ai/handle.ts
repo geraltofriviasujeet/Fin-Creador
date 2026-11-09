@@ -223,7 +223,8 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
 
   // Without a provider or the person's words to keep out, the question goes on without the web.
   let web: WebSession | null = null
-  if (deps.search) {
+  // A plan made from the records only (chosen at the intake when lookups are used up) sends none.
+  if (deps.search && !parsed.data.plan?.recordsOnly) {
     try {
       const loaded = await deps.search.loadTerms()
       if (loaded) web = new WebSession({ provider: deps.search.makeProvider(), db: deps.search.db, requestId, ...loaded, plan: parsed.data.plan !== undefined })

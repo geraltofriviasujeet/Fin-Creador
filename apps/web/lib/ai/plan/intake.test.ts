@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildPlan, detectPlan, intakeQuestions, monthIn, parseMonth } from "./intake"
+import { budgetIn, buildPlan, detectPlan, intakeQuestions, lookupsNotice, monthIn, parseMonth } from "./intake"
 import { planRequest } from "./types"
 
 // The plan intake: which questions are plans, what they already say, and only the questions still needed.
@@ -7,10 +7,16 @@ import { planRequest } from "./types"
 const TODAY = "2026-11-07"
 
 describe("recognising a plan", () => {
-  it("fills in what a trip question already says, and asks only for the rest", () => {
+  it("fills in what a trip question already says, shows each figure it read so it can be corrected, and asks for the rest", () => {
     const draft = detectPlan("Plan my trip to Goa in January for 2 people, 4 nights", TODAY)
     expect(draft).toEqual({ kind: "trip", destination: "Goa", origin: null, month: "2027-01", nights: 4, travellers: 2, style: null })
-    expect(intakeQuestions(draft!, TODAY).map((q) => q.field)).toEqual(["origin", "style"])
+    const qs = intakeQuestions(draft!, TODAY)
+    expect(qs.map((q) => q.field)).toEqual(["origin", "month", "nights", "travellers", "style"])
+    expect(qs.find((q) => q.field === "month")).toMatchObject({ initial: "2027-01", hint: "Read from your question as January 2027. Change it if that's wrong." })
+    expect(qs.find((q) => q.field === "nights")).toMatchObject({ initial: "4", hint: "Read from your question as 4. Change it if that's wrong." })
+    expect(qs.find((q) => q.field === "travellers")).toMatchObject({ initial: "2" })
+    // Left as read, the answers give the same plan.
+    expect(buildPlan(draft!, { origin: "Delhi", month: "2027-01", nights: "4", travellers: "2" }, new Set(["style"]), "INR", TODAY)).toEqual({ plan: { ...draft, origin: "Delhi" } })
     expect(planRequest.safeParse(draft).success).toBe(true)
   })
 
@@ -23,13 +29,15 @@ describe("recognising a plan", () => {
   it("always asks where from, filled in when the question says it, so it can be changed", () => {
     const draft = detectPlan("Plan a trip from Delhi to Goa in January, 4 nights for 2 people, luxury", TODAY)!
     expect(draft).toMatchObject({ destination: "Goa", origin: "Delhi", style: "luxury" })
-    expect(intakeQuestions(draft, TODAY)).toEqual([expect.objectContaining({ field: "origin", initial: "Delhi" })])
+    expect(intakeQuestions(draft, TODAY)[0]).toEqual(expect.objectContaining({ field: "origin", initial: "Delhi" }))
+    expect(intakeQuestions(draft, TODAY).map((q) => q.field)).toEqual(["origin", "month", "nights", "travellers"])
   })
 
   it("reads a purchase, its make and model from the app's list, and asks month and deposit", () => {
     const draft = detectPlan("Can I buy a Hyundai Creta next month?", TODAY)
     expect(draft).toEqual({ kind: "purchase", item: "car", make: "Hyundai", model: "Creta", month: "2026-12", depositMinor: null })
-    expect(intakeQuestions(draft!, TODAY).map((q) => q.field)).toEqual(["depositMinor"])
+    expect(intakeQuestions(draft!, TODAY).map((q) => q.field)).toEqual(["month", "depositMinor"])
+    expect(intakeQuestions(draft!, TODAY)[0]).toMatchObject({ initial: "2026-12", hint: "Read from your question as December 2026. Change it if that's wrong." })
   })
 
   it("asks use and budget for a vehicle the question doesn't name (a shortlist), make and model only behind 'I already know the model', and neither for a house", () => {
@@ -37,7 +45,22 @@ describe("recognising a plan", () => {
     expect(draft).toEqual({ kind: "purchase", item: "bike", make: null, model: null, month: null, depositMinor: null, use: null, budgetMinor: null })
     expect(intakeQuestions(draft, TODAY).map((q) => q.field)).toEqual(["use", "budgetMinor", "month", "depositMinor"])
     expect(intakeQuestions(draft, TODAY, true).map((q) => q.field)).toEqual(["make", "model", "month", "depositMinor"])
-    expect(intakeQuestions(detectPlan("Can I buy a house in March 2028?", TODAY)!, TODAY).map((q) => q.field)).toEqual(["depositMinor"])
+    expect(intakeQuestions(detectPlan("Can I buy a house in March 2028?", TODAY)!, TODAY).map((q) => q.field)).toEqual(["month", "depositMinor"])
+  })
+
+  it("reads a budget from the question exactly and shows it in the budget field to correct", () => {
+    const draft = detectPlan("want to buy a bike under 12 lakh", TODAY)!
+    expect(draft).toMatchObject({ item: "bike", make: null, budgetMinor: 12_00_000_00 })
+    expect(intakeQuestions(draft, TODAY).find((q) => q.field === "budgetMinor")).toMatchObject({ initial: "12,00,000", hint: "Read from your question as ₹12,00,000. Change it if that's wrong." })
+    expect(buildPlan(draft, { budgetMinor: "12,00,000" }, new Set(), "INR", TODAY)).toMatchObject({ plan: { budgetMinor: 12_00_000_00 } })
+    expect(budgetIn("a car below ₹8.5 lakh")).toBe(8_50_000_00)
+    expect(budgetIn("budget of 1,50,000 for a bike")).toBe(1_50_000_00)
+    expect(budgetIn("a 15 lakh budget car")).toBe(15_00_000_00)
+    expect(budgetIn("an SUV up to 1.2 crore")).toBe(1_20_00_000_00)
+    expect(budgetIn("under 90k")).toBe(90_000_00)
+    // No budget named, or a number too small to be a price.
+    expect(budgetIn("a bike for under 5 people")).toBeNull()
+    expect(budgetIn("a bike for my commute")).toBeNull()
   })
 
   it("recognises the natural ways people ask for a trip plan, in code", () => {
@@ -133,6 +156,23 @@ describe("checking the answers", () => {
 
   it("a skipped answer is null, whatever was typed", () => {
     expect(buildPlan(bike, { depositMinor: "abc" }, new Set(["depositMinor"]), "INR", TODAY)).toMatchObject({ plan: { depositMinor: null } })
+  })
+})
+
+describe("lookups left, before the form", () => {
+  const bike = detectPlan("Can I afford a bike?", TODAY)!
+  const trip = detectPlan("Plan my trip to Goa", TODAY)!
+  it("says when a plan's lookups can't all run, and when they reset", () => {
+    expect(lookupsNotice({ outcome: "ok", credits: 1, limitedBy: "day" }, bike)).toBe("Only 1 web lookup left today; a plan needs 2. They reset at midnight in your time zone.")
+    expect(lookupsNotice({ outcome: "daily_limit", credits: 0, limitedBy: "day" }, bike)).toBe("No web lookups left today; a plan needs 2. They reset at midnight in your time zone.")
+    expect(lookupsNotice({ outcome: "ok", credits: 5, limitedBy: "day" }, trip)).toBe("Only 5 web lookups left today; a trip plan needs up to 8. They reset at midnight in your time zone.")
+    expect(lookupsNotice({ outcome: "monthly_cap", credits: 0, limitedBy: "month" }, bike)).toBe("No web lookups left this month; a plan needs 2. They reset on the 1st of next month.")
+    expect(lookupsNotice({ outcome: "disabled", credits: 0, limitedBy: null }, bike)).toBe("Web lookups are off right now; a plan needs 2.")
+  })
+  it("says nothing when there are enough, nothing is known, or the plan needs none", () => {
+    expect(lookupsNotice({ outcome: "ok", credits: 2, limitedBy: "day" }, bike)).toBeNull()
+    expect(lookupsNotice(null, bike)).toBeNull()
+    expect(lookupsNotice({ outcome: "daily_limit", credits: 0, limitedBy: "day" }, detectPlan("Can I buy a house?", TODAY)!)).toBeNull()
   })
 })
 

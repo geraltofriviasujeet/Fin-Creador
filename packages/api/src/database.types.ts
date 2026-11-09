@@ -2726,6 +2726,14 @@ export type Database = {
         Returns: number
       }
       roma_search_release: { Args: { p_request_id: string }; Returns: boolean }
+      roma_search_remaining: {
+        Args: never
+        Returns: {
+          credits: number
+          limited_by: string
+          outcome: string
+        }[]
+      }
       roma_search_settle: {
         Args: { p_credits: number; p_request_id: string }
         Returns: boolean

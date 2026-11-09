@@ -169,6 +169,71 @@ describe("a model shortlist", () => {
   })
 })
 
+describe("budget before the offer cap", () => {
+  it("a cheaper model past the first 12 on a page is still offered", async () => {
+    // 13 bikes over a ₹1,00,000 budget, then one within it.
+    const dear = ["Pulsar N160", "Pulsar NS200", "Dominar 400", "Avenger", "Chetak", "Pulsar N250", "CT 110X", "Freedom 125", "Platina", "Pulsar 150"].map((m) => `Bajaj ${m} Rs. 2,10,000.`)
+    const more = ["Classic 350", "Hunter 350", "Meteor 350"].map((m) => `Royal Enfield ${m} Rs. 2,20,000.`)
+    const page: SearchResult = { title: "Test long list", url: "https://long.example.test/", snippet: "Test data.", content: [...dear, ...more, "TVS Radeon Rs. 70,303."].join(" ") }
+    const { ctx } = setup([page])
+    const m = model()
+    const run = await runPlan({ ...bike, budgetMinor: 10_000_000 }, { ctx, provider: m, records: records().load })
+    expect(m.briefs[0]!.models.map((x) => x.name)).toEqual(["TVS Radeon"])
+    expect(run.plan.candidates!.listed.map((c) => c.model)).toEqual(["Radeon"])
+    expect(run.plan.candidates!.note).toMatch(/13 models were over the budget\.$/)
+  })
+
+  it("records that leave nothing free keep no budget: every model is listed, each with its fit", async () => {
+    const { ctx, search } = setup()
+    const run = await runPlan(bike, { ctx, provider: model(), records: records(0).load })
+    expect(search.queries[1]).toBe("entry-level bikes price list India")
+    expect(run.plan.candidates!.budget).toBeNull()
+    expect(run.plan.candidates!.listed.map((c) => [c.model, c.fit.met])).toEqual([
+      ["Splendor Plus", "no"],
+      ["Radeon", "no"],
+      ["Classic 350", "no"],
+      ["Shine 100", "no"],
+    ])
+    expect(run.plan.candidates!.note).toMatch(/Your records leave nothing free by January 2027 after your other goals, so the list isn't kept to a budget; each model says whether it fits\./)
+  })
+})
+
+describe("when no lookup can run", () => {
+  const capped = (outcome: "daily_limit" | "monthly_cap") => {
+    const search = fakeSearch()
+    const web = new WebSession({ provider: search, db: { begin: async () => ({ outcome, credits: 0 }), settle: async () => true, release: async () => true }, requestId: "r1", terms: { names: [], phrases: [] }, countryCode: "IN", plan: true })
+    return { search, ctx: { supabase: {} as UserClient, today: "2026-11-09", currency: "INR", descriptionsOk: false, web } }
+  }
+  const DAILY = "You've used your web lookups for today. This is FinCreador's own daily limit, not the search provider's, and it resets at midnight in your time zone."
+
+  it("a model plan says the day's lookups are used up and when they reset, not 'no line could be priced'", async () => {
+    const { ctx, search } = capped("daily_limit")
+    const run = await runPlan({ kind: "purchase", item: "car", make: "Mahindra", model: "XUV 3XO", month: "2027-03", depositMinor: null }, { ctx, provider: model(), records: records().load })
+    expect(search.queries).toEqual([])
+    expect(run.plan.verdicts.webOff).toEqual({ reason: "daily_limit", message: DAILY })
+    expect(run.plan.verdicts.web.summary).toBe(`No web estimates in this plan. ${DAILY}`)
+    expect(planVerdictCard(run.plan)).toMatchObject({ status: "unknown", reason: DAILY })
+    expect(run.plan.lines.every((l) => l.how === `No estimate: ${DAILY}`)).toBe(true)
+  })
+
+  it("so does a trip plan, and a shortlist; the month's cap says the 1st", async () => {
+    const trip = capped("monthly_cap")
+    const run = await runPlan({ kind: "trip", destination: "Goa", origin: "Delhi", month: "2027-01", nights: 4, travellers: 2, style: "comfort" }, { ctx: trip.ctx, provider: model(), records: records().load })
+    expect(planVerdictCard(run.plan).reason).toBe("Web lookups are used up for this month. They reset on the 1st of next month.")
+    const list = capped("daily_limit")
+    const short = await runPlan(bike, { ctx: list.ctx, provider: model(), records: records().load })
+    expect(short.plan.candidates!.note).toBe(`No models looked up. ${DAILY}`)
+    expect(planVerdictCard(short.plan)).toMatchObject({ headline: "No model could be suggested.", reason: DAILY })
+  })
+
+  it("a plan from the records only, by choice, sends nothing and says so", async () => {
+    const run = await runPlan({ kind: "purchase", item: "car", make: "Mahindra", model: "XUV 3XO", month: "2027-03", depositMinor: null, recordsOnly: true }, { ctx: { ...setup().ctx, web: undefined }, provider: model(), records: records().load })
+    expect(run.plan.verdicts.webOff).toEqual({ reason: "records_only", message: "Made from your records only: no web lookups ran, as you chose." })
+    expect(run.plan.lines.every((l) => l.how === "Not looked up: you chose to make this plan from your records only.")).toBe(true)
+    expect(checkedPlanSchema.safeParse(run.plan).success).toBe(true)
+  })
+})
+
 describe("price bands", () => {
   it("come from the budget in rupees, never another currency", () => {
     expect(bandFor("bike", 11_999_900, "INR")).toBe("entry-level")

@@ -18,8 +18,10 @@ export type ModelItem = "bike" | "car"
 
 /** How far after a model's name its price may be, in its own card. */
 const CARD_CHARS = 300
-/** At most this many candidates are offered to the model. */
+/** At most this many candidates are offered to the model, after the budget (run.ts). */
 export const CANDIDATES_OFFERED = 12
+/** At most this many are kept from the pages (ids m1 to m99). */
+const CANDIDATES_FOUND = 99
 
 export type ModelCandidate = {
   id: string
@@ -111,7 +113,9 @@ export function factsIn(card: string, item: ModelItem): string[] {
 }
 
 /**
- * Models with a price in the results, each once, ids "m1" on; `range` is the purchase's
+ * Models with a price in the results, each once, ids "m1" on, all of them: the budget is
+ * applied before the CANDIDATES_OFFERED cap (run.ts), so a cheaper model further down a page
+ * still counts. `range` is the purchase's
  * plausible price in whole rupees (run.ts PURCHASE_SANITY).
  */
 export function modelCandidates(
@@ -174,5 +178,5 @@ export function modelCandidates(
     }
   }
   for (const [key, reason] of reasons) if (!seen.has(key)) drops[reason]++
-  return { candidates: out.slice(0, CANDIDATES_OFFERED).map((c, i) => ({ ...c, id: `m${i + 1}` })), drops, named: new Set([...seen, ...reasons.keys()]).size }
+  return { candidates: out.slice(0, CANDIDATES_FOUND).map((c, i) => ({ ...c, id: `m${i + 1}` })), drops, named: new Set([...seen, ...reasons.keys()]).size }
 }

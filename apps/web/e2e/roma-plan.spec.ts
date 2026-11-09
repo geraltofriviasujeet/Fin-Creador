@@ -167,6 +167,13 @@ test("a plan question can be sent as an ordinary question instead", async ({ pag
   await expect(intake).toHaveCount(0)
   await expect(page.getByRole("list", { name: "Roma's answers" })).toHaveCount(0)
 
+  // A budget in the question is read exactly and shown in its field, to correct if it's wrong.
+  await page.getByLabel("Your question").fill("want to buy a bike under 12 lakh")
+  await page.getByRole("button", { name: "Ask Roma" }).click()
+  await expect(intake.getByLabel("What's your budget?", { exact: true })).toHaveValue("12,00,000")
+  await expect(intake.getByText("Read from your question as ₹12,00,000. Change it if that's wrong.")).toBeVisible()
+  await intake.getByRole("button", { name: "Cancel" }).click()
+
   // Asked in everyday words, with no "trip": still a plan, and the intake has the route filled in.
   await page.getByLabel("Your question").fill("make my plan from delhi to shillong?")
   await page.getByRole("button", { name: "Ask Roma" }).click()

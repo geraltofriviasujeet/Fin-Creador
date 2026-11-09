@@ -1,13 +1,14 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { tripPlaceScope } from "@fin-creador/schemas"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Field, FormMessage } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
-import { type IntakeQuestion, buildPlan, canShortlist, intakeQuestions, modelsOf } from "@/lib/ai/plan/intake"
+import { romaLookupsLeftAction } from "@/app/(app)/roma/actions"
+import { type IntakeQuestion, type LookupsLeft, buildPlan, canShortlist, intakeQuestions, lookupsNotice, modelsOf } from "@/lib/ai/plan/intake"
 import type { PlanRequest } from "@/lib/ai/plan/types"
 
 // The plan intake (10.9): the questions still needed for a plan, written in code
@@ -16,6 +17,9 @@ import type { PlanRequest } from "@/lib/ai/plan/types"
 // until "Make the plan" is pressed (each plan spends one question and its web lookups).
 // A bike or car without a make asks for its main use and budget and gets a model shortlist;
 // "I already know the model" asks for the make and model instead (the usual model plan).
+// Before the form, the lookups left are read: when the plan's can't all run, it says so (and
+// when they reset) and offers the plan from the records only, instead of spending the last
+// ones on a plan that then shows "No estimate".
 
 type Answers = Record<string, string>
 
@@ -33,6 +37,20 @@ type Props = {
 
 export function PlanIntake({ question, draft, today, currency, pending, onPlan, onAsk, onCancel }: Props) {
   const [knowModel, setKnowModel] = useState(false)
+  // undefined while it is read; null when it couldn't be (the intake goes on as before).
+  const [left, setLeft] = useState<LookupsLeft | null | undefined>(undefined)
+  const [recordsOnly, setRecordsOnly] = useState(false)
+  useEffect(() => {
+    let live = true
+    romaLookupsLeftAction().then(
+      (l) => live && setLeft(l),
+      () => live && setLeft(null),
+    )
+    return () => {
+      live = false
+    }
+  }, [])
+  const short = left === undefined ? null : lookupsNotice(left, draft)
   const shortlist = canShortlist(draft)
   const questions = intakeQuestions(draft, today, knowModel)
   // A question filled in from what was said (the origin) starts with that answer, to change or skip.
@@ -62,7 +80,7 @@ export function PlanIntake({ question, draft, today, currency, pending, onPlan, 
     }
     setError(null)
     setErrorField(null)
-    onPlan(built.plan)
+    onPlan(recordsOnly ? { ...built.plan, recordsOnly: true } : built.plan)
   }
 
   const known = describe(draft)
@@ -79,51 +97,72 @@ export function PlanIntake({ question, draft, today, currency, pending, onPlan, 
             {questions.length > 0 ? " A few details first. Skip any you don’t know: those costs will show as no estimate." : ""}
           </p>
         </div>
-        {shortlist && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="justify-self-start"
-            aria-pressed={knowModel}
-            onClick={() => {
-              setKnowModel(!knowModel)
-              setError(null)
-              setErrorField(null)
-            }}
-          >
-            {knowModel ? "Suggest models instead" : "I already know the model"}
-          </Button>
+        {short && !recordsOnly ? (
+          <div className="grid gap-3 rounded-lg bg-chip-blue px-3 py-3" role="status" data-testid="plan-lookups-short">
+            <p className="text-sm text-ink">{short}</p>
+            <div className="flex flex-wrap gap-3">
+              <Button type="button" variant="primary" onClick={() => setRecordsOnly(true)}>
+                Continue from my records only
+              </Button>
+              <Button type="button" variant="ghost" onClick={onCancel}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {recordsOnly && (
+              <p className="rounded-lg bg-chip-blue px-3 py-2 text-sm text-ink" role="note">
+                From your records only: no web lookups will run, so web prices show as no estimate.
+              </p>
+            )}
+            {shortlist && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="justify-self-start"
+                aria-pressed={knowModel}
+                onClick={() => {
+                  setKnowModel(!knowModel)
+                  setError(null)
+                  setErrorField(null)
+                }}
+              >
+                {knowModel ? "Suggest models instead" : "I already know the model"}
+              </Button>
+            )}
+            {questions.map((q) => (
+              <IntakeField
+                key={q.field}
+                id={`${baseId}-${q.field}`}
+                q={q}
+                value={answers[q.field] ?? ""}
+                skipped={skipped.has(q.field)}
+                error={errorField === q.field ? (error ?? undefined) : undefined}
+                make={draft.kind === "purchase" && draft.item !== "house" ? { item: draft.item, make: draft.make ?? answers.make ?? null } : null}
+                currency={currency}
+                onChange={(v) => set(q.field, v)}
+                onSkip={() => skip(q.field)}
+              />
+            ))}
+            {error && <FormMessage tone="error">{error}</FormMessage>}
+            <p className="text-xs text-muted-foreground">
+              Web prices are what pages list today, not live fares or bookings. A plan uses up to 8 web lookups from your daily allowance.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="submit" disabled={pending}>
+                {pending ? "Making the plan…" : recordsOnly ? "Make the plan from my records" : "Make the plan"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={onAsk} disabled={pending}>
+                Ask as a question instead
+              </Button>
+              <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
+                Cancel
+              </Button>
+            </div>
+          </>
         )}
-        {questions.map((q) => (
-          <IntakeField
-            key={q.field}
-            id={`${baseId}-${q.field}`}
-            q={q}
-            value={answers[q.field] ?? ""}
-            skipped={skipped.has(q.field)}
-            error={errorField === q.field ? (error ?? undefined) : undefined}
-            make={draft.kind === "purchase" && draft.item !== "house" ? { item: draft.item, make: draft.make ?? answers.make ?? null } : null}
-            currency={currency}
-            onChange={(v) => set(q.field, v)}
-            onSkip={() => skip(q.field)}
-          />
-        ))}
-        {error && <FormMessage tone="error">{error}</FormMessage>}
-        <p className="text-xs text-muted-foreground">
-          Web prices are what pages list today, not live fares or bookings. A plan uses up to 8 web lookups from your daily allowance.
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={pending}>
-            {pending ? "Making the plan…" : "Make the plan"}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onAsk} disabled={pending}>
-            Ask as a question instead
-          </Button>
-          <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
-            Cancel
-          </Button>
-        </div>
       </form>
     </Card>
   )
