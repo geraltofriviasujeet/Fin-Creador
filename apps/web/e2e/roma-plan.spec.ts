@@ -34,22 +34,33 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(answers.getByText(/These are estimates, not quotes or bookings\./)).toBeVisible()
   await expect(intake).toHaveCount(0)
 
-  // The plan opens in a modal, from the checked plan: every line, where it came from, its sources.
+  // The plan opens in a modal, from the checked plan: the verdict card, the figures, every line, where it came from, its sources.
   await answers.getByRole("button", { name: "Open the plan" }).click()
   const plan = page.getByRole("dialog")
-  await expect(plan.getByRole("heading", { name: /^Plan: trip from Delhi to Goa in January \d{4}$/ })).toBeVisible()
+  await expect(plan.getByRole("heading", { name: /^Delhi to Goa · January \d{4}$/ })).toBeVisible()
+  await expect(plan.getByText(/^4 nights · 2 travellers · Created \d{1,2} [A-Z][a-z]{2} \d{4}$/)).toBeVisible()
   await expect(plan.getByText(/^Estimates, not quotes or bookings\. Web prices are as pages listed them/)).toBeVisible()
+  // The records-only verdict comes first in the verdict card, then Roma's verdict in plain words.
+  const verdict = plan.getByRole("region", { name: "Roma's verdict" })
+  await expect(verdict.getByText("From your records:", { exact: true })).toBeVisible()
+  await expect(verdict.getByText(/^(This trip fits your current plan\.|This trip does not fit your current plan yet\.|Roma can't say yet whether this trip fits\.)$/)).toBeVisible()
+  await expect(verdict.getByTestId("plan-status")).toHaveText(/^(Fits|Needs adjustment|Can't say)$/)
+  await expect(plan.getByRole("region", { name: "Plan figures" })).toContainText("Estimated trip cost")
+  await expect(plan.getByRole("region", { name: "Plan figures" })).toContainText("Extra saving needed")
+  // A line with no estimate says why without being opened.
   await expect(plan.locator('[data-line="stay"]')).toContainText("No estimate: the travel style was skipped.")
   await expect(plan.locator('[data-line="transport"]')).toContainText("Web estimate")
+  await plan.locator('[data-line="transport"]').getByRole("button").first().click()
   await expect(plan.locator('[data-line="transport"]')).toContainText("IndiGo, from INR 18,000 a person")
   await expect(plan.locator('[data-line="transport"]')).toContainText("listed on example.test")
   // Food is a per-day line: the test pages' hotel and flight prices aren't per day, so they aren't used, and the line says why.
   await expect(plan.locator('[data-line="food"]')).toContainText("2 prices weren't per day (1 per night, 1 no unit given), so they weren't used.")
-  await expect(plan.getByText("The plan's verdict, from both signals", { exact: true })).toBeVisible()
-  await expect(plan.getByText("Against your past trip", { exact: true })).toBeVisible()
-  await expect(plan.locator('[data-line="buffer"]')).toContainText("Worked out by the app")
-  await expect(plan.getByText("From your records", { exact: true })).toBeVisible()
-  await expect(plan.getByText("With web estimates, not your records", { exact: true })).toBeVisible()
+  await verdict.getByRole("button", { name: "How Roma decided" }).click()
+  await expect(verdict.getByText("Free money by the travel month", { exact: true })).toBeVisible()
+  await expect(verdict.getByText("Against your past trip", { exact: true })).toBeVisible()
+  await expect(verdict.getByText("With web estimates, not your records", { exact: true })).toBeVisible()
+  await expect(plan.locator('[data-line="buffer"]')).toContainText("Calculated")
+  await plan.getByRole("button", { name: "View data sources" }).click()
   await expect(plan.getByRole("region", { name: "Sources" }).getByRole("link", { name: "https://example.test/hotels" })).toBeVisible()
   // The test pages name IndiGo; the mock model picks no names, so none is suggested.
   await expect(plan.getByRole("region", { name: "Airlines listed for this route" })).toContainText("No airlines on the pages found could be confirmed, so none is suggested.")
@@ -64,14 +75,16 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   const printed = page.getByTestId("plan-print")
   await expect(printed).toBeVisible()
   await expect(page.getByRole("list", { name: "Roma's answers" })).toBeHidden()
-  await expect(printed.getByText(/^Made on \d{4}-\d{2}-\d{2}\. Figures marked “From your goal”/)).toBeVisible()
+  await expect(printed.getByText(/^Made on \d{4}-\d{2}-\d{2}\. Figures marked “From your records”/)).toBeVisible()
+  await expect(printed.getByText(/^Delhi to Goa · January \d{4}$/)).toBeVisible()
   // The open modal hides the rest of the page from assistive technology, so the copy is found by CSS, not role.
   await expect(printed.locator('[role="note"]').filter({ hasText: /^Estimates, not quotes or bookings\./ })).toBeVisible()
   await expect(printed.locator('[data-line="stay"]')).toContainText("No estimate")
   const after = await printed.locator('[data-line="transport"] a').first().evaluate((a) => getComputedStyle(a, "::after").content)
   expect(after).toContain("https://example.test/")
   await page.emulateMedia({ media: "screen" })
-  await plan.getByRole("button", { name: "Close" }).click()
+  // The footer's Close (the header's close button has the same name).
+  await plan.getByRole("button", { name: "Close", exact: true }).last().click()
 
   // Reopened from the conversation, it says when it was made and that prices may have changed.
   await expect(page).toHaveURL(/\/roma\?c=/)
@@ -79,9 +92,9 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await page.getByRole("list", { name: "Roma's answers" }).getByRole("button", { name: "Open the plan" }).click()
   await expect(page.getByRole("dialog").getByText(/^Made on \d{4}-\d{2}-\d{2}\. Web prices may have changed since this plan was made\./)).toBeVisible()
 
-  // Add to my goals: the normal goal form, filled in from the plan; nothing is added until the person adds it.
+  // Create travel goal: the normal goal form, filled in from the plan; nothing is added until the person adds it.
   const reopened = page.getByRole("dialog")
-  await reopened.getByRole("button", { name: "Add to my goals" }).click()
+  await reopened.getByRole("button", { name: "Create travel goal" }).click()
   await expect(reopened.getByText(/^Filled in from the plan\./)).toBeVisible()
   await expect(reopened.getByLabel("Name", { exact: true })).toHaveValue("Trip to Goa")
   await expect(reopened.getByLabel("People")).toHaveValue("2")
@@ -89,15 +102,15 @@ test("a trip plan: only the missing question is asked, it can be skipped, and th
   await expect(reopened.getByLabel("Transport")).not.toHaveValue("")
   // Cancel goes back to the plan, and nothing was added.
   await reopened.getByRole("button", { name: "Cancel" }).click()
-  await expect(reopened.getByRole("region", { name: "Cost lines" })).toBeVisible()
-  await reopened.getByRole("button", { name: "Add to my goals" }).click()
+  await expect(reopened.getByRole("region", { name: "Cost breakdown" })).toBeVisible()
+  await reopened.getByRole("button", { name: "Create travel goal" }).click()
   // The plan skipped the stay style and doesn't know how they travel: the person chooses, then adds.
   await reopened.getByLabel("Name", { exact: true }).fill("Goa in January")
   await reopened.getByLabel("Travel by").selectOption({ label: "Flight" })
   await reopened.getByLabel("Stay type").selectOption({ label: "Hotel" })
   await reopened.getByRole("button", { name: "Add goal" }).click()
   await expect(reopened.getByTestId("plan-goal")).toContainText("Added to your goals as “Goa in January”.")
-  await expect(reopened.getByRole("button", { name: "Add to my goals" })).toHaveCount(0)
+  await expect(reopened.getByRole("button", { name: "Create travel goal" })).toHaveCount(0)
 
   // Reopened again, the plan still shows its goal; the goal is an ordinary goal on the Goals page.
   await page.reload()

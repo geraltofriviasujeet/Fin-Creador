@@ -152,7 +152,9 @@ describe("a trip plan", () => {
     expect(run.plan.verdicts.web.summary).toBe(
       'No. With web estimates the plan adds up to at least ₹52,140 (a minimum: some prices are "from" prices). At your current rate that wouldn\'t be covered by January 2027.',
     )
-    expect(run.plan.changes[0]).toMatch(/^Save ₹5,000(\.00)? more a month\.$/)
+    expect(run.plan.changes[0]).toMatchObject({ title: expect.stringMatching(/^Save ₹5,000(\.00)? more a month$/), detail: "At your current rate, that covers the plan by January 2027." })
+    // The stat cards' figures are the projection's own, in the profile currency.
+    expect(run.plan.verdicts.figures).toMatchObject({ currency: "INR", month: "2027-01", extraMonthlyMinor: 500_000 })
     // Every web line carries its page; names are only those found, each with where.
     expect(by.transport!.prices[0]).toMatchObject({ site: "goa-flights.example.test", per: "person" })
     expect(run.plan.carriers!.listed.map((c) => c.name)).toEqual(["Air India Express", "IndiGo", "Akasa Air", "SpiceJet"])

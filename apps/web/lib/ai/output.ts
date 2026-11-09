@@ -9,7 +9,8 @@ import type { Figure } from "./tools/types"
 //     money-shaped when it carries a currency marker (₹, Rs, INR, "rupees"), a decimal part,
 //     thousands separators or a scale word (lakh, crore, L, Cr, K), or is 1000 or more. Other
 //     numbers (small bare integers: counts, nights, travellers, list markers), dates
-//     (2026-11-07, "December 2027") and bare years 1900 to 2100 ("by 2027") pass (10.8). One unmatched figure and the whole answer is
+//     (2026-11-07, "December 2027") and bare years 1900 to 2100 ("by 2027") pass (10.8). A number
+//     the person typed in their own questions also passes (saidNumbers). One unmatched figure and the whole answer is
 //     refused: numbers are never stripped, rounded or corrected. Digits inside a string a tool
 //     returned (a goal, category or account name such as "Car 2027") are not figures: those
 //     strings are set aside, exactly as written (any case), before the numbers are read;
@@ -76,6 +77,32 @@ export function allowedNumbers(figures: readonly Figure[], dates: readonly strin
   }
   for (const d of dates) for (const part of d.split("-")) allowed.add(normalizeNumber(part))
   return allowed
+}
+
+const SCALES: [RegExp, number][] = [
+  [/^\s*(?:lakhs?|lacs?|L\b)/i, 100_000],
+  [/^\s*(?:crores?|cr\b)/i, 10_000_000],
+]
+
+/**
+ * The numbers the person typed in their own questions: an answer may repeat them (a budget of
+ * 1200000, "under 12 lakh"). Each also in its other form, so "12 lakh" lets 1200000 through and
+ * 1200000 lets "12 lakh" through. They are the person's words, not facts the answer adds.
+ */
+export function saidNumbers(said: string): string[] {
+  const out: string[] = []
+  for (const m of said.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
+    const raw = m[0].replace(/,+$/, "")
+    const value = normalizeNumber(raw)
+    out.push(value)
+    const after = said.slice(m.index + raw.length, m.index + raw.length + 10)
+    const n = Number(value)
+    for (const [word, scale] of SCALES) {
+      if (word.test(after)) out.push(normalizeNumber(String(Math.round(n * scale))))
+      else if (n >= scale && Number.isInteger(n)) out.push(normalizeNumber(String(n / scale)))
+    }
+  }
+  return out
 }
 
 /**

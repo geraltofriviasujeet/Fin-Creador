@@ -19,12 +19,15 @@ function DialogContent({
   description,
   children,
   className,
+  actions,
 }: {
   eyebrow?: string
   title: string
   description?: React.ReactNode
   children: React.ReactNode
   className?: string
+  /** Buttons beside the close button (a plan's Save as PDF). */
+  actions?: React.ReactNode
 }) {
   return (
     <DialogPrimitive.Portal>
@@ -51,12 +54,15 @@ function DialogContent({
                 <DialogPrimitive.Description className="text-sm text-muted-foreground">{description}</DialogPrimitive.Description>
               )}
             </div>
-            <DialogPrimitive.Close
-              aria-label="Close"
-              className="flex size-[36px] shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-ink outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              <X aria-hidden="true" className="size-5" />
-            </DialogPrimitive.Close>
+            <div className="flex shrink-0 items-center gap-2">
+              {actions}
+              <DialogPrimitive.Close
+                aria-label="Close"
+                className="flex size-[36px] shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-ink outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <X aria-hidden="true" className="size-5" />
+              </DialogPrimitive.Close>
+            </div>
           </div>
           {children}
         </DialogPrimitive.Popup>

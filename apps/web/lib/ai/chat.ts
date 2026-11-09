@@ -1,6 +1,6 @@
 import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
-import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber } from "./output"
+import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber, saidNumbers } from "./output"
 import { figureId, fillPlaceholders, formatFigure, webAmounts, withoutPlaceholders } from "./placeholders"
 import { ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
@@ -21,7 +21,8 @@ import {
 // the final text passes the output guard or is refused. From 10.3 the question comes with the
 // conversation's recent turns as plain text and a summary (history.ts) in a third system block.
 // Neither is a source of figures: the figure check accepts only numbers from this question's
-// tool calls. The history part of the request is the same in every round of a question, so the
+// tool calls, and numbers the person typed in their own questions (not in earlier answers).
+// The history part of the request is the same in every round of a question, so the
 // model's thinking blocks stay valid when they are sent back (checked live, 2026-11-06).
 // From 10.4 a goal check's verdict is computed in code: an answer that doesn't start with it
 // (after passing the figure check) is replaced by the check's own code-built summary. Strings
@@ -172,6 +173,8 @@ export async function runChat({
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
     const allowed = allowedNumbers(figures, dates)
     for (const n of webNumbers(found.web)) allowed.add(n)
+    // The person's own numbers (a budget they typed) are theirs to see again, never a refusal.
+    for (const n of saidNumbers([question, ...history.recent.map((t) => t.question)].join("\n"))) allowed.add(n)
     const check = checkAnswer(withoutPlaceholders(response.text), allowed, found.literals)
     if (!check.ok) return done(check.reason === "unverified" ? { kind: "unverified", unmatched: check.unmatched ?? [] } : { kind: check.reason })
     const filled = fillPlaceholders(response.text.trim(), new Map([...found.amounts, ...webAmounts(found.web.at(-1))]))

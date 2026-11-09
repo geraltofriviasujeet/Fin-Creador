@@ -73,6 +73,12 @@ describe("Roma's chat loop", () => {
     expect(run.result).toEqual({ kind: "unverified", unmatched: ["1000", "2000"] })
   })
 
+  it("lets the answer repeat a budget the person typed", async () => {
+    const question = "want to buy a car? can you suggest some under 1200000 budget"
+    const run = await ask(() => mockText("Under your ₹12,00,000 budget I can't name models yet."), { question })
+    expect(run.result).toMatchObject({ kind: "answer" })
+  })
+
   it("refuses a figure stated without any tool call", async () => {
     const run = await ask(() => mockText("You spent ₹9,000 last month."))
     expect(run.result).toEqual({ kind: "unverified", unmatched: ["9000"] })

@@ -15,7 +15,7 @@ import { lineWords } from "./format"
 import { type Mention, type PriceUnit, SUBJECT_WORDS, aboutPage, aboutPrice, dishesIn, placesIn, shoppingIn, unitAt } from "./context"
 import { NAMES_PER_KIND, carrierCandidates, hotelCandidates, listingHotelAt, nameKey, priceAt } from "./names"
 import { RATES_ON, RATES_SOURCE, canConvert, convertDecimal, rateWords } from "./rates"
-import type { CheckedPlan, PlanAmount, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanSignal, PlanVerdict } from "./types"
+import type { CheckedPlan, PlanAmount, PlanChange, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanSignal, PlanVerdict } from "./types"
 
 // One plan, run (10.9). In order:
 //   1. The person's records: the records-only verdict, any matching goal's cost lines and
@@ -701,7 +701,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   const deposit = request.kind === "purchase" ? (request.depositMinor ?? 0) : 0
   const saved = records.saved
   const hasWeb = lines.some((l) => l.from === "web")
-  const { web: webVerdict, changes, checked } = planVerdict({ request, records, mine, noEstimate, deposit, hasWeb, money, today })
+  const { web: webVerdict, changes, checked, figures } = planVerdict({ request, records, mine, noEstimate, deposit, hasWeb, money, today })
   const both = request.kind === "trip" ? bothSignals({ request, records, web: webVerdict, checked, noEstimate, money }) : null
 
   // Every page used, and when nothing could be checked every page found: a spent lookup is never silent.
@@ -719,7 +719,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     carriers,
     // Hotels are on the stay line (10.9 follow-up); older stored plans keep their own list.
     hotels: null,
-    verdicts: { totals, records: records.records, web: webVerdict, ...(both ? { both } : {}) },
+    verdicts: { totals, records: records.records, web: webVerdict, ...(both ? { both } : {}), ...(figures ? { figures } : {}) },
     changes,
     assumptions: planAssumptions(request, records, currency, [...new Set(lines.flatMap((l) => l.prices.flatMap((p) => (p.converted ? [p.currency] : []))))]),
     sources,
@@ -788,9 +788,9 @@ function planVerdict(a: {
   hasWeb: boolean
   money: (minor: number) => string
   today: string
-}): { web: PlanVerdict; changes: string[]; checked: Checked | null } {
+}): { web: PlanVerdict; changes: PlanChange[]; checked: Checked | null; figures: PlanFigures | null } {
   const { request, records, mine, money } = a
-  const none = (summary: string) => ({ web: { verdict: "No verdict.", summary }, changes: [], checked: null })
+  const none = (summary: string) => ({ web: { verdict: "No verdict.", summary }, changes: [], checked: null, figures: null })
   if (!a.hasWeb) return none("No web estimates in this plan: no line could be priced from the web.")
   if (!mine) return none("No verdict with web estimates: no line is priced in your currency.")
   if (!records.project) return none(`No verdict with web estimates: ${request.month === null ? "the month was skipped, so there is no date to save by" : "there is nothing in your records to project from"}.`)
@@ -817,21 +817,31 @@ function planVerdict(a: {
   if (p.verdict === "yes") outcome = `At your current rate that would be covered by ${month}.`
   else if (p.verdict === "no") outcome = `At your current rate that wouldn't be covered by ${month}.`
   else outcome = "There aren't enough months in your records to say."
-  const changes: string[] = []
+  const changes: PlanChange[] = []
   if (p.verdict === "no") {
-    if (p.extraMonthlyMinor !== null) changes.push(`Save ${money(p.extraMonthlyMinor)} more a month.`)
-    if (p.reachMonth) changes.push(`${request.kind === "trip" ? "Go" : "Buy"} in ${monthName(p.reachMonth)} instead.`)
+    if (p.extraMonthlyMinor !== null) changes.push({ title: `Save ${money(p.extraMonthlyMinor)} more a month`, detail: `At your current rate, that covers the plan by ${month}.` })
+    if (p.reachMonth)
+      changes.push({ title: `${request.kind === "trip" ? "Go" : "Buy"} in ${monthName(p.reachMonth)} instead`, detail: "More time to save, with no change to your monthly saving." })
     if (request.kind === "trip") {
-      if (request.style === "luxury" || request.style === "comfort") changes.push("Choose a simpler travel style: the stay line comes down.")
-      if (request.nights !== null && request.nights > 1) changes.push("Fewer nights: stay, food and local travel come down.")
-    } else if (a.deposit === 0) changes.push("A trade-in or deposit lowers what is needed.")
+      if (request.style === "luxury" || request.style === "comfort") changes.push({ title: "Choose a simpler travel style", detail: "The stay line comes down." })
+      if (request.nights !== null && request.nights > 1) changes.push({ title: "Fewer nights", detail: "Stay, food and local travel come down." })
+    } else if (a.deposit === 0) changes.push({ title: "Add a trade-in or deposit", detail: "It lowers what is needed." })
+  }
+  const figures: PlanFigures = {
+    currency: mine.currency,
+    month: request.month,
+    freeMinor: p.availableByTargetMinor ?? null,
+    extraMonthlyMinor: p.verdict === "yes" ? 0 : p.verdict === "no" ? (p.extraMonthlyMinor ?? null) : null,
   }
   return {
     web: { verdict, summary: `${verdict} With web estimates the plan adds up to ${amount}.${range}${deposit}${saved}${missing} ${outcome}`.trim() },
     changes,
     checked: { projection: p, totalMinor, bound: mine.bound },
+    figures,
   }
 }
+
+type PlanFigures = NonNullable<CheckedPlan["verdicts"]["figures"]>
 
 /** The plan total the projection checked, and how it came out. */
 type Checked = { projection: GoalProjection; totalMinor: number; bound: PlanAmount["bound"] }

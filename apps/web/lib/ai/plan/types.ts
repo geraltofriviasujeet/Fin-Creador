@@ -144,12 +144,23 @@ export const checkedPlanSchema = z
         web: verdictSchema,
         /** A trip's verdict from both signals: free money by the travel month, and the past trip's cost. Absent on purchases and older plans. */
         both: z.object({ verdict: text(40), summary: text(600), money: signalSchema, past: signalSchema }).strict().optional(),
+        /**
+         * The projection's own figures behind the verdict with web estimates, profile currency minor units: free money by
+         * the month after other goals (negative when other goals take more), and the extra a month needed (0 when it fits).
+         * Null when the projection has none; absent on older plans and when no verdict was worked out.
+         */
+        figures: z
+          .object({ currency: z.string().regex(/^[A-Z]{3}$/), month: month.nullable(), freeMinor: z.number().int().nullable(), extraMonthlyMinor: z.number().int().min(0).nullable() })
+          .strict()
+          .optional(),
       })
       .strict(),
-    changes: z.array(text(200)).max(6),
+    /** What would make it fit: a title and one line each (older plans: one sentence each). */
+    changes: z.array(z.union([text(200), z.object({ title: text(80), detail: text(200) }).strict()])).max(6),
     assumptions: z.array(text(400)).max(16),
     sources: z.array(z.object({ site, url }).strict()).max(40),
   })
   .strict()
 
 export type CheckedPlan = z.infer<typeof checkedPlanSchema>
+export type PlanChange = CheckedPlan["changes"][number]
