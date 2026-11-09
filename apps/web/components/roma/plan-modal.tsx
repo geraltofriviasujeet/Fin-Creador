@@ -21,6 +21,7 @@ import {
   planAmount,
   planHeading,
   planPrice,
+  isWide,
   planVerdictCard,
   recordsLine,
   shortMonth,
@@ -488,6 +489,7 @@ function LineRow({ line, plan, expandAll }: { line: PlanLine; plan: CheckedPlan;
         <span className="grid min-w-0 gap-0.5">
           <span className="font-semibold text-ink">{lineWords(line.line)}</span>
           {caption && <span className="text-xs text-muted-foreground">{caption}</span>}
+          {line.amounts.some(isWide) && <span className="text-xs font-semibold text-ink">Prices found vary widely; treat this as rough.</span>}
         </span>
         <span className="col-start-1 row-start-2 md:col-start-auto md:row-start-auto">
           <Badge tone={SOURCE_TONE[line.from]}>{LINE_SOURCE[line.from]}</Badge>

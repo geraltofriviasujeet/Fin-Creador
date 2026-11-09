@@ -5,6 +5,7 @@ import { LlmError, type LlmProvider, type LlmRequest } from "../llm/types"
 import { type SearchDb, WebSession } from "../search/session"
 import type { SearchProvider, SearchResult } from "../search/types"
 import { type PlanRecords, runPlan } from "./run"
+import { planVerdictCard } from "./format"
 import { type PlanRequest, checkedPlanSchema } from "./types"
 
 // A plan, run on fake pages, a fake model and fake records: what code works out, what a skipped
@@ -148,10 +149,11 @@ describe("a trip plan", () => {
     expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4740", high: "10140", median: "7440", bound: "at_least" }] })
     // The median total: the line medians (8,400 + 45,000 + 8,000 + 10,000 + 3,000) plus 10% of them.
     expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "52140", high: "111540", median: "81840", bound: "at_least" }])
-    expect(targets).toEqual([5_214_000])
+    // The verdict checks the higher end, never the cheapest figure, even when the prices are minimums.
+    expect(targets).toEqual([11_154_000])
     expect(run.answer).toMatch(/ 6 of 6 cost lines have an estimate\./)
     expect(run.plan.verdicts.web.summary).toBe(
-      'No. With web estimates the plan adds up to at least ₹52,140 (a minimum: some prices are "from" prices). At your current rate that wouldn\'t be covered by January 2027.',
+      'No. With web estimates the plan adds up to at least ₹1,11,540 (a minimum: some prices are "from" prices). The lines range from ₹52,140 to ₹1,11,540; the higher end is checked. At your current rate that wouldn\'t be covered by January 2027.',
     )
     expect(run.plan.changes[0]).toMatchObject({ title: expect.stringMatching(/^Save ₹5,000(\.00)? more a month$/), detail: "At your current rate, that covers the plan by January 2027." })
     // The stat cards' figures are the projection's own, in the profile currency.
@@ -371,7 +373,7 @@ describe("a trip plan", () => {
 
 describe("a trip plan's verdict from both signals", () => {
   const projecting = (verdict: "yes" | "no" | "too_early") => () => ({ verdict, availableByTargetMinor: 3_000_000, extraMonthlyMinor: 500_000, reachMonth: "2027-04-01" }) as unknown as GoalProjection
-  const april = { from: "2026-04-01", to: "2026-04-05", days: 5, travelMinor: 6_000_000, similar: true }
+  const april = { from: "2026-04-01", to: "2026-04-05", days: 5, travelMinor: 12_000_000, similar: true }
 
   it("money fails but the plan costs no more than the past trip: Not yet, the money is the constraint", async () => {
     const { ctx } = setup()
@@ -379,8 +381,8 @@ describe("a trip plan's verdict from both signals", () => {
     const both = run.plan.verdicts.both!
     expect(both.verdict).toBe("Not yet.")
     expect(both.summary).toBe("The money is the constraint, not the trip: the plan costs no more than your past trip did, but there isn't enough free money by January 2027.")
-    expect(both.money).toEqual({ met: "no", summary: "₹30,000 is free for it by January 2027 after your other goals (planned trips included), short of the plan's at least ₹52,140." })
-    expect(both.past).toEqual({ met: "yes", summary: "The plan's at least ₹52,140 is at or below your Travel spending from 2026-04-01 to 2026-04-05 (5 days): ₹60,000, as spent. Who went and where isn't known." })
+    expect(both.money).toEqual({ met: "no", summary: "₹30,000 is free for it by January 2027 after your other goals (planned trips included), short of the plan's at least ₹1,11,540." })
+    expect(both.past).toEqual({ met: "yes", summary: "The plan's at least ₹1,11,540 is at or below your Travel spending from 2026-04-01 to 2026-04-05 (5 days): ₹1,20,000, as spent. Who went and where isn't known." })
     expect(run.answer).toMatch(/The plan's verdict, from both signals: Not yet\. The money is the constraint/)
     expect(checkedPlanSchema.safeParse(run.plan).success).toBe(true)
   })
@@ -424,6 +426,45 @@ describe("a purchase plan", () => {
     expect(run.plan.verdicts.web.summary).toMatch(/already saved toward New car/)
     expect(run.plan.carriers).toBeNull()
     expect(run.plan.verdicts.both).toBeUndefined()
+  })
+
+  // The BYD eMax 7 bug (2026-11-09): "₹0 needed" and "Fits" on a thirty-lakh car, from its cheapest figure.
+  const creta = { kind: "purchase", item: "car", make: "Hyundai", model: "Creta", month: "2027-03", depositMinor: null } satisfies PlanRequest
+  /** Affordable only below ₹10 lakh: a verdict on the cheap end says Yes, one on the real price says No. */
+  const tenLakh = () =>
+    fakeRecords({
+      project: (t) => {
+        targets.push(t)
+        return { verdict: t <= 100_000_000 ? "yes" : "no", extraMonthlyMinor: t <= 100_000_000 ? null : 900_000, reachMonth: null, availableByTargetMinor: 100_000_000 } as unknown as GoalProjection
+      },
+    })
+  const carPages = (text: string): [RegExp, SearchResult][] => [
+    [/on road price/, page("Creta price", text)],
+    [/insurance price/, page("Creta insurance", "Hyundai Creta insurance costs ₹45,000 for the first year.")],
+  ]
+
+  it("drops a car price outside ₹2,00,000 to ₹2,00,00,000 as a misread, and says so in the assumptions", async () => {
+    const { ctx } = setup(carPages("The Hyundai Creta on road price in India is ₹29.9 lakh. Hyundai Creta seat covers cost ₹30,500."))
+    const run = await runPlan(creta, { ctx, provider: pickingModel(), records: tenLakh() })
+    const price = run.plan.lines.find((l) => l.line === "price")!
+    expect(price.amounts).toEqual([{ currency: "INR", low: "2990000", high: "2990000", median: "2990000" }])
+    expect(price.how).toMatch(/1 price outside ₹2,00,000 to ₹2,00,00,000 was dropped as implausible\.$/)
+    expect(run.plan.assumptions).toContain("A car's price outside ₹2,00,000 to ₹2,00,00,000 (in rupees, after any conversion) is dropped as a misread: an accessory, a part or an instalment, not the car.")
+    expect(run.plan.verdicts.web.verdict).toBe("No.")
+  })
+
+  it("never says Fits from the cheapest figure: an outlier low and a realistic high are checked at the high end, and the line says it is rough", async () => {
+    const { ctx } = setup(carPages("A used Hyundai Creta starts from ₹2.5 lakh. The Hyundai Creta on road price in India is ₹29.9 lakh."))
+    targets.length = 0
+    const run = await runPlan(creta, { ctx, provider: pickingModel(), records: tenLakh() })
+    const price = run.plan.lines.find((l) => l.line === "price")!
+    expect(price.amounts[0]).toMatchObject({ low: "250000", high: "2990000" })
+    expect(price.how).toMatch(/Prices found vary widely \(the highest is more than 5 times the lowest\); treat this as rough\./)
+    // ₹29,90,000 + ₹45,000 insurance: the high end, never ₹2,95,000.
+    expect(targets).toEqual([303_500_000])
+    expect(run.plan.verdicts.web.verdict).toBe("No.")
+    expect(run.plan.verdicts.figures).toMatchObject({ extraMonthlyMinor: 900_000 })
+    expect(planVerdictCard(run.plan).status).not.toBe("fits")
   })
 
   it("doesn't look up a house: its lines are no estimate without a goal", async () => {

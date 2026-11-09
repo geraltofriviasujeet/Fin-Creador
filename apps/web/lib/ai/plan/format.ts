@@ -100,6 +100,14 @@ export function recordsLine(records: { verdict: string; summary: string }): stri
   return records.summary.toLowerCase().startsWith(stem) ? records.summary : `${records.verdict} ${records.summary}`.trim()
 }
 
+/** A line whose highest figure is more than this many times its lowest is rough, and says so. */
+export const WIDE_SPREAD = 5
+/** Whether an amount's range is too wide to read as a clean estimate. */
+export function isWide(a: PlanAmount): boolean {
+  const digits = currencyMinorDigits(a.currency)
+  return decimalToMinor(a.high, digits) > WIDE_SPREAD * decimalToMinor(a.low, digits)
+}
+
 export type PlanStatus = "fits" | "adjust" | "unknown"
 export const STATUS_WORDS: Record<PlanStatus, string> = { fits: "Fits", adjust: "Needs adjustment", unknown: "Can't say" }
 

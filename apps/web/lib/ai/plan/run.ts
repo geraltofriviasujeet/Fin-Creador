@@ -10,11 +10,11 @@ import type { SearchResult } from "../search/types"
 import { type Bound, type PriceCandidate, SCALES, plain, scaleUp, siteOf, verifyWebFigure } from "../search/verify"
 import { VERDICT_WORDS, monthName } from "../tools/goals"
 import type { ToolContext, TotalBound } from "../tools/types"
-import { lineWords, planAmount } from "./format"
+import { WIDE_SPREAD, isWide, lineWords } from "./format"
 import { type Mention, type PriceUnit, SUBJECT_WORDS, aboutPage, aboutPrice, dishesIn, placesIn, shoppingIn, unitAt } from "./context"
 import { NAMES_PER_KIND, carrierCandidates, hotelCandidates, listingHotelAt, nameKey, priceAt } from "./names"
 import { RATES_ON, RATES_SOURCE, canConvert, convertDecimal, rateWords } from "./rates"
-import type { CheckedPlan, PlanAmount, PlanChange, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanSignal, PlanVerdict } from "./types"
+import type { CheckedPlan, PlanAmount, PlanChange, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanSignal, PlanVerdict, PurchasePlanRequest } from "./types"
 
 // One plan, run (10.9). In order:
 //   1. The person's records: the records-only verdict, any matching goal's cost lines and
@@ -373,25 +373,36 @@ export const SANITY: Partial<Record<PlanLineName, { low: number; high: number; u
   local_travel: { low: 100, high: 10_000, unit: "person_day" },
   sightseeing: { low: 200, high: 20_000, unit: "person" },
 }
-const UNIT_WORDS = { person: "a person", night: "a night", person_day: "a person a day" } as const
+/**
+ * Plausible prices per purchase (whole rupees, the whole price): a price outside its kind's range
+ * is dropped as a misread ("₹30,500" for a car is an accessory or an EMI, not the car), so it can
+ * never make a purchase look affordable.
+ */
+export const PURCHASE_SANITY: Record<PurchasePlanRequest["item"], { low: number; high: number }> = {
+  bike: { low: 30_000, high: 15_00_000 },
+  car: { low: 2_00_000, high: 2_00_00_000 },
+  house: { low: 5_00_000, high: 50_00_00_000 },
+}
+const UNIT_WORDS = { person: "a person", night: "a night", person_day: "a person a day", item: "" } as const
+type Range = { low: number; high: number; unit: keyof typeof UNIT_WORDS }
 
-/** A line's range for this trip, or null when it has none. */
-function rangeFor(line: PlanLineName, international: boolean) {
+/** A line's range for this plan (a trip line's, or a purchase's price by kind), or null when it has none. */
+function rangeFor(line: PlanLineName, international: boolean, item?: PurchasePlanRequest["item"]): Range | null {
+  if (line === "price") return item ? { ...PURCHASE_SANITY[item], unit: "item" } : null
   const r = SANITY[line]
   if (!r) return null
   const { low, high } = international && r.international ? r.international : r
   return { low, high, unit: r.unit }
 }
 
-const rangeWords = (r: { low: number; high: number; unit: keyof typeof UNIT_WORDS }) =>
-  `${formatMoney(r.low * 100, { currency: "INR" })} to ${formatMoney(r.high * 100, { currency: "INR" })} ${UNIT_WORDS[r.unit]}`
+const rangeWords = (r: Range) => `${formatMoney(r.low * 100, { currency: "INR" })} to ${formatMoney(r.high * 100, { currency: "INR" })}${r.unit === "item" ? "" : ` ${UNIT_WORDS[r.unit]}`}`
 
 /** Whether a price, scaled to the range's unit, is inside it; true when it can't be checked. */
-export function inRange(p: PlanPrice, r: { low: number; high: number; unit: keyof typeof UNIT_WORDS }, nights: number | null, travellers: number | null): boolean {
+export function inRange(p: PlanPrice, r: Range, nights: number | null, travellers: number | null): boolean {
   const { currency, value } = effective(p)
   if (currency !== "INR") return true
   const times = timesFor(p.per, nights, travellers)
-  const units = r.unit === "person" ? travellers : r.unit === "night" ? nights : nights === null || travellers === null ? null : (nights + 1) * travellers
+  const units = r.unit === "item" ? 1 : r.unit === "person" ? travellers : r.unit === "night" ? nights : nights === null || travellers === null ? null : (nights + 1) * travellers
   if (times === null || units === null) return true
   const total = decimalToMinor(multiplyDecimal(value, times), 2)
   return total >= r.low * 100 * units && total <= r.high * 100 * units
@@ -654,7 +665,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
         ? ""
         : ` ${foreignCount} ${foreignCount === 1 ? "price" : "prices"} in ${currencyList([...s!.foreign.keys()])} ${foreignCount === 1 ? "wasn't" : "weren't"} used (no exchange rate).`
     const wrongUnitWords = s ? unitWords(line, s.wrongUnit) : ""
-    const range = rangeFor(line, international)
+    const range = rangeFor(line, international, request.kind === "purchase" ? request.item : undefined)
     const inside = range ? checked.filter((p) => inRange(p, range, nights, travellers)) : checked
     const prices = inside.slice(0, PRICES_PER_LINE)
     const dropped = checked.length - inside.length
@@ -668,7 +679,8 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     const sites = [...new Set(prices.map((p) => p.site))].join(", ")
     const from = [...new Set(prices.flatMap((p) => (p.converted ? [p.currency] : [])))]
     const convertedWords = from.length === 0 ? "" : ` Prices in ${currencyList(from)} are converted to ${currency}, approximately (the rate is in the assumptions).`
-    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${convertedWords}${foreignWords}${wrongUnitWords}${subjectWords}${droppedWords}`, prices, pages: [] }
+    const roughWords = amounts.some(isWide) ? ` Prices found vary widely (the highest is more than ${WIDE_SPREAD} times the lowest); treat this as rough.` : ""
+    return { line, from: "web", amounts, how: `${prices.length === 1 ? "A price" : `${prices.length} prices`} listed on ${sites}${scaling(prices, nights, travellers)}; the lowest to the highest.${roughWords}${convertedWords}${foreignWords}${wrongUnitWords}${subjectWords}${droppedWords}`, prices, pages: [] }
   }
 
   // The buffer: the goal's own, or BUFFER_PERCENT of the lines with an estimate, per currency.
@@ -807,9 +819,10 @@ function planVerdict(a: {
   if (!records.project) return none(`No verdict with web estimates: ${request.month === null ? "the month was skipped, so there is no date to save by" : "there is nothing in your records to project from"}.`)
 
   const digits = currencyMinorDigits(mine.currency)
-  // In whole units, rounded up: the checked figure carries no false paise and never comes in under the estimate.
+  // Always the higher end, never the cheapest: an affordability check errs towards "you need more",
+  // and a "from" price (a minimum) must never make a plan look affordable. In whole units, rounded up.
   const unit = 10 ** digits
-  const totalMinor = Math.ceil(decimalToMinor(mine.bound === "at_least" ? mine.low : mine.high, digits) / unit) * unit
+  const totalMinor = Math.ceil(decimalToMinor(mine.high, digits) / unit) * unit
   const target = Math.max(0, totalMinor - a.deposit)
   const p = records.project(target)
   const verdict = VERDICT_WORDS[p.verdict]
@@ -822,7 +835,7 @@ function planVerdict(a: {
         : mine.bound === "mixed"
           ? `${money(totalMinor)} (neither a minimum nor a maximum: "from" and "up to" prices are mixed)`
           : money(totalMinor)
-  const range = mine.low !== mine.high && !mine.bound ? ` The lines range from ${planAmount(mine)}; the higher end is checked.` : ""
+  const range = mine.low !== mine.high ? ` The lines range from ${money(decimalToMinor(mine.low, digits))} to ${money(totalMinor)}; the higher end is checked.` : ""
   const deposit = a.deposit > 0 ? ` Less your trade-in or deposit of ${money(a.deposit)}, ${money(target)} is needed.` : ""
   const missing = a.noEstimate.length > 0 ? ` Lines with no estimate aren't included: ${a.noEstimate.join(", ")}.` : ""
   const saved = records.saved ? ` ${money(records.saved.minor)} is already saved toward ${records.saved.goal}.` : ""
@@ -931,6 +944,9 @@ function planAssumptions(r: PlanRequest, records: PlanRecords, currency: string,
     )
   } else {
     list.push(r.item === "house" ? "Registration, stamp duty and loan costs aren't included." : "Loan interest isn't included; insurance and extras are the first year's.")
+    list.push(
+      `A ${r.item}'s price outside ${rangeWords(rangeFor("price", false, r.item)!)} (in rupees, after any conversion) is dropped as a misread: an accessory, a part or an instalment, not the ${r.item}.`,
+    )
   }
   if (convertedFrom.length > 0)
     list.push(

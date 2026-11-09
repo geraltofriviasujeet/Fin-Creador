@@ -6,7 +6,7 @@ import type { CheckedPlan, PlanAmount, PlanLineName, PlanRequest } from "./types
 // "Add to my goals" (10.9 follow-up): a goal prefilled from a checked plan, in code. The values
 // go into the normal goal form as its text fields, and the person changes anything before
 // saving; nothing is saved from here. Each figure is the plan's own, in the profile currency:
-// the higher end of a line's range (the one the verdict checks), or a minimum's figure. A line
+// the higher end of a line's range (the one the verdict checks), for a minimum too. A line
 // with no estimate leaves its field empty for the person to fill in.
 
 export type GoalPrefill = {
@@ -32,7 +32,8 @@ const TRIP_GOAL_LINE: Partial<Record<PlanLineName, TripCostLine>> = {
 export function lineMinor(amounts: readonly PlanAmount[], currency: string): number | null {
   const a = amounts.find((x) => x.currency === currency)
   if (!a) return null
-  return decimalToMinor(a.bound === "at_least" ? a.low : a.high, currencyMinorDigits(currency))
+  // The higher end, as the verdict checks: never the cheapest figure, even for a minimum.
+  return decimalToMinor(a.high, currencyMinorDigits(currency))
 }
 
 /** The plan's month as a goal's target date: its first day, or today when that has passed. */
