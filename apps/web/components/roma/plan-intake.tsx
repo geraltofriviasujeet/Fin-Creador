@@ -130,7 +130,7 @@ function IntakeField({
   onSkip: () => void
 }) {
   const unlisted = (q.field === "destination" || q.field === "origin") && value.trim() !== "" && !tripPlaceScope(value)
-  const hint = skipped ? "Skipped: this shows as no estimate." : unlisted ? "Not on the app's list, so it can't be priced on the web." : "hint" in q ? q.hint : undefined
+  const hint = skipped ? (q.kind === "month" ? q.skipped : "Skipped: this shows as no estimate.") : unlisted ? "Not on the app's list, so it can't be priced on the web." : "hint" in q ? q.hint : undefined
   const aside = (
     <Button type="button" variant="ghost" size="sm" onClick={onSkip} disabled={skipped} aria-label={`Skip: ${q.label}`}>
       {skipped ? "Skipped" : "Skip"}

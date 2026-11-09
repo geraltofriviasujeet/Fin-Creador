@@ -66,6 +66,13 @@ describe("recognising a plan", () => {
     expect(detectPlan("What did I spend on travel to Goa?", TODAY)).toBeNull()
   })
 
+  it("says beside the month what skipping it costs", () => {
+    const trip = intakeQuestions(detectPlan("Plan a trip to Goa", TODAY)!, TODAY).find((q) => q.field === "month")
+    expect(trip).toMatchObject({ hint: expect.stringMatching(/no verdict and no transport estimate/), skipped: "Skipped: the plan will have no verdict and no transport estimate." })
+    const car = intakeQuestions(detectPlan("Can I buy a car?", TODAY)!, TODAY).find((q) => q.field === "month")
+    expect(car).toMatchObject({ skipped: "Skipped: the plan will have no verdict." })
+  })
+
   it("leaves other questions to Roma's chat", () => {
     expect(detectPlan("What did I spend last month?", TODAY)).toBeNull()
     expect(detectPlan("How much did my Goa trip cost?", TODAY)).toBeNull()

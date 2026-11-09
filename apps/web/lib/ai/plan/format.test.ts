@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { changeParts, lineCaption, planHeading, planVerdictCard, totalFigure } from "./format"
+import { changeParts, lineCaption, planHeading, planVerdictCard, recordsLine, totalFigure } from "./format"
 import { type CheckedPlan, type PlanLine, checkedPlanSchema } from "./types"
 
 // The modal's and the PDF's wording (redesign, 2026-11-09): all from the checked plan.
@@ -83,5 +83,15 @@ describe("stat cards and ways to make it fit", () => {
     expect(changeParts("Fewer nights: stay, food and local travel come down.")).toEqual({ title: "Fewer nights", detail: "Stay, food and local travel come down." })
     expect(changeParts("Go in April 2027 instead.")).toEqual({ title: "Go in April 2027 instead", detail: null })
     expect(changeParts({ title: "Fewer nights", detail: "Stay comes down." })).toEqual({ title: "Fewer nights", detail: "Stay comes down." })
+  })
+})
+
+describe("the records-only verdict line", () => {
+  it("says the verdict once when the summary already starts with it", () => {
+    expect(recordsLine({ verdict: "No verdict.", summary: "No verdict from your records: the month was skipped." })).toBe("No verdict from your records: the month was skipped.")
+    expect(recordsLine({ verdict: "No estimate from your records.", summary: "No estimate from your records. There is no trip to scale from." })).toBe(
+      "No estimate from your records. There is no trip to scale from.",
+    )
+    expect(recordsLine({ verdict: "Yes.", summary: "At your current rate it is covered by March." })).toBe("Yes. At your current rate it is covered by March.")
   })
 })

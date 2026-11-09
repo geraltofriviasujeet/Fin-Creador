@@ -94,6 +94,12 @@ export function lineCaption(line: PlanLine, plan: CheckedPlan): string | null {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
+/** The records-only verdict in one sentence run: its word, then its summary, unless the summary already says it ("No verdict. No verdict from your records: …"). */
+export function recordsLine(records: { verdict: string; summary: string }): string {
+  const stem = records.verdict.replace(/\.$/, "").toLowerCase()
+  return records.summary.toLowerCase().startsWith(stem) ? records.summary : `${records.verdict} ${records.summary}`.trim()
+}
+
 export type PlanStatus = "fits" | "adjust" | "unknown"
 export const STATUS_WORDS: Record<PlanStatus, string> = { fits: "Fits", adjust: "Needs adjustment", unknown: "Can't say" }
 

@@ -124,7 +124,8 @@ export function detectPlan(question: string, today: IsoDate): PlanRequest | null
 
 export type IntakeQuestion =
   | { field: "destination" | "origin"; kind: "text"; label: string; hint: string; initial?: string }
-  | { field: "month"; kind: "month"; label: string; min: string }
+  /** `hint`: what skipping it costs, shown beside it before and after a skip (the person still chooses). */
+  | { field: "month"; kind: "month"; label: string; min: string; hint: string; skipped: string }
   | { field: "nights" | "travellers"; kind: "number"; label: string; min: number; max: number }
   | { field: "style"; kind: "choice"; label: string; options: { value: string; label: string }[] }
   | { field: "make"; kind: "choice"; label: string; options: { value: string; label: string }[] }
@@ -137,11 +138,16 @@ const STYLE_LABELS: Record<(typeof TRIP_STYLES)[number], string> = { budget: "Bu
 export function intakeQuestions(draft: PlanRequest, today: IsoDate): IntakeQuestion[] {
   const out: IntakeQuestion[] = []
   const month = { field: "month", kind: "month", min: today.slice(0, 7) } as const
+  // The verdict is worked out for a month, and so are a trip's fares: skipping it quietly empties both, so it says so.
+  const monthCost =
+    draft.kind === "trip"
+      ? { hint: "Skip it and the plan has no verdict and no transport estimate: both are worked out for the travel month.", skipped: "Skipped: the plan will have no verdict and no transport estimate." }
+      : { hint: "Skip it and the plan has no verdict: it is worked out for the month you buy.", skipped: "Skipped: the plan will have no verdict." }
   if (draft.kind === "trip") {
     if (draft.destination === null) out.push({ field: "destination", kind: "text", label: "Where to?", hint: "A country, an Indian state or a city. Places not on the app's list can't be priced on the web." })
     // Always asked, filled in when the question named it, so it can be changed.
     out.push({ field: "origin", kind: "text", label: "Travelling from which city?", hint: "Flights and airlines are looked up from here. Skip it and transport shows no estimate.", ...(draft.origin ? { initial: draft.origin } : {}) })
-    if (draft.month === null) out.push({ ...month, label: "Which month?" })
+    if (draft.month === null) out.push({ ...month, ...monthCost, label: "Which month?" })
     if (draft.nights === null) out.push({ field: "nights", kind: "number", label: "How many nights?", min: 1, max: 30 })
     if (draft.travellers === null) out.push({ field: "travellers", kind: "number", label: "How many travellers?", min: 1, max: 9 })
     if (draft.style === null) out.push({ field: "style", kind: "choice", label: "What kind of stay?", options: TRIP_STYLES.map((s) => ({ value: s, label: STYLE_LABELS[s] })) })
@@ -151,7 +157,7 @@ export function intakeQuestions(draft: PlanRequest, today: IsoDate): IntakeQuest
     if (draft.make === null) out.push({ field: "make", kind: "choice", label: "Which make?", options: vehicleMakes(draft.item).map((m) => ({ value: m, label: m })) })
     if (draft.model === null) out.push({ field: "model", kind: "model", label: "Which model?" })
   }
-  if (draft.month === null) out.push({ ...month, label: "When do you want to buy it?" })
+  if (draft.month === null) out.push({ ...month, ...monthCost, label: "When do you want to buy it?" })
   if (draft.depositMinor === null) out.push({ field: "depositMinor", kind: "amount", label: "Any trade-in or deposit?", hint: "What you'll put in from a trade-in or an existing deposit. Skip if none." })
   return out
 }

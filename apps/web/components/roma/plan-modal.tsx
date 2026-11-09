@@ -22,6 +22,7 @@ import {
   planHeading,
   planPrice,
   planVerdictCard,
+  recordsLine,
   shortMonth,
   totalFigure,
 } from "@/lib/ai/plan/format"
@@ -364,7 +365,7 @@ function VerdictCard({ plan, expandAll }: { plan: CheckedPlan; expandAll: boolea
             </Badge>
           </div>
           <p>
-            <span className="font-semibold">From your records:</span> {records.summary.startsWith(records.verdict) ? records.summary : `${records.verdict} ${records.summary}`}
+            <span className="font-semibold">From your records:</span> {recordsLine(records)}
           </p>
           <p className="font-heading text-xl font-semibold text-white print:text-ink">{card.headline}</p>
           <p>{card.reason}</p>
