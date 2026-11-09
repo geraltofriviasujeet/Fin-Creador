@@ -37,6 +37,35 @@ describe("recognising a plan", () => {
     expect(intakeQuestions(detectPlan("Can I buy a house in March 2028?", TODAY)!, TODAY).map((q) => q.field)).toEqual(["depositMinor"])
   })
 
+  it("recognises the natural ways people ask for a trip plan, in code", () => {
+    // The one from dev: no trip word, a route to a place on the list.
+    expect(detectPlan("make my plan from delhi to shillong?", TODAY)).toMatchObject({ kind: "trip", origin: "Delhi", destination: "Shillong" })
+    expect(detectPlan("plan my trip to Kerala", TODAY)).toMatchObject({ kind: "trip", destination: "Kerala" })
+    expect(detectPlan("Plan a trip to Singapore", TODAY)).toMatchObject({ kind: "trip", destination: "Singapore" })
+    // A place not on the app's list is still a trip; its destination is asked again.
+    expect(detectPlan("Plan a trip to Bali", TODAY)).toMatchObject({ kind: "trip", destination: null })
+    expect(detectPlan("I want to go to Shillong", TODAY)).toMatchObject({ kind: "trip", destination: "Shillong" })
+    expect(detectPlan("We'd like to visit Japan in March", TODAY)).toMatchObject({ kind: "trip", destination: "Japan", month: "2027-03" })
+    expect(detectPlan("help me plan our holiday to Goa", TODAY)).toMatchObject({ kind: "trip", destination: "Goa" })
+    expect(detectPlan("Can I afford a trip to Thailand?", TODAY)).toMatchObject({ kind: "trip", destination: "Thailand" })
+    expect(detectPlan("Should we take a vacation in December?", TODAY)).toMatchObject({ kind: "trip", destination: null, month: "2026-12" })
+  })
+
+  it("recognises the natural ways people ask for a purchase plan", () => {
+    expect(detectPlan("should I buy a car", TODAY)).toMatchObject({ kind: "purchase", item: "car" })
+    expect(detectPlan("I want to buy a bike", TODAY)).toMatchObject({ kind: "purchase", item: "bike" })
+    expect(detectPlan("want to buy a car? can you suggest some under 1200000 budget", TODAY)).toMatchObject({ kind: "purchase", item: "car" })
+    expect(detectPlan("We're thinking of buying a flat next year", TODAY)).toMatchObject({ kind: "purchase", item: "house" })
+  })
+
+  it("leaves questions about the past, and plans that aren't trips, to Roma's chat", () => {
+    expect(detectPlan("how much did I spend on travel last year", TODAY)).toBeNull()
+    expect(detectPlan("Did I take a trip last year?", TODAY)).toBeNull()
+    expect(detectPlan("I want to go over my budget for October", TODAY)).toBeNull()
+    expect(detectPlan("Make a plan to reduce my spending", TODAY)).toBeNull()
+    expect(detectPlan("What did I spend on travel to Goa?", TODAY)).toBeNull()
+  })
+
   it("leaves other questions to Roma's chat", () => {
     expect(detectPlan("What did I spend last month?", TODAY)).toBeNull()
     expect(detectPlan("How much did my Goa trip cost?", TODAY)).toBeNull()

@@ -4,17 +4,44 @@ import { TRIP_STYLES } from "../search/query"
 import { type PlanRequest, type PurchasePlanRequest, type TripPlanRequest, planRequest } from "./types"
 
 // The plan intake (10.9), in code: a question that asks for a plan ("plan my trip to Goa",
-// "can I buy a car") is recognised here, what it already says is filled in, and only the
+// "make my plan from Delhi to Shillong", "can I buy a car", "I want to buy a bike") is recognised here, what it already says is filled in, and only the
 // missing fields are asked, with questions written here, never by the model. Every question
 // can be skipped: a skipped field stays null and the lines that need it are "no estimate".
 
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
 const MONTH_WORD = new RegExp(`\\bin\\s+(${MONTHS.map((m) => `${m.slice(0, 3)}(?:${m.slice(3)})?`).join("|")})\\b(?:\\s+(\\d{4}))?`, "i")
 
-const TRIP = /\b(?:plan|planning)\b[^.?!]*\b(?:trip|holiday|vacation|travel)\b|\b(?:trip|holiday|vacation)\b[^.?!]*\bplan\b/i
-const PURCHASE = /\b(?:can i|could i|should i)\s+(?:afford|buy|get)\b|\bplan(?:ning)?\s+(?:to\s+buy|buying|for\s+(?:a|an|my)\s+new)\b/i
+// A trip plan, in the ways people ask (2026-11-09):
+//   * a plan and a trip word: "plan my trip", "plan a trip to Goa", "help me plan our holiday";
+//   * affording or taking a trip ahead: "can I afford a trip to Bali", "should I take a vacation";
+//   * wanting to go somewhere: "I want to go to Shillong", "we'd like to travel to Japan";
+//   * a plan with a route to a place on the app's list: "make my plan from Delhi to Shillong"
+//     (PLAN_ROUTE, checked in detectPlan), so "plan to reduce my spending" isn't a trip.
+// A question about past travel ("how much did I spend on travel last year") is none of these.
+const TRIP = new RegExp(
+  [
+    /\b(?:plan|planning)\b[^.?!]*\b(?:trip|holiday|vacation|travel)\b|\b(?:trip|holiday|vacation)\b[^.?!]*\bplan\b/.source,
+    // Asked ahead, never a past trip: "did I take a trip last year" isn't one.
+    /\b(?:afford|(?:can|could|should|shall)\s+(?:i|we)\s+(?:take|go on|book))\s+(?:a|an|my|our|the|this)?\s*(?:\w+\s+)?(?:trip|holiday|vacation)\b/.source,
+    // Going "to" a place, or visiting one: "want to go over my budget" isn't one.
+    /\b(?:want|wanna|would like|'d like|wish|hope|planning|thinking of|thinking about)\s+(?:to\s+)?(?:(?:go(?:ing)?|travel(?:ling)?|fly(?:ing)?)\s+to|visit(?:ing)?)\s+[A-Za-z]/.source,
+  ].join("|"),
+  "i",
+)
+const PLAN_ROUTE = /\b(?:plan|planning|itinerary)\b[^.?!]*\b(?:from\s+[A-Za-z][^.?!]*?\s+)?to\s+[A-Za-z]/i
+const PURCHASE = new RegExp(
+  [
+    /\b(?:can i|could i|should i)\s+(?:afford|buy|get)\b|\bplan(?:ning)?\s+(?:to\s+buy|buying|for\s+(?:a|an|my)\s+new)\b/.source,
+    // "I want to buy a bike", "we'd like to get a car", "thinking of buying a flat".
+    /\b(?:want|wanna|would like|'d like|need|hope|wish|plan|planning|thinking of|thinking about)\s+(?:to\s+)?(?:buy(?:ing)?|get(?:ting)?|purchas(?:e|ing))\b/.source,
+  ].join("|"),
+  "i",
+)
 const ORIGIN = /\bfrom\s+([A-Za-z][A-Za-z .'-]{1,39}?)(?=\s+(?:to|in|for|with|on|this|next|over|during)\b|[,.?!]|$)/i
-const DESTINATION = /\b(?:trip|holiday|vacation|travel(?:ling)?|go(?:ing)?|visit(?:ing)?)(?:\s+from\s+[A-Za-z .'-]{1,39}?)?\s+to\s+([A-Za-z][A-Za-z .'-]{1,39}?)(?=\s+(?:in|for|with|on|this|next|over|during)\b|[,.?!]|$)/i
+const DESTINATION =
+  /\b(?:trip|holiday|vacation|travel(?:ling)?|go(?:ing)?|fly(?:ing)?|visit(?:ing)?|plan|itinerary)(?:\s+from\s+[A-Za-z .'-]{1,39}?)?\s+to\s+([A-Za-z][A-Za-z .'-]{1,39}?)(?=\s+(?:in|for|with|on|this|next|over|during)\b|[,.?!]|$)|\bvisit(?:ing)?\s+([A-Za-z][A-Za-z .'-]{1,39}?)(?=\s+(?:in|for|with|on|this|next|over|during)\b|[,.?!]|$)/i
+/** "shillong" as "Shillong": a place as the person typed it, capitalised for the plan's title. */
+const placeWords = (place: string) => place.replace(/(^|[\s-])(\p{Ll})/gu, (_, sep: string, ch: string) => sep + ch.toLocaleUpperCase())
 const ITEMS: [RegExp, PurchasePlanRequest["item"]][] = [
   [/\b(?:bike|motorbike|motorcycle|scooter|scooty)\b/i, "bike"],
   [/\b(?:car|suv|sedan|hatchback)\b/i, "car"],
@@ -34,8 +61,11 @@ export function monthIn(text: string, today: IsoDate): string | null {
 }
 
 function tripFrom(text: string, today: IsoDate): TripPlanRequest {
-  const place = DESTINATION.exec(text)?.[1]?.trim() ?? null
-  const from = ORIGIN.exec(text)?.[1]?.trim() ?? null
+  const route = DESTINATION.exec(text)
+  const typed = (route?.[1] ?? route?.[2])?.trim()
+  const place = typed ? placeWords(typed) : null
+  const fromTyped = ORIGIN.exec(text)?.[1]?.trim()
+  const from = fromTyped ? placeWords(fromTyped) : null
   const nights = /\b(\d{1,2})\s*nights?\b/i.exec(text)
   const days = /\b(\d{1,2})\s*days?\b/i.exec(text)
   const people = /\b(\d)\s*(?:people|persons|travell?ers|adults|of us)\b/i.exec(text)
@@ -83,6 +113,11 @@ function purchaseFrom(text: string, today: IsoDate): PurchasePlanRequest | null 
 /** The plan a question asks for, with what it already says; null when it isn't one. */
 export function detectPlan(question: string, today: IsoDate): PlanRequest | null {
   if (TRIP.test(question)) return tripFrom(question, today)
+  // A plan with a route: a trip only when the place is one the app knows.
+  if (PLAN_ROUTE.test(question)) {
+    const trip = tripFrom(question, today)
+    if (trip.destination !== null) return trip
+  }
   if (PURCHASE.test(question)) return purchaseFrom(question, today)
   return null
 }

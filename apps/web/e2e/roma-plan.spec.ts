@@ -162,4 +162,12 @@ test("a plan question can be sent as an ordinary question instead", async ({ pag
   await intake.getByRole("button", { name: "Cancel" }).click()
   await expect(intake).toHaveCount(0)
   await expect(page.getByRole("list", { name: "Roma's answers" })).toHaveCount(0)
+
+  // Asked in everyday words, with no "trip": still a plan, and the intake has the route filled in.
+  await page.getByLabel("Your question").fill("make my plan from delhi to shillong?")
+  await page.getByRole("button", { name: "Ask Roma" }).click()
+  await expect(intake).toBeVisible()
+  await expect(intake.getByText(/From your question: Shillong/)).toBeVisible()
+  await expect(intake.getByLabel("Travelling from which city?", { exact: true })).toHaveValue("Delhi")
+  await expect(page.getByRole("list", { name: "Roma's answers" })).toHaveCount(0)
 })
