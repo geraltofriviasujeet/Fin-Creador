@@ -3,7 +3,7 @@ import { type GoalProjection, TRIP_LOOKBACK_MONTHS, currencyMinorDigits, formatM
 import { tripPlaceScope } from "@fin-creador/schemas"
 import { DEADLINE_MS } from "../chat"
 import { LlmError, type LlmMessage, type LlmProvider, type LlmUsage, NO_USAGE, addUsage } from "../llm/types"
-import type { WebLookupInput } from "../search/query"
+import type { PriceBand, WebLookupInput } from "../search/query"
 import type { LookupDepth, LookupOutcome, LookupRefusal } from "../search/session"
 import { addDecimals, compareDecimals, decimalToMinor, multiplyDecimal } from "../search/totals"
 import type { SearchResult } from "../search/types"
@@ -12,9 +12,10 @@ import { VERDICT_WORDS, monthName } from "../tools/goals"
 import type { ToolContext, TotalBound } from "../tools/types"
 import { WIDE_SPREAD, isWide, lineWords } from "./format"
 import { type Mention, type PriceUnit, SUBJECT_WORDS, aboutPage, aboutPrice, dishesIn, placesIn, shoppingIn, unitAt } from "./context"
+import { CANDIDATES_OFFERED, type ModelCandidate, modelCandidates } from "./candidates"
 import { NAMES_PER_KIND, carrierCandidates, hotelCandidates, listingHotelAt, nameKey, priceAt } from "./names"
 import { RATES_ON, RATES_SOURCE, canConvert, convertDecimal, rateWords } from "./rates"
-import type { CheckedPlan, PlanAmount, PlanChange, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanSignal, PlanVerdict, PurchasePlanRequest } from "./types"
+import type { CheckedPlan, PlanAmount, PlanCandidate, PlanCandidates, PlanChange, PlanLine, PlanLineName, PlanNames, PlanPrice, PlanRequest, PlanSignal, PlanVerdict, PurchasePlanRequest } from "./types"
 
 // One plan, run (10.9). In order:
 //   1. The person's records: the records-only verdict, any matching goal's cost lines and
@@ -91,7 +92,7 @@ const REFUSALS: Record<LookupRefusal, string> = {
   private: "This lookup couldn't be made.",
   unsafe: "This lookup couldn't be made.",
   off: "Web lookups are off right now.",
-  monthly_cap: "Web lookups are used up for this month.",
+  monthly_cap: "Web lookups are used up for this month. They reset on the 1st of next month.",
   daily_limit: "You've used your web lookups for today. This is FinCreador's own daily limit, not the search provider's, and it resets at midnight in your time zone.",
   question_limit: "This plan's web lookups were used up before this line.",
   failed: "The lookup couldn't be completed.",
@@ -101,6 +102,17 @@ const REFUSALS: Record<LookupRefusal, string> = {
 const NOT_CHECKED = "The prices found couldn't be checked in time, so none is used. The pages found are listed."
 const NONE_PICKED = "No price on the pages found could be confirmed for this line."
 const NO_WEB = "Web lookups are off right now, so this line wasn't looked up."
+const RECORDS_ONLY = "Not looked up: you chose to make this plan from your records only."
+/** Why a plan has no web lookups at all, or null when one ran (or none was asked for). */
+type WebOff = NonNullable<CheckedPlan["verdicts"]["webOff"]>
+function webOffOf(request: PlanRequest, web: unknown, outcomes: readonly (LookupOutcome | null)[]): WebOff | null {
+  if (request.recordsOnly) return { reason: "records_only", message: "Made from your records only: no web lookups ran, as you chose." }
+  if (outcomes.length === 0) return null
+  if (!web) return { reason: "off", message: "Web lookups are off right now, so nothing was looked up." }
+  if (outcomes.some((o) => o?.ok)) return null
+  const capped = outcomes.find((o): o is Extract<LookupOutcome, { ok: false }> => !!o && !o.ok && (o.reason === "daily_limit" || o.reason === "monthly_cap" || o.reason === "off"))
+  return capped ? { reason: capped.reason as WebOff["reason"], message: REFUSALS[capped.reason] } : null
+}
 
 /** What the plan asks for, lookups and skipped lines. */
 function lookupsFor(request: PlanRequest, goalLines: Partial<Record<PlanLineName, number>>, today: string): { lookups: Lookup[]; skips: Skip[] } {
@@ -187,6 +199,8 @@ export const pickInput = z
       .max(9),
     carriers: z.array(z.string().regex(/^c\d{1,2}$/)).max(NAMES_PER_KIND),
     hotels: z.array(z.string().regex(/^h\d{1,2}$/)).max(NAMES_PER_KIND),
+    /** A purchase shortlist's models; absent on a trip. */
+    models: z.array(z.string().regex(/^m\d{1,2}$/)).max(CANDIDATES_OFFERED).optional(),
   })
   .strict()
 type Picks = z.infer<typeof pickInput>
@@ -194,12 +208,12 @@ type Picks = z.infer<typeof pickInput>
 const PICK_TOOL = {
   name: "plan_pick",
   description:
-    "Picks, by id, the prices that fit each cost line of the plan, with what each price covers as its page says (per), and the carriers and hotels that fit. Pick only what the page text shows is for this line and this place; pick nothing for a line when nothing fits. Never type an amount or a name.",
+    "Picks, by id, the prices that fit each cost line of the plan, with what each price covers as its page says (per), the carriers and hotels that fit, and for a purchase shortlist the models that suit its main use. Pick only what the page text shows is for this line and this place; pick nothing for a line when nothing fits. Never type an amount or a name.",
   inputSchema: (({ $schema: _s, ...rest }) => rest)(z.toJSONSchema(pickInput) as Record<string, unknown>),
 }
 
 const PICK_SYSTEM = [
-  "You help build a cost plan. The app found prices and names on web pages, each with an id. Call the plan_pick tool once with the ids that fit each cost line, and the carriers and hotels that fit. A price fits a line only when its own text is clearly that cost for that place; 'for' is what the app found it is for, next to it on its page. Say what each price covers (per) exactly as its text says: total, night, person, person_night, day_person, or day (a day for the whole party, such as a car's day hire). 'unit' is what the app found written next to the price. If nothing fits, call plan_pick with empty lists. Write nothing else, and no tags.",
+  "You help build a cost plan. The app found prices and names on web pages, each with an id. Call the plan_pick tool once with the ids that fit each cost line, and the carriers and hotels that fit. A price fits a line only when its own text is clearly that cost for that place; 'for' is what the app found it is for, next to it on its page. Say what each price covers (per) exactly as its text says: total, night, person, person_night, day_person, or day (a day for the whole party, such as a car's day hire). 'unit' is what the app found written next to the price. For a purchase shortlist, pick in 'models' up to 6 model ids that suit the plan's main use (use), judged by each model's own text and facts only; leave 'lines' empty. If nothing fits, call plan_pick with empty lists. Write nothing else, and no tags.",
 ]
 
 /** Time a second ask needs; with less left, a reply without the tool call ends the round. */
@@ -508,6 +522,8 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   } catch {
     records = { records: { verdict: "No verdict.", summary: "No verdict from your records: they couldn't be read just now." }, goal: null, saved: null, project: null, assumptions: [] }
   }
+  // A bike or car without a make: a model shortlist instead of cost lines.
+  if (isShortlist(request)) return runShortlist(request, deps, records, deadline)
   const goalLines = records.goal?.lines ?? {}
 
   // 2. Lookups, all at once; each search stops at its own time-out.
@@ -625,13 +641,13 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     }
     const skip = skips.find((s) => s.line === line)
     if (skip) return none(line, skip.how)
-    if (!web) return none(line, NO_WEB)
+    if (!web) return none(line, request.recordsOnly ? RECORDS_ONLY : NO_WEB)
     const o = found(line)
     const s = screened.get(line)
     // Why the line's own lookup gave no price, in words after "No estimate:"; null when it did.
     let why: string | null = null
     let checked: PlanPrice[] = []
-    if (!o) why = NO_WEB
+    if (!o) why = request.recordsOnly ? RECORDS_ONLY : NO_WEB
     else if (!o.ok) why = REFUSALS[o.reason]
     else if (o.prices.length === 0) why = "no price was found on the pages looked up."
     else if (!s || s.prices.length === 0) why = s && s.foreign.size > 0 && s.noSubject === 0 && s.wrongUnit.size === 0 ? `prices found only in ${currencyList([...s.foreign.keys()])}, which the app has no exchange rate for.` : ""
@@ -724,7 +740,8 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
   const deposit = request.kind === "purchase" ? (request.depositMinor ?? 0) : 0
   const saved = records.saved
   const hasWeb = lines.some((l) => l.from === "web")
-  const { web: webVerdict, changes, checked, figures } = planVerdict({ request, records, mine, noEstimate, deposit, hasWeb, money, today })
+  const webOff = webOffOf(request, web, outcomes.map((o) => o.outcome))
+  const { web: webVerdict, changes, checked, figures } = planVerdict({ request, records, mine, noEstimate, deposit, hasWeb, money, today, webOff })
   const both = request.kind === "trip" ? bothSignals({ request, records, web: webVerdict, checked, noEstimate, money }) : null
 
   // Every page used, and when nothing could be checked every page found: a spent lookup is never silent.
@@ -742,7 +759,7 @@ export async function runPlan(request: PlanRequest, deps: PlanDeps): Promise<Pla
     carriers,
     // Hotels are on the stay line (10.9 follow-up); older stored plans keep their own list.
     hotels: null,
-    verdicts: { totals, records: records.records, web: webVerdict, ...(both ? { both } : {}), ...(figures ? { figures } : {}) },
+    verdicts: { totals, records: records.records, web: webVerdict, ...(both ? { both } : {}), ...(figures ? { figures } : {}), ...(webOff ? { webOff } : {}) },
     changes,
     assumptions: planAssumptions(request, records, currency, [...new Set(lines.flatMap((l) => l.prices.flatMap((p) => (p.converted ? [p.currency] : []))))]),
     sources,
@@ -792,6 +809,15 @@ function intakeFields(r: PlanRequest, money: (minor: number) => string): Checked
       { label: "Style", value: r.style },
     ]
   }
+  if (isShortlist(r)) {
+    return [
+      { label: "Buying", value: r.item },
+      { label: "Main use", value: r.use ? USE_LABELS[r.use] : null },
+      { label: "Budget", value: r.budgetMinor === null || r.budgetMinor === undefined ? "From your records" : money(r.budgetMinor) },
+      { label: "When", value: r.month ? monthName(`${r.month}-01`) : null },
+      { label: "Trade-in or deposit", value: r.depositMinor === null ? null : money(r.depositMinor) },
+    ]
+  }
   return [
     { label: "Buying", value: r.item },
     { label: "Make", value: r.make },
@@ -811,10 +837,11 @@ function planVerdict(a: {
   hasWeb: boolean
   money: (minor: number) => string
   today: string
+  webOff: WebOff | null
 }): { web: PlanVerdict; changes: PlanChange[]; checked: Checked | null; figures: PlanFigures | null } {
   const { request, records, mine, money } = a
   const none = (summary: string) => ({ web: { verdict: "No verdict.", summary }, changes: [], checked: null, figures: null })
-  if (!a.hasWeb) return none("No web estimates in this plan: no line could be priced from the web.")
+  if (!a.hasWeb) return none(a.webOff ? `No web estimates in this plan. ${a.webOff.message}` : "No web estimates in this plan: no line could be priced from the web.")
   if (!mine) return none("No verdict with web estimates: no line is priced in your currency.")
   if (!records.project) return none(`No verdict with web estimates: ${request.month === null ? "the month was skipped, so there is no date to save by" : "there is nothing in your records to project from"}.`)
 
@@ -956,8 +983,197 @@ function planAssumptions(r: PlanRequest, records: PlanRecords, currency: string,
   return [...list, ...records.assumptions].slice(0, 16)
 }
 
+/** A shortlist request: a bike or car whose make wasn't given ("I already know the model" not used). */
+export const isShortlist = (r: PlanRequest): r is PurchasePlanRequest & { item: "bike" | "car" } => r.kind === "purchase" && r.item !== "house" && r.make === null
+
+/** A main use in the person's words. */
+export const USE_LABELS: Record<NonNullable<PurchasePlanRequest["use"]>, string> = { commute: "City commute", touring: "Touring", family: "Family", first: "First vehicle" }
+
+/** Models on a shortlist, at most. */
+export const SHORTLIST_SIZE = 6
+/**
+ * Where a budget's price band starts (whole rupees): below the first, entry-level; below the
+ * second, mid-range; else premium. Only the band's word reaches a query, never the figure.
+ */
+export const BAND_EDGES: Record<"bike" | "car", readonly [number, number]> = { bike: [1_20_000, 2_50_000], car: [8_00_000, 20_00_000] }
+
+/** The band for a budget in rupees; null without one, or in another currency (the edges are rupees). */
+export function bandFor(item: "bike" | "car", budgetMinor: number | null, currency: string): PriceBand | null {
+  if (budgetMinor === null || currency !== "INR") return null
+  const [mid, premium] = BAND_EDGES[item]
+  return budgetMinor < mid * 100 ? "entry-level" : budgetMinor < premium * 100 ? "mid-range" : "premium"
+}
+
+const PLAN_SHORTLIST_NOTE = "Listed on the pages found, not Roma's recommendation. Prices are as each page lists them, not quotes."
+
+/**
+ * A model shortlist (10.9 follow-up). In order:
+ *   1. The budget: the person's own, or free money by the month after other goals (records),
+ *      plus what is saved toward a matching goal and any trade-in or deposit; its band word
+ *      (BAND_EDGES) is all a query gets of it.
+ *   2. Two lookups from fixed templates: by main use, and by band.
+ *   3. Candidates found in code (candidates.ts): a listed make and model with a price on its
+ *      own card, inside the purchase's plausible range; kept when the lower price is within the
+ *      budget. The model picks ids that suit the use; it never types a name or an amount.
+ *   4. A fit per model on the same projection (its higher price, less trade-in or deposit),
+ *      and one verdict for the list. "Pick this model" then runs the usual model plan.
+ */
+async function runShortlist(request: PurchasePlanRequest & { item: "bike" | "car" }, deps: PlanDeps, records: PlanRecords, deadline: number): Promise<PlanRun> {
+  const { ctx } = deps
+  const { currency } = ctx
+  const web = ctx.web ?? null
+  const money = (minor: number) => formatMoney(minor, { currency })
+  const deposit = request.depositMinor ?? 0
+  const savedMinor = records.saved?.minor ?? 0
+  // Free money by the month: the projection on a target just past what is saved (a reached target has no figure).
+  const freeMinor = records.project ? (records.project(savedMinor + 1).availableByTargetMinor ?? null) : null
+  // Records that leave nothing free by the month give no budget to keep to: every model is listed, each with its fit.
+  const nothingFree = (request.budgetMinor ?? null) === null && freeMinor !== null && freeMinor <= 0
+  const budget: PlanCandidates["budget"] =
+    request.budgetMinor !== null && request.budgetMinor !== undefined
+      ? { currency, minor: request.budgetMinor, from: "intake" }
+      : freeMinor !== null && !nothingFree
+        ? { currency, minor: freeMinor + savedMinor + deposit, from: "records" }
+        : null
+  const band = nothingFree ? "entry-level" : bandFor(request.item, budget?.minor ?? null, currency)
+
+  // 2. Both lookups at once.
+  const month = request.month
+  const inputs: WebLookupInput[] = [
+    { kind: "models", vehicle: request.item, month, by: "use", use: request.use ?? null },
+    { kind: "models", vehicle: request.item, month, by: "band", band },
+  ]
+  const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now() - MARGIN_MS))
+  const outcomes = web ? await Promise.all(inputs.map((input) => web.lookup(input, signal))) : []
+  const results: SearchResult[] = []
+  for (const o of outcomes) if (o.ok) for (const r of o.results) if (!results.some((x) => x.url === r.url)) results.push(r)
+  const refused = outcomes.flatMap((o) => (o.ok ? [] : [o.reason]))
+
+  // 3. Candidates in code, kept to the budget (rupees only: listing prices are in rupees).
+  const found = modelCandidates(results, request.item, PURCHASE_SANITY[request.item])
+  const budgetRupees = budget && currency === "INR" ? minorToDecimal(budget.minor, currency) : null
+  const within = budgetRupees === null ? found.candidates : found.candidates.filter((c) => compareDecimals(c.low, budgetRupees) <= 0)
+  const overBudget = found.candidates.length - within.length
+  const affordable = within.slice(0, CANDIDATES_OFFERED)
+  const brief = {
+    plan: { kind: "purchase", item: request.item, use: request.use ?? null },
+    models: affordable.map((c) => ({ id: c.id, name: `${c.make} ${c.model}`, site: c.site, facts: c.facts, text: c.quote })),
+  }
+  const round = affordable.length > 0 ? await pick(deps.provider, brief, deadline) : { picks: null, outcome: "no_candidates" as const, usage: NO_USAGE, unknown: false, calls: 0 }
+  const picked = round.picks ? affordable.filter((c) => round.picks!.models?.includes(c.id)).slice(0, SHORTLIST_SIZE) : []
+
+  // 4. A fit per model, on its higher price in whole rupees, rounded up.
+  const fitOf = (c: ModelCandidate): PlanSignal => {
+    if (currency !== "INR") return { met: "unknown", summary: `Not checked: the price is in rupees and your records are in ${currency}.` }
+    if (!records.project) return { met: "unknown", summary: request.month === null ? "Not checked: the month was skipped." : "Not checked: there is nothing in your records to project from." }
+    const priceMinor = Math.ceil(decimalToMinor(c.high, 2) / 100) * 100
+    const p = records.project(Math.max(0, priceMinor - deposit))
+    const when = monthName(`${request.month}-01`)
+    const price = money(priceMinor)
+    const less = deposit > 0 ? `, less your ${money(deposit)} trade-in or deposit,` : ""
+    if (p.verdict === "yes") return { met: "yes", summary: `Fits: at your current rate its higher price of ${price}${less} is covered by ${when}, after your other goals.` }
+    if (p.verdict === "no")
+      return { met: "no", summary: `Short: its higher price of ${price}${less} isn't covered by ${when}${p.extraMonthlyMinor !== null ? `; ${money(p.extraMonthlyMinor)} more a month would cover it` : ""}.` }
+    return { met: "unknown", summary: "There aren't enough months in your records to say." }
+  }
+  const listed: PlanCandidate[] = picked.map((c) => ({
+    make: c.make,
+    model: c.model,
+    currency: "INR",
+    low: c.low,
+    high: c.high,
+    ...(c.bound ? { bound: c.bound } : {}),
+    exShowroom: c.exShowroom,
+    facts: c.facts.slice(0, 6),
+    site: c.site,
+    url: c.url,
+    fit: fitOf(c),
+  }))
+
+  const kinds = request.item === "bike" ? "bikes" : "cars"
+  const budgetWords = budget ? ` within ${budget.from === "intake" ? "your budget of" : "what your records leave free by the month, plus savings and any trade-in:"} ${money(budget.minor)}` : ""
+  const dropped = [
+    found.drops.outOfRange > 0 ? `${found.drops.outOfRange} ${found.drops.outOfRange === 1 ? "price was" : "prices were"} outside ${rangeWords(rangeFor("price", false, request.item)!)} and dropped as implausible` : null,
+    overBudget > 0 ? `${overBudget} ${overBudget === 1 ? "model was" : "models were"} over the budget` : null,
+  ].filter(Boolean)
+  const droppedWords = dropped.length > 0 ? ` ${dropped.join("; ")}.`.replace(/^ (.)/, (_, c: string) => ` ${c.toUpperCase()}`) : ""
+  let note: string
+  const webOff = webOffOf(request, web, web ? outcomes : [null])
+  if (webOff) note = `No models looked up. ${webOff.message}`
+  else if (results.length === 0) note = `No models looked up: ${refused.length > 0 ? REFUSALS[refused[0]!] : "the lookups found no pages."}`
+  else if (found.candidates.length === 0) note = `No model with a price could be confirmed on the pages found, so none is suggested.${droppedWords}`
+  else if (affordable.length === 0) note = `No model listed on the pages found is priced${budgetWords}, so none is suggested.${droppedWords}`
+  else if (!round.picks) note = round.outcome === "timeout" ? "The models found couldn't be checked in time, so none is listed. The pages found are in the sources." : "The models found couldn't be checked, so none is listed. The pages found are in the sources."
+  else if (listed.length === 0) note = `No model on the pages found suits the main use, so none is suggested.${droppedWords}`
+  else
+    note = `${PLAN_SHORTLIST_NOTE} ${kinds.charAt(0).toUpperCase()}${kinds.slice(1)} with a price on their own listing${budgetWords}.${
+      nothingFree ? ` Your records leave nothing free by ${monthName(`${request.month}-01`)} after your other goals, so the list isn't kept to a budget; each model says whether it fits.` : ""
+    }${droppedWords}`
+
+  const fits = listed.filter((c) => c.fit.met === "yes").length
+  const known = listed.filter((c) => c.fit.met !== "unknown").length
+  const when = request.month ? monthName(`${request.month}-01`) : null
+  const webVerdict: PlanVerdict =
+    listed.length === 0
+      ? { verdict: "No verdict.", summary: "No verdict: no model is listed." }
+      : known === 0
+        ? { verdict: "No verdict.", summary: `No verdict: ${listed[0]!.fit.summary.replace(/^Not checked: /, "").replace(/^There/, "there")}` }
+        : {
+            verdict: fits > 0 ? "Yes." : "No.",
+            summary: `${fits > 0 ? "Yes." : "No."} ${fits} of ${listed.length} ${listed.length === 1 ? "model" : "models"} listed ${fits === 1 ? "fits" : "fit"} by ${when} at ${listed.length === 1 ? "its" : "each one's"} higher price${deposit > 0 ? ", less your trade-in or deposit" : ""}, after your other goals.`,
+          }
+  // Nothing fits: the cheapest model's own ways to make it fit.
+  const changes: PlanChange[] = []
+  const cheapest = [...listed].sort((a, b) => compareDecimals(a.high, b.high))[0]
+  if (fits === 0 && known > 0 && cheapest && records.project) {
+    const p = records.project(Math.max(0, Math.ceil(decimalToMinor(cheapest.high, 2) / 100) * 100 - deposit))
+    if (p.extraMonthlyMinor !== null) changes.push({ title: `Save ${money(p.extraMonthlyMinor)} more a month`, detail: `That covers the ${cheapest.make} ${cheapest.model} by ${when}.` })
+    if (p.reachMonth) changes.push({ title: `Buy in ${monthName(p.reachMonth)} instead`, detail: `The ${cheapest.make} ${cheapest.model} fits by then at your current rate.` })
+    if (deposit === 0) changes.push({ title: "Add a trade-in or deposit", detail: "It lowers what is needed." })
+  }
+
+  const pagesFound = results.slice(0, 10).map((r) => ({ site: siteOf(r.url), url: r.url }))
+  const plan: CheckedPlan = {
+    v: 1,
+    kind: "purchase",
+    intake: { title: titleOf(request), fields: intakeFields(request, money), request },
+    lines: [],
+    saved: records.saved ? { goal: records.saved.goal, minor: records.saved.minor, currency } : null,
+    carriers: null,
+    hotels: null,
+    verdicts: {
+      totals: [],
+      records: records.records,
+      web: webVerdict,
+      figures: { currency, month: request.month, freeMinor, extraMonthlyMinor: null },
+      ...(webOff ? { webOff } : {}),
+    },
+    changes,
+    assumptions: [
+      PLAN_SHORTLIST_NOTE,
+      `A model is listed only when its page names a make and model on the app's list with a price on the same card; nothing else about it is inferred. "Ex-showroom" is shown only where the page says so.`,
+      `A ${request.item}'s price outside ${rangeWords(rangeFor("price", false, request.item)!)} is dropped as a misread: an accessory, a part or an instalment, not the ${request.item}.`,
+      "Each model's fit checks its higher price, less any trade-in or deposit, against free money by the month after your other goals. Loan interest, insurance and extras aren't included: pick a model for those.",
+      "The lookups name only the kind of vehicle, its main use and a price band (entry-level, mid-range or premium), never your budget's figure.",
+      ...records.assumptions,
+    ].slice(0, 16),
+    sources: uniqueSources(listed.length > 0 ? listed.map(({ site, url }) => ({ site, url })) : pagesFound),
+    candidates: { listed, note, budget },
+  }
+  return { plan, answer: planAnswer(plan), calls: round.calls, usage: round.usage, unknownCalls: round.unknown ? 1 : 0, picked: round.outcome }
+}
+
 /** The chat answer, written in code from the checked plan. */
 export function planAnswer(plan: CheckedPlan): string {
+  if (plan.candidates) {
+    const c = plan.candidates
+    return [
+      `${plan.intake.title}. ${c.listed.length === 0 ? c.note : `${c.listed.length} ${c.listed.length === 1 ? "model" : "models"} listed.`}`,
+      `From your records: ${plan.verdicts.records.summary}`,
+      `With web estimates: ${plan.verdicts.web.summary}`,
+      "Open the plan for each model's price, its source and whether it fits. Models are listed on the pages found, not Roma's recommendation.",
+    ].join("\n\n")
+  }
   const priced = plan.lines.filter((l) => l.from !== "not_estimated")
   const estimated = priced.filter((l) => l.from !== "none").length
   const both = plan.verdicts.both

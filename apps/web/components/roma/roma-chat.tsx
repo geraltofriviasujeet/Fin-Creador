@@ -301,7 +301,14 @@ function Conversation({
                           </span>
                         )}
                       </p>
-                      <Reply reply={turn.reply} madeOn={turn.asOf ?? todayIn(timeZone)} reopened={turn.asOf !== undefined} currency={currency} today={todayIn(timeZone)} />
+                      <Reply
+                        reply={turn.reply}
+                        madeOn={turn.asOf ?? todayIn(timeZone)}
+                        reopened={turn.asOf !== undefined}
+                        currency={currency}
+                        today={todayIn(timeZone)}
+                        onPickModel={pending ? undefined : (plan, words) => void send(words, plan)}
+                      />
                       {turn.asOf && <p className="text-xs text-muted-foreground">Answered on {turn.asOf}. Ask again for today’s figures.</p>}
                       {turn.reply.status === "answer" && !turn.reply.saved && !turn.asOf && (
                         <p className="text-xs text-muted-foreground">This answer couldn’t be saved to your conversations.</p>
@@ -333,7 +340,22 @@ function RomaMark() {
   )
 }
 
-function Reply({ reply, madeOn, reopened, currency, today }: { reply: ChatResponseBody; madeOn: string; reopened: boolean; currency: string; today: string }) {
+function Reply({
+  reply,
+  madeOn,
+  reopened,
+  currency,
+  today,
+  onPickModel,
+}: {
+  reply: ChatResponseBody
+  madeOn: string
+  reopened: boolean
+  currency: string
+  today: string
+  /** A shortlist's "Pick this model": makes that model's plan (a new question); absent while one is being answered. */
+  onPickModel?: (plan: PlanRequest, words: string) => void
+}) {
   const [planOpen, setPlanOpen] = useState(false)
   if (reply.status === "error") {
     return (
@@ -356,6 +378,7 @@ function Reply({ reply, madeOn, reopened, currency, today }: { reply: ChatRespon
           {...(reply.planLink ? { link: reply.planLink } : {})}
           currency={currency}
           today={today}
+          {...(onPickModel ? { onPickModel } : {})}
         />
       </>
     )

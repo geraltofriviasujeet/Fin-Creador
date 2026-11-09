@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { TRIP_STYLES } from "../search/query"
+import { PURCHASE_USES, TRIP_STYLES } from "../search/query"
 
 // Detailed plans (Sprint 10.9). A plan request comes from the intake, built in code: every
 // field is null when the person skipped it, and a skipped field makes the lines that need it
@@ -21,6 +21,8 @@ export const tripPlanRequest = z
     nights: z.number().int().min(1).max(30).nullable(),
     travellers: z.number().int().min(1).max(9).nullable(),
     style: z.enum(TRIP_STYLES).nullable(),
+    /** Made from the records only, by choice at the intake (lookups used up): no web lookups run. */
+    recordsOnly: z.literal(true).optional(),
   })
   .strict()
 
@@ -36,6 +38,11 @@ export const purchasePlanRequest = z
     month: month.nullable(),
     /** Trade-in or deposit already arranged, in the profile currency's minor units. */
     depositMinor: z.number().int().min(0).max(1e13).nullable(),
+    /** A shortlist (a bike or car with no make): its main use, and the budget in the profile currency's minor units (null: worked out from the records). Absent on plans made before shortlists. */
+    use: z.enum(PURCHASE_USES).nullable().optional(),
+    budgetMinor: z.number().int().min(0).max(1e13).nullable().optional(),
+    /** As a trip's: made from the records only, by choice at the intake. */
+    recordsOnly: z.literal(true).optional(),
   })
   .strict()
 
@@ -121,6 +128,40 @@ export type PlanVerdict = z.infer<typeof verdictSchema>
 const signalSchema = z.object({ met: z.enum(["yes", "no", "unknown"]), summary: text(600) }).strict()
 export type PlanSignal = z.infer<typeof signalSchema>
 
+/**
+ * A model on a shortlist (10.9 follow-up): a make and model from the app's list and its price,
+ * both found in code on one listing page (plan/candidates.ts), picked by id, with only what the
+ * same card says beside them. Listed on that page, not Roma's recommendation.
+ */
+const candidateSchema = z
+  .object({
+    make: text(40),
+    model: text(40),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    low: decimal,
+    high: decimal,
+    bound: z.enum(["from", "up_to"]).optional(),
+    exShowroom: z.boolean(),
+    facts: z.array(text(30)).max(6),
+    site,
+    url,
+    /** Whether its higher price, less any trade-in or deposit, fits free money by the month after other goals. */
+    fit: signalSchema,
+  })
+  .strict()
+export type PlanCandidate = z.infer<typeof candidateSchema>
+
+const candidatesSchema = z
+  .object({
+    listed: z.array(candidateSchema).max(6),
+    /** Where the list came from, or why it is empty, in code's words. */
+    note: text(400),
+    /** The budget the list was kept to: the person's own, or free money by the month (records); null when there was none. */
+    budget: z.object({ currency: z.string().regex(/^[A-Z]{3}$/), minor: z.number().int(), from: z.enum(["intake", "records"]) }).strict().nullable(),
+  })
+  .strict()
+export type PlanCandidates = z.infer<typeof candidatesSchema>
+
 export const checkedPlanSchema = z
   .object({
     v: z.literal(1),
@@ -157,12 +198,20 @@ export const checkedPlanSchema = z
           .object({ currency: z.string().regex(/^[A-Z]{3}$/), month: month.nullable(), freeMinor: z.number().int().nullable(), extraMonthlyMinor: z.number().int().min(0).nullable() })
           .strict()
           .optional(),
+        /**
+         * Why no web lookup ran, when none could: the daily or monthly allowance used up, lookups
+         * off, or the person chose the records only. In code's words, with when it resets. Absent
+         * when lookups ran, and on older plans.
+         */
+        webOff: z.object({ reason: z.enum(["daily_limit", "monthly_cap", "off", "records_only"]), message: text(300) }).strict().optional(),
       })
       .strict(),
     /** What would make it fit: a title and one line each (older plans: one sentence each). */
     changes: z.array(z.union([text(200), z.object({ title: text(80), detail: text(200) }).strict()])).max(6),
     assumptions: z.array(text(400)).max(16),
     sources: z.array(z.object({ site, url }).strict()).max(40),
+    /** A purchase plan's model shortlist (a bike or car asked for without a model). Absent on every other plan. */
+    candidates: candidatesSchema.optional(),
   })
   .strict()
 

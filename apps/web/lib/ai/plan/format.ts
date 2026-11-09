@@ -1,7 +1,7 @@
 import { currencyMinorDigits, formatMoney } from "@fin-creador/domain"
-import { decimalToMinor } from "../search/totals"
+import { compareDecimals, decimalToMinor } from "../search/totals"
 import { webPrice } from "../web-format"
-import type { CheckedPlan, PlanAmount, PlanChange, PlanLine, PlanLineName, PlanPrice } from "./types"
+import type { CheckedPlan, PlanAmount, PlanCandidate, PlanCandidates, PlanChange, PlanLine, PlanLineName, PlanPrice } from "./types"
 
 // How a checked plan's figures are written on screen and in the PDF (10.9): one wording for
 // both, so the PDF says exactly what the modal says.
@@ -63,7 +63,7 @@ export function planHeading(plan: CheckedPlan, madeOn: string): { eyebrow: strin
     const parts = [r.nights !== null ? count(r.nights, "night", "nights") : null, r.travellers !== null ? count(r.travellers, "traveller", "travellers") : null]
     return { eyebrow, title: [where, r.month ? monthWords(r.month) : null].filter(Boolean).join(" · "), subline: [...parts, created].filter(Boolean).join(" · ") }
   }
-  const what = r.item === "house" ? "A house" : [r.make, r.model].filter(Boolean).join(" ") || `A ${r.item}`
+  const what = r.item === "house" ? "A house" : [r.make, r.model].filter(Boolean).join(" ") || (plan.candidates ? `Which ${r.item}` : `A ${r.item}`)
   const deposit = r.depositMinor ? `Trade-in or deposit ${formatMoney(r.depositMinor, { currency: plan.saved?.currency ?? plan.verdicts.figures?.currency ?? plan.verdicts.totals[0]?.currency ?? "INR" })}` : null
   return { eyebrow, title: [what, r.month ? monthWords(r.month) : null].filter(Boolean).join(" · "), subline: [deposit, created].filter(Boolean).join(" · ") }
 }
@@ -119,8 +119,23 @@ export function planVerdictCard(plan: CheckedPlan): { status: PlanStatus; headli
   const thing = plan.kind === "trip" ? "trip" : "purchase"
   const v = plan.verdicts.both ?? plan.verdicts.web
   const status: PlanStatus = v.verdict === "Yes." ? "fits" : v.verdict === "No." || v.verdict === "Not yet." ? "adjust" : "unknown"
+  // A shortlist: how many of its models fit, from each model's own check.
+  if (plan.candidates) {
+    const listed = plan.candidates.listed
+    const fits = listed.filter((c) => c.fit.met === "yes").length
+    const headline =
+      listed.length === 0
+        ? "No model could be suggested."
+        : status === "unknown"
+          ? `Roma can't say yet whether these models fit.`
+          : `${fits} of ${listed.length} ${listed.length === 1 ? "model fits" : "models fit"} your current plan.`
+    return { status, headline, reason: listed.length === 0 ? (plan.verdicts.webOff?.message ?? plan.candidates.note) : v.summary.replace(/^(?:Yes|No|No verdict)\.\s*/, "") }
+  }
   const headline =
     status === "fits" ? `This ${thing} fits your current plan.` : status === "adjust" ? `This ${thing} does not fit your current plan yet.` : `Roma can't say yet whether this ${thing} fits.`
+  // No lookup could run (the allowance used up, lookups off, or records only by choice): that is the reason, with when it resets.
+  const off = plan.verdicts.webOff
+  if (off && status === "unknown") return { status, headline, reason: off.message }
   // A trip's summary is one or two short sentences; the web one is the long account, so its verdict word is dropped.
   const reason = plan.verdicts.both ? v.summary : v.summary.replace(/^(?:Yes|No|Too early to say|No verdict)\.\s*/, "")
   return { status, headline, reason }
@@ -152,3 +167,34 @@ export function totalFigure(a: PlanAmount, web: boolean): { value: string; capti
 
 /** "Dec 2026" from "2026-12", for the stat card's label. */
 export const shortMonth = (month: string) => new Date(`${month}-01T00:00:00Z`).toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" })
+
+/** Why no line or model has a web price, for a figure's caption: why no lookup ran, else none could be priced. */
+export const noPriceWords = (plan: CheckedPlan, otherwise: string) => plan.verdicts.webOff?.message ?? otherwise
+
+/** A model's price as listed: "₹93,169", "₹10,91,000 to ₹20,46,000", "from ₹1,00,000". */
+export function candidatePrice(c: PlanCandidate): string {
+  const bound = c.bound === "from" ? "at_least" : c.bound === "up_to" ? "at_most" : undefined
+  const words = planAmount({ currency: c.currency, low: c.low, high: c.high, ...(bound ? { bound } : {}) })
+  return bound === "at_least" ? words.replace(/^at least/, "from") : bound === "at_most" ? words.replace(/^at most/, "up to") : words
+}
+
+/** A shortlist's stat figures, from the checked plan only. */
+export function shortlistFigures(plan: CheckedPlan, candidates: PlanCandidates) {
+  const { listed } = candidates
+  const figures = plan.verdicts.figures
+  const month = figures?.month ? shortMonth(figures.month) : null
+  const lowest = [...listed].sort((a, b) => compareDecimals(a.low, b.low))[0]
+  const highest = [...listed].sort((a, b) => compareDecimals(b.high, a.high))[0]
+  const range = lowest && highest ? `${money(lowest.low, lowest.currency)} to ${money(highest.high, highest.currency)}` : null
+  const known = listed.filter((c) => c.fit.met !== "unknown").length
+  const free = figures?.freeMinor ?? null
+  return {
+    range,
+    freeLabel: month ? `Free money by ${month}` : "Free money by the month",
+    free: free === null ? null : formatMoney(free, { currency: figures!.currency }),
+    negative: free !== null && free < 0,
+    fitLabel: month ? `Fit by ${month}` : "Fit by the month",
+    fit: known === 0 ? null : `${listed.filter((c) => c.fit.met === "yes").length} of ${listed.length}`,
+    noFigure: figures ? (figures.month === null ? "The month was skipped" : "Not enough in your records to say") : "Not worked out for this plan",
+  }
+}
