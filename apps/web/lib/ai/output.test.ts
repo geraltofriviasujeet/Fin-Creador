@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { allowedNumbers, checkAnswer, checkSubjects, isNamedIn, literalStrings, normalizeNumber, numbersIn } from "./output"
+import { allowedNumbers, checkAnswer, checkSubjects, isNamedIn, literalStrings, normalizeNumber, numbersIn, saidNumbers } from "./output"
 import type { Figure } from "./tools/types"
 
 const figures: Figure[] = [
@@ -159,5 +159,27 @@ describe("only money-shaped figures and percentages must match a tool (10.8)", (
   it("refuses a percentage no tool gave", () => {
     expect(checkAnswer("You saved 12% of your income.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["12"] })
     expect(checkAnswer("You saved 12 percent of your income.", none)).toEqual({ ok: false, reason: "unverified", unmatched: ["12"] })
+  })
+})
+
+describe("numbers the person typed", () => {
+  const withSaid = (said: string) => {
+    const a = allowedNumbers([], [])
+    for (const n of saidNumbers(said)) a.add(n)
+    return a
+  }
+  it("never refuses a budget the person wrote", () => {
+    const said = "want to buy a car? can you suggest some under 1200000 budget"
+    expect(checkAnswer("Under your ₹12,00,000 budget, here are some options.", withSaid(said)).ok).toBe(true)
+    expect(checkAnswer("Within 1200000 you could look at a few models.", withSaid(said)).ok).toBe(true)
+    expect(checkAnswer("Under ₹12 lakh, here are some options.", withSaid(said)).ok).toBe(true)
+  })
+  it("reads lakh and crore either way", () => {
+    expect(saidNumbers("under 12 lakh")).toContain("1200000")
+    expect(saidNumbers("about 1.5 cr")).toContain("15000000")
+    expect(checkAnswer("A ₹12,00,000 budget.", withSaid("under 12 lakh")).ok).toBe(true)
+  })
+  it("still refuses a figure the person didn't write", () => {
+    expect(checkAnswer("A ₹9,50,000 model fits.", withSaid("under 1200000"))).toEqual({ ok: false, reason: "unverified", unmatched: ["950000"] })
   })
 })

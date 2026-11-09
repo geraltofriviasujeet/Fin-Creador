@@ -39,6 +39,11 @@ places) are domestic, the countries in `region-data.ts` other than India are int
 plus `TRIP_PLACE_ALIASES` (other names in common use, such as Bangalore or USA). A place on no
 list is asked about, never guessed.
 
+Roma's plans (10.9) convert web prices found in another currency with the fixed rate table
+`INR_PER` in `apps/web/lib/ai/plan/rates.ts` (rupees for one USD, EUR, GBP, AED, THB, SGD, MYR,
+LKR and NPR), dated by `RATES_ON`. The daily refresh-prices job can't supply rates: it reads
+only AMFI and BSE files. A plan states the rate and its date and says it is approximate.
+
 ## When
 
 In January, April, July and October. Normally only vehicle makes and models change. Touch
@@ -77,7 +82,10 @@ territory or a renamed city).
    | car  | add    | Example make | Example model | https://… |
    | bike | remove | Example make | Old model     | https://… |
 
-6. Update `LISTS_REVIEWED_ON` in `goal-data.ts` (`vehicles`, and `places` if checked) to the
+6. Rates: take each rate in `INR_PER` from open.er-api.com (`/v6/latest/INR`, 1 ÷ the rate,
+   4 places), check the ones the ECB publishes against its reference rates (within 1%), and set
+   `RATES_ON` to the day taken. NPR is pegged (1 INR = 1.6 NPR). Update `rates.test.ts`'s figures.
+7. Update `LISTS_REVIEWED_ON` in `goal-data.ts` (`vehicles`, and `places` if checked) to the
    review date, even when nothing changed.
-7. Run `npm run typecheck`, `npm run lint` and `npm test`.
-8. Open one draft PR. The owner reviews and merges it.
+8. Run `npm run typecheck`, `npm run lint` and `npm test`.
+9. Open one draft PR. The owner reviews and merges it.

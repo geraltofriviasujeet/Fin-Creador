@@ -69,6 +69,15 @@ describe("prices in text", () => {
     expect(pricesIn("4 hours 45 minutes, 43 hotels")).toEqual([])
   })
 
+  it("reads a rupee sign glued to the word before it (a tariff card), but never a word mark or a dollar", () => {
+    expect(pricesIn("8 hrs / 80 km₹2,800 Extra km₹15")).toEqual([
+      { currency: "INR", amount: "2800", scale: "none" },
+      { currency: "INR", amount: "15", scale: "none" },
+    ])
+    expect(pricesIn("2 hours 30 mins")).toEqual([])
+    expect(pricesIn("plans 25")).toEqual([])
+  })
+
   it("scales exactly, without floating point", () => {
     expect(scaleUp("7.4", 5)).toBe("740000")
     expect(scaleUp("14.52", 5)).toBe("1452000")

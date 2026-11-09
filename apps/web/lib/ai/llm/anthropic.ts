@@ -7,6 +7,9 @@ import { LlmError, type LlmMessage, type LlmProvider, type LlmRequest, type LlmR
 // Thinking is adaptive (the model's default) at effort "low": short factual answers don't
 // need more. Thinking blocks come back in `providerContent` and are passed back unchanged on
 // the next round of the same question. Forced tool choice is not used (auto is the default).
+// A round asked to run without thinking (plan picks, 10.9) gets it off where the model allows:
+// "disabled" on Haiku 5.5 and Opus 5 at this effort, "between_tools" on Sonnet 5.5; Opus 5.5 and
+// Fable 5.1 can't turn it off, so it stays adaptive at low effort there.
 
 const CALL_TIMEOUT_MS = 20_000
 
@@ -38,6 +41,7 @@ export function anthropicProvider({ apiKey, model, fetch }: Options): LlmProvide
               input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
             })),
             output_config: { effort: "low" },
+            ...(request.thinking === "off" ? thinkingOff(model) : {}),
           },
           { signal },
         )
@@ -116,4 +120,11 @@ function toLlmError(error: unknown): LlmError {
     return new LlmError(status >= 500 ? "unavailable" : "rejected", "no", `The provider answered ${status}`)
   }
   return new LlmError("unavailable", "unknown", "The provider call failed")
+}
+
+/** Thinking off for one request, in the form the model accepts; nothing where it can't be off. */
+function thinkingOff(model: string): { thinking?: Anthropic.MessageCreateParams["thinking"] } {
+  if (/^claude-(opus-5-5|fable|mythos)/.test(model)) return {}
+  if (/^claude-sonnet-5-5/.test(model)) return { thinking: { type: "between_tools" } as unknown as Anthropic.MessageCreateParams["thinking"] }
+  return { thinking: { type: "disabled" } }
 }

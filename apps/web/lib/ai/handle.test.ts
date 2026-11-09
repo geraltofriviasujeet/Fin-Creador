@@ -5,7 +5,8 @@ import type { LlmConfig } from "./config"
 import { type BeginOutcome, type ChatDeps, type RomaDb, type RomaHistory, type TurnToRecord, handleChat } from "./handle"
 import { MAX_TURNS, type StoredTurn } from "./history"
 import { mockProvider } from "./llm/mock"
-import { NO_USAGE } from "./llm/types"
+import { LlmError, type LlmProvider, NO_USAGE } from "./llm/types"
+import { runPlan } from "./plan/run"
 import { mockSearchProvider } from "./search/mock"
 
 // The request flow with a fake ledger: what is reserved, settled and released. Mock provider only.
@@ -334,5 +335,58 @@ describe("web lookups spent on a question with no answer shown (10.8)", () => {
   it("says nothing about lookups when none ran", async () => {
     const res = await handleChat(ask, deps({ search, run: async () => ({ result: { kind: "failed", reason: "rejected" }, calls: 1, usage: NO_USAGE, unknownCalls: 0 }) }))
     expect(res.body).toMatchObject({ code: "unavailable", message: "Roma couldn't answer just now. Try again in a moment." })
+  })
+})
+
+describe("detailed plans (10.9)", () => {
+  const ledger: string[] = []
+  const search: NonNullable<ChatDeps["search"]> = {
+    db: {
+      begin: async (_r, _p, plan) => (ledger.push(`begin:${plan ? "plan" : "question"}`), { outcome: "ok", credits: 8 }),
+      settle: async (_r, credits) => (ledger.push(`settle:${credits}`), true),
+      release: async () => (ledger.push("release"), true),
+    },
+    // A rate with the hotel it is for: a price without one isn't offered to the model (10.9).
+    makeProvider: () => mockSearchProvider(() => [{ title: "Test data", url: "https://hotels.example.test/goa", snippet: "Test data. Rooms at the Sea Breeze Hotel are ₹4,500 a night." }]),
+    loadTerms: async () => ({ terms: { names: [], phrases: [] }, countryCode: "IN" }),
+  }
+  const records = async () => ({ records: { verdict: "Too early to say.", summary: "Too early to say. Test records." }, goal: null, saved: null, project: null, assumptions: [] })
+  const hanging: LlmProvider = {
+    name: "mock",
+    model: "mock",
+    complete: (_r, signal) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(new LlmError("timeout", "unknown", "cut off")))),
+  }
+  const goa = { kind: "trip", destination: "Goa", origin: "Delhi", month: "2027-01", nights: 4, travellers: 2, style: "comfort" } as const
+
+  it("answers a plan when the model's round hangs: the plan comes back, is stored, and the lookups' credits are settled", async () => {
+    ledger.length = 0
+    const d = deps({
+      search,
+      config: haikuOn,
+      makeProvider: () => hanging,
+      runPlan: (r, ctx, provider) => runPlan(r, { ctx, provider, records, deadlineMs: 2_600 }),
+    })
+    const res = await handleChat({ question: "Plan my trip to Goa", plan: goa }, d)
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ status: "answer", saved: true, plan: { kind: "trip", verdicts: { records: { verdict: "Too early to say." } } } })
+    expect(ledger).toEqual(["begin:plan", "settle:8"])
+    // The model call may have been sent: charged at the worst case for one call, never released.
+    expect(d.db.ledger.settled).toHaveLength(1)
+    expect(d.db.ledger.settled[0]!.costUsd).toBeGreaterThan(0)
+    expect(d.history.recorded[0]).toMatchObject({ tools: ["trip_plan"], periods: [], plan: { v: 1, kind: "trip" } })
+    expect(res.body.status === "answer" && res.body.answer).toMatch(/^Plan: trip from Delhi to Goa in January 2027\. 0 of 6 cost lines have an estimate\./)
+  })
+
+  it("saves a plan that made no model call (nothing to pick): the request is settled at nothing, never released", async () => {
+    const d = deps({ runPlan: (r, ctx, provider) => runPlan(r, { ctx, provider, records }) })
+    const res = await handleChat({ question: "Plan my trip", plan: { ...goa, destination: null } }, d)
+    expect(res.body).toMatchObject({ status: "answer", saved: true })
+    expect(d.db.ledger.released).toEqual([])
+    expect(d.db.ledger.settled).toEqual([{ id: "req-1", inputTokens: 0, outputTokens: 0, costUsd: 0 }])
+  })
+
+  it("refuses a plan request with a field it doesn't know", async () => {
+    const res = await handleChat({ question: "Plan my trip", plan: { ...goa, budget: 5 } }, deps({ search }))
+    expect(res.body).toMatchObject({ code: "invalid" })
   })
 })

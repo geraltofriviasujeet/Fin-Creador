@@ -30,9 +30,16 @@ describe("Tavily adapter", () => {
     expect(sent[0]?.url).toBe("https://api.tavily.com/search")
     expect(sent[0]?.headers.authorization).toBe("Bearer test-key-not-real")
     expect(sent[0]?.body).toMatchObject({ query: "hotel price per night in Goa", search_depth: "basic", include_answer: false })
+    expect(sent[0]?.body).not.toHaveProperty("country")
     expect(results).toEqual([
       { title: "Test data", url: "https://example.test/a", snippet: "Test data. Rooms from ₹4,500.", content: "Page text", publishedAt: "2026-10-01" },
     ])
+  })
+
+  it("asks for a country's pages first when told to (a domestic trip's lookups)", async () => {
+    const { fetch, sent } = fakeFetch(() => json({ results: [] }))
+    await tavilyProvider({ apiKey: "test-key-not-real", fetch }).search("local taxi hire price per day in Chennai in rupees", signal(), { country: "india" })
+    expect(sent[0]?.body).toMatchObject({ country: "india" })
   })
 
   it("drops results that aren't plain web links", async () => {

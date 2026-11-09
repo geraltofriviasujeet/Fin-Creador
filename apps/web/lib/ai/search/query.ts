@@ -14,7 +14,12 @@ import { VEHICLE_CATALOGUE, countryName, normalizePlace, tripPlaceScope } from "
 // account and category names, recent descriptions). Any failure: no search.
 
 export const WEB_TRIP_LINES = ["transport", "stay", "food", "activities", "visa"] as const
-export type WebTripLine = (typeof WEB_TRIP_LINES)[number]
+/** 10.9 plans add these; only plan code sends them (the model's web_price_lookup can't). */
+export const PLAN_TRIP_LINES = [...WEB_TRIP_LINES, "local_travel", "shopping", "carriers", "hotels"] as const
+export type WebTripLine = (typeof PLAN_TRIP_LINES)[number]
+/** A plan's travel style (10.9): which hotels the stay and hotels lookups look for. */
+export const TRIP_STYLES = ["budget", "comfort", "luxury"] as const
+export type TripStyle = (typeof TRIP_STYLES)[number]
 
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
 const placeText = z.string().trim().min(1).max(40)
@@ -26,7 +31,10 @@ const tripLookup = z
     month,
     nights: z.number().int().min(1).max(30),
     travellers: z.number().int().min(1).max(9),
-    cost_line: z.enum(WEB_TRIP_LINES),
+    cost_line: z.enum(PLAN_TRIP_LINES),
+    style: z.enum(TRIP_STYLES).optional(),
+    /** 10.9 plans: the city they travel from (a listed place), for flights and carriers. */
+    origin: placeText.optional(),
   })
   .strict()
 
@@ -37,6 +45,8 @@ const vehicleLookup = z
     make: z.string().trim().min(1).max(40),
     model: z.string().trim().min(1).max(40).optional(),
     month,
+    /** 10.9 plans: the insurance line; the price line otherwise. */
+    line: z.enum(["price", "insurance"]).optional(),
   })
   .strict()
 
@@ -107,12 +117,24 @@ function placeForQuery(destination: string): string | null {
   return cleaned
 }
 
-function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "international", monthText: string, country: string | null): string | null {
+const STAY_WORDS: Record<TripStyle, string> = { budget: "budget hotel", comfort: "average hotel", luxury: "luxury hotel" }
+
+/** Lines whose lookup asks for prices: a domestic one asks for them in rupees, so they need no conversion. */
+const PRICED_LINES = new Set<WebTripLine>(["transport", "stay", "food", "activities", "local_travel", "hotels"])
+
+function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "international", monthText: string, country: string | null, style?: TripStyle, origin?: string): string | null {
+  const query = tripQueryWords(line, place, scope, monthText, country, style, origin)
+  return query && scope === "domestic" && PRICED_LINES.has(line) ? `${query} in rupees` : query
+}
+
+function tripQueryWords(line: WebTripLine, place: string, scope: "domestic" | "international", monthText: string, country: string | null, style?: TripStyle, origin?: string): string | null {
+  const from = origin ?? (scope === "international" ? country : null)
   switch (line) {
     case "transport":
-      return scope === "international" && country ? `return flight price from ${country} to ${place} in ${monthText}` : `flight ticket price to ${place} in ${monthText}`
+      if (scope === "international" && from) return `return flight price from ${from} to ${place} in ${monthText}`
+      return from ? `flight ticket price from ${from} to ${place} in ${monthText}` : `flight ticket price to ${place} in ${monthText}`
     case "stay":
-      return `average hotel price per night in ${place} in ${monthText}`
+      return `${STAY_WORDS[style ?? "comfort"]} price per night in ${place} in ${monthText}`
     case "food":
       return `average daily food cost per person in ${place}`
     case "activities":
@@ -120,6 +142,15 @@ function tripQuery(line: WebTripLine, place: string, scope: "domestic" | "intern
     case "visa":
       if (scope !== "international") return null
       return country ? `${place} tourist visa fee for ${country} passport holders` : `${place} tourist visa fee`
+    case "local_travel":
+      return `local taxi hire price per day in ${place}`
+    case "shopping":
+      return `what to buy in ${place} famous local products`
+    case "carriers":
+      return from ? `airlines flying from ${from} to ${place}` : `airlines with flights to ${place}`
+    case "hotels":
+      // A budget plan's stay line takes its hotels from here too: budget hotels, by name.
+      return style === "budget" ? `budget hotels in ${place} with prices per night` : `four star and five star hotels and resorts in ${place} price per night`
   }
 }
 
@@ -163,9 +194,12 @@ export function buildQuery(input: WebLookupInput, terms: PrivateTerms, countryCo
     scope = tripPlaceScope(input.destination) ?? undefined
     const place = placeForQuery(input.destination)
     if (!scope || !place) return { ok: false, reason: "unlisted_place" }
-    query = tripQuery(input.cost_line, place, scope, monthText, country)
+    // The origin, like the destination, must be a listed place, and is checked for private words too.
+    const origin = input.origin === undefined ? undefined : placeForQuery(input.origin)
+    if (origin === null || (origin !== undefined && !tripPlaceScope(origin))) return { ok: false, reason: "unlisted_place" }
+    query = tripQuery(input.cost_line, place, scope, monthText, country, input.style, origin)
     if (!query) return { ok: false, reason: "line_not_for_scope" }
-    subject = place
+    subject = origin ? `${origin} ${place}` : place
   } else {
     const catalogue = VEHICLE_CATALOGUE[input.vehicle]
     const make = listedName(Object.keys(catalogue), input.make)
@@ -174,7 +208,10 @@ export function buildQuery(input: WebLookupInput, terms: PrivateTerms, countryCo
     if (input.model !== undefined && !model) return { ok: false, reason: "unlisted_item" }
     subject = model ? `${make} ${model}` : make
     allowedDigits = model ? [model] : []
-    query = `${subject} on road price${country ? ` in ${country}` : ""} ${monthText}`
+    query =
+      input.line === "insurance"
+        ? `${subject} insurance price for the first year${country ? ` in ${country}` : ""}`
+        : `${subject} on road price${country ? ` in ${country}` : ""} ${monthText}`
   }
 
   // The template's own words ("food", "hotel") may match a category; only the variable part

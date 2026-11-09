@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { userToday } from "@fin-creador/api"
+import { type Json, userToday } from "@fin-creador/api"
 import { readLlmConfig, readSearchConfig } from "@/lib/ai/config"
 import { type BeginOutcome, type RomaDb, type RomaHistory, handleChat } from "@/lib/ai/handle"
 import { type StoredTurn, fromDateRangeLiteral, toDateRangeLiteral } from "@/lib/ai/history"
@@ -91,16 +91,25 @@ export async function POST(request: NextRequest) {
         p_periods: turn.periods.map(toDateRangeLiteral),
         p_tools: turn.tools,
         p_sent_descriptions: turn.sentDescriptions,
+        // The checked plan (10.9); the database checks its shape, size and keys again.
+        ...(turn.plan ? { p_plan: turn.plan as unknown as Json } : {}),
       })
       const row = Array.isArray(data) ? data[0] : null
+      // A turn that couldn't be saved logs its error code and message only (the function's own
+      // words, never the question, the answer or the plan).
+      if (error) console.warn(JSON.stringify({ event: "roma_record_failed", code: error.code, message: error.message }))
       if (error || !row) return null
-      return { conversationId: row.conversation_id, seq: row.seq }
+      if (!turn.plan) return { conversationId: row.conversation_id, seq: row.seq }
+      // A plan's turn, read back for "Add to my goals" (owner-only, RLS); without it the plan
+      // still shows, and can't be added as a goal.
+      const message = await supabase.from("ai_messages").select("id").eq("conversation_id", row.conversation_id).eq("seq", row.seq).maybeSingle()
+      return { conversationId: row.conversation_id, seq: row.seq, ...(message.data ? { messageId: message.data.id } : {}) }
     },
   }
 
   const searchDb: SearchDb = {
-    async begin(requestId, provider) {
-      const { data, error } = await supabase.rpc("roma_search_begin", { p_request_id: requestId, p_provider: provider })
+    async begin(requestId, provider, plan) {
+      const { data, error } = await supabase.rpc("roma_search_begin", { p_request_id: requestId, p_provider: provider, p_plan: plan === true })
       const row = Array.isArray(data) ? data[0] : null
       if (error || !row) return null
       return { outcome: row.outcome as SearchBeginOutcome, credits: row.credits }

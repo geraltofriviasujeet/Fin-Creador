@@ -19,6 +19,9 @@ import { tripCheckTool } from "./tools/trip"
 import { spendingTool } from "./tools/spending"
 import type { FinanceTool, Figure, ToolContext, WebBlock } from "./tools/types"
 import { webPriceFiguresTool, webPriceLookupTool } from "./tools/web-prices"
+import { loadPlanRecords } from "./plan/records"
+import { PICK_OUTPUT_TOKENS, type PlanRun, runPlan } from "./plan/run"
+import { type CheckedPlan, checkedPlanSchema, planRequest } from "./plan/types"
 
 // POST /api/ai/chat, without the framework (Sprint 10.1; the remaining tools from 10.2). Order: signed in, Roma configured,
 // a valid question, the conversation's stored turns (10.3), then roma_begin_request (kill
@@ -50,6 +53,8 @@ const questionSchema = z.object({
   question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
   /** The conversation to continue; absent or null starts a new one. */
   conversationId: z.uuid().nullable().optional(),
+  /** A detailed plan (10.9), from the intake: answered by runPlan, not the chat loop. */
+  plan: planRequest.optional(),
 })
 
 /** A call whose usage is unknown (it failed after it may have been sent) is charged at this. */
@@ -63,9 +68,9 @@ export type RomaDb = {
   release(requestId: string): Promise<boolean>
 }
 
-export type RecordedTurn = { conversationId: string; seq: number }
+export type RecordedTurn = { conversationId: string; seq: number; /** The stored turn, for a plan (a goal added from it links to it); absent when it couldn't be read back. */ messageId?: string }
 
-export type TurnToRecord = Omit<StoredTurn, "seq"> & { requestId: string; conversationId: string | null }
+export type TurnToRecord = Omit<StoredTurn, "seq"> & { requestId: string; conversationId: string | null; plan?: CheckedPlan }
 
 export type RomaHistory = {
   /** The conversation's turns; "missing" when it isn't the caller's (or was deleted); null when it can't be read. */
@@ -84,6 +89,8 @@ export type ChatDeps = {
   /** The person's today and currency, or null when they can't be read. */
   loadContext: () => Promise<ToolContext | null>
   run?: typeof runChat
+  /** A plan's run (10.9); tests replace it. */
+  runPlan?: (request: Parameters<typeof runPlan>[0], ctx: ToolContext, provider: LlmProvider) => Promise<PlanRun>
   /** Server diagnostic when an answer is refused by the figure check: the numbers only, never the answer; not stored. */
   onUnverified?: (unmatched: readonly string[]) => void
   /** Web lookups (10.8); absent when SEARCH_ENABLED is off. */
@@ -111,6 +118,8 @@ export type ChatErrorCode =
   | "refusal"
   | "unavailable"
 
+export type PlanLink = { messageId: string; goal: { id: string; name: string } | null }
+
 export type ChatResponseBody =
   | {
       status: "answer"
@@ -126,6 +135,10 @@ export type ChatResponseBody =
       web?: WebBlock
       /** Why web lookups were skipped (caps, timeouts). */
       webNotices?: string[]
+      /** A detailed plan (10.9): the checked plan the answer was written from, for the modal and the PDF. */
+      plan?: CheckedPlan
+      /** The plan's stored turn, and the goal added from it (null until one is): "Add to my goals" links the goal to the turn. Absent when the plan couldn't be saved. */
+      planLink?: PlanLink
       /** The conversation the turn was recorded in (10.3); null when it couldn't be saved. */
       conversationId: string | null
       saved: boolean
@@ -213,12 +226,16 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
   if (deps.search) {
     try {
       const loaded = await deps.search.loadTerms()
-      if (loaded) web = new WebSession({ provider: deps.search.makeProvider(), db: deps.search.db, requestId, ...loaded })
+      if (loaded) web = new WebSession({ provider: deps.search.makeProvider(), db: deps.search.db, requestId, ...loaded, plan: parsed.data.plan !== undefined })
     } catch {
       web = null
     }
   }
   if (web) context = { ...context, web }
+
+  if (parsed.data.plan) {
+    return answerPlan(deps, { requestId, conversationId, question: parsed.data.question, request: parsed.data.plan, context, provider, web, model })
+  }
 
   let run: ChatRun
   try {
@@ -306,6 +323,63 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
   }
 }
 
+/**
+ * A detailed plan (10.9): runPlan instead of the chat loop, with the same reservation, settle
+ * and release. A plan always comes back once its lookups have run: a model round that fails or
+ * runs out of time leaves those lines as "no estimate" (plan/run.ts), never a failed plan.
+ */
+async function answerPlan(
+  deps: ChatDeps,
+  a: { requestId: string; conversationId: string | null; question: string; request: NonNullable<z.infer<typeof questionSchema>["plan"]>; context: ToolContext; provider: LlmProvider; web: WebSession | null; model: string },
+): Promise<{ status: number; body: ChatResponseBody }> {
+  const { requestId, context, web, model } = a
+  let run: PlanRun
+  try {
+    run = await (deps.runPlan ?? ((r, ctx, provider) => runPlan(r, { ctx, provider, records: (req) => loadPlanRecords(ctx, req) })))(a.request, context, a.provider)
+  } catch {
+    await finishWeb(web)
+    await deps.db.settle(requestId, 0, 0, microToUsd(2 * unknownPlanCallMicroUsd(model)))
+    return lookupsNoted(error("unavailable"), web)
+  }
+  await finishWeb(web)
+  // Settled even when no model call was made (nothing to pick): a released request can't be
+  // recorded (roma_record_turn takes a settled one), and a plan that can't be saved can't be
+  // reopened. Settled at its real cost, nothing when no call was sent.
+  const micro = callCostMicroUsd(model, run.usage) + run.unknownCalls * unknownPlanCallMicroUsd(model)
+  await deps.db.settle(requestId, run.usage.inputTokens + run.usage.cacheReadTokens + run.usage.cacheWriteTokens, run.usage.outputTokens, microToUsd(micro))
+  // The plan is checked against the stored shape before it is shown or kept.
+  const checked = checkedPlanSchema.safeParse(run.plan)
+  if (!checked.success) return lookupsNoted(error("unavailable"), web)
+  const plan = checked.data
+  const turn: TurnToRecord = {
+    requestId,
+    conversationId: a.conversationId,
+    question: a.question,
+    answer: run.answer,
+    asOf: context.today,
+    periods: [],
+    tools: [`${plan.kind}_plan`],
+    sentDescriptions: false,
+    plan,
+  }
+  const recorded = (await recordQuietly(deps.history, turn)) ?? (await recordQuietly(deps.history, turn))
+  const notices = web ? [...web.notices] : []
+  return {
+    status: 200,
+    body: {
+      status: "answer",
+      answer: run.answer,
+      figures: [],
+      periods: [],
+      plan,
+      ...(recorded?.messageId ? { planLink: { messageId: recorded.messageId, goal: null } } : {}),
+      ...(notices.length > 0 ? { webNotices: notices } : {}),
+      conversationId: recorded?.conversationId ?? null,
+      saved: recorded !== null,
+    },
+  }
+}
+
 /** An error after web lookups were sent says they were used, so a spent lookup is never silent. */
 function lookupsNoted(failure: { status: number; body: ChatResponseBody }, web: WebSession | null): { status: number; body: ChatResponseBody } {
   const sent = web?.lookupsSent ?? 0
@@ -335,6 +409,10 @@ const figureValue = (f: Figure) => (f.kind === "money" ? f.minor : f.kind === "p
 
 const unknownCallMicroUsd = (model: string) =>
   callCostMicroUsd(model, { inputTokens: UNKNOWN_CALL_INPUT_TOKENS, outputTokens: MAX_OUTPUT_TOKENS, cacheReadTokens: 0, cacheWriteTokens: 0 })
+
+/** A plan's pick call whose usage is unknown (up to two per plan, below the chat's worst case). */
+const unknownPlanCallMicroUsd = (model: string) =>
+  callCostMicroUsd(model, { inputTokens: UNKNOWN_CALL_INPUT_TOKENS, outputTokens: PICK_OUTPUT_TOKENS, cacheReadTokens: 0, cacheWriteTokens: 0 })
 
 /** The most one question can cost (roma_settings.reserve_usd must stay above it). */
 export const worstCaseQuestionMicroUsd = (model: string) => MAX_ROUNDS * unknownCallMicroUsd(model)

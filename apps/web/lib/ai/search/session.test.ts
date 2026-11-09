@@ -41,6 +41,15 @@ describe("web lookup credits", () => {
     expect(web.trips).toEqual([{ nights: 4, travellers: 2 }, { nights: 4, travellers: 2 }])
   })
 
+  it("asks for Indian pages first on a domestic trip only", async () => {
+    const asked: unknown[] = []
+    const provider = { name: "fake", search: async (_q: string, _s: AbortSignal, options?: { country?: "india" }) => (asked.push(options), []) }
+    const web = session(fakeDb({ outcome: "ok", credits: 3 }).db, provider)
+    await web.lookup(goa, signal())
+    await web.lookup({ ...goa, destination: "Thailand" }, signal())
+    expect(asked).toEqual([{ country: "india" }, undefined])
+  })
+
   it("runs no more lookups than begin granted", async () => {
     const { db, calls } = fakeDb({ outcome: "ok", credits: 1 })
     const web = session(db)

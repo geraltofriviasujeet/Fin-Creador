@@ -36,9 +36,12 @@ export const mockToolCall = (name: string, input: unknown, id = `call-${name}`):
  * for <n>, <travel|all_spending>" (10.5). "Web prices for a trip to <place>, <YYYY-MM>, <n>
  * nights, <n> travellers" (10.8) asks trip_check, then web_price_lookup for stay and transport,
  * then reports the mock search's two prices with web_price_figures, then repeats trip_check's
- * code-built summary.
+ * code-built summary. A plan's round (10.9, the plan_pick tool) picks each line's prices whose
+ * text says "per night" (as a night) or "per person" (as a person), and no names.
  */
 const defaultScript: MockScript = (request) => {
+  const plan = planScript(request)
+  if (plan) return plan
   const last = request.messages.at(-1)
   const web = webScript(request)
   if (web) return web
@@ -114,4 +117,16 @@ function webScript(request: LlmRequest): LlmResponse | null {
   const first = results[0]?.role === "tool_results" ? results[0].results[0]?.content : undefined
   const summary = (JSON.parse(first ?? "{}") as { verdict_summary?: string }).verdict_summary
   return mockText(`${summary ?? "I couldn't check this trip."} (Test answer.)`)
+}
+
+/** The plan round (10.9): picks by id from the brief, never typing an amount or a name. */
+function planScript(request: LlmRequest): LlmResponse | null {
+  if (!request.tools.some((t) => t.name === "plan_pick")) return null
+  const first = request.messages[0]
+  const brief = JSON.parse(first?.role === "user" ? first.text : "{}") as { lines?: { line: string; prices: { id: string; text: string }[] }[] }
+  const lines = (brief.lines ?? []).map((l) => ({
+    line: l.line,
+    picks: l.prices.flatMap((p) => (/per night/i.test(p.text) ? [{ id: p.id, per: "night" }] : /per person/i.test(p.text) ? [{ id: p.id, per: "person" }] : [])).slice(0, 1),
+  }))
+  return mockToolCall("plan_pick", { lines, carriers: [], hotels: [] })
 }

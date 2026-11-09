@@ -224,3 +224,26 @@
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Save as PDF (10.9): the browser's own print-to-PDF, no PDF library. While a plan is being
+ * printed (body.printing-plan, set by the button), only its print copy is on the page, and
+ * every link is written out after its text so the PDF stands alone.
+ */
+.plan-print {
+  display: none;
+}
+@media print {
+  body.printing-plan > *:not(.plan-print) {
+    display: none !important;
+  }
+  body.printing-plan > .plan-print {
+    display: block;
+    color: #000;
+    background: #fff;
+  }
+  .plan-print a[data-print-url]::after {
+    content: " (" attr(data-print-url) ")";
+    word-break: break-all;
+  }
+}

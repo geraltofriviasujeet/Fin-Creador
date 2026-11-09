@@ -121,6 +121,31 @@ describe("saveGoal", () => {
     expect(update?.values).not.toHaveProperty("currency")
   })
 
+  it("links a new goal to the plan it was added from, and names a refused link", async () => {
+    const PLAN = "d4000000-0000-4000-8000-000000000001"
+    const { client, calls } = fakeClient((call) => profile(call) ?? { data: { id: GOAL }, error: null })
+    expect(await saveGoal(client, { ...tripInput, planMessageId: PLAN })).toMatchObject({ status: "success", goalId: GOAL })
+    expect(calls.find((c) => c.op === "insert")?.values).toMatchObject({ plan_message_id: PLAN })
+
+    const taken = fakeClient((call) => profile(call) ?? { data: null, error: { code: "23505", message: 'duplicate key value violates unique constraint "goals_plan_message_unique"' } })
+    expect(await saveGoal(taken.client, { ...tripInput, planMessageId: PLAN })).toEqual({ status: "error", message: "This plan already has a goal. Find it on the Goals page." })
+    const gone = fakeClient((call) => profile(call) ?? { data: null, error: { code: "FC058", message: "Plan not found" } })
+    expect(await saveGoal(gone.client, { ...tripInput, planMessageId: PLAN })).toMatchObject({ status: "error", message: expect.stringContaining("can't be found") })
+
+    const bad = fakeClient((call) => profile(call) ?? { data: { id: GOAL }, error: null })
+    expect(await saveGoal(bad.client, { ...tripInput, planMessageId: "not-a-plan" })).toMatchObject({ status: "error" })
+    expect(bad.calls.some((c) => c.op === "insert")).toBe(false)
+  })
+
+  it("an edit never sets or changes the plan link", async () => {
+    const { client, calls } = fakeClient((call) => {
+      if (call.table === "goals" && call.op === "select") return { data: { id: GOAL, type: "trip", currency: "INR", target_date: null, archived_at: null }, error: null }
+      return { data: [{ id: GOAL }], error: null }
+    })
+    await saveGoal(client, { ...tripInput, goalId: GOAL, planMessageId: "d4000000-0000-4000-8000-000000000001" })
+    expect(calls.find((c) => c.op === "update")?.values).not.toHaveProperty("plan_message_id")
+  })
+
   it("does not write when the form is invalid", async () => {
     const { client, calls } = fakeClient((call) => profile(call) ?? { data: null, error: null })
     const result = await saveGoal(client, { ...tripInput, people: "0" })

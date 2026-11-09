@@ -11,7 +11,8 @@ import { type Bound, type KeptWebFigure, type PriceCandidate, firstPrices, price
 export type SearchBeginOutcome = "ok" | "disabled" | "no_request" | "monthly_cap" | "daily_limit"
 
 export type SearchDb = {
-  begin(requestId: string, provider: string): Promise<{ outcome: SearchBeginOutcome; credits: number } | null>
+  /** `plan`: a 10.9 plan, granted roma_settings.search_plan_reserve_credits instead. */
+  begin(requestId: string, provider: string, plan?: boolean): Promise<{ outcome: SearchBeginOutcome; credits: number } | null>
   settle(requestId: string, credits: number): Promise<boolean>
   release(requestId: string): Promise<boolean>
 }
@@ -21,12 +22,16 @@ export type LookupRefusal = "unlisted_place" | "unlisted_item" | "line_not_for_s
 
 export type LookupOutcome = { ok: true; subject: string; results: SearchResult[]; prices: (PriceCandidate & { id: string })[] } | { ok: false; reason: LookupRefusal }
 
-/** Prices handed to the model per lookup, found in code. */
+/** Prices handed to the model per lookup, found in code, and per page. */
 const PRICES_PER_LOOKUP = 12
+const PRICES_PER_PAGE = 4
+
+/** A lookup that reads deeper into its pages (a plan's listing and tariff pages): more prices per page and in all, for code to screen before any reach the model. */
+export type LookupDepth = { perPage: number; total: number }
 
 export const WEB_NOTICES: Partial<Record<LookupRefusal, string>> = {
   monthly_cap: "Web lookups are used up for this month (they reset on the 1st). This answer uses your own records only.",
-  daily_limit: "You've used today's web lookups. This answer uses your own records only.",
+  daily_limit: "You've used your web lookups for today. This is FinCreador's own daily limit, not the search provider's, and it resets at midnight in your time zone. This answer uses your own records only.",
   off: "Web lookups are off right now. This answer uses your own records only.",
   timeout: "A web lookup took too long and was skipped.",
   failed: "A web lookup couldn't be completed and was skipped.",
@@ -38,6 +43,8 @@ type Options = {
   requestId: string
   terms: PrivateTerms
   countryCode: string | null
+  /** A 10.9 plan: its larger credit cap is asked for. */
+  plan?: boolean
 }
 
 /**
@@ -81,7 +88,7 @@ export class WebSession {
 
   constructor(private readonly options: Options) {}
 
-  async lookup(input: WebLookupInput, signal: AbortSignal): Promise<LookupOutcome> {
+  async lookup(input: WebLookupInput, signal: AbortSignal, depth?: LookupDepth): Promise<LookupOutcome> {
     const built = buildQuery(input, this.options.terms, this.options.countryCode)
     if (!built.ok) return { ok: false, reason: built.reason }
 
@@ -93,11 +100,15 @@ export class WebSession {
     this.used++
 
     try {
-      const results = await this.options.provider.search(built.query, signal)
+      // A domestic trip prefers Indian pages: their prices are in rupees.
+      const results = await this.options.provider.search(built.query, signal, built.scope === "domestic" ? { country: "india" } : undefined)
       this.sent++
       for (const r of results) if (!this.results.some((have) => have.url === r.url)) this.results.push(r)
       if (input.kind === "trip") this.trips.push({ nights: input.nights, travellers: input.travellers })
-      const prices = firstPrices(results.flatMap((r) => priceCandidates(r)), PRICES_PER_LOOKUP).map((p) => ({ ...p, id: this.idFor(p) }))
+      const prices = firstPrices(
+        results.flatMap((r) => priceCandidates(r, depth?.perPage ?? PRICES_PER_PAGE)),
+        depth?.total ?? PRICES_PER_LOOKUP,
+      ).map((p) => ({ ...p, id: this.idFor(p) }))
       // A range's two ends know each other's id, so keeping one keeps both (web-prices.ts).
       for (const p of prices) {
         if (!p.range) continue
@@ -140,7 +151,7 @@ export class WebSession {
 
   private async begin(): Promise<number> {
     const { db, requestId, provider } = this.options
-    const begun = await db.begin(requestId, provider.name).catch(() => null)
+    const begun = await db.begin(requestId, provider.name, this.options.plan).catch(() => null)
     if (!begun || begun.outcome !== "ok") {
       this.refusal = begun?.outcome === "monthly_cap" || begun?.outcome === "daily_limit" ? begun.outcome : "off"
       return 0

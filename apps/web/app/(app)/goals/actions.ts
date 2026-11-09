@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { type FormInput, type WriteResult, deleteGoal, saveGoal, setCategoryBudget, setGoalArchived, setGoalSaved } from "@fin-creador/api"
+import { type FormInput, type GoalWriteResult, type WriteResult, deleteGoal, saveGoal, setCategoryBudget, setGoalArchived, setGoalSaved } from "@fin-creador/api"
 import { TRIP_COST_LINES } from "@fin-creador/domain"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
@@ -35,10 +35,14 @@ const GOAL_FIELDS = [
   "goalId", "type", "name", "targetDate", "saved", "idempotencyKey", "amount", "description",
   "scope", "place", "people", "days", "travelMode", "stay", ...TRIP_COST_LINES.map((l) => `cost_${l}`),
   "vehicle", "condition", "make", "model", "purpose", "city", "item", "payment", "price", "extras", "downPayment", "rate", "months",
+  // A goal added from a Roma plan: the plan's turn (checked by the database).
+  "planMessageId",
 ] as const
 
-export async function saveGoalAction(input: unknown): Promise<WriteResult> {
-  return refreshed(await saveGoal(await client(), fields(input, GOAL_FIELDS)))
+export async function saveGoalAction(input: unknown): Promise<GoalWriteResult> {
+  const result = refreshed(await saveGoal(await client(), fields(input, GOAL_FIELDS)))
+  if (result.status === "success" && fields(input, ["planMessageId"]).planMessageId) revalidatePath("/roma")
+  return result
 }
 
 export async function setGoalSavedAction(input: unknown): Promise<WriteResult> {

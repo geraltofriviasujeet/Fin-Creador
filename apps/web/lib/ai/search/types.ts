@@ -32,5 +32,6 @@ export class SearchError extends Error {
 export interface SearchProvider {
   /** Ledger label (roma_search_usage.provider). */
   readonly name: string
-  search(query: string, signal: AbortSignal): Promise<SearchResult[]>
+  /** `country`: pages from that country first (a domestic trip's lookups ask for India's). */
+  search(query: string, signal: AbortSignal, options?: { country?: "india" }): Promise<SearchResult[]>
 }
