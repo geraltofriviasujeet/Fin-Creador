@@ -176,6 +176,7 @@ export function PlanView({ plan, madeOn, reopened, expandAll = false, sourcesOpe
   const showSources = expandAll || (onSourcesOpenChange ? sourcesOpen : ownSourcesOpen)
   const toggleSources = () => (onSourcesOpenChange ?? setOwnSourcesOpen)(!showSources)
   const { verdicts } = plan
+  const web = plan.lines.some((l) => l.from === "web")
   return (
     <div className="grid gap-4 text-sm" data-testid="plan-view">
       {reopened && (
@@ -213,7 +214,11 @@ export function PlanView({ plan, madeOn, reopened, expandAll = false, sourcesOpe
         title="Cost breakdown"
         subtitle="Estimates are clearly separated from your own records."
         label="Cost breakdown"
-        aside={verdicts.totals.length > 0 && <span className="font-heading text-base font-semibold text-ink tabular-nums">{verdicts.totals.map(planAmount).join(" + ")} total</span>}
+        aside={
+          verdicts.totals.length > 0 && (
+            <span className="font-heading text-base font-semibold text-ink tabular-nums">{verdicts.totals.map((t) => totalFigure(t, web).value).join(" + ")} total</span>
+          )
+        }
       >
         <ul className="grid divide-y divide-line border-t border-line">
           {plan.lines.map((l) => (
@@ -226,12 +231,18 @@ export function PlanView({ plan, madeOn, reopened, expandAll = false, sourcesOpe
               <span className="font-semibold">Total:</span> no estimate. No line could be priced.
             </p>
           ) : (
-            verdicts.totals.map((t) => (
-              <p key={t.currency} className="flex flex-wrap justify-between gap-x-4 text-ink">
-                <span className="font-semibold">Total{verdicts.totals.length > 1 ? `, in ${t.currency}` : ""}, lines with an estimate only</span>
-                <span className="font-semibold tabular-nums">{planAmount(t)}</span>
-              </p>
-            ))
+            verdicts.totals.map((t) => {
+              const total = totalFigure(t, web)
+              return (
+                <div key={t.currency} className="grid gap-0.5">
+                  <p className="flex flex-wrap justify-between gap-x-4 text-ink">
+                    <span className="font-semibold">Total{verdicts.totals.length > 1 ? `, in ${t.currency}` : ""}, lines with an estimate only</span>
+                    <span className="font-semibold tabular-nums">{total.value}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">{total.caption}</p>
+                </div>
+              )
+            })
           )}
           {plan.saved && (
             <p className="flex flex-wrap justify-between gap-x-4 text-ink">

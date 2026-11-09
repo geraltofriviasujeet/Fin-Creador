@@ -55,8 +55,12 @@ const site = z.string().min(1).max(120)
 const text = (max: number) => z.string().max(max)
 const bound = z.enum(["at_least", "at_most", "mixed"])
 
-/** An amount in one currency: one figure, or low to high; a minimum or maximum when bound. */
-const amountSchema = z.object({ currency: z.string().regex(/^[A-Z]{3}$/), low: decimal, high: decimal, bound: bound.optional() }).strict()
+/**
+ * An amount in one currency: one figure, or low to high; a minimum or maximum when bound.
+ * `median`: the representative figure (a line's middle price, scaled; a total's line medians
+ * added up). Absent on plans made before 2026-11-09.
+ */
+const amountSchema = z.object({ currency: z.string().regex(/^[A-Z]{3}$/), low: decimal, high: decimal, median: decimal.optional(), bound: bound.optional() }).strict()
 export type PlanAmount = z.infer<typeof amountSchema>
 
 /** A web price kept for a line: as found on its page, with the site and link. */

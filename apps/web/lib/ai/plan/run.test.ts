@@ -127,9 +127,9 @@ describe("a trip plan", () => {
     expect(run.picked).toBe("picked")
     expect(run.plan.assumptions.some((a) => a.startsWith("Prices outside a plausible range in rupees (after any conversion) are dropped as misreads: transport ₹1,500 to ₹40,000 a person (international ₹8,000 to ₹2,00,000 a person)"))).toBe(true)
     const by = Object.fromEntries(run.plan.lines.map((l) => [l.line, l]))
-    expect(by.transport!.amounts).toEqual([{ currency: "INR", low: "8400", high: "8400" }])
+    expect(by.transport!.amounts).toEqual([{ currency: "INR", low: "8400", high: "8400", median: "8400" }])
     // Stay: the stay lookup's hotel and the hotels lookup's, one list, each hotel once.
-    expect(by.stay!.amounts).toEqual([{ currency: "INR", low: "18000", high: "72000", bound: "at_least" }])
+    expect(by.stay!.amounts).toEqual([{ currency: "INR", low: "18000", high: "72000", median: "45000", bound: "at_least" }])
     expect(by.stay!.prices.map((p) => [p.about, p.amount])).toEqual([["Novotel Goa Resort & Spa", "4500"], ["Taj Exotica Resort & Spa", "18000"]])
     expect(by.stay!.mentions).toBeUndefined()
     expect(by.food!.amounts[0]!.high).toBe("8000") // ₹800 × 5 days × 2
@@ -145,8 +145,9 @@ describe("a trip plan", () => {
     // Shopping: never an amount, what the place is known for buying.
     expect(by.shopping).toMatchObject({ from: "not_estimated", amounts: [], prices: [] })
     expect(by.shopping!.mentions!.map((m) => m.name)).toEqual(["cashews", "spices", "feni"])
-    expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4740", high: "10140", bound: "at_least" }] })
-    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "52140", high: "111540", bound: "at_least" }])
+    expect(by.buffer).toMatchObject({ from: "worked_out", amounts: [{ currency: "INR", low: "4740", high: "10140", median: "7440", bound: "at_least" }] })
+    // The median total: the line medians (8,400 + 45,000 + 8,000 + 10,000 + 3,000) plus 10% of them.
+    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "52140", high: "111540", median: "81840", bound: "at_least" }])
     expect(targets).toEqual([5_214_000])
     expect(run.answer).toMatch(/ 6 of 6 cost lines have an estimate\./)
     expect(run.plan.verdicts.web.summary).toBe(
@@ -199,7 +200,8 @@ describe("a trip plan", () => {
     // USD 598 is about ₹56,282 a person: outside the domestic fare range once converted.
     expect(by.transport).toMatchObject({ from: "none", how: "No estimate: 1 price outside ₹1,500 to ₹40,000 a person was dropped as implausible." })
     // USD 12 × 94.1176 = ₹1,129.41 a person a day, × 5 days × 2.
-    expect(by.food!.amounts).toEqual([{ currency: "INR", low: "8000", high: "11294.1" }])
+    // Two prices: the median is halfway between them.
+    expect(by.food!.amounts).toEqual([{ currency: "INR", low: "8000", high: "11294.1", median: "9647.05" }])
     expect(by.food!.prices.find((p) => p.currency === "USD")).toMatchObject({ amount: "12", about: "thali", converted: { currency: "INR", amount: "1129.41" } })
     expect(by.food!.how).toMatch(/ Prices in USD are converted to INR, approximately \(the rate is in the assumptions\)\.$/)
     expect(by.sightseeing!.how).toBe("No estimate: prices found only in JPY, which the app has no exchange rate for.")
@@ -235,7 +237,7 @@ describe("a trip plan", () => {
     const run = await runPlan(goa, { ctx, provider: pickingModel(totals), records: fakeRecords() })
     const local = run.plan.lines.find((l) => l.line === "local_travel")!
     expect(local.prices.map((p) => [p.about, p.amount, p.per])).toEqual([["taxi", "2600", "day"]])
-    expect(local.amounts).toEqual([{ currency: "INR", low: "13000", high: "13000" }])
+    expect(local.amounts).toEqual([{ currency: "INR", low: "13000", high: "13000", median: "13000" }])
     expect(local.how).toMatch(/ 4 prices weren't per day \(1 per trip, 1 per km, 1 per hour, 1 no unit given\), so they weren't used\.$/)
   })
 
@@ -416,7 +418,7 @@ describe("a purchase plan", () => {
       { ctx, provider: pickingModel(), records: fakeRecords({ saved: { goal: "New car", minor: 20_000_000 } }) },
     )
     expect(search.queries).toHaveLength(2)
-    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "1495000", high: "1495000" }])
+    expect(run.plan.verdicts.totals).toEqual([{ currency: "INR", low: "1495000", high: "1495000", median: "1495000" }])
     expect(targets).toEqual([139_500_000])
     expect(run.plan.saved).toEqual({ goal: "New car", minor: 20_000_000, currency: "INR" })
     expect(run.plan.verdicts.web.summary).toMatch(/already saved toward New car/)

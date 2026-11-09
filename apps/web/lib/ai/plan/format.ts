@@ -6,7 +6,11 @@ import type { CheckedPlan, PlanAmount, PlanChange, PlanLine, PlanLineName, PlanP
 // How a checked plan's figures are written on screen and in the PDF (10.9): one wording for
 // both, so the PDF says exactly what the modal says.
 
-const money = (amount: string, currency: string) => formatMoney(decimalToMinor(amount, currencyMinorDigits(currency)), { currency })
+/** A plan's figure in whole units of its currency (₹33,874, never ₹33,873.58): a web estimate's paise are false precision. */
+const money = (amount: string, currency: string) => {
+  const unit = 10 ** currencyMinorDigits(currency)
+  return formatMoney(Math.round(decimalToMinor(amount, currencyMinorDigits(currency)) / unit) * unit, { currency })
+}
 
 /** "₹18,000", "₹18,000 to ₹36,000", "at least ₹7,026", "at most $300". */
 export function planAmount(a: PlanAmount): string {
@@ -118,13 +122,18 @@ export function changeParts(c: PlanChange): { title: string; detail: string | nu
 export const PLAN_NOT_LIVE = "Estimates, not quotes or bookings. Web prices are as pages listed them when the plan was made, not live fares or room rates."
 export const PLAN_REOPENED = "Web prices may have changed since this plan was made. Make a new plan for today's prices."
 
-/** A total for a stat card: the figure alone, its kind in the caption ("₹77,387", "Minimum web estimate"); "web" only when a line is from the web. */
+/**
+ * A total for a stat card: one representative figure, the median of the estimates, with the range
+ * and its kind in the caption ("₹77,387", "Median of web estimates · ₹33,874 to ₹2,58,862").
+ * "web" only when a line is from the web. An older plan without a median shows its range.
+ */
 export function totalFigure(a: PlanAmount, web: boolean): { value: string; caption: string } {
-  const kind = web ? "web estimate" : "estimate"
-  if (a.bound === "at_least") return { value: money(a.low, a.currency), caption: `Minimum ${kind}` }
-  if (a.bound === "at_most") return { value: money(a.high, a.currency), caption: `Maximum ${kind}` }
-  const caption = `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`
-  return { value: planAmount(a), caption: a.bound === "mixed" ? `${caption}, neither a minimum nor a maximum` : caption }
+  const kind = web ? "web estimates" : "estimates"
+  const range = a.low === a.high ? null : `${money(a.low, a.currency)} to ${money(a.high, a.currency)}`
+  const bound = a.bound === "at_least" ? "a minimum" : a.bound === "at_most" ? "a maximum" : a.bound === "mixed" ? "neither a minimum nor a maximum" : null
+  const middle = a.median ?? (range ? null : a.low)
+  if (middle === null) return { value: planAmount(a), caption: [`Range of ${kind}`, bound].filter(Boolean).join(" · ") }
+  return { value: money(middle, a.currency), caption: [range ? `Median of ${kind} · ${range}` : `From ${kind}`, bound].filter(Boolean).join(" · ") }
 }
 
 /** "Dec 2026" from "2026-12", for the stat card's label. */

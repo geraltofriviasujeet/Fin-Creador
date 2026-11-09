@@ -10,8 +10,7 @@ import type { SearchResult } from "../search/types"
 import { type Bound, type PriceCandidate, SCALES, plain, scaleUp, siteOf, verifyWebFigure } from "../search/verify"
 import { VERDICT_WORDS, monthName } from "../tools/goals"
 import type { ToolContext, TotalBound } from "../tools/types"
-import { webTotal } from "../web-format"
-import { lineWords } from "./format"
+import { lineWords, planAmount } from "./format"
 import { type Mention, type PriceUnit, SUBJECT_WORDS, aboutPage, aboutPrice, dishesIn, placesIn, shoppingIn, unitAt } from "./context"
 import { NAMES_PER_KIND, carrierCandidates, hotelCandidates, listingHotelAt, nameKey, priceAt } from "./names"
 import { RATES_ON, RATES_SOURCE, canConvert, convertDecimal, rateWords } from "./rates"
@@ -273,27 +272,35 @@ function boundOf(bounds: ReadonlySet<Bound | TotalBound>): TotalBound | undefine
   return [...kinds][0] as TotalBound
 }
 
-/** A line's amount per currency: its lowest and highest kept price, times nights and travellers. */
+/** A line's amount per currency: its lowest, middle (median) and highest kept price, times nights and travellers. */
 export function lineAmounts(prices: readonly PlanPrice[], nights: number | null, travellers: number | null): PlanAmount[] {
-  const by = new Map<string, { low: string; high: string; bounds: Set<Bound> }>()
+  const by = new Map<string, { values: string[]; bounds: Set<Bound> }>()
   for (const p of prices) {
     const times = timesFor(p.per, nights, travellers)
     if (times === null) continue
     const { currency, value: each } = effective(p)
-    const value = multiplyDecimal(each, times)
-    const have = by.get(currency)
-    if (!have) by.set(currency, { low: value, high: value, bounds: new Set(p.bound ? [p.bound] : []) })
-    else {
-      if (compareDecimals(value, have.low) < 0) have.low = value
-      if (compareDecimals(value, have.high) > 0) have.high = value
-      if (p.bound) have.bounds.add(p.bound)
-    }
+    const have = by.get(currency) ?? { values: [], bounds: new Set<Bound>() }
+    have.values.push(multiplyDecimal(each, times))
+    if (p.bound) have.bounds.add(p.bound)
+    by.set(currency, have)
   }
   return [...by].map(([currency, a]) => {
+    const sorted = [...a.values].sort(compareDecimals)
     const bound = boundOf(a.bounds)
-    return { currency, low: a.low, high: a.high, ...(bound ? { bound } : {}) }
+    return { currency, low: sorted[0]!, high: sorted.at(-1)!, median: medianOf(sorted, currency), ...(bound ? { bound } : {}) }
   })
 }
+
+/** The middle of sorted figures; with an even count, halfway between the two middle ones (in minor units, rounded half up). */
+function medianOf(sorted: readonly string[], currency: string): string {
+  const mid = Math.floor(sorted.length / 2)
+  if (sorted.length % 2 === 1) return sorted[mid]!
+  const digits = currencyMinorDigits(currency)
+  return minorToDecimal(Math.round((decimalToMinor(sorted[mid - 1]!, digits) + decimalToMinor(sorted[mid]!, digits)) / 2), currency)
+}
+
+/** An amount's representative figure: its median, or its one figure; null for an older range without one. */
+const middleOf = (a: PlanAmount) => a.median ?? (a.low === a.high ? a.low : null)
 
 /** A kept price's full amount ("7.4" lakh is "740000"). */
 const valueOf = (p: PlanPrice) => scaleUp(p.amount, SCALES[p.scale])
@@ -317,17 +324,20 @@ export function minorToDecimal(minor: number, currency: string): string {
 
 /** Amounts added up per currency, bounds carried. */
 export function addAmounts(amounts: readonly PlanAmount[]): PlanAmount[] {
-  const by = new Map<string, { low: string[]; high: string[]; bounds: Set<TotalBound> }>()
+  const by = new Map<string, { low: string[]; high: string[]; median: (string | null)[]; bounds: Set<TotalBound> }>()
   for (const a of amounts) {
-    const have = by.get(a.currency) ?? { low: [], high: [], bounds: new Set() }
+    const have = by.get(a.currency) ?? { low: [], high: [], median: [], bounds: new Set() }
     have.low.push(a.low)
     have.high.push(a.high)
+    have.median.push(middleOf(a))
     if (a.bound) have.bounds.add(a.bound)
     by.set(a.currency, have)
   }
   return [...by].map(([currency, a]) => {
     const bound = boundOf(a.bounds)
-    return { currency, low: addDecimals(...a.low), high: addDecimals(...a.high), ...(bound ? { bound } : {}) }
+    // The total's median: the parts' medians added up, only when every part has one.
+    const medians = a.median.every((m) => m !== null) ? { median: addDecimals(...(a.median as string[])) } : {}
+    return { currency, low: addDecimals(...a.low), high: addDecimals(...a.high), ...medians, ...(bound ? { bound } : {}) }
   })
 }
 
@@ -335,7 +345,8 @@ export function addAmounts(amounts: readonly PlanAmount[]): PlanAmount[] {
 function bufferOf(a: PlanAmount): PlanAmount {
   const digits = currencyMinorDigits(a.currency)
   const pct = (d: string) => minorToDecimal(Math.ceil((decimalToMinor(d, digits) * BUFFER_PERCENT) / 100), a.currency)
-  return { currency: a.currency, low: pct(a.low), high: pct(a.high), ...(a.bound ? { bound: a.bound } : {}) }
+  const middle = middleOf(a)
+  return { currency: a.currency, low: pct(a.low), high: pct(a.high), ...(middle ? { median: pct(middle) } : {}), ...(a.bound ? { bound: a.bound } : {}) }
 }
 
 const toPrice = (c: PriceCandidate, per: PlanPrice["per"], about?: string): PlanPrice => ({
@@ -796,7 +807,9 @@ function planVerdict(a: {
   if (!records.project) return none(`No verdict with web estimates: ${request.month === null ? "the month was skipped, so there is no date to save by" : "there is nothing in your records to project from"}.`)
 
   const digits = currencyMinorDigits(mine.currency)
-  const totalMinor = decimalToMinor(mine.bound === "at_least" ? mine.low : mine.high, digits)
+  // In whole units, rounded up: the checked figure carries no false paise and never comes in under the estimate.
+  const unit = 10 ** digits
+  const totalMinor = Math.ceil(decimalToMinor(mine.bound === "at_least" ? mine.low : mine.high, digits) / unit) * unit
   const target = Math.max(0, totalMinor - a.deposit)
   const p = records.project(target)
   const verdict = VERDICT_WORDS[p.verdict]
@@ -809,7 +822,7 @@ function planVerdict(a: {
         : mine.bound === "mixed"
           ? `${money(totalMinor)} (neither a minimum nor a maximum: "from" and "up to" prices are mixed)`
           : money(totalMinor)
-  const range = mine.low !== mine.high && !mine.bound ? ` The lines range from ${webTotal(mine)}; the higher end is checked.` : ""
+  const range = mine.low !== mine.high && !mine.bound ? ` The lines range from ${planAmount(mine)}; the higher end is checked.` : ""
   const deposit = a.deposit > 0 ? ` Less your trade-in or deposit of ${money(a.deposit)}, ${money(target)} is needed.` : ""
   const missing = a.noEstimate.length > 0 ? ` Lines with no estimate aren't included: ${a.noEstimate.join(", ")}.` : ""
   const saved = records.saved ? ` ${money(records.saved.minor)} is already saved toward ${records.saved.goal}.` : ""
@@ -900,6 +913,8 @@ function bothSignals(a: {
 function planAssumptions(r: PlanRequest, records: PlanRecords, currency: string, convertedFrom: readonly string[]): string[] {
   const list = [
     "Estimates, not quotes or bookings. Web prices are as listed on the pages found when the plan was made, not live fares or room rates.",
+    // One entry, so it never pushes a records assumption past the plan's limit.
+    `The estimated cost is the median: for each line, the middle of its prices (halfway between the two middle ones when there is an even number), added up, with the buffer worked out the same way; the range runs from the lowest to the highest, and the verdict checks the higher end. Figures are shown in whole ${currency === "INR" ? "rupees" : `units of ${currency}`}.`,
     "The verdict from your records comes first; the one with web estimates never changes it.",
   ]
   if (r.kind === "trip") {

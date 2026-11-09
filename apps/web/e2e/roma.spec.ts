@@ -17,7 +17,9 @@ test("turn Roma on, ask what I spent this month, find entries, allow description
 
   // Off by default: the page says what is sent and where to turn her on.
   await page.goto("/roma")
-  await expect(page.getByRole("heading", { level: 1, name: "Roma" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Ask Roma" })).toBeVisible()
+  await expect(page.getByText("Your intelligent finance analyst, grounded in your records.", { exact: true })).toBeVisible()
+  await expect(page.getByTestId("roma-status")).toHaveText("Off")
   await expect(page.getByText("Roma is off", { exact: true })).toBeVisible()
   await expect(page.getByText(/Roma sends your question and summaries of your figures to Anthropic/)).toBeVisible()
 
@@ -39,6 +41,7 @@ test("turn Roma on, ask what I spent this month, find entries, allow description
   await expect(page).toHaveURL(/\/roma$/)
   // Opening screen: static text in her own time zone, with the first name from the profile.
   await expect(page.getByText(/^Good (morning|afternoon|evening), Meera\.$/)).toBeVisible()
+  await expect(page.getByTestId("roma-status")).toHaveText("Ready")
   await expect(page.getByText("I’m Roma, your Intelligent Finance Analyst. What do you want to know?", { exact: true })).toBeVisible()
 
   // Shift+Enter adds a line; Enter sends.

@@ -5,9 +5,10 @@ import Link from "next/link"
 import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { z } from "zod"
-import { PageHeader } from "@/components/shell/app-shell"
+import { Sparkles } from "lucide-react"
 import { type OpenConversation, RomaChat } from "@/components/roma/roma-chat"
 import type { ConversationKind } from "@/components/roma/roma-history"
+import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
@@ -27,12 +28,16 @@ const LISTED_CONVERSATIONS = 50
 
 export default function RomaPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <>
-      <PageHeader title="Roma" description="Ask about your own money. Every figure comes from your records." />
-      <Suspense fallback={<RomaSkeleton />}>
-        <RomaContent searchParams={searchParams} />
-      </Suspense>
-    </>
+    <Suspense
+      fallback={
+        <>
+          <RomaHeader />
+          <RomaSkeleton />
+        </>
+      }
+    >
+      <RomaContent searchParams={searchParams} />
+    </Suspense>
   )
 }
 
@@ -44,31 +49,40 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
   const { data: profile, error } = await supabase.from("profiles").select("roma_enabled, display_name, time_zone, currency").eq("id", auth.user.id).maybeSingle()
   if (error || !profile) {
     return (
-      <FormMessage tone="error" className="max-w-2xl">
-        We couldn’t load Roma. Refresh the page to try again.
-      </FormMessage>
+      <>
+        <RomaHeader />
+        <FormMessage tone="error" className="max-w-2xl">
+          We couldn’t load Roma. Refresh the page to try again.
+        </FormMessage>
+      </>
     )
   }
 
   if (!profile.roma_enabled) {
     return (
-      <Card className="max-w-2xl">
-        <CardTitle>Roma is off</CardTitle>
-        <CardDescription className="mt-1">{ROMA_DATA_NOTICE}</CardDescription>
-        <Link href="/settings" className={buttonVariants({ className: "mt-4" })}>
-          Turn Roma on in Settings
-        </Link>
-      </Card>
+      <>
+        <RomaHeader status="off" />
+        <Card className="max-w-2xl">
+          <CardTitle>Roma is off</CardTitle>
+          <CardDescription className="mt-1">{ROMA_DATA_NOTICE}</CardDescription>
+          <Link href="/settings" className={buttonVariants({ className: "mt-4" })}>
+            Turn Roma on in Settings
+          </Link>
+        </Card>
+      </>
     )
   }
 
   // The kill switch and caps are checked per question; this only says when Roma isn't set up.
   if (readLlmConfig(process.env).status !== "on") {
     return (
-      <Card className="max-w-2xl">
-        <CardTitle>Roma is off right now</CardTitle>
-        <CardDescription className="mt-1">Roma isn’t available at the moment. Your records are unaffected.</CardDescription>
-      </Card>
+      <>
+        <RomaHeader status="off" />
+        <Card className="max-w-2xl">
+          <CardTitle>Roma is off right now</CardTitle>
+          <CardDescription className="mt-1">Roma isn’t available at the moment. Your records are unaffected.</CardDescription>
+        </Card>
+      </>
     )
   }
 
@@ -85,9 +99,12 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
   ])
   if (list.error || opened === "error") {
     return (
-      <FormMessage tone="error" className="max-w-2xl">
-        We couldn’t load your conversations with Roma. Refresh the page to try again.
-      </FormMessage>
+      <>
+        <RomaHeader />
+        <FormMessage tone="error" className="max-w-2xl">
+          We couldn’t load your conversations with Roma. Refresh the page to try again.
+        </FormMessage>
+      </>
     )
   }
 
@@ -102,14 +119,17 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
 
   // Static text, not a model call: it costs nothing and needs no output check.
   return (
-    <RomaChat
-      greeting={`${greeting(profile.display_name, profile.time_zone)}.`}
-      timeZone={profile.time_zone}
-      currency={profile.currency}
-      conversations={list.data.map((c) => ({ id: c.id, title: c.title, lastMessageAt: c.last_message_at, kind: kindOf(c.id) }))}
-      open={opened}
-      missing={requested.success && opened === null}
-    />
+    <>
+      <RomaHeader status="ready" />
+      <RomaChat
+        greeting={`${greeting(profile.display_name, profile.time_zone)}.`}
+        timeZone={profile.time_zone}
+        currency={profile.currency}
+        conversations={list.data.map((c) => ({ id: c.id, title: c.title, lastMessageAt: c.last_message_at, kind: kindOf(c.id) }))}
+        open={opened}
+        missing={requested.success && opened === null}
+      />
+    </>
   )
 }
 
@@ -156,9 +176,35 @@ async function loadConversation(supabase: Supabase, id: string): Promise<OpenCon
   }
 }
 
+/**
+ * The page's header (docs/design/roma, 2026-11-09): Roma's mark, "Ask Roma", whether she is
+ * ready (on and set up) or off, and what she is. No chip while loading or after an error.
+ */
+function RomaHeader({ status }: { status?: "ready" | "off" }) {
+  return (
+    <div className="mb-5 flex items-center gap-3 md:mb-6 md:gap-4">
+      <span aria-hidden="true" className="on-dark grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-deep text-brand md:size-12">
+        <Sparkles className="size-5" />
+      </span>
+      <div className="grid min-w-0 gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-(--fc-tracking-heading) md:text-3xl">Ask Roma</h1>
+          {status && (
+            <Badge tone={status === "ready" ? "positive" : "neutral"} data-testid="roma-status">
+              <span aria-hidden="true" className={`size-1.5 rounded-full ${status === "ready" ? "bg-success" : "bg-muted-foreground"}`} />
+              {status === "ready" ? "Ready" : "Off"}
+            </Badge>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">Your intelligent finance analyst, grounded in your records.</p>
+      </div>
+    </div>
+  )
+}
+
 function RomaSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading Roma" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div aria-busy="true" aria-label="Loading Roma" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
       <Card className="grid gap-4">
         <span className="h-5 w-40 rounded bg-canvas" />
         <span className="h-20 w-full rounded-lg bg-canvas" />

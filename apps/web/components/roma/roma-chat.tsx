@@ -211,7 +211,7 @@ function Conversation({
   )
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start">
       <div className="grid min-w-0 gap-4">
         <details className="rounded-2xl border border-line bg-surface p-4 lg:hidden">
           <summary className="cursor-pointer text-sm font-semibold text-ink">Past conversations ({conversations.length})</summary>

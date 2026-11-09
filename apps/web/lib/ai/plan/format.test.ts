@@ -68,9 +68,16 @@ describe("the verdict card", () => {
 })
 
 describe("stat cards and ways to make it fit", () => {
-  it("a minimum shows its figure, the caption says it is a minimum", () => {
-    expect(totalFigure({ currency: "INR", low: "77387", high: "77387", bound: "at_least" }, true)).toEqual({ value: "₹77,387", caption: "Minimum web estimate" })
-    expect(totalFigure({ currency: "INR", low: "5000", high: "5000" }, false)).toEqual({ value: "₹5,000", caption: "Estimate" })
+  it("one figure, the median, rounded to whole rupees; the range and its kind in the caption", () => {
+    expect(totalFigure({ currency: "INR", low: "33873.58", high: "258862.21", median: "77386.6" }, true)).toEqual({
+      value: "₹77,387",
+      caption: "Median of web estimates · ₹33,874 to ₹2,58,862",
+    })
+    expect(totalFigure({ currency: "INR", low: "77387", high: "77387", bound: "at_least" }, true)).toEqual({ value: "₹77,387", caption: "From web estimates · a minimum" })
+    expect(totalFigure({ currency: "INR", low: "5000", high: "5000" }, false)).toEqual({ value: "₹5,000", caption: "From estimates" })
+  })
+  it("an older plan without a median shows its range, rounded", () => {
+    expect(totalFigure({ currency: "INR", low: "33873.58", high: "258862.21" }, true)).toEqual({ value: "₹33,874 to ₹2,58,862", caption: "Range of web estimates" })
   })
   it("an older plan's sentence splits into a title and a line", () => {
     expect(changeParts("Fewer nights: stay, food and local travel come down.")).toEqual({ title: "Fewer nights", detail: "Stay, food and local travel come down." })
