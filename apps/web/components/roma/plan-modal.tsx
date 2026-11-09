@@ -353,7 +353,7 @@ function VerdictCard({ plan, expandAll }: { plan: CheckedPlan; expandAll: boolea
             </Badge>
           </div>
           <p>
-            <span className="font-semibold">From your records:</span> {records.verdict} {records.summary}
+            <span className="font-semibold">From your records:</span> {records.summary.startsWith(records.verdict) ? records.summary : `${records.verdict} ${records.summary}`}
           </p>
           <p className="font-heading text-xl font-semibold text-white print:text-ink">{card.headline}</p>
           <p>{card.reason}</p>
@@ -480,7 +480,7 @@ function LineRow({ line, plan, expandAll }: { line: PlanLine; plan: CheckedPlan;
         <span className="col-start-1 row-start-2 md:col-start-auto md:row-start-auto">
           <Badge tone={SOURCE_TONE[line.from]}>{LINE_SOURCE[line.from]}</Badge>
         </span>
-        <span className="col-start-2 row-start-1 text-right font-semibold text-ink tabular-nums md:col-start-auto">
+        <span className="col-start-2 row-start-1 text-right font-semibold text-ink tabular-nums md:col-start-auto md:row-start-auto">
           {line.amounts.length > 0 ? line.amounts.map(planAmount).join(" + ") : line.from === "not_estimated" ? "Not estimated" : "No estimate"}
         </span>
         <ChevronDown aria-hidden="true" className={`col-start-2 row-start-2 size-4 justify-self-end text-muted-foreground transition-transform motion-reduce:transition-none md:col-start-auto md:row-start-auto print:hidden ${shown ? "rotate-180" : ""}`} />
