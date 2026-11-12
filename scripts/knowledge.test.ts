@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAX_CHUNK_CHARS, chunkText, parseDocument, planIngestion, sha256, validFinancialYear, type ParsedFile } from "./knowledge.ts";
 
@@ -124,5 +126,20 @@ describe("planIngestion", () => {
 
   it("refuses two files with one slug", () => {
     expect(() => planIngestion([file("a", "1"), file("a", "2")], [])).toThrow(/used twice/);
+  });
+});
+
+describe("supabase/knowledge", () => {
+  const dir = join(import.meta.dirname, "..", "supabase", "knowledge");
+  const files = readdirSync(dir).filter((name) => name.endsWith(".md") && name !== "README.md");
+
+  it("every document parses, chunks within the limits and has a unique slug", () => {
+    const parsed = files.map((name) => parseDocument(name, readFileSync(join(dir, name), "utf8")));
+    for (const file of parsed) {
+      const chunks = chunkText(file.body);
+      expect(chunks.length).toBeGreaterThan(0);
+      for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(MAX_CHUNK_CHARS);
+    }
+    expect(() => planIngestion(parsed, [])).not.toThrow();
   });
 });
