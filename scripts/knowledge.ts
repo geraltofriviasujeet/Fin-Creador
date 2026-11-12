@@ -26,6 +26,7 @@ export interface KnowledgeDocument {
   source_url: string | null;
   based_on_publisher: string | null;
   read_more_url: string | null;
+  link_permission_pending: boolean;
   reuse_terms: string;
   reuse_terms_url: string | null;
   reuse_terms_checked_on: string;
@@ -49,6 +50,7 @@ const FIELDS = [
   "source_url",
   "based_on_publisher",
   "read_more_url",
+  "link_permission_pending",
   "reuse_terms",
   "reuse_terms_url",
   "reuse_terms_checked_on",
@@ -136,16 +138,23 @@ export function parseDocument(fileName: string, text: string): ParsedFile {
     if (value !== null && !validUrl(value)) problems.push(`${key} must be an https URL of at most 500 characters`);
   }
 
-  // The attribution rule (knowledge_documents_attribution).
+  const pendingText = optional("link_permission_pending") ?? "false";
+  if (pendingText !== "true" && pendingText !== "false") problems.push("link_permission_pending must be true or false");
+  const linkPending = pendingText === "true";
+
+  // The attribution rule (knowledge_documents_attribution, as relaxed in 20261113120000).
   if (kind === "official") {
     if (publisher === FINCREADOR) problems.push(`an official document's publisher cannot be ${FINCREADOR}`);
     if (sourceUrl === null) problems.push("an official document needs source_url");
     if (basedOn !== null || readMoreUrl !== null) problems.push("an official document has no based_on_publisher or read_more_url");
+    if (linkPending) problems.push("an official document never has a pending link");
   } else if (kind === "own") {
     if (publisher !== FINCREADOR) problems.push(`an own explainer's publisher is ${FINCREADOR}`);
     if (sourceUrl !== null) problems.push("an own explainer has no source_url");
     if (basedOn === null || basedOn === FINCREADOR) problems.push("an own explainer needs based_on_publisher (the official publisher)");
-    if (readMoreUrl === null) problems.push("an own explainer needs read_more_url");
+    // No link only while the publisher's permission to link is pending, and then no link at all.
+    if (readMoreUrl === null && !linkPending) problems.push("an own explainer needs read_more_url, or link_permission_pending: true");
+    if (readMoreUrl !== null && linkPending) problems.push("link_permission_pending: true needs read_more_url left empty");
   }
 
   const reuseTerms = required("reuse_terms");
@@ -177,6 +186,7 @@ export function parseDocument(fileName: string, text: string): ParsedFile {
       source_url: sourceUrl,
       based_on_publisher: basedOn,
       read_more_url: readMoreUrl,
+      link_permission_pending: linkPending,
       reuse_terms: reuseTerms,
       reuse_terms_url: reuseTermsUrl,
       reuse_terms_checked_on: checkedOn,

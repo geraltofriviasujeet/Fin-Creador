@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-11-13 (10.6a migration on dev, types committed; 10.6b on draft PR #66: embed function, ingestion script, 18 draft documents; migration `20261113120000_knowledge_embed.sql` awaiting SQL review; tax documents blocked on linking permission.)
+Last updated: 2026-11-13 (10.6a migration on dev, types committed; 10.6b on draft PR #66: embed function, ingestion script, 21 draft documents; migration `20261113120000_knowledge_embed.sql` (embed counter and link-pending rule) awaiting SQL review; old-regime slab document on hold.)
 
 ## Sprint status
 
@@ -285,6 +285,8 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-11-13** | 10.6 links (owner): a `source_url` or `read_more_url` is a link, so the publisher's hyperlinking policy applies as well as its reuse terms. RBI: home page only, after a written notice, until RBI permits deep links (pre-launch item); AMFI: home page only; SEBI, IRDAI, EPFO: direct links. The Income Tax Department's sites and indiabudget.gov.in require prior permission for any link, so no tax document is written until a source allows it. Terms and the RBI notice: `docs/knowledge-base-links.md`. | Linking without a publisher's permission breaks their terms just as copying would. |
 | **2026-11-13** | 10.6 embeddings belong to a question (owner): a signed-in call to the embed function names the caller's own open `roma_usage` question, and `roma_knowledge_embed` allows at most 3 per question, with the kill switch on; the question already passed the caps and daily limit. Needs migration `20261113120000_knowledge_embed.sql` (a counter column and one function). The ingestion script's service-role batches are unaffected. | The embed function can't be called outside Roma's limits. |
 | **2026-11-13** | 10.6 own explainers (owner): short, worked examples with the arithmetic checked, how things work without recommending any product; all stay draft until the owner has read them. | Our words carry our name, so they get the owner's read-through. |
+| **2026-11-13** | 10.6 link pending (owner): where a publisher needs prior permission for any link (the Income Tax Department), an own explainer names it in plain text with no link: `link_permission_pending` true exactly when `read_more_url` is null, never on official text (relaxed attribution check in `20261113120000_knowledge_embed.sql`, returned by `match_knowledge_chunks`). Shown as "FinCreador explainer, based on ‹publisher› material. Link pending the department's permission." Tax figures come only from the department's own pages for tax year 2026-27 under the Income-tax Act, 2025; a figure that can't be read there is not written. | No link we aren't allowed to give, and no figure we haven't seen on the source. |
+| **2026-11-13** | 10.6 IRDAI health (owner): IRDAI's consumer health page predates the 2024 Master Circular on Health Insurance Business, so it is not ingested; an own explainer of the current rules, linked to irdai.gov.in, replaces it. | Official text that is out of date is still out of date. |
 
 ## Sprint 7 Investments: market data decisions
 

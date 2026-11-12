@@ -29,6 +29,7 @@ Check `supabase migration list --linked` against each project before any databas
   - Leaked-password protection, once on Supabase Pro (not available on Free).
   - Tavily: written confirmation that the free plan allows commercial use, before any commercial launch (a launch blocker, not a build blocker; Roma's web lookups, step 10.8).
   - Request RBI permission for deep links (knowledge base "read more" links use RBI's home page until then); send the home-page notice first. Draft and the publishers' linking terms: `docs/knowledge-base-links.md`. Tell SEBI and EPFO about the links (they ask to be told).
+  - Request the Income Tax Department's permission to link (draft in `docs/knowledge-base-links.md`). Until it is given, tax explainers carry `link_permission_pending: true` and no link; when it is, set `read_more_url`, drop the flag and re-ingest.
 - Vercel Pro and Supabase Pro before any commercial use.
 - Review the licence terms of the market data (AMFI, BSE, and NSE if added) before any commercial use (upgrade checklist in `docs/deployment.md`).
 - A paused Free project stops the daily price job: after a restore, check `cron.job_run_details` and run the refresh once by hand.

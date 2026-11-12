@@ -59,6 +59,16 @@ describe("parseDocument", () => {
     expect(() => parseDocument("example-slabs.md", withLine(OFFICIAL, "source_url: https://example.org/slabs", "read_more_url: https://example.org/slabs"))).toThrow(/needs source_url.*no based_on_publisher/);
   });
 
+  it("lets an own explainer go without a link only while permission to link is pending", () => {
+    const pending = withLine(OWN, "read_more_url: https://example.org/sip", "link_permission_pending: true");
+    expect(parseDocument("what-is-an-sip.md", pending).document).toMatchObject({ read_more_url: null, link_permission_pending: true });
+    expect(parseDocument("what-is-an-sip.md", OWN).document.link_permission_pending).toBe(false);
+    expect(() => parseDocument("what-is-an-sip.md", withLine(OWN, "read_more_url: https://example.org/sip", ""))).toThrow(/or link_permission_pending: true/);
+    expect(() => parseDocument("what-is-an-sip.md", withLine(OWN, "verified_on", "link_permission_pending: true\nverified_on"))).toThrow(/needs read_more_url left empty/);
+    expect(() => parseDocument("example-slabs.md", withLine(OFFICIAL, "verified_on", "link_permission_pending: true\nverified_on"))).toThrow(/never has a pending link/);
+    expect(() => parseDocument("what-is-an-sip.md", withLine(OWN, "verified_on", "link_permission_pending: yes\nverified_on"))).toThrow(/must be true or false/);
+  });
+
   it("names every problem with the file", () => {
     const bad = withLine(withLine(OWN, "verified_on: 2026-11-13", "verified_on: 2026-02-30"), "reuse_terms_url: https://example.org/terms", "reuse_terms_url: http://example.org/terms");
     expect(() => parseDocument("what-is-an-sip.md", bad)).toThrow(/^what-is-an-sip\.md: .*reuse_terms_url must be an https URL.*verified_on must be a date/);

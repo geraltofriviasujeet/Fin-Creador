@@ -18,6 +18,8 @@ publisher: FinCreador               # own: always FinCreador; official: the publ
 source_url:                         # official only: the page the text was taken from
 based_on_publisher: <publisher>     # own only
 read_more_url: https://...          # own only: the official page, shown as "read more"
+link_permission_pending: false      # own only: true (and no read_more_url) while the publisher's
+                                    # permission to link is pending
 reuse_terms: <what the publisher's terms say, and for own why the text could not be reused>
 reuse_terms_url: https://...
 reuse_terms_checked_on: 2026-11-13
