@@ -1,21 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { DIMENSIONS, MAX_BATCH, MAX_PASSAGE_CHARS, MAX_QUESTION_CHARS, bearer, handleRequest, readTexts, sameKey, type Caller, type Deps } from "./embed.ts";
+import { DIMENSIONS, MAX_BATCH, MAX_PASSAGE_CHARS, MAX_QUESTION_CHARS, bearer, handleRequest, readRequestId, readTexts, sameKey, type Deps } from "./embed.ts";
 
 const VECTOR = Array.from({ length: DIMENSIONS }, (_, i) => i / DIMENSIONS);
 
-function deps(caller: Caller | null, embed: (text: string) => Promise<number[]> = async () => VECTOR) {
+const REQUEST_ID = "a1000000-0000-4000-8000-000000000001";
+
+// service: the token is the service-role key. allowed: roma_knowledge_embed's answer.
+function deps(service: boolean, allowed = true, embed: (text: string) => Promise<number[]> = async () => VECTOR) {
   const logs: string[] = [];
   const seen: string[] = [];
+  const asked: string[] = [];
   const d: Deps = {
-    caller: async () => caller,
+    isService: async () => service,
+    allowQuestion: async (_token, requestId) => {
+      asked.push(requestId);
+      return allowed;
+    },
     embed: async (text) => {
       seen.push(text);
       return embed(text);
     },
     log: (line) => logs.push(line),
   };
-  return { d, logs, seen };
+  return { d, logs, seen, asked };
 }
+
+const question = (text: string) => ({ texts: [text], request_id: REQUEST_ID });
 
 const post = (body: unknown, token: string | null = "t") =>
   new Request("https://example.test/functions/v1/embed", {
@@ -64,45 +74,78 @@ describe("readTexts", () => {
   });
 });
 
+describe("readRequestId", () => {
+  it("reads a uuid and nothing else", () => {
+    expect(readRequestId({ request_id: REQUEST_ID })).toBe(REQUEST_ID);
+    for (const body of [null, {}, { request_id: "1" }, { request_id: 1 }, { request_id: `${REQUEST_ID}x` }]) expect(readRequestId(body)).toBeNull();
+  });
+});
+
 describe("handleRequest", () => {
-  it("answers 401 without a known caller and never embeds", async () => {
-    for (const [caller, token] of [[null, "t"], ["person", null]] as const) {
-      const { d, seen } = deps(caller);
-      const response = await handleRequest(post({ texts: ["q"] }, token), d);
-      expect(response.status).toBe(401);
-      expect(seen).toEqual([]);
-    }
+  it("answers 401 without a token and never embeds", async () => {
+    const { d, seen } = deps(false);
+    expect((await handleRequest(post(question("q"), null), d)).status).toBe(401);
+    expect(seen).toEqual([]);
   });
 
-  it("answers 401 when the caller check throws", async () => {
-    const { d } = deps("person");
-    d.caller = async () => {
-      throw new Error("auth down");
+  it("lets a person embed only inside an open question that roma_knowledge_embed accepts", async () => {
+    const ok = deps(false, true);
+    const response = await handleRequest(post(question("What is an SIP?")), ok.d);
+    expect(response.status).toBe(200);
+    expect(ok.asked).toEqual([REQUEST_ID]);
+    expect(ok.seen).toEqual(["What is an SIP?"]);
+
+    const refused = deps(false, false);
+    expect((await handleRequest(post(question("q")), refused.d)).status).toBe(403);
+    expect(refused.seen).toEqual([]);
+  });
+
+  it("answers 403 when the question check throws (signed out, bad token, database down)", async () => {
+    const { d, seen } = deps(false);
+    d.allowQuestion = async () => {
+      throw new Error("down");
     };
-    expect((await handleRequest(post({ texts: ["q"] }), d)).status).toBe(401);
+    expect((await handleRequest(post(question("q")), d)).status).toBe(403);
+    expect(seen).toEqual([]);
   });
 
-  it("refuses other methods and bad bodies", async () => {
-    const { d } = deps("person");
-    expect((await handleRequest(new Request("https://example.test/", { method: "GET" }), d)).status).toBe(405);
-    expect((await handleRequest(post("{not json"), d)).status).toBe(400);
+  it("refuses a person's call without a question id, before any check", async () => {
+    const { d, asked } = deps(false);
+    expect((await handleRequest(post({ texts: ["q"] }), d)).status).toBe(400);
+    expect((await handleRequest(post({ texts: ["q"], request_id: "nope" }), d)).status).toBe(400);
+    expect(asked).toEqual([]);
+  });
+
+  it("treats a failing service check as a person", async () => {
+    const { d } = deps(false);
+    d.isService = async () => {
+      throw new Error("x");
+    };
     expect((await handleRequest(post({ texts: ["a", "b"] }), d)).status).toBe(400);
   });
 
-  it("returns one vector per text, in order", async () => {
-    const { d, seen } = deps("service");
+  it("refuses other methods and bad bodies", async () => {
+    const { d } = deps(false);
+    expect((await handleRequest(new Request("https://example.test/", { method: "GET" }), d)).status).toBe(405);
+    expect((await handleRequest(post("{not json"), d)).status).toBe(400);
+    expect((await handleRequest(post({ texts: ["a", "b"], request_id: REQUEST_ID }), d)).status).toBe(400);
+  });
+
+  it("returns one vector per passage to the service role, in order, without a question check", async () => {
+    const { d, seen, asked } = deps(true);
     const response = await handleRequest(post({ texts: ["one", "two"] }), d);
     expect(response.status).toBe(200);
     const body = (await response.json()) as { embeddings: number[][] };
     expect(body.embeddings).toHaveLength(2);
     expect(body.embeddings[0]).toHaveLength(DIMENSIONS);
     expect(seen).toEqual(["one", "two"]);
+    expect(asked).toEqual([]);
   });
 
   it("fails without leaking the text when the model returns a bad vector or throws", async () => {
     for (const embed of [async () => VECTOR.slice(1), async () => [...VECTOR.slice(1), Number.NaN], async () => Promise.reject(new TypeError("secret question"))]) {
-      const { d, logs } = deps("person", embed);
-      const response = await handleRequest(post({ texts: ["secret question"] }), d);
+      const { d, logs } = deps(false, true, embed);
+      const response = await handleRequest(post(question("secret question")), d);
       expect(response.status).toBe(500);
       expect(await response.text()).not.toContain("secret");
       expect(logs.join(" ")).not.toContain("secret");

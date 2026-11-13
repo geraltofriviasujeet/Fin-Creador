@@ -5,9 +5,13 @@
 // Rules (docs/sprint-plan.md, Sprint 10, "10.6 knowledge base: scope and handoff"):
 //   * Supabase's built-in gte-small only (free, no paid provider): 384 dimensions, mean-pooled
 //     and normalised, so cosine similarity matches match_knowledge_chunks.
-//   * Signed-in people embed one question at a time (the knowledge_search tool, 10.6c).
+//   * Signed-in people embed one question at a time (the knowledge_search tool, 10.6c), and
+//     only inside their own open Roma question: request_id must be a roma_usage reservation
+//     that roma_knowledge_embed accepts (20261113120000), so the kill switch, spend caps and
+//     daily limit apply, with at most 3 embeddings per question. Checked with the person's own
+//     token, which also proves they are signed in.
 //   * The service role (the owner's ingestion script) embeds passages in small batches.
-//   * Anyone else gets 401. Text is never logged or stored; errors carry no request data.
+//   * Anyone else gets 401 or 403. Text is never logged or stored; errors carry no request data.
 //   * Every vector is checked (384 finite numbers) before it is returned.
 
 export const DIMENSIONS = 384;
@@ -19,9 +23,13 @@ export const MAX_BATCH = 16;
 
 export type Caller = "person" | "service";
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface Deps {
-  /** Who sent the bearer token: a signed-in person, the service role, or nobody known. */
-  caller(token: string): Promise<Caller | null>;
+  /** Whether the bearer token is the service-role key. */
+  isService(token: string): Promise<boolean>;
+  /** roma_knowledge_embed under the person's token: true when this embedding is allowed. */
+  allowQuestion(token: string, requestId: string): Promise<boolean>;
   /** One gte-small embedding (mean-pooled, normalised). */
   embed(text: string): Promise<number[]>;
   log(line: string): void;
@@ -51,6 +59,13 @@ export async function sameKey(provided: string, expected: string | undefined): P
   return diff === 0;
 }
 
+/** The person's question id (a roma_usage reservation), or null. */
+export function readRequestId(body: unknown): string | null {
+  if (typeof body !== "object" || body === null) return null;
+  const id = (body as { request_id?: unknown }).request_id;
+  return typeof id === "string" && UUID.test(id) ? id : null;
+}
+
 /** The texts to embed, or null when the body breaks the caller's limits. */
 export function readTexts(body: unknown, caller: Caller): string[] | null {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
@@ -69,12 +84,15 @@ export function validVector(vector: unknown): vector is number[] {
   return Array.isArray(vector) && vector.length === DIMENSIONS && vector.every((v) => typeof v === "number" && Number.isFinite(v));
 }
 
-/** POST {"texts": [...]} with a bearer token; answers {"embeddings": [[...384 numbers], ...]}. */
+/**
+ * POST with a bearer token: {"texts": ["question"], "request_id": "<uuid>"} from a person, or
+ * {"texts": [...passages]} from the service role. Answers {"embeddings": [[...384 numbers], ...]}.
+ */
 export async function handleRequest(request: Request, deps: Deps): Promise<Response> {
   if (request.method !== "POST") return json(405, { error: "method_not_allowed" });
   const token = bearer(request.headers.get("Authorization"));
-  const caller = token ? await deps.caller(token).catch(() => null) : null;
-  if (!caller) return json(401, { error: "unauthorized" });
+  if (!token) return json(401, { error: "unauthorized" });
+  const caller: Caller = (await deps.isService(token).catch(() => false)) ? "service" : "person";
 
   let body: unknown;
   try {
@@ -83,7 +101,12 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
     return json(400, { error: "invalid_request" });
   }
   const texts = readTexts(body, caller);
-  if (!texts) return json(400, { error: "invalid_request" });
+  const requestId = caller === "person" ? readRequestId(body) : null;
+  if (!texts || (caller === "person" && !requestId)) return json(400, { error: "invalid_request" });
+  // Counted before the model runs; a failed embedding still used one of the question's three.
+  if (caller === "person" && !(await deps.allowQuestion(token, requestId!).catch(() => false))) {
+    return json(403, { error: "not_allowed" });
+  }
 
   try {
     const embeddings: number[][] = [];
