@@ -13,7 +13,7 @@ verified_on: 2026-11-13
 status: draft
 ---
 
-SEBI requires mutual fund schemes to be grouped into defined categories so investors can compare like with like. Open-ended schemes fall into five broad groups.
+SEBI requires mutual fund schemes to be grouped into defined categories so investors can compare like with like. Under SEBI's circular of 26 February 2026 on categorisation and rationalisation, schemes fall into five broad groups.
 
 ## Equity schemes
 
@@ -27,9 +27,11 @@ Invest in bonds and money market instruments. Categories are defined by how long
 
 Mix equity and debt in ranges set for each category, from conservative (mostly debt) to aggressive (mostly equity), plus arbitrage and other mixes.
 
-## Solution-oriented schemes
+## Life cycle funds
 
-Retirement and children's schemes, with a lock-in of at least five years or until the stated age.
+Funds with a target maturity date in their name (for example "Life Cycle Fund 2045"), launched for 5 to 30 years. They invest across equity, debt, gold and silver ETFs and InvITs, moving from mostly equity towards debt as the date nears. Leaving early carries an exit load: 3% within one year, 2% within two years, 1% within three.
+
+The same circular discontinued the solution-oriented category (retirement and children's schemes); existing ones stopped taking new money and are to be merged into similar schemes.
 
 ## Other schemes
 
@@ -39,4 +41,3 @@ Index funds and exchange-traded funds, which track an index, and funds of funds,
 
 - A category describes what a scheme may hold, not how well it will do.
 - Each scheme carries a riskometer, from low to very high risk, which is reviewed regularly.
-- A fund house may usually offer only one scheme per category (index funds, ETFs and some others aside).

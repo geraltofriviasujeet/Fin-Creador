@@ -13,7 +13,7 @@ financial_year: 2026-27
 status: draft
 ---
 
-These figures are from the First Schedule (Part I-B) and the Memorandum to the Finance Bill 2026, for tax year 2026-27 (1 April 2026 to 31 March 2027). The old regime applies only to someone who opts out of the default section 202 rates (see "Old or new tax regime: how the choice works").
+These figures are from the Finance Bill 2026 as introduced, its First Schedule (Part I-B), and its Memorandum, for tax year 2026-27 (1 April 2026 to 31 March 2027). The old regime applies only to someone who opts out of the default section 202 rates (see "Old or new tax regime: how the choice works").
 
 ## The rates
 

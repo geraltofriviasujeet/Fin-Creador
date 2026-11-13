@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-11-14 (10.6a migration on dev, types committed; 10.6b on draft PR #66: embed function, ingestion script, 23 draft documents, tax examples with cess; migration `20261113120000_knowledge_embed.sql` (embed counter and link-pending rule) awaiting SQL review.)
+Last updated: 2026-11-14 (10.6a migration on dev, types committed; 10.6b built on draft PR #66: embed function, ingestion script, 23 draft documents (tax examples with cess; IRDAI life insurance text replaced by own explainer; mutual fund categories per SEBI's 26 February 2026 circular), migration `20261113120000_knowledge_embed.sql`, owner's runbook `docs/knowledge-runbook.md`. Open: debt-fund capital gains section waits on the Income Tax Department's page being checked; owner deploys, ingests and approves on dev. 10.6c not started.)
 
 ## Sprint status
 
