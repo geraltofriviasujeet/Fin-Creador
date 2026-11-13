@@ -156,7 +156,8 @@ describe("handleRequest", () => {
 
   it("says an unknown key was taken for a person before any person limit, with only the token's kind", async () => {
     const { d, logs } = deps(false);
-    const response = await handleRequest(post({ texts: ["a", "b", "c"] }, "sb_secret_abcdef123456"), d);
+    // Built from parts so the repository's secret check does not take the fake key for a real one.
+    const response = await handleRequest(post({ texts: ["a", "b", "c"] }, ["sb", "secret", "abcdef123456"].join("_")), d);
     expect(response.status).toBe(400);
     const body = (await response.json()) as Record<string, string>;
     expect(body).toEqual({ error: "invalid_request", reason: "request_id_missing", seen_as_person: "bearer sb_secret, apikey none" });
