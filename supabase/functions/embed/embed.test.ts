@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DIMENSIONS, MAX_BATCH, MAX_PASSAGE_CHARS, MAX_QUESTION_CHARS, bearer, handleRequest, readRequestId, readTexts, sameKey, type Deps } from "./embed.ts";
+import { DIMENSIONS, MAX_BATCH, MAX_PASSAGE_CHARS, MAX_QUESTION_CHARS, bearer, handleRequest, isServiceKey, readRequestId, readTexts, sameKey, serviceKeys, type Deps } from "./embed.ts";
 
 const VECTOR = Array.from({ length: DIMENSIONS }, (_, i) => i / DIMENSIONS);
 
@@ -81,6 +81,21 @@ describe("readRequestId", () => {
   });
 });
 
+describe("serviceKeys", () => {
+  it("takes the legacy key and every secret key, and ignores a dictionary that is not JSON", async () => {
+    const keys = serviceKeys("legacy-jwt", JSON.stringify({ default: "sb_secret_one", ingest: "sb_secret_two", bad: 3 }));
+    expect(keys).toEqual(["legacy-jwt", "sb_secret_one", "sb_secret_two"]);
+    expect(serviceKeys(undefined, "not json")).toEqual([]);
+    expect(serviceKeys("legacy-jwt", undefined)).toEqual(["legacy-jwt"]);
+    expect(await isServiceKey("sb_secret_two", keys)).toBe(true);
+    expect(await isServiceKey("legacy-jwt", keys)).toBe(true);
+    expect(await isServiceKey("someone-else", keys)).toBe(false);
+    expect(await isServiceKey("anything", [])).toBe(false);
+  });
+});
+
+const reason = async (response: Response) => ((await response.json()) as { reason?: string }).reason;
+
 describe("handleRequest", () => {
   it("answers 401 without a token and never embeds", async () => {
     const { d, seen } = deps(false);
@@ -121,7 +136,28 @@ describe("handleRequest", () => {
     d.isService = async () => {
       throw new Error("x");
     };
-    expect((await handleRequest(post({ texts: ["a", "b"] }), d)).status).toBe(400);
+    const response = await handleRequest(post({ texts: ["q"] }), d);
+    expect(response.status).toBe(400);
+    expect(await reason(response)).toBe("request_id_missing");
+  });
+
+  it("names the rule a body broke, never the text", async () => {
+    const service = deps(true).d;
+    const cases: [unknown, string][] = [
+      ["{not json", "body_not_json"],
+      [{ texts: [] }, "texts_missing"],
+      [{ passages: ["p"] }, "texts_missing"],
+      [{ texts: Array(MAX_BATCH + 1).fill("p") }, "too_many_texts"],
+      [{ texts: ["  "] }, "text_empty_or_not_string"],
+      [{ texts: ["secret words " + "x".repeat(MAX_PASSAGE_CHARS)] }, "text_too_long"],
+    ];
+    for (const [body, expected] of cases) {
+      const response = await handleRequest(post(body), service);
+      expect(response.status).toBe(400);
+      const text = await response.text();
+      expect(JSON.parse(text)).toEqual({ error: "invalid_request", reason: expected });
+      expect(text).not.toContain("secret words");
+    }
   });
 
   it("refuses other methods and bad bodies", async () => {

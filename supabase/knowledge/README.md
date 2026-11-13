@@ -40,7 +40,7 @@ Step by step, with what each command prints: `docs/knowledge-runbook.md`.
 
 1. Deploy the embed function once per project: `supabase functions deploy embed`.
 2. Keep an env file outside the repository with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`
-   (the key the project gives its Edge Functions).
+   (a secret key `sb_secret_...` or the legacy service-role key).
 3. `npm run knowledge:ingest -- --check` reads and chunks the files without any network.
 4. `KNOWLEDGE_ENV_FILE=~/<private>/dev.env npm run knowledge:ingest`.
 

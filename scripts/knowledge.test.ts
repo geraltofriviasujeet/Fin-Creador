@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MAX_CHUNK_CHARS, chunkText, parseDocument, planIngestion, sha256, validFinancialYear, type ParsedFile } from "./knowledge.ts";
+import { DIMENSIONS, MAX_BATCH, handleRequest } from "../supabase/functions/embed/embed.ts";
+import { EMBED_BATCH, MAX_CHUNK_CHARS, chunkText, embedBatches, parseDocument, planIngestion, sha256, validFinancialYear, type ParsedFile } from "./knowledge.ts";
 
 const OWN = [
   "---",
@@ -151,5 +152,37 @@ describe("supabase/knowledge", () => {
       for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(MAX_CHUNK_CHARS);
     }
     expect(() => planIngestion(parsed, [])).not.toThrow();
+  });
+
+  it("every passage goes through the embed function's checks as the ingestion script sends it", async () => {
+    expect(EMBED_BATCH).toBeLessThanOrEqual(MAX_BATCH);
+    const vector = Array.from({ length: DIMENSIONS }, () => 0.1);
+    const deps = {
+      isService: async () => true,
+      allowQuestion: async () => false,
+      embed: async () => vector,
+      log: () => {},
+    };
+    for (const name of files) {
+      const file = parseDocument(name, readFileSync(join(dir, name), "utf8"));
+      for (const texts of embedBatches(chunkText(file.body))) {
+        // The same body as scripts/ingest-knowledge.ts: {"texts": [...]} with the service key.
+        const request = new Request("https://example.test/functions/v1/embed", {
+          method: "POST",
+          headers: { Authorization: "Bearer service-key", "Content-Type": "application/json" },
+          body: JSON.stringify({ texts }),
+        });
+        const response = await handleRequest(request, deps);
+        expect({ slug: file.document.slug, status: response.status, body: response.status === 200 ? null : await response.text() }).toEqual({ slug: file.document.slug, status: 200, body: null });
+        expect(((await response.json()) as { embeddings: number[][] }).embeddings).toHaveLength(texts.length);
+      }
+    }
+  });
+
+  it("splits passages into the script's batches in order", () => {
+    const chunks = Array.from({ length: EMBED_BATCH * 2 + 1 }, (_, i) => `p${i}`);
+    const batches = embedBatches(chunks);
+    expect(batches.map((b) => b.length)).toEqual([EMBED_BATCH, EMBED_BATCH, 1]);
+    expect(batches.flat()).toEqual(chunks);
   });
 });

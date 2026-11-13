@@ -39,8 +39,8 @@ Works when: it prints `{"error":"unauthorized"}`.
 
 Once: create the env file outside the repository, readable only by you, with two lines
 (`SUPABASE_URL=https://<dev-project-ref>.supabase.co` and `SUPABASE_SERVICE_ROLE_KEY=<the
-key>`; Dashboard → Project Settings → API keys, the legacy service-role key, the same value the
-function receives):
+key>`; Dashboard → Project Settings → API keys: a secret key (`sb_secret_...`) or the legacy
+service-role key. The embed function accepts either, from its deploy of 2026-11-14 on):
 
 ```sh
 umask 077; touch ~/<private>/dev.env; open -e ~/<private>/dev.env
@@ -65,8 +65,11 @@ KNOWLEDGE_ENV_FILE=~/<private>/dev.env npm run knowledge:ingest
 Works when: one line per new or changed document, such as
 `compounding: written (draft, N passages)`, then `23 written, 0 unchanged, 0 retired.` on the
 first run. Running it again straight away prints `0 written, 23 unchanged, 0 retired.` An error
-prints one line (`POST /functions/v1/embed failed: 401 ...`, never the key) and exits with
-code 1; fix the cause and run it again, it redoes only what is unfinished.
+prints one line with the document's slug and the reason, never the key or the text (for example
+`compounding: POST /functions/v1/embed failed: 400 invalid_request (text_too_long)`), and exits
+with code 1; fix the cause and run it again, it redoes only what is unfinished. Reason
+`request_id_missing` means the function did not recognise the key as a service key: check the
+key in the env file and that the function was redeployed after 2026-11-14.
 
 Check (SQL editor):
 

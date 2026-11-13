@@ -6,9 +6,10 @@
 //
 // The env file holds two lines and lives outside the repository:
 //   SUPABASE_URL=https://<project-ref>.supabase.co
-//   SUPABASE_SERVICE_ROLE_KEY=<the project's service-role key>
-// The key is the one the project gives its Edge Functions as SUPABASE_SERVICE_ROLE_KEY (the
-// embed function compares the two). It is never printed, logged or written anywhere.
+//   SUPABASE_SERVICE_ROLE_KEY=<a secret key (sb_secret_...) or the legacy service-role key>
+// The key is one the project gives its Edge Functions (SUPABASE_SECRET_KEYS or the legacy
+// SUPABASE_SERVICE_ROLE_KEY; the embed function compares them). It is never printed, logged or
+// written anywhere.
 //
 // A run: reads and checks every file (one bad file stops the run before any write), compares
 // each file's SHA-256 with content_hash, and for each new or changed file embeds its passages
@@ -20,11 +21,10 @@ import { readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PENDING_HASH, chunkText, parseDocument, planIngestion, type ParsedFile, type StoredDocument } from "./knowledge.ts";
+import { PENDING_HASH, chunkText, embedBatches, parseDocument, planIngestion, type ParsedFile, type StoredDocument } from "./knowledge.ts";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DOCUMENTS_DIR = join(REPO, "supabase", "knowledge");
-const EMBED_BATCH = 16;
 
 function readFiles(): ParsedFile[] {
   const names = readdirSync(DOCUMENTS_DIR).filter((name) => name.endsWith(".md") && name !== "README.md").sort();
@@ -74,12 +74,16 @@ class Project {
       // Status and the server's error code and message only; never the request or headers.
       let detail = "";
       try {
-        const error = JSON.parse(text) as { code?: string; message?: string; error?: string };
-        detail = `${error.code ?? ""} ${error.message ?? error.error ?? ""}`.trim();
+        const error = JSON.parse(text) as { code?: string; message?: string; error?: string; reason?: string };
+        detail = `${error.code ?? ""} ${error.message ?? error.error ?? ""}${error.reason ? ` (${error.reason})` : ""}`.trim();
+        // The embed function treats a key it does not know as a person's token.
+        if (error.reason === "request_id_missing") {
+          detail += ": the embed function did not take SUPABASE_SERVICE_ROLE_KEY as a service key; use the project's legacy service-role key or a secret key (sb_secret_...), and redeploy the function if it predates secret-key support";
+        }
       } catch {
         detail = "";
       }
-      throw new Error(`${init.method} ${path.split("?")[0]} failed: ${response.status} ${detail}`.slice(0, 300));
+      throw new Error(`${init.method} ${path.split("?")[0]} failed: ${response.status} ${detail}`.slice(0, 600));
     }
     return text ? JSON.parse(text) : null;
   }
@@ -90,8 +94,7 @@ class Project {
 
   async embed(texts: string[]): Promise<number[][]> {
     const vectors: number[][] = [];
-    for (let i = 0; i < texts.length; i += EMBED_BATCH) {
-      const batch = texts.slice(i, i + EMBED_BATCH);
+    for (const batch of embedBatches(texts)) {
       const body = (await this.call("/functions/v1/embed", { method: "POST", body: { texts: batch } })) as { embeddings?: number[][] };
       if (!Array.isArray(body?.embeddings) || body.embeddings.length !== batch.length) throw new Error("The embed function returned the wrong number of vectors.");
       vectors.push(...body.embeddings);
@@ -152,7 +155,11 @@ async function main() {
   for (const slug of plan.write) {
     const file = files.find((f) => f.document.slug === slug)!;
     const chunks = chunksBySlug.get(slug)!;
-    await project.write(file, chunks, await project.embed(chunks));
+    try {
+      await project.write(file, chunks, await project.embed(chunks));
+    } catch (error) {
+      throw new Error(`${slug}: ${error instanceof Error ? error.message : "failed"}`);
+    }
     console.warn(`${slug}: written (${file.document.status}, ${chunks.length} passages)`);
   }
   await project.retire(plan.retire);

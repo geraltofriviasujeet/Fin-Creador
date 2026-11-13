@@ -10,6 +10,8 @@ import { createHash } from "node:crypto";
 
 export const MAX_CHUNK_CHARS = 1200;
 export const MAX_CHUNKS = 200;
+// Passages per call to the embed function (at most its MAX_BATCH).
+export const EMBED_BATCH = 16;
 export const FINCREADOR = "FinCreador";
 // A placeholder hash written while a document's passages are replaced, so a run that stops half
 // way never matches the file and the next run redoes it.
@@ -260,6 +262,13 @@ export function chunkText(body: string, limit = MAX_CHUNK_CHARS): string[] {
   const chunks = pack(merged.flatMap((m) => splitParagraph(m, limit)), limit, "\n\n");
   if (chunks.length > MAX_CHUNKS) throw new Error(`more than ${MAX_CHUNKS} passages; split the document`);
   return chunks;
+}
+
+/** The passages in the groups the ingestion script sends to the embed function, in order. */
+export function embedBatches(chunks: string[], size = EMBED_BATCH): string[][] {
+  const batches: string[][] = [];
+  for (let i = 0; i < chunks.length; i += size) batches.push(chunks.slice(i, i + size));
+  return batches;
 }
 
 export interface StoredDocument {

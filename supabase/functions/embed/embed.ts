@@ -10,8 +10,10 @@
 //     that roma_knowledge_embed accepts (20261113120000), so the kill switch, spend caps and
 //     daily limit apply, with at most 3 embeddings per question. Checked with the person's own
 //     token, which also proves they are signed in.
-//   * The service role (the owner's ingestion script) embeds passages in small batches.
+//   * The service role (the owner's ingestion script) embeds passages in small batches. Its key
+//     is the legacy service-role key or any of the project's secret keys (sb_secret_...).
 //   * Anyone else gets 401 or 403. Text is never logged or stored; errors carry no request data.
+//     A 400 names the rule the body broke (a fixed reason code), never the text.
 //   * Every vector is checked (384 finite numbers) before it is returned.
 
 export const DIMENSIONS = 384;
@@ -37,6 +39,7 @@ export interface Deps {
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const invalid = (reason: InvalidReason) => json(400, { error: "invalid_request", reason });
 
 /** The bearer token from an Authorization header, or null. */
 export function bearer(header: string | null): string | null {
@@ -59,6 +62,38 @@ export async function sameKey(provided: string, expected: string | undefined): P
   return diff === 0;
 }
 
+/**
+ * The keys that make a caller the service role: the legacy service-role key and every value of
+ * the secret keys dictionary (SUPABASE_SECRET_KEYS, JSON such as {"default": "sb_secret_..."}).
+ */
+export function serviceKeys(legacy: string | undefined, secretKeysJson: string | undefined): string[] {
+  const keys = legacy ? [legacy] : [];
+  try {
+    const parsed: unknown = secretKeysJson ? JSON.parse(secretKeysJson) : null;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      for (const value of Object.values(parsed)) if (typeof value === "string" && value !== "") keys.push(value);
+    }
+  } catch {
+    // Not JSON: only the legacy key counts.
+  }
+  return keys;
+}
+
+/** Whether the token is one of the service keys (each compared in constant time). */
+export async function isServiceKey(token: string, keys: string[]): Promise<boolean> {
+  const matches = await Promise.all(keys.map((key) => sameKey(token, key)));
+  return matches.includes(true);
+}
+
+/** Why a body was refused with 400; sent back as {"error": "invalid_request", "reason": ...}. */
+export type InvalidReason =
+  | "body_not_json"
+  | "texts_missing"
+  | "too_many_texts"
+  | "text_empty_or_not_string"
+  | "text_too_long"
+  | "request_id_missing";
+
 /** The person's question id (a roma_usage reservation), or null. */
 export function readRequestId(body: unknown): string | null {
   if (typeof body !== "object" || body === null) return null;
@@ -66,18 +101,25 @@ export function readRequestId(body: unknown): string | null {
   return typeof id === "string" && UUID.test(id) ? id : null;
 }
 
-/** The texts to embed, or null when the body breaks the caller's limits. */
-export function readTexts(body: unknown, caller: Caller): string[] | null {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
+/** The texts to embed, or the rule the body breaks for this caller. */
+export function checkTexts(body: unknown, caller: Caller): { texts: string[] } | { reason: InvalidReason } {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return { reason: "texts_missing" };
   const texts = (body as { texts?: unknown }).texts;
-  if (!Array.isArray(texts) || texts.length === 0) return null;
+  if (!Array.isArray(texts) || texts.length === 0) return { reason: "texts_missing" };
   const maxCount = caller === "person" ? 1 : MAX_BATCH;
   const maxChars = caller === "person" ? MAX_QUESTION_CHARS : MAX_PASSAGE_CHARS;
-  if (texts.length > maxCount) return null;
+  if (texts.length > maxCount) return { reason: "too_many_texts" };
   for (const text of texts) {
-    if (typeof text !== "string" || text.trim() === "" || text.length > maxChars) return null;
+    if (typeof text !== "string" || text.trim() === "") return { reason: "text_empty_or_not_string" };
+    if (text.length > maxChars) return { reason: "text_too_long" };
   }
-  return texts as string[];
+  return { texts: texts as string[] };
+}
+
+/** The texts to embed, or null when the body breaks the caller's limits. */
+export function readTexts(body: unknown, caller: Caller): string[] | null {
+  const checked = checkTexts(body, caller);
+  return "texts" in checked ? checked.texts : null;
 }
 
 export function validVector(vector: unknown): vector is number[] {
@@ -98,11 +140,15 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
   try {
     body = await request.json();
   } catch {
-    return json(400, { error: "invalid_request" });
+    return invalid("body_not_json");
   }
-  const texts = readTexts(body, caller);
+  const checked = checkTexts(body, caller);
+  if ("reason" in checked) return invalid(checked.reason);
+  const texts = checked.texts;
+  // A token that is not a service key is treated as a person's, and a person's call needs its
+  // question's request_id: a service key the function does not know ends here.
   const requestId = caller === "person" ? readRequestId(body) : null;
-  if (!texts || (caller === "person" && !requestId)) return json(400, { error: "invalid_request" });
+  if (caller === "person" && !requestId) return invalid("request_id_missing");
   // Counted before the model runs; a failed embedding still used one of the question's three.
   if (caller === "person" && !(await deps.allowQuestion(token, requestId!).catch(() => false))) {
     return json(403, { error: "not_allowed" });
