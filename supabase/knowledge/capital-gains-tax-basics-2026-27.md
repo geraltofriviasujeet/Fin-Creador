@@ -29,6 +29,16 @@ These figures are from the Income-tax Act, 2025, as published on the Income Tax 
 
 Surcharge on the tax applies above ₹50 lakh of income (see the income tax explainers), but on these gains it is capped at 15%. Health and education cess is 4% of the tax plus surcharge. For a resident individual whose other income is below the basic exemption limit, the unused part of that limit reduces the gain first.
 
+## Debt mutual funds and market linked debentures (section 76)
+
+Section 76 of the Income-tax Act, 2025 treats some gains as short-term whatever the holding period, so they are added to income and taxed at the person's slab rate, with no 12.5% long-term rate:
+
+- Units of a specified mutual fund bought on or after 1 April 2023. A specified mutual fund invests more than 65% of its money in debt and money market instruments, or invests 65% or more in units of such a fund.
+- Market linked debentures.
+- Unlisted bonds and debentures transferred, redeemed or matured on or after 23 July 2024.
+
+Example under the default (new) regime: salary ₹15,00,000, so taxable income ₹14,25,000 after the standard deduction, plus a ₹1,00,000 gain on debt fund units bought in 2024 and held three years. Taxable income becomes ₹15,25,000. Tax: 5% of ₹4,00,000 (₹20,000) + 10% of ₹4,00,000 (₹40,000) + 15% of ₹3,25,000 (₹48,750) = ₹1,08,750. Cess ₹4,350; total ₹1,13,100. Without the gain the total would be ₹97,500, so the gain costs ₹15,600 (15% plus cess), even though it was held for three years.
+
 ## Worked examples (cess included, no surcharge)
 
 - Equity fund units held 18 months, gain ₹2,00,000: tax on ₹2,00,000 − ₹1,25,000 = ₹75,000 at 12.5% = ₹9,375. Cess ₹375; total ₹9,750.

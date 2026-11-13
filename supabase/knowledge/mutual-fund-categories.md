@@ -17,7 +17,7 @@ SEBI requires mutual fund schemes to be grouped into defined categories so inves
 
 ## Equity schemes
 
-Invest mainly in shares. Categories are defined by company size, style or theme. Company size is set by market capitalisation rank: large cap is the 1st to 100th company, mid cap the 101st to 250th, and small cap the 251st onwards. Equity-linked savings schemes (ELSS) carry a three-year lock-in. Equity schemes usually carry the highest short-term ups and downs of the groups.
+Invest mainly in shares. Categories are defined by company size, style or theme. Company size is set by market capitalisation rank: large cap is the 1st to 100th company, mid cap the 101st to 250th, and small cap the 251st onwards. Equity-linked savings schemes (ELSS) carry a three-year lock-in. A fund house may offer both a value fund and a contra fund only if their portfolios overlap by no more than 50%. Equity schemes usually carry the highest short-term ups and downs of the groups.
 
 ## Debt schemes
 
@@ -29,9 +29,9 @@ Mix equity and debt in ranges set for each category, from conservative (mostly d
 
 ## Life cycle funds
 
-Funds with a target maturity date in their name (for example "Life Cycle Fund 2045"), launched for 5 to 30 years. They invest across equity, debt, gold and silver ETFs and InvITs, moving from mostly equity towards debt as the date nears. Leaving early carries an exit load: 3% within one year, 2% within two years, 1% within three.
+Funds with a target maturity date in their name (for example "Life Cycle Fund 2045"), launched for 5 to 30 years in multiples of 5 years. They follow a glide path across equity, debt and other assets (gold and silver ETFs, InvITs), moving from mostly equity towards debt as the date nears. Leaving early carries an exit load: 3% within one year, 2% within two years, 1% within three.
 
-The same circular discontinued the solution-oriented category (retirement and children's schemes); existing ones stopped taking new money and are to be merged into similar schemes.
+The same circular discontinued the solution-oriented category (retirement and children's schemes) from 26 February 2026; existing ones stopped taking new money and are to be merged into similar schemes.
 
 ## Other schemes
 
