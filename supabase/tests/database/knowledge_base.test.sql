@@ -17,6 +17,7 @@ returns uuid language sql set search_path = ''
             'content_kind', 'official',
             'publisher', 'Example Regulator',
             'source_url', 'https://example.org/source',
+            'link_permission_pending', false,  -- column added by 20261113120000
             'reuse_terms', 'Reuse permitted with attribution.',
             'reuse_terms_url', 'https://example.org/terms',
             'reuse_terms_checked_on', '2026-11-10',
