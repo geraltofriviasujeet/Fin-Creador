@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-11-13 (10.6a migration on dev, types committed; 10.6b on draft PR #66: embed function, ingestion script, 22 draft documents; migration `20261113120000_knowledge_embed.sql` (embed counter and link-pending rule) awaiting SQL review; old-regime slab document on hold.)
+Last updated: 2026-11-14 (10.6a migration on dev, types committed; 10.6b on draft PR #66: embed function, ingestion script, 23 draft documents, tax examples with cess; migration `20261113120000_knowledge_embed.sql` (embed counter and link-pending rule) awaiting SQL review.)
 
 ## Sprint status
 

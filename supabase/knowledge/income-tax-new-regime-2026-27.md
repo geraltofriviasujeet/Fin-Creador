@@ -27,7 +27,13 @@ For individuals, Hindu undivided families and some other persons, these rates ap
 - ₹20,00,001 to ₹24,00,000: 25%
 - Above ₹24,00,000: 30%
 
-Each rate applies only to the part of income inside its band. Health and education cess, and surcharge on high incomes, are added on top; their rates are not covered here.
+Each rate applies only to the part of income inside its band.
+
+## Surcharge and cess
+
+- Surcharge, a percentage of the tax: 10% above ₹50 lakh up to ₹1 crore; 15% above ₹1 crore up to ₹2 crore; 25% above ₹2 crore. Under these rates surcharge never goes above 25% (section 202). On dividends and on capital gains taxed under sections 196 to 198, surcharge is capped at 15%.
+- Marginal relief: just above each surcharge threshold, the tax plus surcharge cannot exceed the tax plus surcharge at the threshold by more than the income above it.
+- Health and education cess: 4% of the tax plus surcharge.
 
 ## Standard deduction and rebate
 
@@ -35,13 +41,13 @@ Each rate applies only to the part of income inside its band. Health and educati
 - A resident individual whose total income is up to ₹12,00,000 gets a rebate of the whole tax, up to ₹60,000 (section 156(2)). Just above ₹12,00,000, the rebate makes sure the tax is never more than the income above ₹12,00,000.
 - Income taxed at special rates, such as some capital gains, is handled separately.
 
-## Worked examples (before cess)
+## Worked examples (cess included)
 
-Salary ₹13,00,000. Taxable income after the standard deduction: ₹12,25,000. Tax: 5% of ₹4,00,000 (₹20,000) + 10% of ₹4,00,000 (₹40,000) + 15% of ₹25,000 (₹3,750) = ₹63,750. The income is ₹25,000 above ₹12,00,000, so the rebate is ₹63,750 − ₹25,000 = ₹38,750 and the tax is ₹25,000.
+Salary ₹13,00,000. Taxable income after the standard deduction: ₹12,25,000. Tax: 5% of ₹4,00,000 (₹20,000) + 10% of ₹4,00,000 (₹40,000) + 15% of ₹25,000 (₹3,750) = ₹63,750. The income is ₹25,000 above ₹12,00,000, so the rebate is ₹63,750 − ₹25,000 = ₹38,750 and the tax is ₹25,000. Cess ₹1,000; total ₹26,000.
 
-Salary ₹12,75,000. Taxable income ₹12,00,000; tax ₹60,000; rebate ₹60,000; tax nil.
+Salary ₹12,75,000. Taxable income ₹12,00,000; tax ₹60,000; rebate ₹60,000; tax nil, so no cess.
 
-Salary ₹15,00,000. Taxable income ₹14,25,000; tax ₹93,750. The income above ₹12,00,000 (₹2,25,000) is more than the tax, so there is no rebate.
+Salary ₹15,00,000. Taxable income ₹14,25,000; tax ₹93,750. The income above ₹12,00,000 (₹2,25,000) is more than the tax, so there is no rebate. Cess ₹3,750; total ₹97,500.
 
 ## What is given up
 

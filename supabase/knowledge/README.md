@@ -36,6 +36,8 @@ attribution rule or any other column rule, before writing anything.
 
 ## Ingesting (owner only)
 
+Step by step, with what each command prints: `docs/knowledge-runbook.md`.
+
 1. Deploy the embed function once per project: `supabase functions deploy embed`.
 2. Keep an env file outside the repository with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`
    (the key the project gives its Edge Functions).

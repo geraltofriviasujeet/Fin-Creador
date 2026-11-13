@@ -55,7 +55,8 @@ Subject: Request for permission to link to the Income Tax Department's website
 > www.incometaxindia.gov.in.
 >
 > Nature of the content: short explainers written in our own words for tax year 2026-27
-> under the Income-tax Act, 2025, on the default tax rates under section 202, the deduction
+> under the Income-tax Act, 2025, on the default tax rates under section 202, the old regime's
+> rates, surcharge and cess, the deduction
 > limits under sections 123, 124 and 126, how the choice of regime works, and capital gains
 > basics. Each explainer is labelled "FinCreador explainer, based on Income Tax Department
 > material" and states the tax year it covers. We do not reproduce the Department's pages, use

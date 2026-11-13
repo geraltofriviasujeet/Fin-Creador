@@ -27,13 +27,13 @@ These figures are from the Income-tax Act, 2025, as published on the Income Tax 
 - Long-term gains on those listed equity shares and units: 12.5% on the part above ₹1,25,000 in the year (section 198).
 - Other long-term gains: 12.5% (section 197). For land or buildings bought before 23 July 2024, a resident individual pays no more than 20% of the gain worked out with indexed cost (section 197(3)).
 
-Cess and any surcharge are added on top; their rates are not covered here. For a resident individual whose other income is below the basic exemption limit, the unused part of that limit reduces the gain first.
+Surcharge on the tax applies above ₹50 lakh of income (see the income tax explainers), but on these gains it is capped at 15%. Health and education cess is 4% of the tax plus surcharge. For a resident individual whose other income is below the basic exemption limit, the unused part of that limit reduces the gain first.
 
-## Worked examples (before cess)
+## Worked examples (cess included, no surcharge)
 
-- Equity fund units held 18 months, gain ₹2,00,000: tax on ₹2,00,000 − ₹1,25,000 = ₹75,000 at 12.5% = ₹9,375.
-- Shares held 8 months, gain ₹50,000: 20% = ₹10,000.
-- Gold held 3 years, gain ₹3,00,000: 12.5% = ₹37,500.
+- Equity fund units held 18 months, gain ₹2,00,000: tax on ₹2,00,000 − ₹1,25,000 = ₹75,000 at 12.5% = ₹9,375. Cess ₹375; total ₹9,750.
+- Shares held 8 months, gain ₹50,000: 20% = ₹10,000. Cess ₹400; total ₹10,400.
+- Gold held 3 years, gain ₹3,00,000: 12.5% = ₹37,500. Cess ₹1,500; total ₹39,000.
 
 ## Points to keep in mind
 

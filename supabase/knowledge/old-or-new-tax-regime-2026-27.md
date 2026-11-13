@@ -30,11 +30,13 @@ The section 202(1) rates (often called the new regime) apply to individuals and 
 - Deductions such as section 123 (₹1,50,000), section 124(3) (own NPS, ₹50,000) and section 126 (health insurance) count only under the old regime.
 - Rebate (section 156): under the default rates, up to ₹60,000 for income up to ₹12,00,000; under the old regime, up to ₹12,500 for income up to ₹5,00,000.
 
-## A worked example
+## A worked example (cess included)
 
 A salary of ₹12,00,000, with ₹1,50,000 under section 123, ₹50,000 own NPS and ₹25,000 family health insurance.
 
-- Default rates: taxable income ₹12,00,000 − ₹75,000 = ₹11,25,000. Tax ₹52,500, fully cancelled by the rebate: nil.
-- Old regime: taxable income ₹12,00,000 − ₹50,000 − ₹1,50,000 − ₹50,000 − ₹25,000 = ₹9,25,000. This is above ₹5,00,000, so the old regime's rebate does not apply and tax is payable at the old regime's rates.
+- Default rates: taxable income ₹12,00,000 − ₹75,000 = ₹11,25,000. Tax ₹52,500, fully cancelled by the rebate: nil, so no cess.
+- Old regime: taxable income ₹12,00,000 − ₹50,000 − ₹1,50,000 − ₹50,000 − ₹25,000 = ₹9,25,000. This is above ₹5,00,000, so the old regime's rebate does not apply. Under 60, tax is 5% of ₹2,50,000 (₹12,500) + 20% of ₹4,25,000 (₹85,000) = ₹97,500. Cess ₹3,900; total ₹1,01,400.
+
+Here the default rates are lower by ₹1,01,400. The old regime's rates are in "Income tax under the old regime".
 
 The comparison turns on how large the deductions are. Working out the tax both ways with your own figures shows which is lower; the regime does not change how income is earned or invested.
