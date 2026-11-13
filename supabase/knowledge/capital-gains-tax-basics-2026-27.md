@@ -37,7 +37,7 @@ Section 76 of the Income-tax Act, 2025 treats some gains as short-term whatever 
 - Market linked debentures.
 - Unlisted bonds and debentures transferred, redeemed or matured on or after 23 July 2024.
 
-Example under the default (new) regime: salary ₹15,00,000, so taxable income ₹14,25,000 after the standard deduction, plus a ₹1,00,000 gain on debt fund units bought in 2024 and held three years. Taxable income becomes ₹15,25,000. Tax: 5% of ₹4,00,000 (₹20,000) + 10% of ₹4,00,000 (₹40,000) + 15% of ₹3,25,000 (₹48,750) = ₹1,08,750. Cess ₹4,350; total ₹1,13,100. Without the gain the total would be ₹97,500, so the gain costs ₹15,600 (15% plus cess), even though it was held for three years.
+Example under the default (new) regime: salary ₹15,00,000, so taxable income ₹14,25,000 after the standard deduction, plus a ₹1,00,000 gain on debt fund units bought in May 2023 and sold in December 2026 (held over three years). Taxable income becomes ₹15,25,000. Tax: 5% of ₹4,00,000 (₹20,000) + 10% of ₹4,00,000 (₹40,000) + 15% of ₹3,25,000 (₹48,750) = ₹1,08,750. Cess ₹4,350; total ₹1,13,100. Without the gain the total would be ₹97,500, so the gain costs ₹15,600 (15% plus cess), even though it was held for over three years.
 
 ## Worked examples (cess included, no surcharge)
 
