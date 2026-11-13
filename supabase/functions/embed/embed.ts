@@ -11,7 +11,8 @@
 //     daily limit apply, with at most 3 embeddings per question. Checked with the person's own
 //     token, which also proves they are signed in.
 //   * The service role (the owner's ingestion script) embeds passages in small batches. Its key
-//     is the legacy service-role key or any of the project's secret keys (sb_secret_...).
+//     is the legacy service-role key or any of the project's secret keys (sb_secret_...), sent as
+//     the bearer token or the apikey header (the platform may replace the bearer on the way).
 //   * Anyone else gets 401 or 403. Text is never logged or stored; errors carry no request data.
 //     A 400 names the rule the body broke (a fixed reason code), never the text.
 //   * Every vector is checked (384 finite numbers) before it is returned.
@@ -94,6 +95,27 @@ export type InvalidReason =
   | "text_too_long"
   | "request_id_missing";
 
+/**
+ * What kind of token this looks like, for refusals and logs: never any part of the token beyond
+ * a key prefix or a JWT's role claim (read unverified, for diagnosis only).
+ */
+export function tokenKind(token: string | null): string {
+  if (!token) return "none";
+  if (token.startsWith("sb_secret_")) return "sb_secret";
+  if (token.startsWith("sb_publishable_")) return "sb_publishable";
+  const parts = token.split(".");
+  if (parts.length === 3) {
+    try {
+      const payload = JSON.parse(atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/"))) as { role?: unknown };
+      const role = typeof payload.role === "string" && /^[a-z_]{1,32}$/.test(payload.role) ? payload.role : "unknown";
+      return `jwt:${role}`;
+    } catch {
+      return "jwt:unreadable";
+    }
+  }
+  return "other";
+}
+
 /** The person's question id (a roma_usage reservation), or null. */
 export function readRequestId(body: unknown): string | null {
   if (typeof body !== "object" || body === null) return null;
@@ -134,7 +156,10 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
   if (request.method !== "POST") return json(405, { error: "method_not_allowed" });
   const token = bearer(request.headers.get("Authorization"));
   if (!token) return json(401, { error: "unauthorized" });
-  const caller: Caller = (await deps.isService(token).catch(() => false)) ? "service" : "person";
+  const apikey = request.headers.get("apikey");
+  const service =
+    (await deps.isService(token).catch(() => false)) || (apikey !== null && (await deps.isService(apikey).catch(() => false)));
+  const caller: Caller = service ? "service" : "person";
 
   let body: unknown;
   try {
@@ -142,13 +167,18 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
   } catch {
     return invalid("body_not_json");
   }
+  // A token that is not a service key is treated as a person's, and a person's call needs its
+  // question's request_id: checked first, so a service key the function does not know ends
+  // here with a reason that says so, not with the person's one-text limit.
+  const requestId = caller === "person" ? readRequestId(body) : null;
+  if (caller === "person" && !requestId) {
+    const seen = `bearer ${tokenKind(token)}, apikey ${tokenKind(apikey)}`;
+    deps.log(`embed refused: not a service key and no request_id (${seen})`);
+    return json(400, { error: "invalid_request", reason: "request_id_missing", seen_as_person: seen });
+  }
   const checked = checkTexts(body, caller);
   if ("reason" in checked) return invalid(checked.reason);
   const texts = checked.texts;
-  // A token that is not a service key is treated as a person's, and a person's call needs its
-  // question's request_id: a service key the function does not know ends here.
-  const requestId = caller === "person" ? readRequestId(body) : null;
-  if (caller === "person" && !requestId) return invalid("request_id_missing");
   // Counted before the model runs; a failed embedding still used one of the question's three.
   if (caller === "person" && !(await deps.allowQuestion(token, requestId!).catch(() => false))) {
     return json(403, { error: "not_allowed" });

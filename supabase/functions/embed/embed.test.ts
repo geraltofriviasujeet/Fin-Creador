@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DIMENSIONS, MAX_BATCH, MAX_PASSAGE_CHARS, MAX_QUESTION_CHARS, bearer, handleRequest, isServiceKey, readRequestId, readTexts, sameKey, serviceKeys, type Deps } from "./embed.ts";
+import { DIMENSIONS, MAX_BATCH, MAX_PASSAGE_CHARS, MAX_QUESTION_CHARS, bearer, handleRequest, isServiceKey, tokenKind, readRequestId, readTexts, sameKey, serviceKeys, type Deps } from "./embed.ts";
 
 const VECTOR = Array.from({ length: DIMENSIONS }, (_, i) => i / DIMENSIONS);
 
@@ -81,6 +81,19 @@ describe("readRequestId", () => {
   });
 });
 
+describe("tokenKind", () => {
+  it("names a key prefix or a JWT's role, nothing else", () => {
+    const jwt = (payload: object) => `h.${btoa(JSON.stringify(payload)).replace(/=+$/, "")}.s`;
+    expect(tokenKind(null)).toBe("none");
+    expect(tokenKind("sb_secret_xyz")).toBe("sb_secret");
+    expect(tokenKind("sb_publishable_xyz")).toBe("sb_publishable");
+    expect(tokenKind(jwt({ role: "service_role", sub: "x" }))).toBe("jwt:service_role");
+    expect(tokenKind(jwt({ role: "Robert'); drop" }))).toBe("jwt:unknown");
+    expect(tokenKind("a.!!!.c")).toBe("jwt:unreadable");
+    expect(tokenKind("plain")).toBe("other");
+  });
+});
+
 describe("serviceKeys", () => {
   it("takes the legacy key and every secret key, and ignores a dictionary that is not JSON", async () => {
     const keys = serviceKeys("legacy-jwt", JSON.stringify({ default: "sb_secret_one", ingest: "sb_secret_two", bad: 3 }));
@@ -139,6 +152,28 @@ describe("handleRequest", () => {
     const response = await handleRequest(post({ texts: ["q"] }), d);
     expect(response.status).toBe(400);
     expect(await reason(response)).toBe("request_id_missing");
+  });
+
+  it("says an unknown key was taken for a person before any person limit, with only the token's kind", async () => {
+    const { d, logs } = deps(false);
+    const response = await handleRequest(post({ texts: ["a", "b", "c"] }, "sb_secret_abcdef123456"), d);
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as Record<string, string>;
+    expect(body).toEqual({ error: "invalid_request", reason: "request_id_missing", seen_as_person: "bearer sb_secret, apikey none" });
+    expect(JSON.stringify(body) + logs.join()).not.toContain("abcdef123456");
+  });
+
+  it("takes the service role from the apikey header when the bearer is not a service key", async () => {
+    const { d, asked } = deps(false);
+    d.isService = async (token) => token === "the-service-key";
+    const request = new Request("https://example.test/functions/v1/embed", {
+      method: "POST",
+      headers: { Authorization: "Bearer some.platform.jwt", apikey: "the-service-key" },
+      body: JSON.stringify({ texts: ["one", "two", "three"] }),
+    });
+    const response = await handleRequest(request, d);
+    expect(response.status).toBe(200);
+    expect(asked).toEqual([]);
   });
 
   it("names the rule a body broke, never the text", async () => {

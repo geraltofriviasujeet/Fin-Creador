@@ -68,8 +68,9 @@ first run. Running it again straight away prints `0 written, 23 unchanged, 0 ret
 prints one line with the document's slug and the reason, never the key or the text (for example
 `compounding: POST /functions/v1/embed failed: 400 invalid_request (text_too_long)`), and exits
 with code 1; fix the cause and run it again, it redoes only what is unfinished. Reason
-`request_id_missing` means the function did not recognise the key as a service key: check the
-key in the env file and that the function was redeployed after 2026-11-14.
+`request_id_missing` means the function did not recognise the key as a service key; the line
+ends with what the function saw (for example `bearer jwt:service_role, apikey sb_secret`, only
+the kind of each token). Check the key in the env file and that the function is redeployed.
 
 Check (SQL editor):
 

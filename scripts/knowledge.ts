@@ -7,11 +7,12 @@
 // constraints on public.knowledge_documents (20261111120000_knowledge_base.sql), so a file the
 // database would refuse is refused here first, with the file and the field named.
 import { createHash } from "node:crypto";
+import { MAX_BATCH } from "../supabase/functions/embed/embed.ts";
 
 export const MAX_CHUNK_CHARS = 1200;
 export const MAX_CHUNKS = 200;
-// Passages per call to the embed function (at most its MAX_BATCH).
-export const EMBED_BATCH = 16;
+// Passages per call to the embed function: its own cap, so the two cannot drift.
+export const EMBED_BATCH = MAX_BATCH;
 export const FINCREADOR = "FinCreador";
 // A placeholder hash written while a document's passages are replaced, so a run that stops half
 // way never matches the file and the next run redoes it.

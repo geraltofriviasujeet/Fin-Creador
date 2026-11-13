@@ -163,9 +163,19 @@ describe("supabase/knowledge", () => {
       embed: async () => vector,
       log: () => {},
     };
-    for (const name of files) {
-      const file = parseDocument(name, readFileSync(join(dir, name), "utf8"));
-      for (const texts of embedBatches(chunkText(file.body))) {
+    // Every real document, plus one with more passages than the function takes in one call.
+    const long = OWN.replace(/\n---\n[\s\S]*$/, "\n---\n") +
+      Array.from({ length: MAX_BATCH * 2 + 3 }, (_, i) => `## Part ${i + 1}\n\n${"Words of the part. ".repeat(60)}`).join("\n\n");
+    const documents = [
+      ...files.map((name) => parseDocument(name, readFileSync(join(dir, name), "utf8"))),
+      parseDocument("what-is-an-sip.md", long),
+    ];
+    expect(chunkText(documents.at(-1)!.body).length).toBeGreaterThan(MAX_BATCH * 2);
+    for (const file of documents) {
+      const chunks = chunkText(file.body);
+      const batches = embedBatches(chunks);
+      expect(batches.flat()).toEqual(chunks);
+      for (const texts of batches) {
         // The same body as scripts/ingest-knowledge.ts: {"texts": [...]} with the service key.
         const request = new Request("https://example.test/functions/v1/embed", {
           method: "POST",

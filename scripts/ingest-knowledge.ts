@@ -74,11 +74,12 @@ class Project {
       // Status and the server's error code and message only; never the request or headers.
       let detail = "";
       try {
-        const error = JSON.parse(text) as { code?: string; message?: string; error?: string; reason?: string };
+        const error = JSON.parse(text) as { code?: string; message?: string; error?: string; reason?: string; seen_as_person?: string };
         detail = `${error.code ?? ""} ${error.message ?? error.error ?? ""}${error.reason ? ` (${error.reason})` : ""}`.trim();
         // The embed function treats a key it does not know as a person's token.
         if (error.reason === "request_id_missing") {
           detail += ": the embed function did not take SUPABASE_SERVICE_ROLE_KEY as a service key; use the project's legacy service-role key or a secret key (sb_secret_...), and redeploy the function if it predates secret-key support";
+          if (error.seen_as_person) detail += ` (the function saw: ${error.seen_as_person})`;
         }
       } catch {
         detail = "";
