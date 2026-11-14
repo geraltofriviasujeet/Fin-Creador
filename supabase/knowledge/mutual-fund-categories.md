@@ -10,7 +10,7 @@ reuse_terms_url: https://www.sebi.gov.in/website-policy.html
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 SEBI requires mutual fund schemes to be grouped into defined categories so investors can compare like with like. Under SEBI's circular of 26 February 2026 on categorisation and rationalisation, schemes fall into five broad groups.

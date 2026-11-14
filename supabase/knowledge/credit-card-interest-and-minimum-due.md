@@ -10,7 +10,7 @@ reuse_terms_url: https://rbi.org.in/Scripts/Disclaimer.aspx
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 A credit card bill shows two key amounts: the total amount due and the minimum amount due. What you pay decides whether interest is charged.

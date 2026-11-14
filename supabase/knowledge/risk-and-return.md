@@ -10,7 +10,7 @@ reuse_terms_url: https://www.sebi.gov.in/website-policy.html
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 In investing, return is what an investment earns; risk is the chance that the outcome differs from what was expected, including losing money. Investments that can earn more over long periods usually come with bigger swings along the way.

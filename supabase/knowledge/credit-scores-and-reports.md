@@ -10,7 +10,7 @@ reuse_terms_url: https://rbi.org.in/Scripts/Disclaimer.aspx
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 A credit report is a record of your loans and credit cards: the lenders, the limits and balances, and whether each payment was made on time. A credit score is a number worked out from that report that sums up how reliably you have repaid. Lenders look at both when deciding whether to lend and at what rate.

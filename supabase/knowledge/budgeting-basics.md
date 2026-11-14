@@ -10,7 +10,7 @@ reuse_terms_url: https://rbi.org.in/Scripts/Disclaimer.aspx
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 A budget is a plan for how income will be used each month: what goes to essentials, what to wants, and what to saving or paying off debt. Planning before the month starts makes it easier to save first instead of saving whatever is left.

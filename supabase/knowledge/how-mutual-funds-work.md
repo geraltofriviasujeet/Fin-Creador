@@ -10,7 +10,7 @@ reuse_terms_url: https://www.amfiindia.com/terms-of-use
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 A mutual fund pools money from many investors and invests it in shares, bonds or other assets according to the scheme's stated objective. A fund manager makes the investment decisions. Each investor owns units of the scheme in proportion to what they put in.

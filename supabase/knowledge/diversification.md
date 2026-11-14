@@ -10,7 +10,7 @@ reuse_terms_url: https://www.sebi.gov.in/website-policy.html
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 Diversification means spreading money across different investments so that a loss in one has a smaller effect on the whole. It can be across asset classes (shares, bonds, gold, deposits), across companies and sectors, and across time.

@@ -10,7 +10,7 @@ reuse_terms_url: https://policyholder.gov.in/privacy-policy
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-14
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 Life insurance policies differ in what they pay, when they pay it, and whether part of the premium is saved or invested. These are the main kinds IRDAI describes for policyholders.

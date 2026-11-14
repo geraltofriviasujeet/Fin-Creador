@@ -10,7 +10,7 @@ reuse_terms_url: https://www.epfo.gov.in/copyright-policy/
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 Three long-term schemes used for retirement and other long goals in India. This explains how each works and how long the money is locked in. Interest rates and returns are not covered: the PPF rate is set by the government each quarter, the EPF rate is declared each year, and NPS returns depend on the markets.

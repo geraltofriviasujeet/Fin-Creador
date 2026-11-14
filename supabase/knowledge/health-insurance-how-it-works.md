@@ -10,7 +10,7 @@ reuse_terms_url: https://irdai.gov.in/web/guest/website-policies
 reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
-status: draft
+status: approved
 ---
 
 A health insurance policy pays for medical treatment up to the sum insured, in return for a premium. These are the main terms, and the policyholder protections set by IRDAI's Master Circular on Health Insurance Business (29 May 2024).
