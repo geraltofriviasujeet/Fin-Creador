@@ -5,10 +5,11 @@ import { type MockScript, mockProvider, mockText, mockToolCall } from "../llm/mo
 import { spendingTool } from "../tools/spending"
 import { knowledgeSearchTool } from "../tools/knowledge"
 import { type FinanceTool, ToolError, type ToolContext } from "../tools/types"
-import { KNOWLEDGE_UNAVAILABLE, NOT_ADVICE, NO_MATERIAL, NO_MATERIAL_PART, applyCitations, citationOf, knowledgeAnswer, sourceLabel, withoutNotAdvice } from "./citations"
+import { progressLine } from "../wording"
+import { KNOWLEDGE_UNAVAILABLE, NOT_ADVICE, NO_MATERIAL, NO_MATERIAL_PART, NO_PRODUCT_PICKS, applyCitations, citationOf, knowledgeAnswer, sourceLabel, withoutNotAdvice } from "./citations"
 import { axis, mockEmbedder } from "./embedder"
-import { routeQuestion } from "./route"
-import { type KnowledgeDb, type KnowledgeRow, KnowledgeSession, MAX_KNOWLEDGE_SEARCHES, type Passage } from "./session"
+import { isProductPick, routeQuestion } from "./route"
+import { DEFAULT_MIN_SIMILARITY, type KnowledgeDb, type KnowledgeRow, KnowledgeSession, MAX_KNOWLEDGE_SEARCHES, type Passage, withinBand } from "./session"
 
 // The knowledge base path (10.6c) on the mock provider and a fake match_knowledge_chunks: no
 // test calls the embed function or a paid API.
@@ -92,7 +93,74 @@ describe("routeQuestion", () => {
   })
 })
 
+describe("product picks (10.6d)", () => {
+  it("detects a question asking which specific product to buy, or what gives the best returns", () => {
+    for (const q of [
+      "Which mutual fund scheme should I buy for the best returns this year?",
+      "Which stock will double next month?",
+      "Should I buy Bitcoin or Ethereum now?",
+      "which fund is best for me",
+      "Best mutual funds for 2027?",
+      "top 5 stocks to buy",
+      "Can you recommend a good ELSS fund?",
+      "suggest some coins",
+      "Which term plan should I take?",
+      "which health insurance policy should I get",
+      "What will give me the best returns?",
+      "highest return investment?",
+      "which ETF to invest in",
+    ])
+      expect(isProductPick(q), q).toBe(true)
+  })
+
+  it("leaves general questions, kinds of product and the person's own records alone", () => {
+    for (const q of [
+      "What is an SIP?",
+      "How does a mutual fund work?",
+      "What types of mutual funds are there?",
+      "Which type of fund suits a 3-year goal?",
+      "What is the difference between a direct plan and a regular plan?",
+      "How big should a good emergency fund be?",
+      "What is the best size for an emergency fund?",
+      "Which plan should I choose, old or new regime?",
+      "Should I buy a house or rent?",
+      "How much did I spend on stocks last month?",
+      "Which health insurance policy covers pre-existing diseases?",
+      "term vs endowment which is what",
+    ])
+      expect(isProductPick(q), q).toBe(false)
+  })
+
+  it("routes a pick to the knowledge base only, so no records tool is offered", () => {
+    expect(routeQuestion("Which mutual fund should I buy with my savings?")).toBe("knowledge")
+    expect(routeQuestion("Which stock will double next month?")).toBe("knowledge")
+  })
+})
+
+describe("the progress line (10.6d)", () => {
+  it("says records only when a records tool is offered", () => {
+    const on = { plan: false, knowledge: true }
+    expect(progressLine("How much did I spend last month?", on)).toBe("Roma is checking your records…")
+    expect(progressLine("Is my savings rate good?", on)).toBe("Roma is checking your records…")
+    expect(progressLine("What is an SIP?", on)).toBe("Roma is working…")
+    expect(progressLine("how much tax on 18 lpa?", on)).toBe("Roma is working…")
+    expect(progressLine("hi", on)).toBe("Roma is working…")
+    expect(progressLine("Plan a bike", { plan: true, knowledge: true })).toBe("Roma is checking your records…")
+    expect(progressLine("What is an SIP?", { plan: false, knowledge: false })).toBe("Roma is checking your records…")
+  })
+})
+
 describe("KnowledgeSession", () => {
+  it("keeps only passages within 0.05 of the top one, at the 0.82 default floor", async () => {
+    expect(DEFAULT_MIN_SIMILARITY).toBe(0.82)
+    const at = (similarity: number, n: number) => row({ chunk_id: `00000000-0000-4000-8000-00000000001${n}`, similarity })
+    expect(withinBand([at(0.91, 1), at(0.86, 2), at(0.859, 3), at(0.83, 4)]).map((r) => r.similarity)).toEqual([0.91, 0.86])
+    expect(withinBand([])).toEqual([])
+    const s = session([at(0.9, 1), at(0.84, 2)])
+    expect((await s.search("emergency fund")).map((p) => p.id)).toEqual(["k1"])
+    expect(s.passages).toHaveLength(1)
+  })
+
   it("keeps one id per passage across searches and refuses a fourth search before any call", async () => {
     const db = fakeDb([row(), SLABS])
     const s = new KnowledgeSession({ embed: mockEmbedder, db, minSimilarity: 0.8 })
@@ -222,6 +290,24 @@ describe("Roma's chat loop with the knowledge base", () => {
     const run = await askKnowledge(searchThen("From memory: Bitcoin is worth ₹50,00,000."), [])
     expect(run.result).toMatchObject({ kind: "answer", text: NO_MATERIAL, figures: [] })
     expect(JSON.stringify(run.result)).not.toContain("50,00,000")
+  })
+
+  it("puts the no-picks line before a cited explanation of a product pick", async () => {
+    const question = "Which mutual fund should I buy for the best returns?"
+    const cited = await askKnowledge(searchThen("Fund X is best. An emergency fund covers three to six months [[k1]]."), [row()], { question })
+    expect(cited.result).toMatchObject({ kind: "answer", text: `${NO_PRODUCT_PICKS}\n\nFund X is best. An emergency fund covers three to six months [1].\n\n${NOT_ADVICE}` })
+    expect(cited.result.kind === "answer" && cited.result.text.startsWith(NO_PRODUCT_PICKS)).toBe(true)
+  })
+
+  it("answers a product pick with the no-picks line alone when no passage is cited", async () => {
+    const question = "Which stock will double next month?"
+    for (const rows of [[], [row()]]) {
+      const run = await askKnowledge(searchThen("Buy Stock Y now."), rows, { question })
+      expect(run.result).toMatchObject({ kind: "answer", text: NO_PRODUCT_PICKS, figures: [] })
+    }
+    // With the knowledge base off, a records answer is not shown for a pick either.
+    const off = await runChat({ provider: mockProvider(() => mockText("Buy Stock Y.")), tools: [spendingTool as FinanceTool], context: base, question })
+    expect(off.result).toMatchObject({ kind: "answer", text: NO_PRODUCT_PICKS })
   })
 
   it("answers the records part of a mixed question and says the general part has no vetted material", async () => {

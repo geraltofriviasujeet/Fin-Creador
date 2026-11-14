@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { basisLabels } from "./wording"
 import type { UserClient } from "@fin-creador/api"
 import type { ChatRun } from "./chat"
 import type { LlmConfig } from "./config"
@@ -440,7 +441,7 @@ describe("knowledge base routing (10.6c)", () => {
       status: "answer",
       answer: "An SIP invests a fixed amount at regular intervals. [1] (Test answer.)\n\nGeneral information, not personal advice.",
       citations: [{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passages: ["An SIP invests a fixed amount at regular intervals."] }],
-      basis: { records: false, knowledge: true },
+      basis: { records: false, knowledge: true, calculated: false },
     })
     expect(d.history.recorded[0]?.tools).toEqual(["knowledge_search"])
   })
@@ -451,9 +452,18 @@ describe("knowledge base routing (10.6c)", () => {
       round === 0 ? mockToolCall("knowledge_search", { question: "capital gains tax" }) : round === 1 ? mockToolCall("tax_estimate", { salary: "5 lakh" }) : mockText("Uncited. (Test answer.)")
     const d = deps({ ...knowledge(), makeProvider: () => mockProvider(script) })
     const res = await handleChat({ question: "How much tax on my capital gains of 5 lakh?" }, d)
-    expect(res.body).toMatchObject({ status: "answer", answer: NOT_COVERED, basis: { records: false, knowledge: false } })
+    // No card was shown either, so no tax chip (10.6d).
+    expect(res.body).toMatchObject({ status: "answer", answer: NOT_COVERED, basis: { records: false, knowledge: false, calculated: false } })
     expect(res.body.status === "answer" && res.body.citations).toBeFalsy()
-    expect(d.history.recorded[0]?.tools).toEqual(["tax_estimate"])
+    expect(d.history.recorded[0]?.tools).toEqual([])
+  })
+
+  it("shows the tax chip beside Roma when the tax card is shown (10.6d)", async () => {
+    const d = deps({ ...knowledge() })
+    const res = await handleChat({ question: "my in hand salary is 1415000 how much i have to pay tax calculate it in old and new tax regime" }, d)
+    expect(res.body).toMatchObject({ status: "answer", tax: { taxYear: "2026-27" }, basis: { records: false, calculated: true } })
+    expect(res.body.status === "answer" && basisLabels(res.body.basis)).toContain("Calculated from the tax rules")
+    expect(d.history.recorded[0]?.tools).toContain("tax_estimate")
   })
 
   it("keeps the records tools only for the person's own money, offers no tools for small talk, and everything when both", async () => {

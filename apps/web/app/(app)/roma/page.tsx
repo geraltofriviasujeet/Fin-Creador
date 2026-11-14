@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
-import { readLlmConfig } from "@/lib/ai/config"
+import { readKnowledgeConfig, readLlmConfig } from "@/lib/ai/config"
 import { answerBasis, fromDateRangeLiteral } from "@/lib/ai/history"
 import { ROMA_DATA_NOTICE } from "@/lib/ai/wording"
 import { greeting } from "@/lib/greeting"
@@ -128,6 +128,7 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
         conversations={list.data.map((c) => ({ id: c.id, title: c.title, lastMessageAt: c.last_message_at, kind: kindOf(c.id) }))}
         open={opened}
         missing={requested.success && opened === null}
+        knowledge={readKnowledgeConfig(process.env).status === "on"}
       />
     </>
   )

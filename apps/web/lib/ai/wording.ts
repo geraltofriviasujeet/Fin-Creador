@@ -1,3 +1,5 @@
+import { routeQuestion } from "./knowledge/route"
+
 // What Roma sends, in the owner-approved words (Sprint 10). Shown on the Settings toggle and,
 // from step 10.2, in Roma the first time a question would send transaction descriptions.
 export const ROMA_DATA_NOTICE =
@@ -9,8 +11,22 @@ export const ROMA_INFORMATIONAL = "Informational only, not financial advice. Fig
 export const ROMA_RETENTION = "Conversations are deleted 180 days after the last message."
 
 /** The chips above an answer: what actually ran, never a claim of records no records tool read. */
-export function basisLabels(basis: { records: boolean; knowledge: boolean }): string[] {
-  return [...(basis.records ? ["From your records"] : []), ...(basis.knowledge ? ["From the knowledge base"] : [])]
+export function basisLabels(basis: { records: boolean; knowledge: boolean; calculated: boolean }): string[] {
+  return [
+    ...(basis.records ? ["From your records"] : []),
+    ...(basis.calculated ? ["Calculated from the tax rules"] : []),
+    ...(basis.knowledge ? ["From the knowledge base"] : []),
+  ]
+}
+
+/**
+ * The line shown while a question is out (10.6d): "checking your records" only when records tools
+ * are offered (a plan, or the records or both route; every question when the knowledge base is
+ * off, as on the server: handle.ts), otherwise a plain one.
+ */
+export function progressLine(question: string, { plan, knowledge }: { plan: boolean; knowledge: boolean }): string {
+  const route = knowledge ? routeQuestion(question) : "records"
+  return plan || route === "records" || route === "both" ? "Roma is checking your records…" : "Roma is working…"
 }
 
 /**

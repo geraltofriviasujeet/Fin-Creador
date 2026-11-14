@@ -62,8 +62,9 @@ test("a salary tax question gets both regimes worked out in code, with the break
   await expect(answer.locator("strong")).toHaveText(["New regime:", "Old regime:"])
   await expect(answers.getByText(/\*\*/)).toHaveCount(0)
   await expect(answers.getByText(/General information, not personal advice\./)).toHaveCount(1)
-  // Nothing was read from the records, so no records chip and no records figures table.
-  await expect(answers.locator("span.text-success")).toHaveCount(0)
+  // Nothing was read from the records, so no records chip and no records figures table; the
+  // tax chip says it was worked out (10.6d), and no passage is cited, so no knowledge chip.
+  await expect(answers.locator("span.text-success")).toHaveText(["Calculated from the tax rules"])
   await expect(answers.getByText("Figures from your records")).toHaveCount(0)
 
   const card = answers.getByRole("region", { name: "Tax estimate" })

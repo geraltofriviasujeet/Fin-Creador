@@ -6,12 +6,16 @@ import { ToolError } from "../tools/types"
 // match_knowledge_chunks returns the closest approved passages at or above the floor. Each
 // passage gets a short id for the model to cite ("k1"); the same passage found twice keeps its
 // id. Passages are untrusted reference text: never instructions, never a figure source unless
-// the answer cites them (chat.ts).
+// the answer cites them (chat.ts). From 10.6d only the passages within SIMILARITY_BAND of the
+// top one are kept, so unrelated tail passages that clear the floor are not sent to the model.
 
 export const MAX_KNOWLEDGE_SEARCHES = 3
 /** Passages per search: match_knowledge_chunks allows up to 8. */
 export const KNOWLEDGE_COUNT = 4
-export const DEFAULT_MIN_SIMILARITY = 0.8
+/** The floor, tuned with scripts/knowledge-eval.ts on dev (10.6d). */
+export const DEFAULT_MIN_SIMILARITY = 0.82
+/** Passages kept: those within this much of the search's top similarity. */
+export const SIMILARITY_BAND = 0.05
 
 /** A row of match_knowledge_chunks (20261113120000_knowledge_embed.sql). */
 export type KnowledgeRow = {
@@ -74,7 +78,7 @@ export class KnowledgeSession {
       this.failures++
       throw new ToolError("The knowledge base couldn't be searched just now. Don't answer the general part from memory.")
     }
-    return rows.flatMap((row) => {
+    return withinBand(rows).flatMap((row) => {
       if (row.content_kind !== "official" && row.content_kind !== "own") return []
       const known = this.passages.find((p) => p.chunkId === row.chunk_id)
       if (known) return [known]
@@ -95,4 +99,11 @@ export class KnowledgeSession {
       return [passage]
     })
   }
+}
+
+/** The rows within SIMILARITY_BAND of the top one (at most KNOWLEDGE_COUNT, as the search asked). */
+export function withinBand(rows: readonly KnowledgeRow[]): KnowledgeRow[] {
+  const top = Math.max(...rows.map((r) => r.similarity))
+  // Rounded to the database's precision, so a passage at exactly the band's edge is kept.
+  return rows.filter((r) => Math.round((top - r.similarity) * 1e6) <= SIMILARITY_BAND * 1e6)
 }

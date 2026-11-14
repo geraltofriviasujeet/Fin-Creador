@@ -10,7 +10,7 @@ import { controlClasses } from "@/components/ui/input"
 import type { ChatResponseBody } from "@/lib/ai/handle"
 import { webPrice, webTotal } from "@/lib/ai/web-format"
 import { MAX_QUESTION_CHARS } from "@/lib/ai/limits"
-import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL, basisLabels, boldParts } from "@/lib/ai/wording"
+import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL, basisLabels, boldParts, progressLine } from "@/lib/ai/wording"
 import { allowRomaDescriptionsAction } from "@/app/(app)/roma/actions"
 import { detectPlan } from "@/lib/ai/plan/intake"
 import type { PlanRequest } from "@/lib/ai/plan/types"
@@ -59,6 +59,8 @@ type Props = {
   open: OpenConversation | null
   /** The conversation asked for no longer exists. */
   missing?: boolean
+  /** The knowledge base is on (KNOWLEDGE_ENABLED): questions are routed, as on the server. */
+  knowledge?: boolean
 }
 
 // Opening a conversation from the list is a navigation, and the chat starts afresh for it (like
@@ -91,6 +93,7 @@ function Conversation({
   conversations: initialConversations,
   open,
   missing = false,
+  knowledge = false,
   onMove,
 }: Props & { onMove: (id: string | null) => void }) {
   // A question handed over in the address (?ask=, from the Goals page) is only filled in, never
@@ -102,6 +105,7 @@ function Conversation({
   const [conversations, setConversations] = useState(initialConversations)
   const [notice, setNotice] = useState<string | null>(missing ? "That conversation was deleted. You’re in a new one." : null)
   const [pending, setPending] = useState(false)
+  const [progress, setProgress] = useState("")
   const [failure, setFailure] = useState<string | null>(null)
   const [consent, setConsent] = useState<Consent>("ask")
   const [intake, setIntake] = useState<{ question: string; draft: PlanRequest } | null>(null)
@@ -134,6 +138,7 @@ function Conversation({
   async function send(text: string, plan?: PlanRequest) {
     if (pending) return
     setPending(true)
+    setProgress(progressLine(text, { plan: plan !== undefined, knowledge }))
     setFailure(null)
     setNotice(null)
     try {
@@ -251,7 +256,7 @@ function Conversation({
             </div>
           </form>
           <p aria-live="polite" className="mt-3 text-sm text-muted-foreground empty:hidden">
-            {pending ? "Roma is checking your records…" : ""}
+            {pending ? progress : ""}
           </p>
           {failure && (
             <FormMessage tone="error" className="mt-2">

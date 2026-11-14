@@ -15,6 +15,8 @@ export const NO_MATERIAL_PART = "I don't have vetted material on the general par
 export const KNOWLEDGE_UNAVAILABLE = "I couldn't search my vetted material just now, so I won't answer this from general knowledge. Try again in a moment."
 export const KNOWLEDGE_UNAVAILABLE_PART = "I couldn't search my vetted material just now, so the general part of your question isn't answered."
 export const NOT_ADVICE = "General information, not personal advice."
+/** Before any answer to a product pick (route.ts isProductPick, 10.6d). */
+export const NO_PRODUCT_PICKS = "I don't recommend specific funds, schemes, stocks, policies or coins, or say which will give the best returns."
 /** The model's own copy of NOT_ADVICE (or a close variant): code adds the line, once. */
 const MODEL_NOT_ADVICE = /[ \t]*\(?\s*(?:this is\s+)?general information,?\s+(?:and\s+)?not\s+(?:personal\s+|financial\s+)*advice\s*[.!]?\s*\)?[ \t]*/gi
 

@@ -2,8 +2,8 @@ import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber, saidNumbers } from "./output"
 import { figureId, fillPlaceholders, formatFigure, webAmounts, withoutPlaceholders } from "./placeholders"
-import { type Citation, NOT_ADVICE, knowledgeAnswer } from "./knowledge/citations"
-import type { Route } from "./knowledge/route"
+import { type Citation, NOT_ADVICE, NO_PRODUCT_PICKS, knowledgeAnswer } from "./knowledge/citations"
+import { type Route, isProductPick } from "./knowledge/route"
 import { KNOWLEDGE_RULES, ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
@@ -40,6 +40,8 @@ import {
 // numbers it may then quote; the citations, built in code from the passages, go with it.
 // From 10.6e tools are given the person's own words (to find the amounts they typed), and a tax
 // estimate's card, built in code, goes with the answer, which then always ends with NOT_ADVICE.
+// From 10.6d a product pick (which fund, stock or coin to buy) gets NO_PRODUCT_PICKS first, then
+// the general explanation only when it cites passages; otherwise that line alone.
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -194,11 +196,13 @@ export async function runChat({
     }
 
     // A general question with no cited passage: a line built in code replaces the text (10.6c).
+    // A product pick is never answered beyond its own line without a cited passage (10.6d).
     const known = knowledgeAnswer(response.text, context.knowledge, route, context.today)
-    if ("replace" in known) {
+    const pick = isProductPick(question)
+    if ("replace" in known || (pick && known.citations.length === 0)) {
       return done({
         kind: "answer",
-        text: known.replace,
+        text: "replace" in known && !pick ? known.replace : NO_PRODUCT_PICKS,
         figures: [],
         periods: [],
         descriptionsWithheld: false,
@@ -235,7 +239,7 @@ export async function runChat({
         descriptionsSent: found.descriptionsSent,
       })
     }
-    const answer = withVerdict(filled.text, found.checks)
+    const answer = pick ? `${NO_PRODUCT_PICKS}\n\n${withVerdict(filled.text, found.checks)}` : withVerdict(filled.text, found.checks)
     // A tax estimate always ends with the not-advice line, cited or not (once).
     const tail = [known.tail, found.tax && known.tail !== NOT_ADVICE ? NOT_ADVICE : null].filter(Boolean).join("\n\n")
     return done({

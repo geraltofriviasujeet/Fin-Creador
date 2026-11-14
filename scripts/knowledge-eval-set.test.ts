@@ -1,7 +1,9 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { COUNT, EVAL_QUESTIONS, FLOORS, cosine, rank, score, tally } from "./knowledge-eval-set.ts";
+import { routeQuestion } from "../apps/web/lib/ai/knowledge/route.ts";
+import { BAND, COUNT, EVAL_QUESTIONS, FLOORS, TAX_ROUTE_QUESTIONS, cosine, rank, score, tally, withinBand } from "./knowledge-eval-set.ts";
+import { SIMILARITY_BAND } from "../apps/web/lib/ai/knowledge/session.ts";
 
 const SLUGS = readdirSync(join(__dirname, "..", "supabase", "knowledge"))
   .filter((n) => n.endsWith(".md") && n !== "README.md")
@@ -15,7 +17,19 @@ describe("the evaluation set", () => {
     expect(EVAL_QUESTIONS.filter((q) => q.expect === null)).toHaveLength(3);
     expect(new Set(EVAL_QUESTIONS.map((q) => q.question)).size).toBe(EVAL_QUESTIONS.length);
     expect(COUNT).toBe(4);
-    expect(FLOORS).toContain(0.8);
+    expect(BAND).toBe(SIMILARITY_BAND);
+    expect(FLOORS).toContain(0.82);
+  });
+
+  it("has 10 loosely worded questions, each routed where knowledge_search is offered", () => {
+    const loose = EVAL_QUESTIONS.filter((q) => q.loose);
+    expect(loose).toHaveLength(10);
+    for (const q of loose) expect(["knowledge", "both"], q.question).toContain(routeQuestion(q.question));
+  });
+
+  it("routes every tax-calculation phrasing to the tax tool", () => {
+    expect(TAX_ROUTE_QUESTIONS).toHaveLength(3);
+    for (const q of TAX_ROUTE_QUESTIONS) expect(routeQuestion(q), q).toBe("tax");
   });
 });
 
@@ -40,5 +54,11 @@ describe("scoring", () => {
     ];
     expect(rank([1, 0], passages, 0.5).map((p) => p.slug)).toEqual(["near", "mid"]);
     expect(rank([1, 0], passages, 0.99)).toHaveLength(1);
+  });
+
+  it("keeps only the passages within the band of the top one", () => {
+    const at = (similarity: number) => ({ slug: String(similarity), similarity, chars: 1 });
+    expect(withinBand([at(0.9), at(0.85), at(0.849), at(0.83)]).map((f) => f.similarity)).toEqual([0.9, 0.85]);
+    expect(withinBand([])).toEqual([]);
   });
 });

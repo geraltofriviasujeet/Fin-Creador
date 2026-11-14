@@ -118,6 +118,8 @@ describe("answerBasis and the answer's chips", () => {
     expect(chips(["savings_rate", "knowledge_search"])).toEqual(["From your records", "From the knowledge base"])
     expect(chips(["trip_plan"])).toEqual(["From your records"])
     expect(chips(["web_price_lookup", "web_price_figures"])).toEqual([])
+    expect(chips(["tax_estimate"])).toEqual(["Calculated from the tax rules"])
+    expect(chips(["tax_estimate", "knowledge_search"])).toEqual(["Calculated from the tax rules", "From the knowledge base"])
     expect(chips([])).toEqual([])
   })
 })

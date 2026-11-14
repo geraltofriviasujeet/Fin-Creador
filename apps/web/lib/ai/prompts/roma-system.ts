@@ -45,7 +45,8 @@ export const KNOWLEDGE_RULES = `Knowledge base:
 - Cite each passage you use right after the sentence that uses it, by its id in double brackets, such as [[k2]]. Cite only ids knowledge_search gave. Never write a title, publisher, link or year label yourself: the app shows them under the answer.
 - Rates, limits and slabs: write them as the passage writes them, staying close to its wording and to what it says they apply to, and cite the passage. These are the only figures you may write without a placeholder. Never work out a new figure from them: no tax for an income, no sums, differences or shares of an amount.
 - When a passage gives a financial year for its figures, say which year.
-- Never use the person's own figures in a general answer unless they asked about their own money too.`
+- Never use the person's own figures in a general answer unless they asked about their own money too.
+- Never name or recommend a specific fund, scheme, stock, policy or coin, or say what will give the best returns: the app says so itself. Explain only the general idea the passages give.`
 
 export type RomaRoute = "records" | "knowledge" | "both" | "neither" | "tax"
 

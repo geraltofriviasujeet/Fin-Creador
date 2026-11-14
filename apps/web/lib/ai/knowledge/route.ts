@@ -9,6 +9,8 @@ import type { RomaRoute } from "../prompts/roma-system"
 //   * neither: a greeting or small talk only, with no tools (any money figure is then refused
 //     by the figure check, as for any answer);
 //   * tax (10.6e): tax to be worked out on a salary: tax_estimate and knowledge_search only.
+// A product pick (10.6d: which fund, scheme, stock, policy or coin to buy, or what gives the
+// best returns) goes to the knowledge route; chat.ts puts a code-built line before the answer.
 // Unclear questions go to "both", never to "neither".
 
 export type Route = RomaRoute
@@ -33,9 +35,35 @@ export function isTaxCalculation(text: string): boolean {
   return TAX.test(text) && WORK_OUT.test(text) && (SALARY_WORDS.test(text) || rupeeAmountsIn(text).length > 0)
 }
 
+const PRODUCT = String.raw`(?:mutual\s+funds?|funds?|schemes?|stocks?|shares?|polic(?:y|ies)|coins?|crypto(?:currency|currencies)?|tokens?|etfs?|ipos?|bonds?|(?:term|insurance|ulip|endowment|pension|health)\s+plans?)`
+const PICKS = [
+  // "which mutual fund scheme should I buy", "which stock will double", "which term plan to take"
+  new RegExp(String.raw`\bwhich\s+(?:[a-z-]+\s+){0,3}?${PRODUCT}\b[^.?!]*\b(?:buy|invest\w*|pick|choose|take|get|go for|best|top|double|triple|multibagger|go up|rise)\b`, "i"),
+  // "best mutual funds for 2027", "top 5 stocks"
+  new RegExp(String.raw`\b(?:best|top|safest)\s+(?:\d+\s+)?(?:[a-z-]+\s+){0,2}?${PRODUCT}\b(?!\s+(?:types?|kinds?|categor\w*))`, "i"),
+  // "recommend a fund", "suggest some stocks"
+  new RegExp(String.raw`\b(?:recommend|suggest)\w*\b[^.?!]*\b${PRODUCT}\b`, "i"),
+  // "what will give the best returns", "highest return"
+  /\b(?:best|highest|maximum|max|most|top)\s+returns?\b/i,
+  // "should I buy Bitcoin or Ethereum"
+  /\b(?:should|shall|can)\s+i\s+(?:buy|invest\s+in)\b[^.?!]*\b(?:bitcoin|ethereum|btc|eth|dogecoin|solana|xrp|crypto\w*|coins?)\b/i,
+]
+/** A general type of product, not a pick: "which type of fund", "mutual fund categories". */
+const KINDS = /\b(?:types?|kinds?|categor\w*)\b/i
+/** Funds that are not products: taken out before the check. */
+const NOT_PRODUCTS = /\b(?:emergency|provident|sinking|contingency)\s+funds?\b/gi
+
+/** A question asking which specific product to buy, or what gives the best returns. */
+export function isProductPick(question: string): boolean {
+  const text = question.replace(NOT_PRODUCTS, "")
+  if (KINDS.test(text) && !/\breturns?\b/i.test(text)) return false
+  return PICKS.some((p) => p.test(text))
+}
+
 export function routeQuestion(question: string): Route {
   const text = question.trim()
   if (SMALL_TALK.test(text)) return "neither"
+  if (isProductPick(text)) return "knowledge"
   if (isTaxCalculation(text)) return "tax"
   const records = RECORDS.test(text)
   const knowledge = KNOWLEDGE.test(text)

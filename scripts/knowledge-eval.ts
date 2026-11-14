@@ -16,12 +16,14 @@
 // authenticated only and it refuses a caller with no auth.uid()), hence the test user; no
 // migration. Only with --include-drafts, questions whose document is still a draft are ranked
 // in this script instead (cosine over approved and draft passages read with the service key),
-// and reported apart. Nothing is written; keys, tokens and passages are never printed.
+// and reported apart. From 10.6d each search keeps only the passages the app keeps (within the
+// band of the top one), and the loosely worded questions are reported apart from the original
+// ones. Nothing is written; keys, tokens and passages are never printed.
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { projectEnv, readEnvFile } from "./knowledge-env.ts";
-import { COUNT, EVAL_QUESTIONS, FLOORS, type Found, type Outcome, rank, score, tally } from "./knowledge-eval-set.ts";
+import { COUNT, EVAL_QUESTIONS, FLOORS, type Found, type Outcome, TAX_ROUTE_QUESTIONS, rank, score, tally, withinBand } from "./knowledge-eval-set.ts";
 import { chunkText, embedBatches, parseDocument } from "./knowledge.ts";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -66,7 +68,8 @@ function check() {
     const lengths = doc.chunks.map((c) => c.length).join(", ");
     console.warn(`${q.expect} (${doc.status}, passages of ${lengths} chars)  ${q.question}`);
   }
-  console.warn(`${EVAL_QUESTIONS.length} questions; nothing sent.`);
+  for (const q of TAX_ROUTE_QUESTIONS) console.warn(`(tax route, checked by npm test)  ${q}`);
+  console.warn(`${EVAL_QUESTIONS.length} questions and ${TAX_ROUTE_QUESTIONS.length} tax phrasings; nothing sent.`);
 }
 
 async function main() {
@@ -110,7 +113,7 @@ async function main() {
     const byQuestion = new Map<number, Found[] | null>();
     for (const [i, q] of EVAL_QUESTIONS.entries()) {
       if (viaScript(q.expect)) {
-        byQuestion.set(i, includeDrafts ? rank(vectors[i]!, ranked, floor) : null);
+        byQuestion.set(i, includeDrafts ? withinBand(rank(vectors[i]!, ranked, floor)) : null);
         continue;
       }
       const rows = (await call(`${url}/rest/v1/rpc/match_knowledge_chunks`, {
@@ -118,17 +121,21 @@ async function main() {
         headers: person,
         body: { p_embedding: JSON.stringify(vectors[i]), p_count: COUNT, p_min_similarity: floor },
       })) as { document_slug: string; similarity: number; content: string }[];
-      byQuestion.set(i, rows.map((r) => ({ slug: r.document_slug, similarity: r.similarity, chars: r.content.length })));
+      byQuestion.set(i, withinBand(rows.map((r) => ({ slug: r.document_slug, similarity: r.similarity, chars: r.content.length }))));
     }
     results.set(floor, byQuestion);
   }
 
-  console.warn(`Floor  hit@1      hit@4      nothing found correctly  (approved, through match_knowledge_chunks)`);
-  for (const floor of FLOORS) {
-    const outcomes = EVAL_QUESTIONS.flatMap((q, i): Outcome[] => (viaScript(q.expect) ? [] : [score(q, results.get(floor)!.get(i)!)]));
-    const t = tally(outcomes);
-    console.warn(`${floor.toFixed(2)}   ${t.hit1}/${t.scored}`.padEnd(17) + `${t.hit4}/${t.scored}`.padEnd(11) + `${t.noneOk}/${t.noneScored}`);
+  for (const loose of [false, true]) {
+    console.warn(`${loose ? "\nLoosely worded" : "Original"} questions`);
+    console.warn(`Floor  hit@1      hit@4      nothing found correctly  (approved, through match_knowledge_chunks)`);
+    for (const floor of FLOORS) {
+      const outcomes = EVAL_QUESTIONS.flatMap((q, i): Outcome[] => (viaScript(q.expect) || (q.loose === true) !== loose ? [] : [score(q, results.get(floor)!.get(i)!)]));
+      const t = tally(outcomes);
+      console.warn(`${floor.toFixed(2)}   ${t.hit1}/${t.scored}`.padEnd(17) + `${t.hit4}/${t.scored}`.padEnd(11) + `${t.noneOk}/${t.noneScored}`);
+    }
   }
+  console.warn(`\n${TAX_ROUTE_QUESTIONS.length} tax-calculation phrasings: routed to tax_estimate in code, checked by npm test (scripts/knowledge-eval-set.test.ts).`);
   const drafts = EVAL_QUESTIONS.filter((q) => viaScript(q.expect));
   if (drafts.length > 0 && !includeDrafts) console.warn(`${drafts.length} questions skipped: their document is not approved (--include-drafts ranks them in this script).`);
   if (includeDrafts && drafts.length > 0) {
@@ -147,7 +154,7 @@ async function main() {
     const found = lowest.get(i);
     const outcome = score(q, found ?? null);
     const list = found ? found.map((f) => `${f.slug} (${f.similarity.toFixed(3)}, ${f.chars})`).join("; ") || "nothing" : "skipped";
-    console.warn(`[${outcome}] ${q.expect ?? "(nothing)"} <- "${q.question}"\n    ${list}`);
+    console.warn(`[${outcome}]${q.loose ? " (loose)" : ""} ${q.expect ?? "(nothing)"} <- "${q.question}"\n    ${list}`);
   }
 }
 

@@ -1,8 +1,11 @@
 // Roma's knowledge base evaluation (Sprint 10.6c): questions with the document each should
 // find, questions that should find nothing, and the scoring. Pure; scripts/knowledge-eval.ts
-// runs it against a project.
+// runs it against a project. From 10.6d, loosely worded questions (Hinglish, shorthand) are
+// scored apart, and tax-calculation phrasings are checked to route to tax_estimate (by the unit
+// tests: routing is code, so nothing is embedded for them).
 
-export type EvalQuestion = { question: string; expect: string | null };
+/** `loose`: a loosely worded question, reported apart from the original set. */
+export type EvalQuestion = { question: string; expect: string | null; loose?: true };
 
 /** `expect`: the document slug that should come back; null: nothing should (no vetted material). */
 export const EVAL_QUESTIONS: EvalQuestion[] = [
@@ -24,13 +27,38 @@ export const EVAL_QUESTIONS: EvalQuestion[] = [
   { question: "Should I buy Bitcoin or Ethereum now?", expect: null },
   { question: "Which stock will double next month?", expect: null },
   { question: "Which mutual fund scheme should I buy for the best returns this year?", expect: null },
+  { question: "sip kya hota hai", expect: "sip-explained", loose: true },
+  { question: "min due only pay?", expect: "credit-card-interest-and-minimum-due", loose: true },
+  { question: "term vs endowment which is what", expect: "types-of-life-insurance", loose: true },
+  { question: "80c limit kitna hai", expect: "tax-deduction-limits-2026-27", loose: true },
+  { question: "ltcg on shares?", expect: "capital-gains-tax-basics-2026-27", loose: true },
+  { question: "emergency fund kitna rakhna chahiye", expect: "emergency-fund", loose: true },
+  { question: "cibil score kaise badhaye", expect: "credit-scores-and-reports", loose: true },
+  { question: "direct ya regular plan, fark kya hai?", expect: "direct-and-regular-plans", loose: true },
+  { question: "new regime slabs 2026-27?", expect: "income-tax-new-regime-2026-27", loose: true },
+  { question: "loan jaldi band karu? prepay worth it?", expect: "prepaying-a-loan", loose: true },
+];
+
+/** Phrasings that must route to tax_estimate (apps/web/lib/ai/knowledge/route.ts), checked by the unit tests. */
+export const TAX_ROUTE_QUESTIONS = [
+  "how much tax on 18 lpa?",
+  "tax kitna banega 12 lakh salary pe, calculate karo",
+  "estimate my income tax for ₹15,00,000 under both regimes",
 ];
 
 export const FLOORS = [0.7, 0.75, 0.78, 0.8, 0.82, 0.85, 0.88];
 /** The app's passages per search (apps/web/lib/ai/knowledge/session.ts KNOWLEDGE_COUNT). */
 export const COUNT = 4;
+/** The app keeps only passages within this much of the top one (session.ts SIMILARITY_BAND). */
+export const BAND = 0.05;
 
 export type Found = { slug: string; similarity: number; chars: number };
+
+/** What the app keeps of a search's rows, closest first: those within BAND of the top one. */
+export function withinBand(found: Found[]): Found[] {
+  const top = found[0]?.similarity ?? 0;
+  return found.filter((f) => Math.round((top - f.similarity) * 1e6) <= BAND * 1e6);
+}
 
 export type Outcome = "hit1" | "hit4" | "miss" | "none_ok" | "none_wrong" | "skipped";
 

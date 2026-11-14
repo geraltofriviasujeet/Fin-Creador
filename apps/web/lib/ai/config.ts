@@ -77,7 +77,7 @@ export function readSearchConfig(env: Record<string, string | undefined>): Searc
 //
 //   KNOWLEDGE_ENABLED=true            off unless exactly "true"
 //   KNOWLEDGE_EMBEDDER=supabase       or "mock" (tests and the E2E server)
-//   KNOWLEDGE_MIN_SIMILARITY=0.8      the floor, 0.5 to 0.95 (tuned with scripts/knowledge-eval.ts)
+//   KNOWLEDGE_MIN_SIMILARITY=0.82     the floor, 0.5 to 0.95 (tuned with scripts/knowledge-eval.ts)
 
 export const KNOWLEDGE_EMBEDDERS = ["supabase", "mock"] as const
 export type KnowledgeEmbedderName = (typeof KNOWLEDGE_EMBEDDERS)[number]

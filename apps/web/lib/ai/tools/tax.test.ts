@@ -183,8 +183,8 @@ describe("tax routing", () => {
     expect(routeQuestion("How much tax did I pay this month?")).toBe("both")
   })
 
-  it("doesn't say the answer is from the records", () => {
-    expect(answerBasis(["tax_estimate", "knowledge_search"])).toEqual({ records: false, knowledge: true })
+  it("doesn't say the answer is from the records, and says it was calculated from the tax rules", () => {
+    expect(answerBasis(["tax_estimate", "knowledge_search"])).toEqual({ records: false, knowledge: true, calculated: true })
   })
 })
 

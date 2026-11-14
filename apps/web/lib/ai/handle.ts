@@ -306,8 +306,9 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
   switch (result.kind) {
     case "answer": {
       // The knowledge base counts only when a citation is shown (10.6e): a search whose passages
-      // the answer didn't cite is left out of the chip and of the turn's tools.
-      const used = result.citations ? result.toolsRan : result.toolsRan.filter((t) => t !== "knowledge_search")
+      // the answer didn't cite is left out of the chip and of the turn's tools; a tax estimate
+      // only when its card is shown (10.6d).
+      const used = result.toolsRan.filter((t) => (t !== "knowledge_search" || result.citations) && (t !== "tax_estimate" || result.tax))
       const turn: TurnToRecord = {
         requestId,
         conversationId,
