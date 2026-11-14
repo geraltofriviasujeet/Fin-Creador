@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { chunkText, parseDocument } from "./knowledge.ts"
+import { documentChunks, parseDocument } from "./knowledge.ts"
 import { UNKNOWN_CALL_INPUT_TOKENS, toolsFor } from "../apps/web/lib/ai/handle"
 import { MAX_OUTPUT_TOKENS } from "../apps/web/lib/ai/chat"
 import { callCostMicroUsd } from "../apps/web/lib/ai/llm/prices"
@@ -17,7 +17,7 @@ import { KNOWLEDGE_COUNT } from "../apps/web/lib/ai/knowledge/session"
 const DIR = join(__dirname, "../supabase/knowledge")
 const passages = readdirSync(DIR)
   .filter((n) => n.endsWith(".md") && n !== "README.md")
-  .flatMap((n) => chunkText(parseDocument(n, readFileSync(join(DIR, n), "utf8")).body))
+  .flatMap((n) => documentChunks(parseDocument(n, readFileSync(join(DIR, n), "utf8"))))
   .sort((a, b) => b.length - a.length)
   .slice(0, KNOWLEDGE_COUNT)
 

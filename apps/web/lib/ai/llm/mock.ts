@@ -149,7 +149,7 @@ function knowledgeScript(request: LlmRequest): LlmResponse | null {
   const last = request.messages.at(-1)
   if (last?.role !== "tool_results") {
     const question = request.messages.filter((m) => m.role === "user").at(-1)
-    return mockToolCall("knowledge_search", { question: question?.role === "user" ? question.text : "" })
+    return mockToolCall("knowledge_search", { query: question?.role === "user" ? question.text : "" })
   }
   const result = JSON.parse(last.results[0]?.content ?? "{}") as { passages?: { id: string; text: string }[] }
   const first = result.passages?.[0]

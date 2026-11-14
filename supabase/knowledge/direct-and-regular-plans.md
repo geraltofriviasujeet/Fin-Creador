@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: direct plan, regular plan, direct vs regular mutual fund, distributor commission
 ---
 
 Most mutual fund schemes come in two plans: direct and regular. Both invest in exactly the same portfolio. The difference is cost.

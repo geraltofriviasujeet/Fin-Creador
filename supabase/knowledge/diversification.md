@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: diversify, asset allocation, spreading risk
 ---
 
 Diversification means spreading money across different investments so that a loss in one has a smaller effect on the whole. It can be across asset classes (shares, bonds, gold, deposits), across companies and sectors, and across time.

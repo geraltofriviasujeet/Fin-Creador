@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: inflation, real return, purchasing power
 ---
 
 Inflation is the general rise in prices over time. As prices rise, the same amount of money buys less. A return that is lower than inflation means money is growing in rupees but shrinking in what it can buy.

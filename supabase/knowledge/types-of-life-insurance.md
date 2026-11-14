@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-14
 verified_on: 2026-11-13
 status: approved
+also_known_as: term insurance, term plan, endowment plan, ULIP, life insurance plans
 ---
 
 Life insurance policies differ in what they pay, when they pay it, and whether part of the premium is saved or invested. These are the main kinds IRDAI describes for policyholders.

@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: min due, minimum amount due, MAD, credit card bill, credit card interest
 ---
 
 A credit card bill shows two key amounts: the total amount due and the minimum amount due. What you pay decides whether interest is charged.

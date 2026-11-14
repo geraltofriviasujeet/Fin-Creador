@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: NAV, net asset value, expense ratio, TER, mutual fund units
 ---
 
 A mutual fund pools money from many investors and invests it in shares, bonds or other assets according to the scheme's stated objective. A fund manager makes the investment decisions. Each investor owns units of the scheme in proportion to what they put in.

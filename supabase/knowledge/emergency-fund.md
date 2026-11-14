@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: emergency fund, contingency fund, rainy day fund
 ---
 
 An emergency fund is money set aside for unplanned costs or a loss of income: a job loss, a medical bill, an urgent repair. Its purpose is to avoid borrowing at high cost or selling long-term investments at a bad time.

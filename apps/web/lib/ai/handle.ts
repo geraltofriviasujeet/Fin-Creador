@@ -278,7 +278,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
 
   const route: Route = deps.knowledge ? routeQuestion(parsed.data.question) : "records"
   if (deps.knowledge && (route === "knowledge" || route === "both" || route === "tax")) {
-    context = { ...context, knowledge: new KnowledgeSession({ embed: deps.knowledge.makeEmbedder(requestId), db: deps.knowledge.db, minSimilarity: deps.knowledge.minSimilarity }) }
+    context = { ...context, knowledge: new KnowledgeSession({ embed: deps.knowledge.makeEmbedder(requestId), db: deps.knowledge.db, minSimilarity: deps.knowledge.minSimilarity, ownWords: parsed.data.question }) }
   }
 
   let run: ChatRun

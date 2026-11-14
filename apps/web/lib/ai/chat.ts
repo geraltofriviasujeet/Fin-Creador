@@ -3,7 +3,8 @@ import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber, saidNumbers } from "./output"
 import { figureId, fillPlaceholders, formatFigure, webAmounts, withoutPlaceholders } from "./placeholders"
 import { type Citation, NOT_ADVICE, NO_PRODUCT_PICKS, knowledgeAnswer } from "./knowledge/citations"
-import { type Route, isProductPick } from "./knowledge/route"
+import { isProductPick } from "./knowledge/picks"
+import type { Route } from "./knowledge/route"
 import { KNOWLEDGE_RULES, ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
@@ -109,7 +110,6 @@ export async function runChat({
   deadlineMs = DEADLINE_MS,
 }: Options): Promise<ChatRun> {
   const deadline = Date.now() + deadlineMs
-  const toolContext: ToolContext = { ...context, asked: question, said: [question, ...history.recent.map((t) => t.question)].join("\n") }
   const toolDefs = tools.map(toToolDef)
   const webTools = tools.some((t) => t.name === "web_price_lookup")
   const knowledgeTools = tools.some((t) => t.name === "knowledge_search")
@@ -142,6 +142,13 @@ export async function runChat({
     web: [],
     amounts: new Map(),
     tax: null,
+    recordStrings: [],
+  }
+  const toolContext: ToolContext = {
+    ...context,
+    asked: question,
+    said: [question, ...history.recent.map((t) => t.question)].join("\n"),
+    recordStrings: () => found.recordStrings,
   }
   let usage = NO_USAGE
   let calls = 0
@@ -276,6 +283,8 @@ type Found = {
   amounts: Map<string, string>
   /** The last tax estimate's card (10.6e). */
   tax: TaxBlock | null
+  /** Every string the records tools returned (10.6d): a knowledge query must not hold them. */
+  recordStrings: string[]
 }
 
 /** The numbers a web block lets an answer quote: prices as written and in full, totals, nights and travellers. */
@@ -326,6 +335,14 @@ export function withVerdict(text: string, checks: readonly GoalCheck[]): string 
   return checks.map((c) => c.summary).join("\n\n")
 }
 
+/** Every string in a tool result, at any depth. */
+function allStrings(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") out.push(value)
+  else if (Array.isArray(value)) for (const v of value) allStrings(v, out)
+  else if (value !== null && typeof value === "object") for (const v of Object.values(value)) allStrings(v, out)
+  return out
+}
+
 type ToolRun = { callId: string; tool: string; output: ToolOutput } | { callId: string; error: string }
 
 async function runTool(tools: readonly FinanceTool[], context: ToolContext, callId: string, name: string, rawInput: unknown): Promise<ToolRun> {
@@ -364,6 +381,7 @@ function applyTool(run: ToolRun, figures: Figure[], periods: DateRange[], found:
   if (output.web) found.web.push(output.web)
   if (output.tax) found.tax = output.tax
   if (!output.untrusted) found.literals.push(...literalStrings(output.data), ...literalStrings(output.figures.map((f) => f.label)))
+  if (!output.untrusted && run.tool !== "tax_estimate") found.recordStrings.push(...allStrings(output.data), ...output.figures.map((f) => f.label))
   found.toolsRan.push(run.tool)
   const content = placeholders.length > 0 ? { ...output.data, amounts: placeholders } : output.data
   return { callId, content: JSON.stringify(content) }

@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: loan prepayment, part payment, loan foreclosure, closing a loan early
 ---
 
 Prepaying means repaying part or all of a loan before it is due. Because interest is charged on the amount still owed, paying some of it early reduces the interest paid over the rest of the loan.

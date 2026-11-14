@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: EMI, equated monthly instalment, EMI calculation, loan interest
 ---
 
 An equated monthly instalment (EMI) is the fixed amount paid each month on a loan. Each EMI covers that month's interest on the amount still owed, and the rest repays the loan (the principal).

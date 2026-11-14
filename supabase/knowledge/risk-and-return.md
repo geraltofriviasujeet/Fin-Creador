@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: risk vs return, volatility, risk appetite
 ---
 
 In investing, return is what an investment earns; risk is the chance that the outcome differs from what was expected, including losing money. Investments that can earn more over long periods usually come with bigger swings along the way.

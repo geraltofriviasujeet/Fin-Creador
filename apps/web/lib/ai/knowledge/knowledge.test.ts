@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { z } from "zod"
 import type { UserClient } from "@fin-creador/api"
 import { runChat } from "../chat"
 import { type MockScript, mockProvider, mockText, mockToolCall } from "../llm/mock"
@@ -8,8 +9,20 @@ import { type FinanceTool, ToolError, type ToolContext } from "../tools/types"
 import { progressLine } from "../wording"
 import { KNOWLEDGE_UNAVAILABLE, NOT_ADVICE, NO_MATERIAL, NO_MATERIAL_PART, NO_PRODUCT_PICKS, applyCitations, citationOf, knowledgeAnswer, sourceLabel, withoutNotAdvice } from "./citations"
 import { axis, mockEmbedder } from "./embedder"
-import { isProductPick, routeQuestion } from "./route"
-import { DEFAULT_MIN_SIMILARITY, type KnowledgeDb, type KnowledgeRow, KnowledgeSession, MAX_KNOWLEDGE_SEARCHES, type Passage, withinBand } from "./session"
+import { isProductPick } from "./picks"
+import { routeQuestion } from "./route"
+import {
+  DEFAULT_MIN_SIMILARITY,
+  type KnowledgeDb,
+  type KnowledgeRow,
+  KnowledgeSession,
+  MAX_KNOWLEDGE_SEARCHES,
+  type Passage,
+  mergeRows,
+  queryProblem,
+  withinBand,
+  withoutAmounts,
+} from "./session"
 
 // The knowledge base path (10.6c) on the mock provider and a fake match_knowledge_chunks: no
 // test calls the embed function or a paid API.
@@ -85,6 +98,11 @@ describe("routeQuestion", () => {
     expect(routeQuestion("find coffee")).toBe("both")
     expect(routeQuestion("and the other one?")).toBe("both")
     expect(routeQuestion("Hello, what is 80C?")).toBe("knowledge")
+
+    // Hinglish (10.6d): a general question reaches knowledge_search; one about their own money keeps the records.
+    expect(routeQuestion("budget kaise banaye mahine ka")).toBe("both")
+    expect(routeQuestion("emi kaise calculate hoti hai")).toBe("knowledge")
+    expect(routeQuestion("mera kharcha kitna hua is mahine")).toBe("both")
   })
 
   it("keeps neither for greetings and small talk only", () => {
@@ -147,6 +165,81 @@ describe("the progress line (10.6d)", () => {
     expect(progressLine("hi", on)).toBe("Roma is working…")
     expect(progressLine("Plan a bike", { plan: true, knowledge: true })).toBe("Roma is checking your records…")
     expect(progressLine("What is an SIP?", { plan: false, knowledge: false })).toBe("Roma is checking your records…")
+  })
+})
+
+describe("searching with the model's query and the person's words (10.6d)", () => {
+  // Each text embeds to its own axis; the database answers by axis.
+  const texts: string[] = []
+  const embed = async (text: string) => {
+    if (!texts.includes(text)) texts.push(text)
+    return axis(texts.indexOf(text))
+  }
+  const byAxis = (answers: KnowledgeRow[][]): KnowledgeDb & { asked: string[] } => {
+    const asked: string[] = []
+    return {
+      asked,
+      async match(vector) {
+        const i = vector.indexOf(1)
+        asked.push(texts[i]!)
+        return answers[i] ?? []
+      },
+    }
+  }
+  const at = (n: number, similarity: number) => row({ chunk_id: `00000000-0000-4000-8000-0000000002${String(n).padStart(2, "0")}`, similarity, content: `Passage ${n}.` })
+
+  it("merges both searches, each passage at its best similarity, and embeds the person's words once", async () => {
+    texts.length = 0
+    const db = byAxis([[at(1, 0.84), at(2, 0.9)], [at(1, 0.88), at(3, 0.87)], [at(4, 0.95)]])
+    const s = new KnowledgeSession({ embed, db, minSimilarity: 0.82, ownWords: "80c limit kitna hai for ₹1,50,000?" })
+    expect((await s.search("section 80C deduction limit")).map((p) => p.content)).toEqual(["Passage 2.", "Passage 1.", "Passage 3."])
+    expect(db.asked).toEqual(["section 80C deduction limit", "80c limit kitna hai for ?"])
+    // The second search embeds only its query; the person's words' rows are reused.
+    expect((await s.search("tax deduction limits")).map((p) => p.content)).toEqual(["Passage 4."])
+    expect(db.asked).toEqual(["section 80C deduction limit", "80c limit kitna hai for ?", "tax deduction limits"])
+    expect(s.embeds).toBe(3)
+    await expect(s.search("third")).rejects.toThrow(ToolError)
+    expect(mergeRows([[at(1, 0.8)], [at(1, 0.9), at(2, 0.85)]]).map((r) => r.similarity)).toEqual([0.9, 0.85])
+  })
+
+  it("searches with the person's words alone when the query can't be used, and refuses with neither", async () => {
+    texts.length = 0
+    const db = byAxis([[at(1, 0.9)]])
+    const s = new KnowledgeSession({ embed, db, minSimilarity: 0.82, ownWords: "sip kya hota hai" })
+    expect((await s.search(null)).map((p) => p.content)).toEqual(["Passage 1."])
+    expect(db.asked).toEqual(["sip kya hota hai"])
+    await expect(new KnowledgeSession({ embed, db, minSimilarity: 0.82 }).search(null)).rejects.toThrow(ToolError)
+  })
+
+  it("takes amounts out of the person's words, keeping section numbers and years", () => {
+    expect(withoutAmounts("my salary is 14.15 lakh, ₹1,20,000 bonus and 18 LPA, rs 5000, 1415000 in 2026 under 80C for 2026-27")).toBe(
+      "my salary is , bonus and , , in 2026 under 80C for 2026-27",
+    )
+  })
+
+  it("refuses a query holding an amount or a name the records returned, and nothing else", () => {
+    expect(queryProblem("tax on 18 lpa salary", [])).toBe("amount")
+    expect(queryProblem("is ₹5,000 a month enough", [])).toBe("amount")
+    expect(queryProblem("emergency fund for the Goa Trip goal", ["Goa Trip", "this_month", "ok"])).toBe("records")
+    expect(queryProblem("section 80C deduction limit 2026-27", ["Goa Trip", "this_month"])).toBeNull()
+    expect(queryProblem("goat farming loans", ["Goa"])).toBeNull()
+  })
+
+  it("never sends a query with a records name: the chat loop hands the records' strings to knowledge_search", async () => {
+    texts.length = 0
+    const db = byAxis([[at(1, 0.9)]])
+    const goals = { name: "goal_projection", description: "", input: z.object({}), run: async () => ({ data: { goal: "Goa Trip" }, figures: [] }) } as unknown as FinanceTool
+    const run = await runChat({
+      provider: mockProvider((_req, round) =>
+        round === 0 ? mockToolCall("goal_projection", {}) : round === 1 ? mockToolCall("knowledge_search", { query: "emergency fund before the Goa Trip" }) : mockText("Keep three to six months [[k1]]."),
+      ),
+      tools: [goals, knowledgeSearchTool as FinanceTool],
+      context: { ...base, knowledge: new KnowledgeSession({ embed, db, minSimilarity: 0.82, ownWords: "how big should my emergency fund be" }) },
+      question: "how big should my emergency fund be",
+      route: "both",
+    })
+    expect(db.asked).toEqual(["how big should my emergency fund be"])
+    expect(run.result.kind).toBe("answer")
   })
 })
 
@@ -255,7 +348,7 @@ const both = [spendingTool as FinanceTool, knowledgeSearchTool as FinanceTool]
 const searchThen =
   (answer: string): MockScript =>
   (_req, round) =>
-    round === 0 ? mockToolCall("knowledge_search", { question: "How big should an emergency fund be?" }) : mockText(answer)
+    round === 0 ? mockToolCall("knowledge_search", { query: "How big should an emergency fund be?" }) : mockText(answer)
 
 const askKnowledge = (script: MockScript, rows: KnowledgeRow[] | Error = [row(), SLABS], extra: Partial<Parameters<typeof runChat>[0]> = {}) =>
   runChat({ provider: mockProvider(script), tools: knowledgeOnly, context: { ...base, knowledge: session(rows) }, question: "How big should an emergency fund be?", route: "knowledge", ...extra })
@@ -314,7 +407,7 @@ describe("Roma's chat loop with the knowledge base", () => {
     const run = await runChat({
       provider: mockProvider((_req, round) =>
         round === 0
-          ? { stop: "tool_use", text: "", toolCalls: [{ id: "a", name: "spending_for_period", input: { period: "this_month" } }, { id: "b", name: "knowledge_search", input: { question: "Is crypto a good investment?" } }], usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } }
+          ? { stop: "tool_use", text: "", toolCalls: [{ id: "a", name: "spending_for_period", input: { period: "this_month" } }, { id: "b", name: "knowledge_search", input: { query: "Is crypto a good investment?" } }], usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } }
           : mockText("You spent ₹500.00 this month."),
       ),
       tools: both,
@@ -335,7 +428,7 @@ describe("Roma's chat loop with the knowledge base", () => {
     let result = ""
     await askKnowledge((req, round) => {
       system = req.system
-      if (round === 0) return mockToolCall("knowledge_search", { question: "emergency fund size" })
+      if (round === 0) return mockToolCall("knowledge_search", { query: "emergency fund size" })
       const last = req.messages.at(-1)
       result = last?.role === "tool_results" ? last.results[0]!.content : ""
       return mockText("ok")

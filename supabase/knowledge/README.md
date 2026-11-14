@@ -27,8 +27,14 @@ published_on: 2026-11-13            # the page's date (official) or when we wrot
 verified_on: 2026-11-13             # last checked against the source
 financial_year: 2026-27             # only when figures depend on the year
 status: draft                       # draft | approved | retired; the owner sets approved
+also_known_as: SIP, systematic investment plan   # optional, comma-separated, at most 200 characters
 ---
 ```
+
+`also_known_as` (10.6d) names other words for the subject: abbreviations, old section numbers,
+common phrasings. It is put before each passage in the text that is embedded, so a question
+using those words finds the document; it is never stored or shown as passage text. Passages
+under 300 characters are joined to a neighbour.
 
 `official` documents carry the publisher's text unchanged, only where their terms permit reuse.
 Everything else is an `own` explainer in our words. The script refuses a file that breaks the

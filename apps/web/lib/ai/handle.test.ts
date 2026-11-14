@@ -436,7 +436,11 @@ describe("knowledge base routing (10.6c)", () => {
     const d = deps({ ...k, makeProvider: () => ({ ...base, complete: (req, signal) => (offered(seen)(req), base.complete(req, signal)) }) })
     const res = await handleChat({ question: "What is an SIP?" }, d)
     expect(seen[0]).toEqual(["knowledge_search"])
-    expect(k.embedded).toEqual([{ requestId: "req-1", text: "What is an SIP?" }])
+    // The model's query, then the person's own words (10.6d), both under the question's reservation.
+    expect(k.embedded).toEqual([
+      { requestId: "req-1", text: "What is an SIP?" },
+      { requestId: "req-1", text: "What is an SIP?" },
+    ])
     expect(res.body).toMatchObject({
       status: "answer",
       answer: "An SIP invests a fixed amount at regular intervals. [1] (Test answer.)\n\nGeneral information, not personal advice.",
@@ -452,7 +456,7 @@ describe("knowledge base routing (10.6c)", () => {
   it("shows the knowledge chip only when a citation is shown", async () => {
     // From dev: a capital gains question searched the knowledge base, cited nothing, and still got the chip.
     const script = (_r: unknown, round: number) =>
-      round === 0 ? mockToolCall("knowledge_search", { question: "capital gains tax" }) : round === 1 ? mockToolCall("tax_estimate", { salary: "5 lakh" }) : mockText("Uncited. (Test answer.)")
+      round === 0 ? mockToolCall("knowledge_search", { query: "capital gains tax" }) : round === 1 ? mockToolCall("tax_estimate", { salary: "5 lakh" }) : mockText("Uncited. (Test answer.)")
     const d = deps({ ...knowledge(), makeProvider: () => mockProvider(script) })
     const res = await handleChat({ question: "How much tax on my capital gains of 5 lakh?" }, d)
     // No card was shown either, so no tax chip (10.6d).

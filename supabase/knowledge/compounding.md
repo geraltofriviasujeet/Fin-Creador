@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: compound interest, power of compounding
 ---
 
 Compounding means earning returns on your earlier returns, not only on the money you first put in. Each year's growth is added to the balance, and the next year's growth is worked out on that larger balance.

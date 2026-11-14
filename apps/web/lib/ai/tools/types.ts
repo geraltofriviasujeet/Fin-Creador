@@ -22,6 +22,8 @@ export type ToolContext = {
   /** The person's own words (10.6e, set by the chat loop): this question, and it with the recent earlier ones. */
   asked?: string
   said?: string
+  /** The strings the records tools returned so far this question (10.6d, set by the chat loop): a knowledge query must not hold them. */
+  recordStrings?: () => readonly string[]
 }
 
 /** A figure a tool produced: what the answer may quote and what the figures panel shows. */

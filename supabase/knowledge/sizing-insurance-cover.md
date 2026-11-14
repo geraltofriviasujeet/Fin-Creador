@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: life cover, sum assured, how much life insurance
 ---
 
 IRDAI lists the factors that decide how much life insurance a person needs: the number of dependants, the lifestyle to provide for them, children's education, investment needs, and what the person can afford. Two common ways turn these into an amount.

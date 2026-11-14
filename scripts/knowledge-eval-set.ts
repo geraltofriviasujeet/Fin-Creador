@@ -4,8 +4,12 @@
 // scored apart, and tax-calculation phrasings are checked to route to tax_estimate (by the unit
 // tests: routing is code, so nothing is embedded for them).
 
-/** `loose`: a loosely worded question, reported apart from the original set. */
-export type EvalQuestion = { question: string; expect: string | null; loose?: true };
+/**
+ * `loose`: a loosely worded question, reported apart from the original set. `pure` (10.6d): an
+ * off-topic question (crypto, nothing to do with personal finance) that must find nothing,
+ * whatever the no-product-picks rule does.
+ */
+export type EvalQuestion = { question: string; expect: string | null; loose?: true; pure?: true };
 
 /** `expect`: the document slug that should come back; null: nothing should (no vetted material). */
 export const EVAL_QUESTIONS: EvalQuestion[] = [
@@ -24,7 +28,7 @@ export const EVAL_QUESTIONS: EvalQuestion[] = [
   { question: "Should I choose the old or the new tax regime?", expect: "old-or-new-tax-regime-2026-27" },
   { question: "How much can I deduct for health insurance premiums?", expect: "tax-deduction-limits-2026-27" },
   { question: "How are long-term capital gains on equity shares taxed?", expect: "capital-gains-tax-basics-2026-27" },
-  { question: "Should I buy Bitcoin or Ethereum now?", expect: null },
+  { question: "Should I buy Bitcoin or Ethereum now?", expect: null, pure: true },
   { question: "Which stock will double next month?", expect: null },
   { question: "Which mutual fund scheme should I buy for the best returns this year?", expect: null },
   { question: "sip kya hota hai", expect: "sip-explained", loose: true },
@@ -37,6 +41,21 @@ export const EVAL_QUESTIONS: EvalQuestion[] = [
   { question: "direct ya regular plan, fark kya hai?", expect: "direct-and-regular-plans", loose: true },
   { question: "new regime slabs 2026-27?", expect: "income-tax-new-regime-2026-27", loose: true },
   { question: "loan jaldi band karu? prepay worth it?", expect: "prepaying-a-loan", loose: true },
+  // 10.6d: ten more, half Hinglish.
+  { question: "health insurance mein waiting period kya hota hai", expect: "health-insurance-how-it-works", loose: true },
+  { question: "emi kaise calculate hoti hai", expect: "emi-and-loan-interest", loose: true },
+  { question: "ppf aur nps mein kya fark hai", expect: "ppf-epf-and-nps", loose: true },
+  { question: "inflation se paisa kaise ghatta hai", expect: "inflation-and-real-returns", loose: true },
+  { question: "budget kaise banaye mahine ka", expect: "budgeting-basics", loose: true },
+  { question: "nav vs expense ratio?", expect: "how-mutual-funds-work", loose: true },
+  { question: "compounding means?", expect: "compounding", loose: true },
+  { question: "80d limit for parents", expect: "tax-deduction-limits-2026-27", loose: true },
+  { question: "old vs new regime which one", expect: "old-or-new-tax-regime-2026-27", loose: true },
+  { question: "diversify how?", expect: "diversification", loose: true },
+  // 10.6d: three more off-topic, two in Hinglish.
+  { question: "bitcoin abhi kharidu kya?", expect: null, pure: true },
+  { question: "aaj ka cricket score kya hai", expect: null, pure: true },
+  { question: "Which IPO should I buy next week?", expect: null },
 ];
 
 /** Phrasings that must route to tax_estimate (apps/web/lib/ai/knowledge/route.ts), checked by the unit tests. */
@@ -52,7 +71,39 @@ export const COUNT = 4;
 /** The app keeps only passages within this much of the top one (session.ts SIMILARITY_BAND). */
 export const BAND = 0.05;
 
-export type Found = { slug: string; similarity: number; chars: number };
+/** `chunk`: the passage's id, when the database gave it (to merge two searches). */
+export type Found = { slug: string; similarity: number; chars: number; chunk?: string };
+
+/**
+ * Two searches' rows as the app merges them (apps/web/lib/ai/knowledge/session.ts mergeRows):
+ * each passage once at its best similarity, closest first, the app's count, then the band.
+ */
+export function mergeFound(lists: Found[][], count = COUNT): Found[] {
+  const best = new Map<string, Found>();
+  for (const f of lists.flat()) {
+    const key = f.chunk ?? `${f.slug}:${f.chars}`;
+    const seen = best.get(key);
+    if (!seen || f.similarity > seen.similarity) best.set(key, f);
+  }
+  return withinBand([...best.values()].sort((a, b) => b.similarity - a.similarity).slice(0, count));
+}
+
+export type OffTopic = { nothing: number; picks: number; handled: number; total: number; pureNothing: number; pure: number };
+
+/** Off-topic questions: handled when nothing is found or the no-product-picks rule catches them; pure ones must find nothing. */
+export function offTopic(rows: { q: EvalQuestion; found: Found[]; pick: boolean }[]): OffTopic {
+  const off = rows.filter((r) => r.q.expect === null);
+  const nothing = off.filter((r) => r.found.length === 0);
+  const pure = off.filter((r) => r.q.pure);
+  return {
+    nothing: nothing.length,
+    picks: off.filter((r) => r.pick).length,
+    handled: off.filter((r) => r.found.length === 0 || r.pick).length,
+    total: off.length,
+    pureNothing: pure.filter((r) => r.found.length === 0).length,
+    pure: pure.length,
+  };
+}
 
 /** What the app keeps of a search's rows, closest first: those within BAND of the top one. */
 export function withinBand(found: Found[]): Found[] {

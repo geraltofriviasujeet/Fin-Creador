@@ -2,7 +2,21 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DIMENSIONS, MAX_BATCH, handleRequest } from "../supabase/functions/embed/embed.ts";
-import { EMBED_BATCH, MAX_CHUNK_CHARS, chunkText, embedBatches, parseDocument, planIngestion, sha256, validFinancialYear, type ParsedFile } from "./knowledge.ts";
+import {
+  CHUNKING_VERSION,
+  EMBED_BATCH,
+  MAX_CHUNK_CHARS,
+  MIN_CHUNK_CHARS,
+  chunkText,
+  documentChunks,
+  embedBatches,
+  embedText,
+  parseDocument,
+  planIngestion,
+  sha256,
+  validFinancialYear,
+  type ParsedFile,
+} from "./knowledge.ts";
 
 const OWN = [
   "---",
@@ -46,7 +60,9 @@ describe("parseDocument", () => {
     const own = parseDocument("what-is-an-sip.md", OWN);
     expect(own.document).toMatchObject({ slug: "what-is-an-sip", content_kind: "own", publisher: "FinCreador", source_url: null, status: "draft", financial_year: null });
     expect(own.body).toBe("An SIP invests a fixed amount every month.");
-    expect(own.contentHash).toBe(sha256(OWN));
+    // The chunking version is part of the hash, so a change in how passages are made re-embeds every document.
+    expect(own.contentHash).toBe(sha256(`chunking ${CHUNKING_VERSION}\n${OWN}`));
+    expect(own.aliases).toEqual([]);
 
     const official = parseDocument("example-slabs.md", OFFICIAL);
     expect(official.document).toMatchObject({ content_kind: "official", status: "approved", financial_year: "2026-27", based_on_publisher: null, published_on: null });
@@ -114,6 +130,18 @@ describe("chunkText", () => {
     expect(chunks.join(" ").replace(/\s+/g, " ")).toBe(`${long}${"word ".repeat(400)}`.replace(/\s+/g, " ").trim());
   });
 
+  it("re-splits a passage under 300 characters with a neighbour so both are at least 300, within the limit", () => {
+    const para = (c: string, n: number) => c.repeat(n);
+    expect(MIN_CHUNK_CHARS).toBe(300);
+    // 172 characters after a passage of two paragraphs: the pair re-split at the middle boundary.
+    const chunks = chunkText([para("a", 550), para("b", 550), para("c", 172), para("d", 1100)].join("\n\n"));
+    expect(chunks.map((c) => c.length)).toEqual([550, 550 + 2 + 172, 1100]);
+    // Nowhere it fits: kept as it is.
+    expect(chunkText([para("a", 1100), para("b", 172), para("c", 1100)].join("\n\n")).map((c) => c.length)).toEqual([1100, 172, 1100]);
+    // A short document stays one passage.
+    expect(chunkText("Short.")).toEqual(["Short."]);
+  });
+
   it("refuses a document of more than 200 passages", () => {
     expect(() => chunkText(Array(201).fill("x".repeat(1000)).join("\n\n"))).toThrow(/split the document/);
   });
@@ -147,9 +175,13 @@ describe("supabase/knowledge", () => {
   it("every document parses, chunks within the limits and has a unique slug", () => {
     const parsed = files.map((name) => parseDocument(name, readFileSync(join(dir, name), "utf8")));
     for (const file of parsed) {
-      const chunks = chunkText(file.body);
+      const chunks = documentChunks(file);
       expect(chunks.length).toBeGreaterThan(0);
-      for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(MAX_CHUNK_CHARS);
+      // With its aliases line, each passage fits the embed function's limit; none is under 300 characters.
+      for (const chunk of chunks) expect(embedText(chunk, file.aliases).length).toBeLessThanOrEqual(MAX_CHUNK_CHARS);
+      for (const chunk of chunks) expect(chunk.length, `${file.document.slug}: ${chunk.slice(0, 40)}`).toBeGreaterThanOrEqual(MIN_CHUNK_CHARS);
+      expect(file.aliases.length, file.document.slug).toBeGreaterThan(0);
+      expect(embedText(chunks[0]!, file.aliases).startsWith(`Also known as: ${file.aliases.join(", ")}\n\n`)).toBe(true);
     }
     expect(() => planIngestion(parsed, [])).not.toThrow();
   });
@@ -170,9 +202,10 @@ describe("supabase/knowledge", () => {
       ...files.map((name) => parseDocument(name, readFileSync(join(dir, name), "utf8"))),
       parseDocument("what-is-an-sip.md", long),
     ];
-    expect(chunkText(documents.at(-1)!.body).length).toBeGreaterThan(MAX_BATCH * 2);
+    expect(documentChunks(documents.at(-1)!).length).toBeGreaterThan(MAX_BATCH * 2);
     for (const file of documents) {
-      const chunks = chunkText(file.body);
+      // As the ingestion script sends them: each passage with its aliases line.
+      const chunks = documentChunks(file).map((c) => embedText(c, file.aliases));
       const batches = embedBatches(chunks);
       expect(batches.flat()).toEqual(chunks);
       for (const texts of batches) {

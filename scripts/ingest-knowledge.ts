@@ -21,7 +21,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { projectEnv, readEnvFile } from "./knowledge-env.ts";
-import { PENDING_HASH, chunkText, embedBatches, parseDocument, planIngestion, type ParsedFile, type StoredDocument } from "./knowledge.ts";
+import { PENDING_HASH, documentChunks, embedBatches, embedText, parseDocument, planIngestion, type ParsedFile, type StoredDocument } from "./knowledge.ts";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DOCUMENTS_DIR = join(REPO, "supabase", "knowledge");
@@ -131,7 +131,7 @@ class Project {
 
 async function main() {
   const files = readFiles();
-  const chunksBySlug = new Map(files.map((file) => [file.document.slug, chunkText(file.body)]));
+  const chunksBySlug = new Map(files.map((file) => [file.document.slug, documentChunks(file)]));
   if (process.argv.includes("--check")) {
     for (const file of files) console.warn(`${file.document.slug}: ${file.document.content_kind}, ${file.document.status}, ${chunksBySlug.get(file.document.slug)!.length} passages`);
     console.warn(`${files.length} documents read; nothing written.`);
@@ -144,7 +144,8 @@ async function main() {
     const file = files.find((f) => f.document.slug === slug)!;
     const chunks = chunksBySlug.get(slug)!;
     try {
-      await project.write(file, chunks, await project.embed(chunks));
+      // The aliases line is embedded with each passage; the passage alone is stored and shown.
+      await project.write(file, chunks, await project.embed(chunks.map((c) => embedText(c, file.aliases))));
     } catch (error) {
       throw new Error(`${slug}: ${error instanceof Error ? error.message : "failed"}`);
     }

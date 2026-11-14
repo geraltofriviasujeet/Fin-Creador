@@ -11,6 +11,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 status: approved
+also_known_as: SIP, systematic investment plan, monthly mutual fund investment
 ---
 
 A systematic investment plan (SIP) invests a fixed amount in a mutual fund scheme at regular intervals, usually monthly, by automatic debit. Each instalment buys units at that day's NAV.

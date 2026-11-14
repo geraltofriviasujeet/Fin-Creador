@@ -11,6 +11,7 @@ published_on: 2026-11-13
 verified_on: 2026-11-13
 financial_year: 2026-27
 status: approved
+also_known_as: old vs new regime, which tax regime, tax regime choice, opting out of the new regime
 ---
 
 These figures are from the Income-tax Act, 2025, as published on the Income Tax Department's website, for tax year 2026-27 (1 April 2026 to 31 March 2027).

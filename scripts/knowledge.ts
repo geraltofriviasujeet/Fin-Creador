@@ -11,6 +11,16 @@ import { MAX_BATCH } from "../supabase/functions/embed/embed.ts";
 
 export const MAX_CHUNK_CHARS = 1200;
 export const MAX_CHUNKS = 200;
+/** A passage shorter than this is merged into a neighbour where the two fit (10.6d). */
+export const MIN_CHUNK_CHARS = 300;
+/**
+ * Part of every document's hash: raised whenever the passages or the text embedded for them are
+ * made differently, so the next ingestion re-embeds every document. 2: short passages merged and
+ * the also_known_as line embedded (10.6d).
+ */
+export const CHUNKING_VERSION = 2;
+/** The also_known_as line, at most this long. */
+export const MAX_ALIASES_CHARS = 200;
 // Passages per call to the embed function: its own cap, so the two cannot drift.
 export const EMBED_BATCH = MAX_BATCH;
 export const FINCREADOR = "FinCreador";
@@ -42,6 +52,8 @@ export interface KnowledgeDocument {
 export interface ParsedFile {
   document: KnowledgeDocument;
   body: string;
+  /** Other names for the document's subject (also_known_as): embedded with each passage, never shown or stored as its text. */
+  aliases: string[];
   contentHash: string;
 }
 
@@ -61,6 +73,7 @@ const FIELDS = [
   "verified_on",
   "financial_year",
   "status",
+  "also_known_as",
 ] as const;
 type Field = (typeof FIELDS)[number];
 
@@ -176,6 +189,11 @@ export function parseDocument(fileName: string, text: string): ParsedFile {
   const status = optional("status") ?? "draft";
   if (status !== "draft" && status !== "approved" && status !== "retired") problems.push("status must be draft, approved or retired");
 
+  // Comma-separated other names ("80C, section 80C, ELSS"); no commas inside one name.
+  const aliasLine = optional("also_known_as");
+  const aliases = aliasLine ? aliasLine.split(",").map((a) => a.trim()).filter(Boolean) : [];
+  if (aliasLine !== null && aliasLine.length > MAX_ALIASES_CHARS) problems.push(`also_known_as is longer than ${MAX_ALIASES_CHARS} characters`);
+
   const body = match[2]!.trim();
   if (body === "") problems.push("the document has no text");
 
@@ -199,7 +217,8 @@ export function parseDocument(fileName: string, text: string): ParsedFile {
       status: status as Status,
     },
     body,
-    contentHash: sha256(text),
+    aliases,
+    contentHash: sha256(`chunking ${CHUNKING_VERSION}\n${text}`),
   };
 }
 
@@ -260,9 +279,61 @@ export function chunkText(body: string, limit = MAX_CHUNK_CHARS): string[] {
     heading = "";
   }
   if (heading) merged.push(heading);
-  const chunks = pack(merged.flatMap((m) => splitParagraph(m, limit)), limit, "\n\n");
+  const chunks = mergeShort(pack(merged.flatMap((m) => splitParagraph(m, limit)), limit, "\n\n"), limit);
   if (chunks.length > MAX_CHUNKS) throw new Error(`more than ${MAX_CHUNKS} passages; split the document`);
   return chunks;
+}
+
+/**
+ * Each passage under MIN_CHUNK_CHARS fixed with a neighbour (10.6d), so a short passage doesn't
+ * rank high for unrelated short questions: the two joined where they fit within the limit,
+ * otherwise re-split at the paragraph boundary nearest the middle that leaves both at least
+ * MIN_CHUNK_CHARS (never just after a heading). The neighbour before is tried first.
+ */
+function mergeShort(chunks: string[], limit: number): string[] {
+  const out = [...chunks];
+  for (let i = 0; i < out.length; i += 1) {
+    if (out[i]!.length >= MIN_CHUNK_CHARS || out.length === 1) continue;
+    for (const j of [i - 1, i + 1]) {
+      if (j < 0 || j >= out.length) continue;
+      const [first, second] = j < i ? [out[j]!, out[i]!] : [out[i]!, out[j]!];
+      const fixed = rebalance(first, second, limit);
+      if (!fixed) continue;
+      out.splice(Math.min(i, j), 2, ...fixed);
+      break;
+    }
+  }
+  return out;
+}
+
+function rebalance(first: string, second: string, limit: number): string[] | null {
+  const joined = `${first}\n\n${second}`;
+  if (joined.length <= limit) return [joined];
+  const units = joined.split("\n\n");
+  let best: string[] | null = null;
+  for (let k = 1; k < units.length; k += 1) {
+    if (/^#{1,6}\s/.test(units[k - 1]!) && !units[k - 1]!.includes("\n")) continue;
+    const left = units.slice(0, k).join("\n\n");
+    const right = units.slice(k).join("\n\n");
+    if (left.length > limit || right.length > limit || left.length < MIN_CHUNK_CHARS || right.length < MIN_CHUNK_CHARS) continue;
+    if (!best || Math.abs(left.length - right.length) < Math.abs(best[0]!.length - best[1]!.length)) best = [left, right];
+  }
+  return best;
+}
+
+/** The line put before each passage of a document with aliases, in the text embedded only. */
+export function aliasesLine(aliases: readonly string[]): string {
+  return aliases.length > 0 ? `Also known as: ${aliases.join(", ")}\n\n` : "";
+}
+
+/** A document's passages, cut short enough that each with its aliases line fits the embed function's limit. */
+export function documentChunks(file: Pick<ParsedFile, "body" | "aliases">): string[] {
+  return chunkText(file.body, MAX_CHUNK_CHARS - aliasesLine(file.aliases).length);
+}
+
+/** The text embedded for a passage: the aliases line, then the passage as stored and shown. */
+export function embedText(chunk: string, aliases: readonly string[]): string {
+  return `${aliasesLine(aliases)}${chunk}`;
 }
 
 /** The passages in the groups the ingestion script sends to the embed function, in order. */

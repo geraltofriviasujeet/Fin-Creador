@@ -4,6 +4,7 @@
 //   KNOWLEDGE_ENV_FILE=~/path/outside/the/repo/dev.env npm run knowledge:eval
 //   KNOWLEDGE_ENV_FILE=... npm run knowledge:eval -- --include-drafts
 //   npm run knowledge:eval -- --check     # the question set and the real chunker only; no network
+//   KNOWLEDGE_ENV_FILE=... npm run knowledge:eval -- --model-query   # also with the model's query
 //
 // The env file (outside the repository) holds, besides the ingestion script's two lines:
 //   SUPABASE_PUBLISHABLE_KEY=<the project's publishable (or legacy anon) key>
@@ -18,13 +19,40 @@
 // in this script instead (cosine over approved and draft passages read with the service key),
 // and reported apart. From 10.6d each search keeps only the passages the app keeps (within the
 // band of the top one), and the loosely worded questions are reported apart from the original
-// ones. Nothing is written; keys, tokens and passages are never printed.
+// ones. Off-topic questions count as handled when nothing is found or the no-product-picks rule
+// (apps/web/lib/ai/knowledge/picks.ts) catches them, reported apart; pure ones must find nothing.
+//
+// --model-query (10.6d, run only by the owner): each question also gets the query the real
+// model writes for knowledge_search, through the app's own adapter, system prompt and tool
+// definition, with knowledge_search the only tool and no records or personal data in the
+// request; the query is printed beside its question and searched beside the words as typed,
+// merged as the app merges them. It needs, in the env file:
+//   ANTHROPIC_API_KEY=<the Anthropic key>
+//   LLM_MODEL=claude-haiku-5-5            (optional; the app's default)
+// It runs under vitest (scripts/knowledge-eval-model.live.test.ts), which loads the app's code.
+// Nothing is written; keys, tokens and passages are never printed.
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { isProductPick } from "../apps/web/lib/ai/knowledge/picks.ts";
 import { projectEnv, readEnvFile } from "./knowledge-env.ts";
-import { COUNT, EVAL_QUESTIONS, FLOORS, type Found, type Outcome, TAX_ROUTE_QUESTIONS, rank, score, tally, withinBand } from "./knowledge-eval-set.ts";
-import { chunkText, embedBatches, parseDocument } from "./knowledge.ts";
+import {
+  COUNT,
+  EVAL_QUESTIONS,
+  type EvalQuestion,
+  FLOORS,
+  type Found,
+  type Outcome,
+  TAX_ROUTE_QUESTIONS,
+  mergeFound,
+  offTopic,
+  rank,
+  score,
+  tally,
+  withinBand,
+} from "./knowledge-eval-set.ts";
+import { documentChunks, embedBatches, parseDocument } from "./knowledge.ts";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DOCUMENTS_DIR = join(REPO, "supabase", "knowledge");
@@ -56,7 +84,7 @@ function check() {
   const names = readdirSync(DOCUMENTS_DIR).filter((n) => n.endsWith(".md") && n !== "README.md");
   const files = new Map(names.map((n) => {
     const file = parseDocument(n, readFileSync(join(DOCUMENTS_DIR, n), "utf8"));
-    return [file.document.slug, { status: file.document.status, chunks: chunkText(file.body) }] as const;
+    return [file.document.slug, { status: file.document.status, chunks: documentChunks(file) }] as const;
   }));
   for (const q of EVAL_QUESTIONS) {
     if (!q.expect) {
@@ -72,9 +100,31 @@ function check() {
   console.warn(`${EVAL_QUESTIONS.length} questions and ${TAX_ROUTE_QUESTIONS.length} tax phrasings; nothing sent.`);
 }
 
-async function main() {
-  if (process.argv.includes("--check")) return check();
-  const includeDrafts = process.argv.includes("--include-drafts");
+/** The query the model writes for a question's knowledge_search, or null when it wrote none (or one that can't be used). */
+export type QueryWriter = (question: string) => Promise<string | null>;
+
+type Results = Map<number, Map<number, Found[] | null>>;
+
+function report(label: string, results: Results, viaScript: (q: EvalQuestion) => boolean) {
+  console.warn(`\n=== ${label} ===`);
+  for (const loose of [false, true]) {
+    console.warn(`${loose ? "Loosely worded" : "Original"} questions`);
+    console.warn(`Floor  hit@1      hit@4`);
+    for (const floor of FLOORS) {
+      const outcomes = EVAL_QUESTIONS.flatMap((q, i): Outcome[] => (viaScript(q) || q.expect === null || (q.loose === true) !== loose ? [] : [score(q, results.get(floor)!.get(i)!)]));
+      const t = tally(outcomes);
+      console.warn(`${floor.toFixed(2)}   ${t.hit1}/${t.scored}`.padEnd(17) + `${t.hit4}/${t.scored}`);
+    }
+  }
+  console.warn(`Off-topic: handled = nothing found or caught by the no-product-picks rule; pure ones must find nothing`);
+  console.warn(`Floor  nothing found  caught by no-picks  handled  pure: nothing found`);
+  for (const floor of FLOORS) {
+    const t = offTopic(EVAL_QUESTIONS.flatMap((q, i) => (q.expect === null ? [{ q, found: results.get(floor)!.get(i) ?? [], pick: isProductPick(q.question) }] : [])));
+    console.warn(`${floor.toFixed(2)}   ${t.nothing}/${t.total}`.padEnd(22) + `${t.picks}/${t.total}`.padEnd(20) + `${t.handled}/${t.total}`.padEnd(9) + `${t.pureNothing}/${t.pure}`);
+  }
+}
+
+export async function runEvaluation({ includeDrafts, queryFor }: { includeDrafts: boolean; queryFor?: QueryWriter }) {
   const values = readEnvFile();
   const { url, key } = projectEnv(values);
   const publishable = values.get("SUPABASE_PUBLISHABLE_KEY") ?? values.get("SUPABASE_ANON_KEY") ?? "";
@@ -86,11 +136,31 @@ async function main() {
   const documents = (await call(`${url}/rest/v1/knowledge_documents?select=slug,status`, { method: "GET", headers: service })) as { slug: string; status: string }[];
   const status = new Map(documents.map((d) => [d.slug, d.status]));
 
-  const vectors: number[][] = [];
-  for (const batch of embedBatches(EVAL_QUESTIONS.map((q) => q.question))) {
-    const body = (await call(`${url}/functions/v1/embed`, { method: "POST", headers: service, body: { texts: batch } })) as { embeddings?: number[][] };
-    if (!Array.isArray(body?.embeddings) || body.embeddings.length !== batch.length) throw new Error("The embed function returned the wrong number of vectors.");
-    vectors.push(...body.embeddings);
+  const embedAll = async (texts: string[]): Promise<number[][]> => {
+    const vectors: number[][] = [];
+    for (const batch of embedBatches(texts)) {
+      const body = (await call(`${url}/functions/v1/embed`, { method: "POST", headers: service, body: { texts: batch } })) as { embeddings?: number[][] };
+      if (!Array.isArray(body?.embeddings) || body.embeddings.length !== batch.length) throw new Error("The embed function returned the wrong number of vectors.");
+      vectors.push(...body.embeddings);
+    }
+    return vectors;
+  };
+  const vectors = await embedAll(EVAL_QUESTIONS.map((q) => q.question));
+
+  // The model's queries, one per question, printed beside it, and their embeddings.
+  const queries: (string | null)[] = [];
+  const queryVectors: (number[] | null)[] = [];
+  if (queryFor) {
+    console.warn(`The model's queries:`);
+    for (const q of EVAL_QUESTIONS) {
+      const query = await queryFor(q.question);
+      queries.push(query);
+      console.warn(`  "${q.question}"  ->  ${query === null ? "(no query: the words as typed only)" : `"${query}"`}`);
+    }
+    const written = queries.filter((x): x is string => x !== null);
+    const embedded = written.length > 0 ? await embedAll(written) : [];
+    let next = 0;
+    for (const query of queries) queryVectors.push(query === null ? null : embedded[next++]!);
   }
 
   const session = (await call(`${url}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: publishable }, body: { email, password } })) as { access_token?: string };
@@ -107,58 +177,73 @@ async function main() {
     ranked = rows.map((r) => ({ slug: r.knowledge_documents.slug, embedding: parseVector(r.embedding), chars: r.content.length }));
   }
 
-  const viaScript = (expect: string | null) => expect !== null && status.get(expect) !== "approved";
-  const results = new Map<number, Map<number, Found[] | null>>();
+  const viaScript = (q: EvalQuestion) => q.expect !== null && status.get(q.expect) !== "approved";
+  const search = async (q: EvalQuestion, vector: number[], floor: number): Promise<Found[] | null> => {
+    if (viaScript(q)) return includeDrafts ? rank(vector, ranked, floor) : null;
+    const rows = (await call(`${url}/rest/v1/rpc/match_knowledge_chunks`, {
+      method: "POST",
+      headers: person,
+      body: { p_embedding: JSON.stringify(vector), p_count: COUNT, p_min_similarity: floor },
+    })) as { chunk_id: string; document_slug: string; similarity: number; content: string }[];
+    return rows.map((r) => ({ slug: r.document_slug, similarity: r.similarity, chars: r.content.length, chunk: r.chunk_id }));
+  };
+
+  const asTyped: Results = new Map();
+  const withQuery: Results = new Map();
   for (const floor of FLOORS) {
-    const byQuestion = new Map<number, Found[] | null>();
+    const typed = new Map<number, Found[] | null>();
+    const merged = new Map<number, Found[] | null>();
     for (const [i, q] of EVAL_QUESTIONS.entries()) {
-      if (viaScript(q.expect)) {
-        byQuestion.set(i, includeDrafts ? withinBand(rank(vectors[i]!, ranked, floor)) : null);
-        continue;
-      }
-      const rows = (await call(`${url}/rest/v1/rpc/match_knowledge_chunks`, {
-        method: "POST",
-        headers: person,
-        body: { p_embedding: JSON.stringify(vectors[i]), p_count: COUNT, p_min_similarity: floor },
-      })) as { document_slug: string; similarity: number; content: string }[];
-      byQuestion.set(i, withinBand(rows.map((r) => ({ slug: r.document_slug, similarity: r.similarity, chars: r.content.length }))));
+      const own = await search(q, vectors[i]!, floor);
+      typed.set(i, own === null ? null : withinBand(own));
+      if (!queryFor) continue;
+      const vector = queryVectors[i];
+      const theirs = own === null || !vector ? [] : ((await search(q, vector, floor)) ?? []);
+      merged.set(i, own === null ? null : mergeFound([own, theirs]));
     }
-    results.set(floor, byQuestion);
+    asTyped.set(floor, typed);
+    withQuery.set(floor, merged);
   }
 
-  for (const loose of [false, true]) {
-    console.warn(`${loose ? "\nLoosely worded" : "Original"} questions`);
-    console.warn(`Floor  hit@1      hit@4      nothing found correctly  (approved, through match_knowledge_chunks)`);
-    for (const floor of FLOORS) {
-      const outcomes = EVAL_QUESTIONS.flatMap((q, i): Outcome[] => (viaScript(q.expect) || (q.loose === true) !== loose ? [] : [score(q, results.get(floor)!.get(i)!)]));
-      const t = tally(outcomes);
-      console.warn(`${floor.toFixed(2)}   ${t.hit1}/${t.scored}`.padEnd(17) + `${t.hit4}/${t.scored}`.padEnd(11) + `${t.noneOk}/${t.noneScored}`);
-    }
-  }
+  report("As typed (the person's words only)", asTyped, viaScript);
+  if (queryFor) report("With the model's query, merged with the words as typed (as the app searches)", withQuery, viaScript);
   console.warn(`\n${TAX_ROUTE_QUESTIONS.length} tax-calculation phrasings: routed to tax_estimate in code, checked by npm test (scripts/knowledge-eval-set.test.ts).`);
-  const drafts = EVAL_QUESTIONS.filter((q) => viaScript(q.expect));
+  const drafts = EVAL_QUESTIONS.filter(viaScript);
   if (drafts.length > 0 && !includeDrafts) console.warn(`${drafts.length} questions skipped: their document is not approved (--include-drafts ranks them in this script).`);
-  if (includeDrafts && drafts.length > 0) {
-    console.warn(`\nNot approved, ranked in this script over approved and draft passages:`);
-    for (const floor of FLOORS) {
-      const t = tally(EVAL_QUESTIONS.flatMap((q, i): Outcome[] => (viaScript(q.expect) ? [score(q, results.get(floor)!.get(i)!)] : [])));
-      console.warn(`${floor.toFixed(2)}   hit@1 ${t.hit1}/${t.scored}, hit@4 ${t.hit4}/${t.scored}`);
-    }
-  }
 
   // Detail at the lowest floor: where the expected document came, against the top passage, with
-  // passage lengths, so long passages that hurt the rate show up.
-  const lowest = results.get(FLOORS[0]!)!;
-  console.warn(`\nAt floor ${FLOORS[0]}: top ${COUNT} as slug (similarity, passage chars)`);
+  // passage lengths, so long or short passages that hurt the rate show up.
+  const detail = (queryFor ? withQuery : asTyped).get(FLOORS[0]!)!;
+  console.warn(`\nAt floor ${FLOORS[0]}${queryFor ? ", with the model's query" : ""}: top ${COUNT} as slug (similarity, passage chars)`);
   for (const [i, q] of EVAL_QUESTIONS.entries()) {
-    const found = lowest.get(i);
-    const outcome = score(q, found ?? null);
+    const found = detail.get(i);
+    const outcome = q.expect === null ? (found?.length ? "found" : "nothing") : score(q, found ?? null);
     const list = found ? found.map((f) => `${f.slug} (${f.similarity.toFixed(3)}, ${f.chars})`).join("; ") || "nothing" : "skipped";
-    console.warn(`[${outcome}]${q.loose ? " (loose)" : ""} ${q.expect ?? "(nothing)"} <- "${q.question}"\n    ${list}`);
+    const tags = `${q.loose ? " (loose)" : ""}${q.pure ? " (pure off-topic)" : ""}${q.expect === null && isProductPick(q.question) ? " (no-picks rule)" : ""}`;
+    console.warn(`[${outcome}]${tags} ${q.expect ?? "(nothing)"} <- "${q.question}"${queryFor ? `  query: ${queries[i] === null ? "(none)" : `"${queries[i]}"`}` : ""}\n    ${list}`);
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : "Evaluation failed.");
-  process.exitCode = 1;
-});
+function main(): Promise<void> | void {
+  if (process.argv.includes("--check")) return check();
+  const includeDrafts = process.argv.includes("--include-drafts");
+  if (process.argv.includes("--model-query")) {
+    // The model's adapter is the app's own code, which vitest loads; the same env file is used.
+    const result = spawnSync("npx", ["vitest", "run", "scripts/knowledge-eval-model.live.test.ts"], {
+      cwd: REPO,
+      stdio: "inherit",
+      env: { ...process.env, KNOWLEDGE_EVAL_MODEL_QUERY: "1", ...(includeDrafts ? { KNOWLEDGE_EVAL_INCLUDE_DRAFTS: "1" } : {}) },
+    });
+    process.exitCode = result.status ?? 1;
+    return;
+  }
+  return runEvaluation({ includeDrafts });
+}
+
+// Run as a script (npm run knowledge:eval); imported by the --model-query run, it does nothing.
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  Promise.resolve(main()).catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : "Evaluation failed.");
+    process.exitCode = 1;
+  });
+}
