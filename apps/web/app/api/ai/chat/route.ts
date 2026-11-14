@@ -99,6 +99,10 @@ export async function POST(request: NextRequest) {
         p_sent_descriptions: turn.sentDescriptions,
         // The checked plan (10.9); the database checks its shape, size and keys again.
         ...(turn.plan ? { p_plan: turn.plan as unknown as Json } : {}),
+        // The citations and tax card (10.6d), only when there are some: a database without
+        // 20261114180000_roma_turn_sources.sql still records every other turn.
+        ...(turn.citations ? { p_citations: turn.citations as unknown as Json } : {}),
+        ...(turn.tax ? { p_tax: turn.tax as unknown as Json } : {}),
       })
       const row = Array.isArray(data) ? data[0] : null
       // A turn that couldn't be saved logs its error code and message only (the function's own

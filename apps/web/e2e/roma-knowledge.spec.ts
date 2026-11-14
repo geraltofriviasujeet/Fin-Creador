@@ -40,6 +40,23 @@ test("a general question is answered from a cited passage, and one with no vette
   await expect(answers.getByText("I don't have vetted material on this, so I won't answer it from general knowledge.", { exact: true })).toBeVisible()
   await expect(answers.getByText(/50,00,000/)).toHaveCount(0)
   await expect(answers.getByRole("region", { name: "Sources from the knowledge base" })).toHaveCount(1)
+
+  // 10.6d: the citations are kept with the turn. Reloaded, and reopened from the list, the
+  // sources, the chip and the out-of-date notice (worked out when shown) are still there.
+  const history = page.getByRole("navigation", { name: "Past conversations" })
+  for (const reopen of [() => page.reload(), async () => {
+    await history.getByRole("button", { name: "New conversation" }).click()
+    await expect(answers).toHaveCount(0)
+    await history.getByRole("link", { name: "What is an emergency fund?" }).click()
+  }]) {
+    await reopen()
+    await expect(answers.getByRole("listitem")).toHaveCount(2)
+    const kept = answers.getByRole("region", { name: "Sources from the knowledge base" })
+    await expect(kept).toHaveCount(1)
+    await expect(kept.getByTestId("citation").locator("summary")).toHaveText("[1] Test explainer: emergency funds · FinCreador explainer, based on Test Publisher · For FY 2025-26")
+    await expect(kept.getByText("[1] is for FY 2025-26, which has ended. It may be out of date.")).toBeVisible()
+    await expect(answers.locator("span.text-success")).toHaveText(["From the knowledge base"])
+  }
 })
 
 // 10.6e: a tax calculation goes to tax_estimate. The mock passes the amount as typed and gives
@@ -74,4 +91,20 @@ test("a salary tax question gets both regimes worked out in code, with the break
   await expect(card.getByText("₹14,15,000 is taken as your annual gross salary (you called it in-hand salary).")).toBeVisible()
   await expect(card.getByText("No deductions given: the old regime is shown with the standard deduction only.")).toBeVisible()
   await expect(card.getByText(/^Rates from the knowledge base: Income tax under the default \(new\) regime, tax year 2026-27; Income tax under the old regime, tax year 2026-27\.$/)).toBeVisible()
+
+  // 10.6d: the card is kept with the turn. Reloaded, and reopened from the list, it is still
+  // there with its chip.
+  const history = page.getByRole("navigation", { name: "Past conversations" })
+  for (const reopen of [() => page.reload(), async () => {
+    await history.getByRole("button", { name: "New conversation" }).click()
+    await expect(answers).toHaveCount(0)
+    await history.getByRole("link", { name: /^my in hand salary is 1415000/ }).click()
+  }]) {
+    await reopen()
+    const kept = answers.getByRole("region", { name: "Tax estimate" })
+    await expect(kept.getByText("Tax estimate · Tax year 2026-27")).toBeVisible()
+    await expect(kept.getByRole("row", { name: /^Total tax/ })).toHaveText([/₹84,240/, /₹2,30,880/])
+    await expect(kept.getByText("The new regime's total is lower by ₹1,46,640.")).toBeVisible()
+    await expect(answers.locator("span.text-success")).toHaveText(["Calculated from the tax rules"])
+  }
 })

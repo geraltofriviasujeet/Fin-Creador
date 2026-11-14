@@ -25,6 +25,7 @@ import { spendingTool } from "./tools/spending"
 import type { FinanceTool, Figure, TaxBlock, ToolContext, WebBlock } from "./tools/types"
 import { webPriceFiguresTool, webPriceLookupTool } from "./tools/web-prices"
 import { loadPlanRecords } from "./plan/records"
+import { type StoredCitations, type StoredTax, toStoredCitations, toStoredTax } from "./stored-sources"
 import { PICK_OUTPUT_TOKENS, type PlanRun, runPlan } from "./plan/run"
 import { type CheckedPlan, checkedPlanSchema, planRequest } from "./plan/types"
 
@@ -87,7 +88,14 @@ export type RomaDb = {
 
 export type RecordedTurn = { conversationId: string; seq: number; /** The stored turn, for a plan (a goal added from it links to it); absent when it couldn't be read back. */ messageId?: string }
 
-export type TurnToRecord = Omit<StoredTurn, "seq"> & { requestId: string; conversationId: string | null; plan?: CheckedPlan }
+export type TurnToRecord = Omit<StoredTurn, "seq"> & {
+  requestId: string
+  conversationId: string | null
+  plan?: CheckedPlan
+  /** The citations and tax card shown (10.6d), checked and trimmed to fit (stored-sources.ts). */
+  citations?: StoredCitations
+  tax?: StoredTax
+}
 
 export type RomaHistory = {
   /** The conversation's turns; "missing" when it isn't the caller's (or was deleted); null when it can't be read. */
@@ -309,6 +317,9 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
       // the answer didn't cite is left out of the chip and of the turn's tools; a tax estimate
       // only when its card is shown (10.6d).
       const used = result.toolsRan.filter((t) => (t !== "knowledge_search" || result.citations) && (t !== "tax_estimate" || result.tax))
+      // Kept with the turn for reopening (10.6d); one that can't be stored is left out, not the turn.
+      const citations = result.citations ? toStoredCitations(result.citations) : null
+      const tax = result.tax ? toStoredTax(result.tax) : null
       const turn: TurnToRecord = {
         requestId,
         conversationId,
@@ -318,6 +329,8 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
         periods: result.periods,
         tools: used,
         sentDescriptions: result.descriptionsSent,
+        ...(citations ? { citations } : {}),
+        ...(tax ? { tax } : {}),
       }
       // Recording is idempotent per request id, so one retry can't store the turn twice.
       const recorded = (await recordQuietly(deps.history, turn)) ?? (await recordQuietly(deps.history, turn))

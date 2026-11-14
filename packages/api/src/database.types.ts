@@ -93,6 +93,7 @@ export type Database = {
         Row: {
           answer: string
           as_of: string
+          citations: Json | null
           conversation_id: string
           created_at: string
           id: string
@@ -102,12 +103,14 @@ export type Database = {
           request_id: string | null
           sent_descriptions: boolean
           seq: number
+          tax: Json | null
           tools: string[]
           user_id: string
         }
         Insert: {
           answer: string
           as_of: string
+          citations?: Json | null
           conversation_id: string
           created_at?: string
           id?: string
@@ -117,12 +120,14 @@ export type Database = {
           request_id?: string | null
           sent_descriptions?: boolean
           seq: number
+          tax?: Json | null
           tools?: string[]
           user_id: string
         }
         Update: {
           answer?: string
           as_of?: string
+          citations?: Json | null
           conversation_id?: string
           created_at?: string
           id?: string
@@ -132,6 +137,7 @@ export type Database = {
           request_id?: string | null
           sent_descriptions?: boolean
           seq?: number
+          tax?: Json | null
           tools?: string[]
           user_id?: string
         }
@@ -2824,12 +2830,14 @@ export type Database = {
         Args: {
           p_answer: string
           p_as_of: string
+          p_citations?: Json
           p_conversation_id: string
           p_periods: unknown[]
           p_plan?: Json
           p_question: string
           p_request_id: string
           p_sent_descriptions: boolean
+          p_tax?: Json
           p_tools: string[]
         }
         Returns: {

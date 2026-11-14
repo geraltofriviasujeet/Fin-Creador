@@ -444,6 +444,9 @@ describe("knowledge base routing (10.6c)", () => {
       basis: { records: false, knowledge: true, calculated: false },
     })
     expect(d.history.recorded[0]?.tools).toEqual(["knowledge_search"])
+    // Kept with the turn for reopening (10.6d), checked; no tax card to keep.
+    expect(d.history.recorded[0]?.citations).toMatchObject([{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passages: ["An SIP invests a fixed amount at regular intervals."] }])
+    expect(d.history.recorded[0]?.tax).toBeUndefined()
   })
 
   it("shows the knowledge chip only when a citation is shown", async () => {
@@ -464,6 +467,8 @@ describe("knowledge base routing (10.6c)", () => {
     expect(res.body).toMatchObject({ status: "answer", tax: { taxYear: "2026-27" }, basis: { records: false, calculated: true } })
     expect(res.body.status === "answer" && basisLabels(res.body.basis)).toContain("Calculated from the tax rules")
     expect(d.history.recorded[0]?.tools).toContain("tax_estimate")
+    expect(d.history.recorded[0]?.tax).toMatchObject({ taxYear: "2026-27", regimes: [{ title: expect.any(String) }, { title: expect.any(String) }] })
+    expect(d.history.recorded[0]?.tax).not.toHaveProperty("outOfDate")
   })
 
   it("keeps the records tools only for the person's own money, offers no tools for small talk, and everything when both", async () => {

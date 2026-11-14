@@ -16,8 +16,10 @@ import { readKnowledgeConfig, readLlmConfig } from "@/lib/ai/config"
 import { answerBasis, fromDateRangeLiteral } from "@/lib/ai/history"
 import { ROMA_DATA_NOTICE } from "@/lib/ai/wording"
 import { greeting } from "@/lib/greeting"
+import type { Database } from "@fin-creador/api"
 import { createClient } from "@/lib/supabase/server"
 import { checkedPlanSchema } from "@/lib/ai/plan/types"
+import { shownCitations, shownTax } from "@/lib/ai/stored-sources"
 
 export const metadata: Metadata = { title: "Roma" }
 
@@ -95,7 +97,7 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
       .select("id, title, last_message_at")
       .order("last_message_at", { ascending: false })
       .limit(LISTED_CONVERSATIONS),
-    requested.success ? loadConversation(supabase, requested.data) : Promise.resolve(null),
+    requested.success ? loadConversation(supabase, requested.data, profile.time_zone) : Promise.resolve(null),
   ])
   if (list.error || opened === "error") {
     return (
@@ -135,25 +137,36 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
+type Message = Pick<Database["public"]["Tables"]["ai_messages"]["Row"], "id" | "seq" | "question" | "answer" | "as_of" | "periods" | "tools" | "plan" | "citations" | "tax">
 
 /** A conversation's stored turns, newest first; null when it isn't the person's. */
-async function loadConversation(supabase: Supabase, id: string): Promise<OpenConversation | null | "error"> {
-  const [conversation, messages] = await Promise.all([
+async function loadConversation(supabase: Supabase, id: string, timeZone: string): Promise<OpenConversation | null | "error"> {
+  const read = (columns: string) => supabase.from("ai_messages").select(columns).eq("conversation_id", id).order("seq", { ascending: false })
+  const [conversation, withSources] = await Promise.all([
     supabase.from("ai_conversations").select("id").eq("id", id).maybeSingle(),
-    supabase.from("ai_messages").select("id, seq, question, answer, as_of, periods, tools, plan").eq("conversation_id", id).order("seq", { ascending: false }),
+    read("id, seq, question, answer, as_of, periods, tools, plan, citations, tax").returns<Message[]>(),
   ])
-  if (conversation.error || messages.error) return "error"
+  // A database without 20261114180000_roma_turn_sources.sql (42703: no such column) still
+  // opens the conversation, without stored sources.
+  const messages =
+    withSources.error?.code === "42703"
+      ? await read("id, seq, question, answer, as_of, periods, tools, plan").returns<Omit<Message, "citations" | "tax">[]>().then((r) => ({ ...r, data: r.data?.map((m) => ({ ...m, citations: null, tax: null })) ?? null }))
+      : withSources
+  if (conversation.error || messages.error || !messages.data) return "error"
   if (!conversation.data) return null
+  const rows = messages.data
   // Goals added from this conversation's plans; a failed read only hides the link.
-  const planIds = messages.data.filter((m) => m.plan !== null).map((m) => m.id)
+  const planIds = rows.filter((m) => m.plan !== null).map((m) => m.id)
   const linked = planIds.length > 0 ? await supabase.from("goals").select("id, name, plan_message_id").in("plan_message_id", planIds) : null
   const goalOf = (messageId: string) => {
     const g = linked?.data?.find((x) => x.plan_message_id === messageId)
     return g ? { id: g.id, name: g.name } : null
   }
+  // The out-of-date notices are worked out as of the person's today now, not when answered.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
   return {
     id,
-    turns: messages.data.map((m) => ({
+    turns: rows.map((m) => ({
       id: m.id,
       question: m.question,
       asOf: m.as_of,
@@ -170,6 +183,12 @@ async function loadConversation(supabase: Supabase, id: string): Promise<OpenCon
         ...(() => {
           const plan = m.plan === null ? null : checkedPlanSchema.safeParse(m.plan)
           return plan?.success ? { plan: plan.data, planLink: { messageId: m.id, goal: goalOf(m.id) } } : {}
+        })(),
+        // Stored citations and the tax card (10.6d), the same way.
+        ...(() => {
+          const citations = m.citations === null ? null : shownCitations(m.citations, today)
+          const tax = m.tax === null ? null : shownTax(m.tax, today)
+          return { ...(citations ? { citations } : {}), ...(tax ? { tax } : {}) }
         })(),
         conversationId: id,
         saved: true,
