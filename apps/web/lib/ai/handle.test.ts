@@ -4,10 +4,11 @@ import type { ChatRun } from "./chat"
 import type { LlmConfig } from "./config"
 import { type BeginOutcome, type ChatDeps, type RomaDb, type RomaHistory, type TurnToRecord, handleChat } from "./handle"
 import { MAX_TURNS, type StoredTurn } from "./history"
-import { mockProvider } from "./llm/mock"
+import { mockProvider, mockText, mockToolCall } from "./llm/mock"
 import { LlmError, type LlmProvider, NO_USAGE } from "./llm/types"
 import { runPlan } from "./plan/run"
 import { mockSearchProvider } from "./search/mock"
+import { NOT_COVERED } from "./tools/tax"
 
 // The request flow with a fake ledger: what is reserved, settled and released. Mock provider only.
 
@@ -442,6 +443,17 @@ describe("knowledge base routing (10.6c)", () => {
       basis: { records: false, knowledge: true },
     })
     expect(d.history.recorded[0]?.tools).toEqual(["knowledge_search"])
+  })
+
+  it("shows the knowledge chip only when a citation is shown", async () => {
+    // From dev: a capital gains question searched the knowledge base, cited nothing, and still got the chip.
+    const script = (_r: unknown, round: number) =>
+      round === 0 ? mockToolCall("knowledge_search", { question: "capital gains tax" }) : round === 1 ? mockToolCall("tax_estimate", { salary: "5 lakh" }) : mockText("Uncited. (Test answer.)")
+    const d = deps({ ...knowledge(), makeProvider: () => mockProvider(script) })
+    const res = await handleChat({ question: "How much tax on my capital gains of 5 lakh?" }, d)
+    expect(res.body).toMatchObject({ status: "answer", answer: NOT_COVERED, basis: { records: false, knowledge: false } })
+    expect(res.body.status === "answer" && res.body.citations).toBeFalsy()
+    expect(d.history.recorded[0]?.tools).toEqual(["tax_estimate"])
   })
 
   it("keeps the records tools only for the person's own money, offers no tools for small talk, and everything when both", async () => {

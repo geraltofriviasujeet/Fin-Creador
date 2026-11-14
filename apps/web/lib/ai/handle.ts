@@ -305,6 +305,9 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
   const result = run.result
   switch (result.kind) {
     case "answer": {
+      // The knowledge base counts only when a citation is shown (10.6e): a search whose passages
+      // the answer didn't cite is left out of the chip and of the turn's tools.
+      const used = result.citations ? result.toolsRan : result.toolsRan.filter((t) => t !== "knowledge_search")
       const turn: TurnToRecord = {
         requestId,
         conversationId,
@@ -312,7 +315,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
         answer: result.text,
         asOf: context.today,
         periods: result.periods,
-        tools: result.toolsRan,
+        tools: used,
         sentDescriptions: result.descriptionsSent,
       }
       // Recording is idempotent per request id, so one retry can't store the turn twice.
@@ -324,7 +327,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           answer: result.text,
           figures: result.figures.filter((f) => !f.inCard && (!f.hideWhenZero || figureValue(f) !== 0)).map((f) => ({ label: f.label, value: formatFigure(f) })),
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
-          basis: answerBasis(result.toolsRan),
+          basis: answerBasis(used),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
           ...(result.checks.length > 0
             ? { checks: result.checks.map(({ kind, goal, verdict, assumptions, web }) => ({ ...(kind ? { kind } : {}), goal, verdict, assumptions, ...(web ? { web } : {}) })) }

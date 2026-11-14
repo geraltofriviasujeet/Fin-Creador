@@ -10,7 +10,7 @@ reuse_terms_checked_on: 2026-11-13
 published_on: 2026-11-13
 verified_on: 2026-11-13
 financial_year: 2026-27
-status: draft
+status: approved
 ---
 
 These figures are from the Income-tax Act, 2025, as published on the Income Tax Department's website, for tax year 2026-27 (1 April 2026 to 31 March 2027). Sections 123, 124 and 126 replace the 1961 Act's sections 80C, 80CCD and 80D. Apart from the employer's pension contribution, these deductions are available only to someone who opts out of the default section 202 rates (the old regime).
