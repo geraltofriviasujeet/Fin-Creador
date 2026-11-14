@@ -21,8 +21,8 @@ test("a general question is answered from a cited passage, and one with no vette
 
   await expect(answers.getByText(/^Test passage: an emergency fund commonly covers three to six months of essential spending, such as ₹40,000 a month\. \[1\] \(Test answer\.\)\s+General information, not personal advice\.$/)).toBeVisible()
   // The chip says what ran: the knowledge base only, no records tool. The line once, from code.
-  await expect(answers.getByText("From the knowledge base", { exact: true })).toBeVisible()
-  await expect(answers.getByText("From your records", { exact: true })).toHaveCount(0)
+  const chips = answers.locator("span.text-success")
+  await expect(chips).toHaveText(["From the knowledge base"])
   await expect(answers.getByText(/General information, not personal advice\./)).toHaveCount(1)
   await expect(page.getByText("Informational only, not financial advice. Figures come from your own records or the cited source.", { exact: true })).toBeVisible()
   const sources = answers.getByRole("region", { name: "Sources from the knowledge base" })
