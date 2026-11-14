@@ -2,7 +2,9 @@ import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber, saidNumbers } from "./output"
 import { figureId, fillPlaceholders, formatFigure, webAmounts, withoutPlaceholders } from "./placeholders"
-import { ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
+import { type Citation, knowledgeAnswer } from "./knowledge/citations"
+import type { Route } from "./knowledge/route"
+import { KNOWLEDGE_RULES, ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
 import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, NO_LOOKUPS, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
@@ -33,6 +35,9 @@ import {
 // Amounts by placeholder (10.8 follow-up, placeholders.ts): each figure of a tool result is
 // sent with its placeholder; the checks read the answer with placeholders blanked, and only
 // then is each one filled in with its formatted amount (an unknown one is marked left out).
+// From 10.6c the question's route (knowledge/route.ts) decides which tools were offered; a
+// general answer is shown only when it cites retrieved passages (knowledge/citations.ts), whose
+// numbers it may then quote; the citations, built in code from the passages, go with it.
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -56,6 +61,8 @@ export type ChatResult =
       web?: WebBlock
       /** Why web lookups were skipped (caps, timeouts), in code's words. */
       webNotices?: string[]
+      /** Knowledge base passages the answer cites (10.6c), numbered as in the text. */
+      citations?: Citation[]
     }
   /** `unmatched`: the numbers that failed the check (for the server's diagnostic only; never the answer text). */
   | { kind: "unverified"; unmatched: string[] }
@@ -79,6 +86,8 @@ type Options = {
   context: ToolContext
   question: string
   history?: ChatHistory
+  /** Which tools were offered (10.6c); the knowledge rules depend on it. */
+  route?: Route
   maxRounds?: number
   deadlineMs?: number
 }
@@ -89,13 +98,21 @@ export async function runChat({
   context,
   question,
   history = NO_HISTORY,
+  route = "records",
   maxRounds = MAX_ROUNDS,
   deadlineMs = DEADLINE_MS,
 }: Options): Promise<ChatRun> {
   const deadline = Date.now() + deadlineMs
   const toolDefs = tools.map(toToolDef)
   const webTools = tools.some((t) => t.name === "web_price_lookup")
-  const system = [ROMA_SYSTEM_PROMPT, romaContext(context), ...(webTools ? [WEB_RULES] : []), ...(history.summary ? [history.summary] : [])]
+  const knowledgeTools = tools.some((t) => t.name === "knowledge_search")
+  const system = [
+    ROMA_SYSTEM_PROMPT,
+    romaContext({ ...context, route }),
+    ...(webTools ? [WEB_RULES] : []),
+    ...(knowledgeTools ? [KNOWLEDGE_RULES] : []),
+    ...(history.summary ? [history.summary] : []),
+  ]
   const messages: LlmMessage[] = [
     ...history.recent.flatMap((t): LlmMessage[] => [
       { role: "user", text: t.question },
@@ -170,14 +187,31 @@ export async function runChat({
       })
     }
 
+    // A general question with no cited passage: a line built in code replaces the text (10.6c).
+    const known = knowledgeAnswer(response.text, context.knowledge, route, context.today)
+    if ("replace" in known) {
+      return done({
+        kind: "answer",
+        text: known.replace,
+        figures: [],
+        periods: [],
+        descriptionsWithheld: false,
+        checks: [],
+        toolsRan: found.toolsRan,
+        descriptionsSent: found.descriptionsSent,
+      })
+    }
+
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
     const allowed = allowedNumbers(figures, dates)
     for (const n of webNumbers(found.web)) allowed.add(n)
+    // Numbers in the passages the answer cites (never in ones it doesn't).
+    for (const n of known.numbers) allowed.add(n)
     // The person's own numbers (a budget they typed) are theirs to see again, never a refusal.
     for (const n of saidNumbers([question, ...history.recent.map((t) => t.question)].join("\n"))) allowed.add(n)
-    const check = checkAnswer(withoutPlaceholders(response.text), allowed, found.literals)
+    const check = checkAnswer(withoutPlaceholders(known.text), allowed, found.literals)
     if (!check.ok) return done(check.reason === "unverified" ? { kind: "unverified", unmatched: check.unmatched ?? [] } : { kind: check.reason })
-    const filled = fillPlaceholders(response.text.trim(), new Map([...found.amounts, ...webAmounts(found.web.at(-1))]))
+    const filled = fillPlaceholders(known.text.trim(), new Map([...found.amounts, ...webAmounts(found.web.at(-1))]))
 
     // A goal or trip answer about something the person didn't ask about: refused, and a summary
     // built in code is shown instead (10.5).
@@ -195,9 +229,10 @@ export async function runChat({
         descriptionsSent: found.descriptionsSent,
       })
     }
+    const answer = withVerdict(filled.text, found.checks)
     return done({
       kind: "answer",
-      text: withVerdict(filled.text, found.checks),
+      text: known.tail ? `${answer}\n\n${known.tail}` : answer,
       figures,
       periods,
       descriptionsWithheld: found.descriptionsWithheld,
@@ -205,6 +240,7 @@ export async function runChat({
       toolsRan: found.toolsRan,
       descriptionsSent: found.descriptionsSent,
       ...webPart(found.web, context, found.checks),
+      ...(known.citations.length > 0 ? { citations: known.citations } : {}),
     })
   }
   return done({ kind: "failed", reason: "rounds" })

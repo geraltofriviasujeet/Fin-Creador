@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { UserClient } from "@fin-creador/api"
 import type { DateRange, IsoDate } from "@fin-creador/domain"
 import type { LlmToolDef } from "../llm/types"
+import type { KnowledgeSession } from "../knowledge/session"
 import type { WebSession } from "../search/session"
 
 // Roma's finance tools are provider-independent: a Zod input schema, a description, and a
@@ -16,6 +17,8 @@ export type ToolContext = {
   descriptionsOk: boolean
   /** This question's web lookups (10.8); absent when web lookups are off. */
   web?: WebSession
+  /** This question's knowledge base searches (10.6c); absent when the knowledge base is off. */
+  knowledge?: KnowledgeSession
 }
 
 /** A figure a tool produced: what the answer may quote and what the figures panel shows. */

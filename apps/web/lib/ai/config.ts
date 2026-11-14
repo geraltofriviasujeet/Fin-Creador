@@ -1,3 +1,4 @@
+import { DEFAULT_MIN_SIMILARITY } from "./knowledge/session"
 import { hasPrice } from "./llm/prices"
 
 // Roma's server configuration (Sprint 10). Server-only variables, never NEXT_PUBLIC_: the key
@@ -69,4 +70,29 @@ export function readSearchConfig(env: Record<string, string | undefined>): Searc
   const apiKey = env.TAVILY_API_KEY?.trim()
   if (!apiKey) return { status: "off", reason: "no_key" }
   return { status: "on", provider: "tavily", apiKey }
+}
+
+// The knowledge base (Sprint 10.6c), the same way. The question is embedded by the project's
+// embed Edge Function with the person's own session, so no key is needed here.
+//
+//   KNOWLEDGE_ENABLED=true            off unless exactly "true"
+//   KNOWLEDGE_EMBEDDER=supabase       or "mock" (tests and the E2E server)
+//   KNOWLEDGE_MIN_SIMILARITY=0.8      the floor, 0.5 to 0.95 (tuned with scripts/knowledge-eval.ts)
+
+export const KNOWLEDGE_EMBEDDERS = ["supabase", "mock"] as const
+export type KnowledgeEmbedderName = (typeof KNOWLEDGE_EMBEDDERS)[number]
+
+export type KnowledgeConfig =
+  | { status: "on"; embedder: KnowledgeEmbedderName; minSimilarity: number }
+  | { status: "off"; reason: "not_enabled" | "unknown_embedder" | "bad_floor" | "mock_in_production" }
+
+export function readKnowledgeConfig(env: Record<string, string | undefined>): KnowledgeConfig {
+  if (env.KNOWLEDGE_ENABLED !== "true") return { status: "off", reason: "not_enabled" }
+  const embedder = (env.KNOWLEDGE_EMBEDDER ?? "supabase").trim()
+  if (!(KNOWLEDGE_EMBEDDERS as readonly string[]).includes(embedder)) return { status: "off", reason: "unknown_embedder" }
+  if (embedder === "mock" && env.VERCEL_ENV === "production") return { status: "off", reason: "mock_in_production" }
+  const raw = env.KNOWLEDGE_MIN_SIMILARITY?.trim()
+  const minSimilarity = raw ? Number(raw) : DEFAULT_MIN_SIMILARITY
+  if (!Number.isFinite(minSimilarity) || minSimilarity < 0.5 || minSimilarity > 0.95) return { status: "off", reason: "bad_floor" }
+  return { status: "on", embedder: embedder as KnowledgeEmbedderName, minSimilarity }
 }

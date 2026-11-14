@@ -39,7 +39,7 @@ export default defineConfig({
       command: `npx next start -p ${PORT}`,
       url: `${BASE_URL}/sign-in`,
       // Roma on the mock provider and mock search (e2e/roma.spec.ts): no key, nothing paid is ever called.
-      env: { LLM_ENABLED: "true", LLM_PROVIDER: "mock", SEARCH_ENABLED: "true", SEARCH_PROVIDER: "mock" },
+      env: { LLM_ENABLED: "true", LLM_PROVIDER: "mock", SEARCH_ENABLED: "true", SEARCH_PROVIDER: "mock", KNOWLEDGE_ENABLED: "true", KNOWLEDGE_EMBEDDER: "mock" },
       // Never attach to a server that is already running (it might use the hosted project).
       reuseExistingServer: false,
       timeout: 60_000,

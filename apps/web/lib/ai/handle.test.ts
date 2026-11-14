@@ -390,3 +390,78 @@ describe("detailed plans (10.9)", () => {
     expect(res.body).toMatchObject({ code: "invalid" })
   })
 })
+
+describe("knowledge base routing (10.6c)", () => {
+  const passageRow = {
+    chunk_id: "00000000-0000-4000-8000-000000000001",
+    document_slug: "sip-explained",
+    title: "What an SIP is and how it works",
+    content_kind: "own",
+    publisher: "FinCreador",
+    based_on_publisher: "AMFI",
+    source_url: null,
+    read_more_url: null,
+    link_permission_pending: true,
+    financial_year: null,
+    content: "An SIP invests a fixed amount at regular intervals.",
+    similarity: 0.9,
+  }
+  function knowledge(rows = [passageRow]) {
+    const embedded: { requestId: string; text: string }[] = []
+    return {
+      embedded,
+      knowledge: {
+        db: { match: async () => rows },
+        minSimilarity: 0.8,
+        makeEmbedder: (requestId: string) => async (text: string) => {
+          embedded.push({ requestId, text })
+          return Array(384).fill(0)
+        },
+      },
+    }
+  }
+  const offered = (seen: string[][]) => (req: { tools: { name: string }[] }) => seen.push(req.tools.map((t) => t.name))
+
+  it("gives a general question knowledge_search alone, embeds under the question's reservation, and returns the citations", async () => {
+    const seen: string[][] = []
+    const k = knowledge()
+    const base = mockProvider()
+    const d = deps({ ...k, makeProvider: () => ({ ...base, complete: (req, signal) => (offered(seen)(req), base.complete(req, signal)) }) })
+    const res = await handleChat({ question: "What is an SIP?" }, d)
+    expect(seen[0]).toEqual(["knowledge_search"])
+    expect(k.embedded).toEqual([{ requestId: "req-1", text: "What is an SIP?" }])
+    expect(res.body).toMatchObject({
+      status: "answer",
+      answer: "An SIP invests a fixed amount at regular intervals. [1] (Test answer.)\n\nGeneral information, not personal advice.",
+      citations: [{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passage: "An SIP invests a fixed amount at regular intervals." }],
+    })
+    expect(d.history.recorded[0]?.tools).toEqual(["knowledge_search"])
+  })
+
+  it("keeps the records tools only for the person's own money, offers no tools for small talk, and everything when both", async () => {
+    const seen: string[][] = []
+    const base = mockProvider()
+    const d = () => deps({ ...knowledge(), makeProvider: () => ({ ...base, complete: (req, signal) => (offered(seen)(req), base.complete(req, signal)) }) })
+    await handleChat({ question: "What did I spend this month?" }, d())
+    await handleChat({ question: "hello" }, d())
+    await handleChat({ question: "Is my savings rate good?" }, d())
+    expect(seen[0]).not.toContain("knowledge_search")
+    expect(seen[0]).toContain("spending_for_period")
+    expect(seen.find((t) => t.length === 0)).toEqual([])
+    expect(seen.at(-1)).toEqual(expect.arrayContaining(["spending_for_period", "savings_rate", "knowledge_search"]))
+  })
+
+  it("routes every question to the records when the knowledge base is off", async () => {
+    const seen: string[][] = []
+    const base = mockProvider()
+    await handleChat({ question: "What is an SIP?" }, deps({ makeProvider: () => ({ ...base, complete: (req, signal) => (offered(seen)(req), base.complete(req, signal)) }) }))
+    expect(seen[0]).toContain("spending_for_period")
+    expect(seen[0]).not.toContain("knowledge_search")
+  })
+
+  it("says there is no vetted material when nothing is above the floor", async () => {
+    const res = await handleChat({ question: "What is crypto staking?" }, deps(knowledge([])))
+    expect(res.body).toMatchObject({ status: "answer", answer: "I don't have vetted material on this, so I won't answer it from general knowledge." })
+    expect(JSON.stringify(res.body)).not.toContain("50,00,000")
+  })
+})

@@ -437,6 +437,7 @@ function Reply({
           {reply.web ? " · Web estimates below, each with its source" : ""}
         </p>
       )}
+      {reply.citations && <Sources citations={reply.citations} />}
       {reply.web && <WebEstimates web={reply.web} />}
       {reply.webNotices?.map((n) => (
         <FormMessage key={n} tone="info">
@@ -457,6 +458,52 @@ function Reply({
           ),
       )}
     </div>
+  )
+}
+
+/**
+ * The knowledge base passages an answer cites (10.6c), numbered as in the answer. Each opens to
+ * the passage itself, so a figure can be checked against what it applies to. Built in code from
+ * the retrieved passage; a link only where the publisher allows one.
+ */
+function Sources({ citations }: { citations: NonNullable<Extract<ChatResponseBody, { status: "answer" }>["citations"]> }) {
+  return (
+    <section className="rounded-xl border border-line p-3" aria-label="Sources from the knowledge base">
+      <p className="text-xs font-semibold text-muted-foreground">From the knowledge base</p>
+      <ul className="mt-2 grid gap-2 text-sm">
+        {citations.map((c) => (
+          <li key={c.n}>
+            <details className="group rounded-lg border border-line bg-canvas px-3 py-2" data-testid="citation">
+              <summary className="cursor-pointer text-ink">
+                <span className="font-semibold">[{c.n}]</span> {c.title}
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {c.source}
+                  {c.financialYear ? ` · For FY ${c.financialYear}` : ""}
+                </span>
+              </summary>
+              <div className="mt-2 grid gap-2">
+                <p className="text-xs font-semibold text-muted-foreground">The passage Roma used</p>
+                <blockquote className="border-l-2 border-line pl-3 text-sm whitespace-pre-line text-ink">{c.passage}</blockquote>
+                {c.linkPending && <p className="text-xs text-muted-foreground">Link pending the publisher&rsquo;s permission.</p>}
+                {c.url && (
+                  <a href={c.url} target="_blank" rel="noopener noreferrer nofollow" className="text-sm text-ink underline underline-offset-2">
+                    Read more at the source
+                  </a>
+                )}
+              </div>
+            </details>
+          </li>
+        ))}
+      </ul>
+      {citations
+        .filter((c) => c.outOfDate)
+        .map((c) => (
+          <div key={c.n} className="mt-2">
+            <FormMessage tone="info">{`[${c.n}] is for FY ${c.financialYear}, which has ended. It may be out of date.`}</FormMessage>
+          </div>
+        ))}
+    </section>
   )
 }
 

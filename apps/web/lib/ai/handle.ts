@@ -2,6 +2,9 @@ import { z } from "zod"
 import { type ChatRun, MAX_OUTPUT_TOKENS, MAX_ROUNDS, runChat } from "./chat"
 import type { LlmConfig } from "./config"
 import { MAX_TURNS, type StoredTurn, buildHistory } from "./history"
+import type { Citation } from "./knowledge/citations"
+import { type Route, routeQuestion } from "./knowledge/route"
+import { type Embedder, type KnowledgeDb, KnowledgeSession } from "./knowledge/session"
 import { MAX_QUESTION_CHARS } from "./limits"
 import { formatFigure } from "./placeholders"
 import { callCostMicroUsd, microToUsd } from "./llm/prices"
@@ -13,6 +16,7 @@ import { accountBalancesTool, netWorthTool } from "./tools/balances"
 import { incomeVsExpensesTool, savingsRateTool } from "./tools/cash-flow"
 import { categoryBreakdownTool } from "./tools/categories"
 import { goalProjectionTool } from "./tools/goals"
+import { knowledgeSearchTool } from "./tools/knowledge"
 import { loansAndCardsTool } from "./tools/liabilities"
 import { searchTransactionsTool } from "./tools/search"
 import { tripCheckTool } from "./tools/trip"
@@ -31,7 +35,9 @@ import { type CheckedPlan, checkedPlanSchema, planRequest } from "./plan/types"
 // recorded as a turn (roma_record_turn, idempotent per request, so it is retried once); a
 // refused or failed question is not stored. From 10.8, when web lookups are configured, the
 // question gets a WebSession: the web tools are offered, their credits are reserved on first
-// use and settled or released once the question ends, whatever the outcome.
+// use and settled or released once the question ends, whatever the outcome. From 10.6c, when
+// the knowledge base is on, the question is routed in code (knowledge/route.ts) and gets only
+// the tools of its route; knowledge_search embeds under this question's reservation.
 
 export const ROMA_TOOLS: readonly FinanceTool[] = [
   spendingTool,
@@ -49,6 +55,15 @@ export const ROMA_TOOLS: readonly FinanceTool[] = [
 /** Offered only when web lookups are on for this question (10.8). */
 export const WEB_TOOLS: readonly FinanceTool[] = [webPriceLookupTool, webPriceFiguresTool] as FinanceTool[]
 
+/** The tools a route offers (10.6c): a general question gets knowledge_search alone. */
+export function toolsFor(route: Route, web: boolean): readonly FinanceTool[] {
+  const records = web ? [...ROMA_TOOLS, ...WEB_TOOLS] : ROMA_TOOLS
+  if (route === "neither") return []
+  if (route === "knowledge") return [knowledgeSearchTool as FinanceTool]
+  if (route === "both") return [...records, knowledgeSearchTool as FinanceTool]
+  return records
+}
+
 const questionSchema = z.object({
   question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
   /** The conversation to continue; absent or null starts a new one. */
@@ -58,7 +73,7 @@ const questionSchema = z.object({
 })
 
 /** A call whose usage is unknown (it failed after it may have been sent) is charged at this. */
-const UNKNOWN_CALL_INPUT_TOKENS = 16_000
+export const UNKNOWN_CALL_INPUT_TOKENS = 16_000
 
 export type BeginOutcome = "ok" | "disabled" | "not_enabled" | "global_budget" | "user_budget" | "daily_limit"
 
@@ -101,6 +116,13 @@ export type ChatDeps = {
     /** The person's own words a query must never carry, and their country code; null when they can't be read. */
     loadTerms: () => Promise<{ terms: PrivateTerms; countryCode: string | null } | null>
   }
+  /** The knowledge base (10.6c); absent when KNOWLEDGE_ENABLED is off (every question is then routed to the records). */
+  knowledge?: {
+    db: KnowledgeDb
+    /** The question's embedder, on its reservation. */
+    makeEmbedder: (requestId: string) => Embedder
+    minSimilarity: number
+  }
 }
 
 export type ChatErrorCode =
@@ -135,6 +157,8 @@ export type ChatResponseBody =
       web?: WebBlock
       /** Why web lookups were skipped (caps, timeouts). */
       webNotices?: string[]
+      /** Knowledge base passages the answer cites (10.6c), numbered as in the answer, each with its passage to check. */
+      citations?: Citation[]
       /** A detailed plan (10.9): the checked plan the answer was written from, for the modal and the PDF. */
       plan?: CheckedPlan
       /** The plan's stored turn, and the goal added from it (null until one is): "Add to my goals" links the goal to the turn. Absent when the plan couldn't be saved. */
@@ -238,14 +262,20 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
     return answerPlan(deps, { requestId, conversationId, question: parsed.data.question, request: parsed.data.plan, context, provider, web, model })
   }
 
+  const route: Route = deps.knowledge ? routeQuestion(parsed.data.question) : "records"
+  if (deps.knowledge && (route === "knowledge" || route === "both")) {
+    context = { ...context, knowledge: new KnowledgeSession({ embed: deps.knowledge.makeEmbedder(requestId), db: deps.knowledge.db, minSimilarity: deps.knowledge.minSimilarity }) }
+  }
+
   let run: ChatRun
   try {
     run = await (deps.run ?? runChat)({
       provider,
-      tools: web ? [...ROMA_TOOLS, ...WEB_TOOLS] : ROMA_TOOLS,
+      tools: toolsFor(route, web !== null),
       context,
       question: parsed.data.question,
       history: buildHistory(turns, context.descriptionsOk),
+      route,
     })
   } catch {
     await finishWeb(web)
@@ -294,6 +324,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
             : {}),
           ...(result.web ? { web: result.web } : {}),
           ...(result.webNotices ? { webNotices: result.webNotices } : {}),
+          ...(result.citations ? { citations: result.citations } : {}),
           conversationId: recorded?.conversationId ?? null,
           saved: recorded !== null,
         },

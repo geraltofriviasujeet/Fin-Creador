@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { readLlmConfig, readSearchConfig } from "./config"
+import { readKnowledgeConfig, readLlmConfig, readSearchConfig } from "./config"
 import { callCostMicroUsd, microToUsd } from "./llm/prices"
 import { worstCaseQuestionMicroUsd } from "./handle"
 
@@ -77,5 +77,17 @@ describe("Web lookup configuration", () => {
     expect(readSearchConfig({ SEARCH_ENABLED: "true", SEARCH_PROVIDER: "mock", CI: "true" })).toMatchObject({ status: "on", provider: "mock" })
     expect(readSearchConfig({ SEARCH_ENABLED: "true", SEARCH_PROVIDER: "mock", VERCEL_ENV: "production" })).toEqual({ status: "off", reason: "mock_in_production" })
     expect(readSearchConfig({ ...tavily, SEARCH_PROVIDER: "other" })).toEqual({ status: "off", reason: "unknown_provider" })
+  })
+})
+
+describe("Knowledge base configuration", () => {
+  it("is off unless KNOWLEDGE_ENABLED is exactly true, with the floor in range and no mock in production", () => {
+    expect(readKnowledgeConfig({})).toEqual({ status: "off", reason: "not_enabled" })
+    expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true" })).toEqual({ status: "on", embedder: "supabase", minSimilarity: 0.8 })
+    expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true", KNOWLEDGE_MIN_SIMILARITY: "0.78" })).toMatchObject({ minSimilarity: 0.78 })
+    expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true", KNOWLEDGE_MIN_SIMILARITY: "0.2" })).toEqual({ status: "off", reason: "bad_floor" })
+    expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true", KNOWLEDGE_MIN_SIMILARITY: "x" })).toEqual({ status: "off", reason: "bad_floor" })
+    expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true", KNOWLEDGE_EMBEDDER: "openai" })).toEqual({ status: "off", reason: "unknown_embedder" })
+    expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true", KNOWLEDGE_EMBEDDER: "mock", VERCEL_ENV: "production" })).toEqual({ status: "off", reason: "mock_in_production" })
   })
 })

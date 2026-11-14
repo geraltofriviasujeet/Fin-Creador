@@ -97,4 +97,36 @@ Status lives in each file's frontmatter, and the database follows it on the next
   setting `draft` or `approved` again. Deleting the file also retires it (works when the
   summary shows `1 retired`); its row stays in the database, never deleted.
 
+## 4. Evaluate retrieval (10.6c)
+
+Measures whether each of 15 questions finds the document it should, and whether 3 questions
+with no vetted material find nothing, at floors 0.70 to 0.88. Writes nothing. It calls the
+deployed embed function and `match_knowledge_chunks` itself; the service role can't call that
+function (execute is granted to signed-in users only), so it signs in as a test user.
+
+Add three lines to `~/<private>/dev.env` (a test account on dev, never a real person's):
+
+```text
+SUPABASE_PUBLISHABLE_KEY=<dev publishable key>
+KNOWLEDGE_EVAL_EMAIL=<test user email>
+KNOWLEDGE_EVAL_PASSWORD=<test user password>
+```
+
+```sh
+npm run knowledge:eval -- --check
+KNOWLEDGE_ENV_FILE=~/<private>/dev.env npm run knowledge:eval
+KNOWLEDGE_ENV_FILE=~/<private>/dev.env npm run knowledge:eval -- --include-drafts
+```
+
+Works when: a table of hit@1, hit@4 and "nothing found correctly" per floor, then each question's
+top passages (document, similarity, passage length). Questions whose document is still a draft
+are counted as skipped; `--include-drafts` ranks them in the script instead, reported apart.
+Pick the floor with the best hit@4 that still finds nothing for the 3 "nothing" questions, and
+set it as `KNOWLEDGE_MIN_SIMILARITY` (default 0.8) in the web app's environment.
+
+## 5. Turn the knowledge base on in the web app (dev)
+
+`KNOWLEDGE_ENABLED=true` (and `KNOWLEDGE_MIN_SIMILARITY` from step 4) in the dev web app's
+environment, then redeploy. Off, every question goes to the records tools as before.
+
 Prod later follows the same steps with `<prod-project-ref>` and a separate env file.

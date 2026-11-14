@@ -969,6 +969,7 @@ export type Database = {
           created_at: string
           financial_year: string | null
           id: string
+          link_permission_pending: boolean
           published_on: string | null
           publisher: string
           read_more_url: string | null
@@ -990,6 +991,7 @@ export type Database = {
           created_at?: string
           financial_year?: string | null
           id?: string
+          link_permission_pending?: boolean
           published_on?: string | null
           publisher: string
           read_more_url?: string | null
@@ -1011,6 +1013,7 @@ export type Database = {
           created_at?: string
           financial_year?: string | null
           id?: string
+          link_permission_pending?: boolean
           published_on?: string | null
           publisher?: string
           read_more_url?: string | null
@@ -1549,6 +1552,7 @@ export type Database = {
           ended_at: string | null
           id: string
           input_tokens: number | null
+          knowledge_embeds: number
           model: string
           output_tokens: number | null
           provider: string
@@ -1562,6 +1566,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           input_tokens?: number | null
+          knowledge_embeds?: number
           model: string
           output_tokens?: number | null
           provider: string
@@ -1575,6 +1580,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           input_tokens?: number | null
+          knowledge_embeds?: number
           model?: string
           output_tokens?: number | null
           provider?: string
@@ -2514,6 +2520,7 @@ export type Database = {
           content_kind: string
           document_slug: string
           financial_year: string
+          link_permission_pending: boolean
           published_on: string
           publisher: string
           read_more_url: string
@@ -2830,6 +2837,7 @@ export type Database = {
           seq: number
         }[]
       }
+      roma_knowledge_embed: { Args: { p_request_id: string }; Returns: boolean }
       roma_release_request: { Args: { p_request_id: string }; Returns: boolean }
       roma_search_begin: {
         Args: { p_plan?: boolean; p_provider: string; p_request_id: string }
