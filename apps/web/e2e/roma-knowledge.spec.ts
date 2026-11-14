@@ -50,7 +50,7 @@ test("a general question is answered from a cited passage, and one with no vette
     await history.getByRole("link", { name: "What is an emergency fund?" }).click()
   }]) {
     await reopen()
-    await expect(answers.getByRole("listitem")).toHaveCount(2)
+    await expect(answers.locator(":scope > li")).toHaveCount(2)
     const kept = answers.getByRole("region", { name: "Sources from the knowledge base" })
     await expect(kept).toHaveCount(1)
     await expect(kept.getByTestId("citation").locator("summary")).toHaveText("[1] Test explainer: emergency funds · FinCreador explainer, based on Test Publisher · For FY 2025-26")
