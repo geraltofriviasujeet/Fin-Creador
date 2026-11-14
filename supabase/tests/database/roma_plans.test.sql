@@ -31,8 +31,8 @@ select ok(
 select ok(
   has_function_privilege('authenticated', 'public.roma_search_begin(uuid, text, boolean)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.roma_search_begin(uuid, text, boolean)', 'EXECUTE')
-  and has_function_privilege('authenticated', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb)', 'EXECUTE')
-  and not has_function_privilege('anon', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb)', 'EXECUTE'),
+  and has_function_privilege('authenticated', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb)', 'EXECUTE'),
   'the new signatures: signed-in users only');
 select ok(
   not has_table_privilege('authenticated', 'public.ai_messages', 'UPDATE')
@@ -40,7 +40,7 @@ select ok(
   'a client cannot write a plan except through roma_record_turn');
 select ok(
   not has_function_privilege('public', 'public.roma_search_begin(uuid, text, boolean)', 'EXECUTE')
-  and not has_function_privilege('public', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb)', 'EXECUTE'),
+  and not has_function_privilege('public', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb)', 'EXECUTE'),
   'the default grant to public was revoked');
 
 -- ------------------------------------------------------------ plan credits (9-17)
