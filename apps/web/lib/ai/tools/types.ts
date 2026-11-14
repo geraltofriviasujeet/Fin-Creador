@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { UserClient } from "@fin-creador/api"
 import type { DateRange, IsoDate } from "@fin-creador/domain"
 import type { LlmToolDef } from "../llm/types"
+import type { KnowledgeSession } from "../knowledge/session"
 import type { WebSession } from "../search/session"
 
 // Roma's finance tools are provider-independent: a Zod input schema, a description, and a
@@ -16,10 +17,22 @@ export type ToolContext = {
   descriptionsOk: boolean
   /** This question's web lookups (10.8); absent when web lookups are off. */
   web?: WebSession
+  /** This question's knowledge base searches (10.6c); absent when the knowledge base is off. */
+  knowledge?: KnowledgeSession
+  /** The person's own words (10.6e, set by the chat loop): this question, and it with the recent earlier ones. */
+  asked?: string
+  said?: string
+  /** The strings the records tools returned so far this question (10.6d, set by the chat loop): a knowledge query must not hold them. */
+  recordStrings?: () => readonly string[]
 }
 
 /** A figure a tool produced: what the answer may quote and what the figures panel shows. */
-export type Figure = { label: string; hideWhenZero?: boolean } & (
+export type Figure = {
+  label: string
+  hideWhenZero?: boolean
+  /** Shown in its own code-built card (a tax estimate, 10.6e), not the "from your records" figures. */
+  inCard?: true
+} & (
   | { kind: "money"; minor: number; currency: string }
   | { kind: "count"; value: number }
   /** A rate in basis points (2,350 is 23.5%), shown with formatPercentFromBasisPoints. */
@@ -76,6 +89,22 @@ export type ToolOutput = {
   untrusted?: true
   /** Web prices kept and totals worked out in code (10.8), shown apart from the records. */
   web?: WebBlock
+  /** A tax estimate (10.6e): the breakdown built in code, shown as its own card. */
+  tax?: TaxBlock
+}
+
+/** A tax estimate's card (10.6e): every row and line built in code from packages/domain. */
+export type TaxBlock = {
+  /** "2026-27". */
+  taxYear: string
+  /** That tax year has ended in the person's own time zone. */
+  outOfDate?: true
+  regimes: { title: string; rows: { label: string; value: string; total?: true }[] }[]
+  /** Which regime's total is lower and by how much, as a fact. */
+  comparison: string
+  assumptions: string[]
+  /** The approved documents the rates come from, by title. */
+  sources: string[]
 }
 
 /** A web total for one currency (10.8): the cost lines' lowest and highest prices added up, as plain decimals. */

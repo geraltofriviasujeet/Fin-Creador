@@ -2,10 +2,13 @@ import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber, saidNumbers } from "./output"
 import { figureId, fillPlaceholders, formatFigure, webAmounts, withoutPlaceholders } from "./placeholders"
-import { ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
+import { type Citation, NOT_ADVICE, NO_PRODUCT_PICKS, knowledgeAnswer } from "./knowledge/citations"
+import { isProductPick } from "./knowledge/picks"
+import type { Route } from "./knowledge/route"
+import { KNOWLEDGE_RULES, ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
-import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, NO_LOOKUPS, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
+import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, NO_LOOKUPS, type TaxBlock, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
 import {
   LlmError,
   type LlmMessage,
@@ -33,6 +36,13 @@ import {
 // Amounts by placeholder (10.8 follow-up, placeholders.ts): each figure of a tool result is
 // sent with its placeholder; the checks read the answer with placeholders blanked, and only
 // then is each one filled in with its formatted amount (an unknown one is marked left out).
+// From 10.6c the question's route (knowledge/route.ts) decides which tools were offered; a
+// general answer is shown only when it cites retrieved passages (knowledge/citations.ts), whose
+// numbers it may then quote; the citations, built in code from the passages, go with it.
+// From 10.6e tools are given the person's own words (to find the amounts they typed), and a tax
+// estimate's card, built in code, goes with the answer, which then always ends with NOT_ADVICE.
+// From 10.6d a product pick (which fund, stock or coin to buy) gets NO_PRODUCT_PICKS first, then
+// the general explanation only when it cites passages; otherwise that line alone.
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -56,6 +66,10 @@ export type ChatResult =
       web?: WebBlock
       /** Why web lookups were skipped (caps, timeouts), in code's words. */
       webNotices?: string[]
+      /** Knowledge base passages the answer cites (10.6c), numbered as in the text. */
+      citations?: Citation[]
+      /** A tax estimate's card (10.6e). */
+      tax?: TaxBlock
     }
   /** `unmatched`: the numbers that failed the check (for the server's diagnostic only; never the answer text). */
   | { kind: "unverified"; unmatched: string[] }
@@ -79,6 +93,8 @@ type Options = {
   context: ToolContext
   question: string
   history?: ChatHistory
+  /** Which tools were offered (10.6c); the knowledge rules depend on it. */
+  route?: Route
   maxRounds?: number
   deadlineMs?: number
 }
@@ -89,13 +105,21 @@ export async function runChat({
   context,
   question,
   history = NO_HISTORY,
+  route = "records",
   maxRounds = MAX_ROUNDS,
   deadlineMs = DEADLINE_MS,
 }: Options): Promise<ChatRun> {
   const deadline = Date.now() + deadlineMs
   const toolDefs = tools.map(toToolDef)
   const webTools = tools.some((t) => t.name === "web_price_lookup")
-  const system = [ROMA_SYSTEM_PROMPT, romaContext(context), ...(webTools ? [WEB_RULES] : []), ...(history.summary ? [history.summary] : [])]
+  const knowledgeTools = tools.some((t) => t.name === "knowledge_search")
+  const system = [
+    ROMA_SYSTEM_PROMPT,
+    romaContext({ ...context, route }),
+    ...(webTools ? [WEB_RULES] : []),
+    ...(knowledgeTools ? [KNOWLEDGE_RULES] : []),
+    ...(history.summary ? [history.summary] : []),
+  ]
   const messages: LlmMessage[] = [
     ...history.recent.flatMap((t): LlmMessage[] => [
       { role: "user", text: t.question },
@@ -117,6 +141,14 @@ export async function runChat({
     subjectText: [],
     web: [],
     amounts: new Map(),
+    tax: null,
+    recordStrings: [],
+  }
+  const toolContext: ToolContext = {
+    ...context,
+    asked: question,
+    said: [question, ...history.recent.map((t) => t.question)].join("\n"),
+    recordStrings: () => found.recordStrings,
   }
   let usage = NO_USAGE
   let calls = 0
@@ -145,7 +177,7 @@ export async function runChat({
     if (response.stop === "tool_use" && response.toolCalls.length > 0) {
       messages.push({ role: "assistant", text: response.text, toolCalls: response.toolCalls, providerContent: response.providerContent })
       // All of a round's tools at once; their results are taken in the order they were called.
-      const runs = await Promise.all(response.toolCalls.map((call) => runTool(tools, context, call.id, call.name, call.input)))
+      const runs = await Promise.all(response.toolCalls.map((call) => runTool(tools, toolContext, call.id, call.name, call.input)))
       const results: LlmToolResult[] = runs.map((r) => applyTool(r, figures, periods, found))
       messages.push({ role: "tool_results", results })
       continue
@@ -155,9 +187,9 @@ export async function runChat({
     if (response.stop === "max_tokens") return done({ kind: "failed", reason: "max_tokens" })
     if (response.stop !== "end") return done({ kind: "failed", reason: "rejected" })
 
-    // A tool that needs more from the person (and no check that ran anyway): its own question,
-    // built in code, replaces whatever the model wrote.
-    if (found.needs.length > 0 && found.checks.length === 0) {
+    // A tool that needs more from the person (and no check or estimate that ran anyway): its own
+    // question, built in code, replaces whatever the model wrote.
+    if (found.needs.length > 0 && found.checks.length === 0 && !found.tax) {
       return done({
         kind: "answer",
         text: [...new Set(found.needs.map((n) => n.question))].join("\n\n"),
@@ -170,14 +202,33 @@ export async function runChat({
       })
     }
 
+    // A general question with no cited passage: a line built in code replaces the text (10.6c).
+    // A product pick is never answered beyond its own line without a cited passage (10.6d).
+    const known = knowledgeAnswer(response.text, context.knowledge, route, context.today)
+    const pick = isProductPick(question)
+    if ("replace" in known || (pick && known.citations.length === 0)) {
+      return done({
+        kind: "answer",
+        text: "replace" in known && !pick ? known.replace : NO_PRODUCT_PICKS,
+        figures: [],
+        periods: [],
+        descriptionsWithheld: false,
+        checks: [],
+        toolsRan: found.toolsRan,
+        descriptionsSent: found.descriptionsSent,
+      })
+    }
+
     const dates = [context.today, ...periods.flatMap((p) => [p.start, p.end]), ...found.dates]
     const allowed = allowedNumbers(figures, dates)
     for (const n of webNumbers(found.web)) allowed.add(n)
+    // Numbers in the passages the answer cites (never in ones it doesn't).
+    for (const n of known.numbers) allowed.add(n)
     // The person's own numbers (a budget they typed) are theirs to see again, never a refusal.
     for (const n of saidNumbers([question, ...history.recent.map((t) => t.question)].join("\n"))) allowed.add(n)
-    const check = checkAnswer(withoutPlaceholders(response.text), allowed, found.literals)
+    const check = checkAnswer(withoutPlaceholders(known.text), allowed, found.literals)
     if (!check.ok) return done(check.reason === "unverified" ? { kind: "unverified", unmatched: check.unmatched ?? [] } : { kind: check.reason })
-    const filled = fillPlaceholders(response.text.trim(), new Map([...found.amounts, ...webAmounts(found.web.at(-1))]))
+    const filled = fillPlaceholders(known.text.trim(), new Map([...found.amounts, ...webAmounts(found.web.at(-1))]))
 
     // A goal or trip answer about something the person didn't ask about: refused, and a summary
     // built in code is shown instead (10.5).
@@ -195,9 +246,12 @@ export async function runChat({
         descriptionsSent: found.descriptionsSent,
       })
     }
+    const answer = pick ? `${NO_PRODUCT_PICKS}\n\n${withVerdict(filled.text, found.checks)}` : withVerdict(filled.text, found.checks)
+    // A tax estimate always ends with the not-advice line, cited or not (once).
+    const tail = [known.tail, found.tax && known.tail !== NOT_ADVICE ? NOT_ADVICE : null].filter(Boolean).join("\n\n")
     return done({
       kind: "answer",
-      text: withVerdict(filled.text, found.checks),
+      text: tail ? `${answer}\n\n${tail}` : answer,
       figures,
       periods,
       descriptionsWithheld: found.descriptionsWithheld,
@@ -205,6 +259,8 @@ export async function runChat({
       toolsRan: found.toolsRan,
       descriptionsSent: found.descriptionsSent,
       ...webPart(found.web, context, found.checks),
+      ...(known.citations.length > 0 ? { citations: known.citations } : {}),
+      ...(found.tax ? { tax: found.tax } : {}),
     })
   }
   return done({ kind: "failed", reason: "rounds" })
@@ -225,6 +281,10 @@ type Found = {
   web: WebBlock[]
   /** Each tool figure's formatted amount by placeholder key ("fig:trip_estimate"). */
   amounts: Map<string, string>
+  /** The last tax estimate's card (10.6e). */
+  tax: TaxBlock | null
+  /** Every string the records tools returned (10.6d): a knowledge query must not hold them. */
+  recordStrings: string[]
 }
 
 /** The numbers a web block lets an answer quote: prices as written and in full, totals, nights and travellers. */
@@ -275,6 +335,14 @@ export function withVerdict(text: string, checks: readonly GoalCheck[]): string 
   return checks.map((c) => c.summary).join("\n\n")
 }
 
+/** Every string in a tool result, at any depth. */
+function allStrings(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") out.push(value)
+  else if (Array.isArray(value)) for (const v of value) allStrings(v, out)
+  else if (value !== null && typeof value === "object") for (const v of Object.values(value)) allStrings(v, out)
+  return out
+}
+
 type ToolRun = { callId: string; tool: string; output: ToolOutput } | { callId: string; error: string }
 
 async function runTool(tools: readonly FinanceTool[], context: ToolContext, callId: string, name: string, rawInput: unknown): Promise<ToolRun> {
@@ -311,7 +379,9 @@ function applyTool(run: ToolRun, figures: Figure[], periods: DateRange[], found:
     found.subjectText.push(JSON.stringify(output.data))
   }
   if (output.web) found.web.push(output.web)
+  if (output.tax) found.tax = output.tax
   if (!output.untrusted) found.literals.push(...literalStrings(output.data), ...literalStrings(output.figures.map((f) => f.label)))
+  if (!output.untrusted && run.tool !== "tax_estimate") found.recordStrings.push(...allStrings(output.data), ...output.figures.map((f) => f.label))
   found.toolsRan.push(run.tool)
   const content = placeholders.length > 0 ? { ...output.data, amounts: placeholders } : output.data
   return { callId, content: JSON.stringify(content) }

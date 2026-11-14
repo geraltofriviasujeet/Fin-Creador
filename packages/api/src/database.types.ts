@@ -93,6 +93,7 @@ export type Database = {
         Row: {
           answer: string
           as_of: string
+          citations: Json | null
           conversation_id: string
           created_at: string
           id: string
@@ -102,12 +103,14 @@ export type Database = {
           request_id: string | null
           sent_descriptions: boolean
           seq: number
+          tax: Json | null
           tools: string[]
           user_id: string
         }
         Insert: {
           answer: string
           as_of: string
+          citations?: Json | null
           conversation_id: string
           created_at?: string
           id?: string
@@ -117,12 +120,14 @@ export type Database = {
           request_id?: string | null
           sent_descriptions?: boolean
           seq: number
+          tax?: Json | null
           tools?: string[]
           user_id: string
         }
         Update: {
           answer?: string
           as_of?: string
+          citations?: Json | null
           conversation_id?: string
           created_at?: string
           id?: string
@@ -132,6 +137,7 @@ export type Database = {
           request_id?: string | null
           sent_descriptions?: boolean
           seq?: number
+          tax?: Json | null
           tools?: string[]
           user_id?: string
         }
@@ -925,6 +931,110 @@ export type Database = {
           },
         ]
       }
+      knowledge_chunks: {
+        Row: {
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string
+          id: string
+          seq: number
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          document_id: string
+          embedding: string
+          id?: string
+          seq: number
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string
+          id?: string
+          seq?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_documents: {
+        Row: {
+          approved_at: string | null
+          based_on_publisher: string | null
+          content_hash: string
+          content_kind: string
+          created_at: string
+          financial_year: string | null
+          id: string
+          link_permission_pending: boolean
+          published_on: string | null
+          publisher: string
+          read_more_url: string | null
+          reuse_terms: string
+          reuse_terms_checked_on: string
+          reuse_terms_url: string | null
+          slug: string
+          source_url: string | null
+          status: string
+          title: string
+          updated_at: string
+          verified_on: string
+        }
+        Insert: {
+          approved_at?: string | null
+          based_on_publisher?: string | null
+          content_hash: string
+          content_kind: string
+          created_at?: string
+          financial_year?: string | null
+          id?: string
+          link_permission_pending?: boolean
+          published_on?: string | null
+          publisher: string
+          read_more_url?: string | null
+          reuse_terms: string
+          reuse_terms_checked_on: string
+          reuse_terms_url?: string | null
+          slug: string
+          source_url?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          verified_on: string
+        }
+        Update: {
+          approved_at?: string | null
+          based_on_publisher?: string | null
+          content_hash?: string
+          content_kind?: string
+          created_at?: string
+          financial_year?: string | null
+          id?: string
+          link_permission_pending?: boolean
+          published_on?: string | null
+          publisher?: string
+          read_more_url?: string | null
+          reuse_terms?: string
+          reuse_terms_checked_on?: string
+          reuse_terms_url?: string | null
+          slug?: string
+          source_url?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          verified_on?: string
+        }
+        Relationships: []
+      }
       liability_payments: {
         Row: {
           account_id: string
@@ -1448,6 +1558,7 @@ export type Database = {
           ended_at: string | null
           id: string
           input_tokens: number | null
+          knowledge_embeds: number
           model: string
           output_tokens: number | null
           provider: string
@@ -1461,6 +1572,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           input_tokens?: number | null
+          knowledge_embeds?: number
           model: string
           output_tokens?: number | null
           provider: string
@@ -1474,6 +1586,7 @@ export type Database = {
           ended_at?: string | null
           id?: string
           input_tokens?: number | null
+          knowledge_embeds?: number
           model?: string
           output_tokens?: number | null
           provider?: string
@@ -2404,6 +2517,25 @@ export type Database = {
         Args: { p_first_due: string; p_seq: number }
         Returns: string
       }
+      match_knowledge_chunks: {
+        Args: { p_count: number; p_embedding: string; p_min_similarity: number }
+        Returns: {
+          based_on_publisher: string
+          chunk_id: string
+          content: string
+          content_kind: string
+          document_slug: string
+          financial_year: string
+          link_permission_pending: boolean
+          published_on: string
+          publisher: string
+          read_more_url: string
+          similarity: number
+          source_url: string
+          title: string
+          verified_on: string
+        }[]
+      }
       pay_card: {
         Args: {
           p_account_id: string
@@ -2698,12 +2830,14 @@ export type Database = {
         Args: {
           p_answer: string
           p_as_of: string
+          p_citations?: Json
           p_conversation_id: string
           p_periods: unknown[]
           p_plan?: Json
           p_question: string
           p_request_id: string
           p_sent_descriptions: boolean
+          p_tax?: Json
           p_tools: string[]
         }
         Returns: {
@@ -2711,6 +2845,7 @@ export type Database = {
           seq: number
         }[]
       }
+      roma_knowledge_embed: { Args: { p_request_id: string }; Returns: boolean }
       roma_release_request: { Args: { p_request_id: string }; Returns: boolean }
       roma_search_begin: {
         Args: { p_plan?: boolean; p_provider: string; p_request_id: string }

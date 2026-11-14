@@ -10,7 +10,7 @@ import { controlClasses } from "@/components/ui/input"
 import type { ChatResponseBody } from "@/lib/ai/handle"
 import { webPrice, webTotal } from "@/lib/ai/web-format"
 import { MAX_QUESTION_CHARS } from "@/lib/ai/limits"
-import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL } from "@/lib/ai/wording"
+import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL, basisLabels, boldParts, progressLine } from "@/lib/ai/wording"
 import { allowRomaDescriptionsAction } from "@/app/(app)/roma/actions"
 import { detectPlan } from "@/lib/ai/plan/intake"
 import type { PlanRequest } from "@/lib/ai/plan/types"
@@ -59,6 +59,8 @@ type Props = {
   open: OpenConversation | null
   /** The conversation asked for no longer exists. */
   missing?: boolean
+  /** The knowledge base is on (KNOWLEDGE_ENABLED): questions are routed, as on the server. */
+  knowledge?: boolean
 }
 
 // Opening a conversation from the list is a navigation, and the chat starts afresh for it (like
@@ -91,6 +93,7 @@ function Conversation({
   conversations: initialConversations,
   open,
   missing = false,
+  knowledge = false,
   onMove,
 }: Props & { onMove: (id: string | null) => void }) {
   // A question handed over in the address (?ask=, from the Goals page) is only filled in, never
@@ -102,6 +105,7 @@ function Conversation({
   const [conversations, setConversations] = useState(initialConversations)
   const [notice, setNotice] = useState<string | null>(missing ? "That conversation was deleted. You’re in a new one." : null)
   const [pending, setPending] = useState(false)
+  const [progress, setProgress] = useState("")
   const [failure, setFailure] = useState<string | null>(null)
   const [consent, setConsent] = useState<Consent>("ask")
   const [intake, setIntake] = useState<{ question: string; draft: PlanRequest } | null>(null)
@@ -134,6 +138,7 @@ function Conversation({
   async function send(text: string, plan?: PlanRequest) {
     if (pending) return
     setPending(true)
+    setProgress(progressLine(text, { plan: plan !== undefined, knowledge }))
     setFailure(null)
     setNotice(null)
     try {
@@ -251,7 +256,7 @@ function Conversation({
             </div>
           </form>
           <p aria-live="polite" className="mt-3 text-sm text-muted-foreground empty:hidden">
-            {pending ? "Roma is checking your records…" : ""}
+            {pending ? progress : ""}
           </p>
           {failure && (
             <FormMessage tone="error" className="mt-2">
@@ -294,12 +299,13 @@ function Conversation({
                     <div className="grid min-w-0 flex-1 gap-3">
                       <p className="flex flex-wrap items-center gap-x-2 text-sm">
                         <span className="font-semibold text-ink">Roma</span>
-                        {turn.reply.status === "answer" && (
-                          <span className="inline-flex items-center gap-1 text-xs text-success">
-                            <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
-                            Checked against your records
-                          </span>
-                        )}
+                        {turn.reply.status === "answer" &&
+                          basisLabels(turn.reply.basis).map((label) => (
+                            <span key={label} className="inline-flex items-center gap-1 text-xs text-success">
+                              <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
+                              {label}
+                            </span>
+                          ))}
                       </p>
                       <Reply
                         reply={turn.reply}
@@ -403,7 +409,8 @@ function Reply({
           )}
         </div>
       ))}
-      <p className="text-sm whitespace-pre-line text-ink">{reply.answer}</p>
+      <p className="text-sm whitespace-pre-line text-ink">{withBold(reply.answer)}</p>
+      {reply.tax && <TaxEstimate tax={reply.tax} />}
       {reply.figures.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-line">
           <table className="w-full text-sm">
@@ -437,6 +444,7 @@ function Reply({
           {reply.web ? " · Web estimates below, each with its source" : ""}
         </p>
       )}
+      {reply.citations && <Sources citations={reply.citations} />}
       {reply.web && <WebEstimates web={reply.web} />}
       {reply.webNotices?.map((n) => (
         <FormMessage key={n} tone="info">
@@ -457,6 +465,104 @@ function Reply({
           ),
       )}
     </div>
+  )
+}
+
+/** An answer's bold parts (boldParts, 10.6e) as <strong>; all of it stays React text, never HTML. */
+const withBold = (text: string) => boldParts(text).map((p, i) => (p.bold ? <strong key={i}>{p.text}</strong> : p.text))
+
+/**
+ * A tax estimate (10.6e): both regimes' breakdown, the comparison and the assumptions, all
+ * built in code from packages/domain. Labelled with its tax year; once that year has ended in
+ * the person's today it says so, as a cited document does.
+ */
+function TaxEstimate({ tax }: { tax: NonNullable<Extract<ChatResponseBody, { status: "answer" }>["tax"]> }) {
+  return (
+    <section className="rounded-xl border border-line border-l-4 border-l-brand-deep p-3" aria-label="Tax estimate">
+      <p className="text-xs font-semibold text-muted-foreground">Tax estimate · Tax year {tax.taxYear}</p>
+      <p className="mt-1 font-heading text-base font-bold text-ink">{tax.comparison}</p>
+      <div className="mt-2 grid gap-3 md:grid-cols-2">
+        {tax.regimes.map((r) => (
+          <div key={r.title} className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full text-sm">
+              <caption className="bg-canvas px-3 py-2 text-left text-xs font-semibold text-muted-foreground">{r.title}</caption>
+              <tbody className="divide-y divide-line">
+                {r.rows.map((row, i) => (
+                  <tr key={i}>
+                    <th scope="row" className={`px-3 py-1.5 text-left ${row.total ? "font-semibold text-ink" : "font-normal text-muted-foreground"}`}>
+                      {row.label}
+                    </th>
+                    <td className={`px-3 py-1.5 text-right text-ink tabular-nums ${row.total ? "font-bold" : "font-semibold"}`}>{row.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs font-semibold text-muted-foreground">Assumptions</p>
+      <ul className="mt-1 grid list-disc gap-1 pl-5 text-sm text-ink">
+        {tax.assumptions.map((a, i) => (
+          <li key={i}>{a}</li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-muted-foreground">Rates from the knowledge base: {tax.sources.join("; ")}.</p>
+      {tax.outOfDate && (
+        <div className="mt-2">
+          <FormMessage tone="info">{`This estimate is for FY ${tax.taxYear}, which has ended. It may be out of date.`}</FormMessage>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * The knowledge base passages an answer cites (10.6c), numbered as in the answer. Each opens to
+ * the passage itself, so a figure can be checked against what it applies to. Built in code from
+ * the retrieved passage; a link only where the publisher allows one.
+ */
+function Sources({ citations }: { citations: NonNullable<Extract<ChatResponseBody, { status: "answer" }>["citations"]> }) {
+  return (
+    <section className="rounded-xl border border-line p-3" aria-label="Sources from the knowledge base">
+      <p className="text-xs font-semibold text-muted-foreground">From the knowledge base</p>
+      <ul className="mt-2 grid gap-2 text-sm">
+        {citations.map((c) => (
+          <li key={c.n}>
+            <details className="group rounded-lg border border-line bg-canvas px-3 py-2" data-testid="citation">
+              <summary className="cursor-pointer text-ink">
+                <span className="font-semibold">[{c.n}]</span> {c.title}
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {c.source}
+                  {c.financialYear ? ` · For FY ${c.financialYear}` : ""}
+                </span>
+              </summary>
+              <div className="mt-2 grid gap-2">
+                <p className="text-xs font-semibold text-muted-foreground">{c.passages.length === 1 ? "The passage Roma used" : "The passages Roma used"}</p>
+                {c.passages.map((text, j) => (
+                  <blockquote key={j} className="border-l-2 border-line pl-3 text-sm whitespace-pre-line text-ink">
+                    {text}
+                  </blockquote>
+                ))}
+                {c.linkPending && <p className="text-xs text-muted-foreground">Link pending the publisher&rsquo;s permission.</p>}
+                {c.url && (
+                  <a href={c.url} target="_blank" rel="noopener noreferrer nofollow" className="text-sm text-ink underline underline-offset-2">
+                    Read more at the source
+                  </a>
+                )}
+              </div>
+            </details>
+          </li>
+        ))}
+      </ul>
+      {citations
+        .filter((c) => c.outOfDate)
+        .map((c) => (
+          <div key={c.n} className="mt-2">
+            <FormMessage tone="info">{`[${c.n}] is for FY ${c.financialYear}, which has ended. It may be out of date.`}</FormMessage>
+          </div>
+        ))}
+    </section>
   )
 }
 
