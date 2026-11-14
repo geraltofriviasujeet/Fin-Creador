@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { type ChatRun, MAX_OUTPUT_TOKENS, MAX_ROUNDS, runChat } from "./chat"
 import type { LlmConfig } from "./config"
-import { MAX_TURNS, type StoredTurn, buildHistory } from "./history"
+import { type AnswerBasis, MAX_TURNS, type StoredTurn, answerBasis, buildHistory } from "./history"
 import type { Citation } from "./knowledge/citations"
 import { type Route, routeQuestion } from "./knowledge/route"
 import { type Embedder, type KnowledgeDb, KnowledgeSession } from "./knowledge/session"
@@ -148,6 +148,8 @@ export type ChatResponseBody =
       answer: string
       figures: { label: string; value: string }[]
       periods: { from: string; to: string }[]
+      /** What the tools that ran read: the chip above the answer ("From your records", "From the knowledge base"). */
+      basis: AnswerBasis
       /** Matching descriptions were left out: show the notice and ask once (10.2). */
       descriptionsNotice?: true
       /** Goal and trip checks (10.4, 10.5): the verdict computed in code and its assumptions. */
@@ -318,6 +320,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           answer: result.text,
           figures: result.figures.filter((f) => !f.hideWhenZero || figureValue(f) !== 0).map((f) => ({ label: f.label, value: formatFigure(f) })),
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
+          basis: answerBasis(result.toolsRan),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
           ...(result.checks.length > 0
             ? { checks: result.checks.map(({ kind, goal, verdict, assumptions, web }) => ({ ...(kind ? { kind } : {}), goal, verdict, assumptions, ...(web ? { web } : {}) })) }
@@ -403,6 +406,7 @@ async function answerPlan(
       answer: run.answer,
       figures: [],
       periods: [],
+      basis: answerBasis(turn.tools),
       plan,
       ...(recorded?.messageId ? { planLink: { messageId: recorded.messageId, goal: null } } : {}),
       ...(notices.length > 0 ? { webNotices: notices } : {}),

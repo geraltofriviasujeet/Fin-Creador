@@ -122,7 +122,12 @@ describe("POST /api/ai/chat flow", () => {
     const res = await handleChat(ask, d)
     expect(res).toMatchObject({
       status: 200,
-      body: { status: "answer", figures: [{ label: "Spent", value: "₹500" }, { label: "Expenses", value: "2" }], periods: [{ from: "2026-11-01", to: "2026-11-05" }] },
+      body: {
+        status: "answer",
+        figures: [{ label: "Spent", value: "₹500" }, { label: "Expenses", value: "2" }],
+        periods: [{ from: "2026-11-01", to: "2026-11-05" }],
+        basis: { records: true, knowledge: false },
+      },
     })
     expect(d.db.ledger.settled).toEqual([{ id: "req-1", inputTokens: 0, outputTokens: 0, costUsd: 0 }])
     expect(d.db.ledger.released).toEqual([])
@@ -434,6 +439,7 @@ describe("knowledge base routing (10.6c)", () => {
       status: "answer",
       answer: "An SIP invests a fixed amount at regular intervals. [1] (Test answer.)\n\nGeneral information, not personal advice.",
       citations: [{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passage: "An SIP invests a fixed amount at regular intervals." }],
+      basis: { records: false, knowledge: true },
     })
     expect(d.history.recorded[0]?.tools).toEqual(["knowledge_search"])
   })

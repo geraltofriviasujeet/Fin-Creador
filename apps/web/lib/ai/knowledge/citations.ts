@@ -14,6 +14,13 @@ export const NO_MATERIAL_PART = "I don't have vetted material on the general par
 export const KNOWLEDGE_UNAVAILABLE = "I couldn't search my vetted material just now, so I won't answer this from general knowledge. Try again in a moment."
 export const KNOWLEDGE_UNAVAILABLE_PART = "I couldn't search my vetted material just now, so the general part of your question isn't answered."
 export const NOT_ADVICE = "General information, not personal advice."
+/** The model's own copy of NOT_ADVICE (or a close variant): code adds the line, once. */
+const MODEL_NOT_ADVICE = /[ \t]*\(?\s*(?:this is\s+)?general information,?\s+(?:and\s+)?not\s+(?:personal\s+|financial\s+)*advice\s*[.!]?\s*\)?[ \t]*/gi
+
+/** The text without any not-advice line the model wrote itself. */
+export function withoutNotAdvice(text: string): string {
+  return text.replace(MODEL_NOT_ADVICE, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim()
+}
 
 export type Citation = {
   n: number
@@ -80,10 +87,11 @@ export type KnowledgeAnswer =
  * What a question's knowledge searches allow the answer to be. A general question (route
  * "knowledge") is answered only from cited passages, else replaced by a line built here. A
  * question that is both keeps its records part; the general part gets a line when nothing was
- * found. Any answer that cites a passage ends with NOT_ADVICE.
+ * found. Any answer that cites a passage ends with NOT_ADVICE, added here only: the model's own
+ * copy is removed from every answer.
  */
 export function knowledgeAnswer(raw: string, session: KnowledgeSession | undefined, route: Route, today: string): KnowledgeAnswer {
-  const { text, cited } = applyCitations(raw, session?.passages ?? [])
+  const { text, cited } = applyCitations(withoutNotAdvice(raw), session?.passages ?? [])
   const plain = { text, citations: [], numbers: [], tail: null }
   if (route === "knowledge") {
     if (session?.allFailed) return { replace: KNOWLEDGE_UNAVAILABLE }

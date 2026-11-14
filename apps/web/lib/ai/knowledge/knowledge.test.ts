@@ -5,7 +5,7 @@ import { type MockScript, mockProvider, mockText, mockToolCall } from "../llm/mo
 import { spendingTool } from "../tools/spending"
 import { knowledgeSearchTool } from "../tools/knowledge"
 import { type FinanceTool, ToolError, type ToolContext } from "../tools/types"
-import { KNOWLEDGE_UNAVAILABLE, NOT_ADVICE, NO_MATERIAL, NO_MATERIAL_PART, applyCitations, citationOf, knowledgeAnswer, sourceLabel } from "./citations"
+import { KNOWLEDGE_UNAVAILABLE, NOT_ADVICE, NO_MATERIAL, NO_MATERIAL_PART, applyCitations, citationOf, knowledgeAnswer, sourceLabel, withoutNotAdvice } from "./citations"
 import { axis, mockEmbedder } from "./embedder"
 import { routeQuestion } from "./route"
 import { type KnowledgeDb, type KnowledgeRow, KnowledgeSession, MAX_KNOWLEDGE_SEARCHES, type Passage } from "./session"
@@ -252,6 +252,21 @@ describe("Roma's chat loop with the knowledge base", () => {
     let records: string[] = []
     await runChat({ provider: mockProvider((req) => ((records = req.system), mockText("ok"))), tools: [spendingTool as FinanceTool], context: base, question: "q" })
     expect(records.some((b) => b.startsWith("Knowledge base:"))).toBe(false)
+  })
+
+  it.each([
+    "Three to six months of essential spending is common [[k1]].\n\nGeneral information, not personal advice.",
+    "Three to six months of essential spending is common [[k1]]. General information, not personal advice.",
+    "Three to six months of essential spending is common [[k1]].\n\n(This is general information, not financial advice.)",
+  ])("prints the not-advice line once, from code, when the model wrote it too: %j", async (written) => {
+    const run = await askKnowledge(searchThen(written))
+    expect(run.result).toMatchObject({ kind: "answer", text: `Three to six months of essential spending is common [1].\n\n${NOT_ADVICE}` })
+    expect(run.result.kind === "answer" && run.result.text.match(/not (?:personal|financial) advice/gi)).toHaveLength(1)
+  })
+
+  it("removes the model's not-advice line from an answer that cites nothing", () => {
+    expect(withoutNotAdvice("You spent ₹500.\n\nGeneral information, not personal advice.")).toBe("You spent ₹500.")
+    expect(withoutNotAdvice("Advice depends on you.")).toBe("Advice depends on you.")
   })
 
   it("the mock provider's general flow quotes and cites the first passage", async () => {

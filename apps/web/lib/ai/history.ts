@@ -35,6 +35,19 @@ export type ChatHistory = {
 
 export const NO_HISTORY: ChatHistory = { summary: null, recent: [] }
 
+/** Tools that read neither the person's records nor the knowledge base. */
+const NEITHER_TOOLS = new Set(["web_price_lookup", "web_price_figures"])
+
+/** What an answer was built from, by the tools that actually ran: the chip above it. */
+export type AnswerBasis = { records: boolean; knowledge: boolean }
+
+export function answerBasis(tools: readonly string[]): AnswerBasis {
+  return {
+    records: tools.some((t) => t !== "knowledge_search" && !NEITHER_TOOLS.has(t)),
+    knowledge: tools.includes("knowledge_search"),
+  }
+}
+
 export const WITHHELD_ANSWER = "(This answer quoted transaction descriptions, which are no longer shared, so it is left out.)"
 
 /**

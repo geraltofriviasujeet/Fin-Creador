@@ -10,7 +10,7 @@ import { controlClasses } from "@/components/ui/input"
 import type { ChatResponseBody } from "@/lib/ai/handle"
 import { webPrice, webTotal } from "@/lib/ai/web-format"
 import { MAX_QUESTION_CHARS } from "@/lib/ai/limits"
-import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL } from "@/lib/ai/wording"
+import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL, basisLabels } from "@/lib/ai/wording"
 import { allowRomaDescriptionsAction } from "@/app/(app)/roma/actions"
 import { detectPlan } from "@/lib/ai/plan/intake"
 import type { PlanRequest } from "@/lib/ai/plan/types"
@@ -294,12 +294,13 @@ function Conversation({
                     <div className="grid min-w-0 flex-1 gap-3">
                       <p className="flex flex-wrap items-center gap-x-2 text-sm">
                         <span className="font-semibold text-ink">Roma</span>
-                        {turn.reply.status === "answer" && (
-                          <span className="inline-flex items-center gap-1 text-xs text-success">
-                            <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
-                            Checked against your records
-                          </span>
-                        )}
+                        {turn.reply.status === "answer" &&
+                          basisLabels(turn.reply.basis).map((label) => (
+                            <span key={label} className="inline-flex items-center gap-1 text-xs text-success">
+                              <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
+                              {label}
+                            </span>
+                          ))}
                       </p>
                       <Reply
                         reply={turn.reply}

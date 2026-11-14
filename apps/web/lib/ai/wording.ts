@@ -3,7 +3,12 @@
 export const ROMA_DATA_NOTICE =
   "Roma sends your question and summaries of your figures to Anthropic to answer it. When you ask her to find transactions, up to 20 matching descriptions (which can include payee names) are sent too. Account numbers are masked. Off by default."
 
-export const ROMA_INFORMATIONAL = "Informational only, not financial advice. Figures come from your own records."
+export const ROMA_INFORMATIONAL = "Informational only, not financial advice. Figures come from your own records or the cited source."
 
 /** The retention rule (roma_prune_conversations), shown beside the history list and in Settings. */
 export const ROMA_RETENTION = "Conversations are deleted 180 days after the last message."
+
+/** The chips above an answer: what actually ran, never a claim of records no records tool read. */
+export function basisLabels(basis: { records: boolean; knowledge: boolean }): string[] {
+  return [...(basis.records ? ["From your records"] : []), ...(basis.knowledge ? ["From the knowledge base"] : [])]
+}

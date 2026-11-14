@@ -6,10 +6,12 @@ import {
   RECENT_TURNS,
   type StoredTurn,
   WITHHELD_ANSWER,
+  answerBasis,
   buildHistory,
   fromDateRangeLiteral,
   toDateRangeLiteral,
 } from "./history"
+import { basisLabels } from "./wording"
 
 // Roma's conversation memory (10.3): what a new question is sent with, built in code.
 
@@ -105,5 +107,17 @@ describe("date ranges", () => {
     for (const bad of ["empty", "[2026-10-01,)", "[2026-10-01,2026-10-01)", "2026-10-01", ""]) {
       expect(fromDateRangeLiteral(bad)).toBeNull()
     }
+  })
+})
+
+describe("answerBasis and the answer's chips", () => {
+  it("follows the tools that ran, never claiming records no records tool read", () => {
+    const chips = (tools: string[]) => basisLabels(answerBasis(tools))
+    expect(chips(["knowledge_search"])).toEqual(["From the knowledge base"])
+    expect(chips(["spending_for_period"])).toEqual(["From your records"])
+    expect(chips(["savings_rate", "knowledge_search"])).toEqual(["From your records", "From the knowledge base"])
+    expect(chips(["trip_plan"])).toEqual(["From your records"])
+    expect(chips(["web_price_lookup", "web_price_figures"])).toEqual([])
+    expect(chips([])).toEqual([])
   })
 })
