@@ -13,6 +13,8 @@
 //   * The service role (the owner's ingestion script) embeds passages in small batches. Its key
 //     is the legacy service-role key or any of the project's secret keys (sb_secret_...), sent as
 //     the bearer token or the apikey header (the platform may replace the bearer on the way).
+//     The platform decides whether a key is the service role (platformServiceCheck): never a
+//     string comparison with the environment, and never the unverified role claim.
 //   * Anyone else gets 401 or 403. Text is never logged or stored; errors carry no request data.
 //     A 400 names the rule the body broke (a fixed reason code), never the text.
 //   * Every vector is checked (384 finite numbers) before it is returned.
@@ -29,7 +31,7 @@ export type Caller = "person" | "service";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface Deps {
-  /** Whether the bearer token is the service-role key. */
+  /** Whether the token is a service key of this project (verified by the platform). */
   isService(token: string): Promise<boolean>;
   /** roma_knowledge_embed under the person's token: true when this embedding is allowed. */
   allowQuestion(token: string, requestId: string): Promise<boolean>;
@@ -48,42 +50,46 @@ export function bearer(header: string | null): string | null {
   return match ? match[1]! : null;
 }
 
-/** Constant-time comparison of a token with the service-role key (both hashed first). */
-export async function sameKey(provided: string, expected: string | undefined): Promise<boolean> {
-  if (!expected) return false;
-  const encoder = new TextEncoder();
-  const [a, b] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
-    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-  ]);
-  const x = new Uint8Array(a);
-  const y = new Uint8Array(b);
-  let diff = 0;
-  for (let i = 0; i < x.length; i += 1) diff |= x[i]! ^ y[i]!;
-  return diff === 0;
+/** What kind of key an environment variable holds, for logs: missing, jwt, sb_secret or other. */
+export function envKeyKind(value: string | undefined): string {
+  if (!value) return "missing";
+  if (value.startsWith("sb_secret_")) return "sb_secret";
+  return value.split(".").length === 3 ? "jwt" : "other";
 }
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const SERVICE_CACHE_MS = 10 * 60 * 1000;
+const SERVICE_CACHE_MAX = 64;
 
 /**
- * The keys that make a caller the service role: the legacy service-role key and every value of
- * the secret keys dictionary (SUPABASE_SECRET_KEYS, JSON such as {"default": "sb_secret_..."}).
+ * Whether a token is a service key of this project, as the platform says: the Auth admin API
+ * checks the signature (or the secret key) and the service role, so a forged or foreign token
+ * fails there. Only tokens that look like a service key are sent; a person's token never is.
+ * Answers are cached per isolate by the token's SHA-256, never the token itself. A network
+ * failure is not cached and counts as "not the service role".
  */
-export function serviceKeys(legacy: string | undefined, secretKeysJson: string | undefined): string[] {
-  const keys = legacy ? [legacy] : [];
-  try {
-    const parsed: unknown = secretKeysJson ? JSON.parse(secretKeysJson) : null;
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      for (const value of Object.values(parsed)) if (typeof value === "string" && value !== "") keys.push(value);
-    }
-  } catch {
-    // Not JSON: only the legacy key counts.
-  }
-  return keys;
-}
-
-/** Whether the token is one of the service keys (each compared in constant time). */
-export async function isServiceKey(token: string, keys: string[]): Promise<boolean> {
-  const matches = await Promise.all(keys.map((key) => sameKey(token, key)));
-  return matches.includes(true);
+export function platformServiceCheck(supabaseUrl: string, fetcher: typeof fetch) {
+  const cache = new Map<string, { ok: boolean; at: number }>();
+  return async (token: string): Promise<boolean> => {
+    const kind = tokenKind(token);
+    if (kind !== "jwt:service_role" && kind !== "sb_secret") return false;
+    const hash = await sha256Hex(token);
+    const hit = cache.get(hash);
+    if (hit && Date.now() - hit.at < SERVICE_CACHE_MS) return hit.ok;
+    // A secret key goes in apikey only; a legacy JWT key is also the bearer.
+    const headers: Record<string, string> = { apikey: token };
+    if (kind !== "sb_secret") headers.Authorization = `Bearer ${token}`;
+    const response = await fetcher(`${supabaseUrl.replace(/\/+$/, "")}/auth/v1/admin/users?page=1&per_page=1`, { headers });
+    await response.body?.cancel();
+    const ok = response.status === 200;
+    if (cache.size >= SERVICE_CACHE_MAX) cache.delete(cache.keys().next().value!);
+    cache.set(hash, { ok, at: Date.now() });
+    return ok;
+  };
 }
 
 /** Why a body was refused with 400; sent back as {"error": "invalid_request", "reason": ...}. */

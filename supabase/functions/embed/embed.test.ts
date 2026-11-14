@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DIMENSIONS, MAX_BATCH, MAX_PASSAGE_CHARS, MAX_QUESTION_CHARS, bearer, handleRequest, isServiceKey, tokenKind, readRequestId, readTexts, sameKey, serviceKeys, type Deps } from "./embed.ts";
+import { DIMENSIONS, MAX_BATCH, MAX_PASSAGE_CHARS, MAX_QUESTION_CHARS, bearer, envKeyKind, handleRequest, platformServiceCheck, tokenKind, readRequestId, readTexts, type Deps } from "./embed.ts";
 
 const VECTOR = Array.from({ length: DIMENSIONS }, (_, i) => i / DIMENSIONS);
 
@@ -44,15 +44,6 @@ describe("bearer", () => {
   });
 });
 
-describe("sameKey", () => {
-  it("matches only the exact key", async () => {
-    expect(await sameKey("k".repeat(40), "k".repeat(40))).toBe(true);
-    expect(await sameKey("k".repeat(39), "k".repeat(40))).toBe(false);
-    expect(await sameKey("", undefined)).toBe(false);
-    expect(await sameKey("", "")).toBe(false);
-  });
-});
-
 describe("readTexts", () => {
   it("lets a person embed one question", () => {
     expect(readTexts({ texts: ["What is an SIP?"] }, "person")).toEqual(["What is an SIP?"]);
@@ -94,16 +85,98 @@ describe("tokenKind", () => {
   });
 });
 
-describe("serviceKeys", () => {
-  it("takes the legacy key and every secret key, and ignores a dictionary that is not JSON", async () => {
-    const keys = serviceKeys("legacy-jwt", JSON.stringify({ default: "sb_secret_one", ingest: "sb_secret_two", bad: 3 }));
-    expect(keys).toEqual(["legacy-jwt", "sb_secret_one", "sb_secret_two"]);
-    expect(serviceKeys(undefined, "not json")).toEqual([]);
-    expect(serviceKeys("legacy-jwt", undefined)).toEqual(["legacy-jwt"]);
-    expect(await isServiceKey("sb_secret_two", keys)).toBe(true);
-    expect(await isServiceKey("legacy-jwt", keys)).toBe(true);
-    expect(await isServiceKey("someone-else", keys)).toBe(false);
-    expect(await isServiceKey("anything", [])).toBe(false);
+// An unsigned JWT: anyone can write one with any claims.
+const unsignedJwt = (payload: object) =>
+  [{ alg: "none", typ: "JWT" }, payload].map((part) => btoa(JSON.stringify(part)).replace(/=+$/, "")).join(".") + ".";
+
+// Stands in for the Auth admin API: 200 only for the project's real service key.
+function platform(validKey: string) {
+  const calls: { url: string; headers: Record<string, string> }[] = [];
+  const fetcher = (async (url: string, init?: RequestInit) => {
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    calls.push({ url, headers });
+    return new Response("{}", { status: headers.apikey === validKey ? 200 : 401 });
+  }) as unknown as typeof fetch;
+  return { fetcher, calls };
+}
+
+describe("envKeyKind", () => {
+  it("names only the kind of key", () => {
+    expect(envKeyKind(undefined)).toBe("missing");
+    expect(envKeyKind("")).toBe("missing");
+    expect(envKeyKind(["sb", "secret", "abc"].join("_"))).toBe("sb_secret");
+    expect(envKeyKind("a.b.c")).toBe("jwt");
+    expect(envKeyKind("plain")).toBe("other");
+  });
+});
+
+describe("platformServiceCheck", () => {
+  const serviceJwt = `${unsignedJwt({ role: "service_role", ref: "dev" })}signed-by-the-project`;
+
+  it("accepts a service token the platform verifies, asks once per token, and sends it to the admin API only", async () => {
+    const { fetcher, calls } = platform(serviceJwt);
+    const check = platformServiceCheck("https://project.example.test/", fetcher);
+    expect(await check(serviceJwt)).toBe(true);
+    expect(await check(serviceJwt)).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://project.example.test/auth/v1/admin/users?page=1&per_page=1");
+    expect(calls[0]!.headers).toEqual({ apikey: serviceJwt, Authorization: `Bearer ${serviceJwt}` });
+  });
+
+  it("sends a secret key as apikey only", async () => {
+    const key = ["sb", "secret", "abcdef123456"].join("_");
+    const { fetcher, calls } = platform(key);
+    expect(await platformServiceCheck("https://p.test", fetcher)(key)).toBe(true);
+    expect(calls[0]!.headers).toEqual({ apikey: key });
+  });
+
+  it("refuses a forged unsigned JWT that claims the service role", async () => {
+    const { fetcher, calls } = platform(serviceJwt);
+    const forged = unsignedJwt({ role: "service_role", ref: "dev" });
+    expect(await platformServiceCheck("https://p.test", fetcher)(forged)).toBe(false);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("never sends a person's token, and a network failure is not the service role", async () => {
+    const { fetcher, calls } = platform(serviceJwt);
+    expect(await platformServiceCheck("https://p.test", fetcher)(unsignedJwt({ role: "authenticated", sub: "u" }))).toBe(false);
+    expect(calls).toEqual([]);
+    const down = platformServiceCheck("https://p.test", (async () => Promise.reject(new TypeError("offline"))) as unknown as typeof fetch);
+    await expect(down(serviceJwt)).rejects.toThrow();
+  });
+});
+
+describe("handleRequest with the platform check", () => {
+  const serviceJwt = `${unsignedJwt({ role: "service_role" })}signed-by-the-project`;
+  const wired = (validKey: string) => {
+    const { d, asked, seen } = deps(false);
+    const { fetcher, calls } = platform(validKey);
+    d.isService = platformServiceCheck("https://p.test", fetcher);
+    return { d, asked, seen, calls };
+  };
+  const passages = { texts: ["one", "two", "three"] };
+
+  it("embeds a batch for a verified service token", async () => {
+    const { d, asked } = wired(serviceJwt);
+    expect((await handleRequest(post(passages, serviceJwt), d)).status).toBe(200);
+    expect(asked).toEqual([]);
+  });
+
+  it("treats a forged service-role JWT as a person without a question", async () => {
+    const { d, seen } = wired(serviceJwt);
+    const response = await handleRequest(post(passages, unsignedJwt({ role: "service_role" })), d);
+    expect(response.status).toBe(400);
+    expect(await reason(response)).toBe("request_id_missing");
+    expect(seen).toEqual([]);
+  });
+
+  it("still needs a request id from a person, and checks it with their token", async () => {
+    const { d, asked, calls } = wired(serviceJwt);
+    const person = unsignedJwt({ role: "authenticated", sub: "u" });
+    expect(await reason(await handleRequest(post({ texts: ["q"] }, person), d))).toBe("request_id_missing");
+    expect((await handleRequest(post(question("q"), person), d)).status).toBe(200);
+    expect(asked).toEqual([REQUEST_ID]);
+    expect(calls).toEqual([]);
   });
 });
 
