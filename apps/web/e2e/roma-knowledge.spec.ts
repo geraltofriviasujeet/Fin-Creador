@@ -41,3 +41,36 @@ test("a general question is answered from a cited passage, and one with no vette
   await expect(answers.getByText(/50,00,000/)).toHaveCount(0)
   await expect(answers.getByRole("region", { name: "Sources from the knowledge base" })).toHaveCount(1)
 })
+
+// 10.6e: a tax calculation goes to tax_estimate. The mock passes the amount as typed and gives
+// both totals by placeholder in Markdown bold, which shows as bold, never as "**". The card is
+// built in code; the not-advice line comes once, from code.
+test("a salary tax question gets both regimes worked out in code, with the breakdown and its assumptions", async ({ page }) => {
+  await signUpConfirmed(page, "Ira Das", uniqueEmail("roma-tax"))
+  await page.goto("/settings")
+  await page.getByRole("button", { name: "Turn Roma on" }).click()
+  await expect(page.getByRole("status").getByText("Roma is on.")).toBeVisible()
+
+  await page.goto("/roma")
+  const box = page.getByLabel("Your question")
+  const answers = page.getByRole("list", { name: "Roma's answers" })
+  await box.fill("my in hand salary is 1415000 how much i have to pay tax calculate it in old and new tax regime")
+  await box.press("Enter")
+
+  const answer = answers.locator("p").filter({ hasText: "(Test answer.)" })
+  await expect(answer).toHaveText(/^New regime: ₹84,240\. Old regime: ₹2,30,880\. \(Test answer\.\)\s+General information, not personal advice\.$/)
+  await expect(answer.locator("strong")).toHaveText(["New regime:", "Old regime:"])
+  await expect(answers.getByText(/\*\*/)).toHaveCount(0)
+  await expect(answers.getByText(/General information, not personal advice\./)).toHaveCount(1)
+  // Nothing was read from the records, so no records chip and no records figures table.
+  await expect(answers.locator("span.text-success")).toHaveCount(0)
+  await expect(answers.getByText("Figures from your records")).toHaveCount(0)
+
+  const card = answers.getByRole("region", { name: "Tax estimate" })
+  await expect(card.getByText("Tax estimate · Tax year 2026-27")).toBeVisible()
+  await expect(card.getByText("The new regime's total is lower by ₹1,46,640.")).toBeVisible()
+  await expect(card.getByRole("row", { name: /^Total tax/ })).toHaveText([/₹84,240/, /₹2,30,880/])
+  await expect(card.getByText("₹14,15,000 is taken as your annual gross salary (you called it in-hand salary).")).toBeVisible()
+  await expect(card.getByText("No deductions given: the old regime is shown with the standard deduction only.")).toBeVisible()
+  await expect(card.getByText(/^Rates from the knowledge base: Income tax under the default \(new\) regime, tax year 2026-27; Income tax under the old regime, tax year 2026-27\.$/)).toBeVisible()
+})

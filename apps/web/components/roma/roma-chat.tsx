@@ -10,7 +10,7 @@ import { controlClasses } from "@/components/ui/input"
 import type { ChatResponseBody } from "@/lib/ai/handle"
 import { webPrice, webTotal } from "@/lib/ai/web-format"
 import { MAX_QUESTION_CHARS } from "@/lib/ai/limits"
-import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL, basisLabels } from "@/lib/ai/wording"
+import { ROMA_DATA_NOTICE, ROMA_INFORMATIONAL, basisLabels, boldParts } from "@/lib/ai/wording"
 import { allowRomaDescriptionsAction } from "@/app/(app)/roma/actions"
 import { detectPlan } from "@/lib/ai/plan/intake"
 import type { PlanRequest } from "@/lib/ai/plan/types"
@@ -404,7 +404,8 @@ function Reply({
           )}
         </div>
       ))}
-      <p className="text-sm whitespace-pre-line text-ink">{reply.answer}</p>
+      <p className="text-sm whitespace-pre-line text-ink">{withBold(reply.answer)}</p>
+      {reply.tax && <TaxEstimate tax={reply.tax} />}
       {reply.figures.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-line">
           <table className="w-full text-sm">
@@ -462,6 +463,54 @@ function Reply({
   )
 }
 
+/** An answer's bold parts (boldParts, 10.6e) as <strong>; all of it stays React text, never HTML. */
+const withBold = (text: string) => boldParts(text).map((p, i) => (p.bold ? <strong key={i}>{p.text}</strong> : p.text))
+
+/**
+ * A tax estimate (10.6e): both regimes' breakdown, the comparison and the assumptions, all
+ * built in code from packages/domain. Labelled with its tax year; once that year has ended in
+ * the person's today it says so, as a cited document does.
+ */
+function TaxEstimate({ tax }: { tax: NonNullable<Extract<ChatResponseBody, { status: "answer" }>["tax"]> }) {
+  return (
+    <section className="rounded-xl border border-line border-l-4 border-l-brand-deep p-3" aria-label="Tax estimate">
+      <p className="text-xs font-semibold text-muted-foreground">Tax estimate · Tax year {tax.taxYear}</p>
+      <p className="mt-1 font-heading text-base font-bold text-ink">{tax.comparison}</p>
+      <div className="mt-2 grid gap-3 md:grid-cols-2">
+        {tax.regimes.map((r) => (
+          <div key={r.title} className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full text-sm">
+              <caption className="bg-canvas px-3 py-2 text-left text-xs font-semibold text-muted-foreground">{r.title}</caption>
+              <tbody className="divide-y divide-line">
+                {r.rows.map((row, i) => (
+                  <tr key={i}>
+                    <th scope="row" className={`px-3 py-1.5 text-left ${row.total ? "font-semibold text-ink" : "font-normal text-muted-foreground"}`}>
+                      {row.label}
+                    </th>
+                    <td className={`px-3 py-1.5 text-right text-ink tabular-nums ${row.total ? "font-bold" : "font-semibold"}`}>{row.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs font-semibold text-muted-foreground">Assumptions</p>
+      <ul className="mt-1 grid list-disc gap-1 pl-5 text-sm text-ink">
+        {tax.assumptions.map((a, i) => (
+          <li key={i}>{a}</li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-muted-foreground">Rates from the knowledge base: {tax.sources.join("; ")}.</p>
+      {tax.outOfDate && (
+        <div className="mt-2">
+          <FormMessage tone="info">{`This estimate is for FY ${tax.taxYear}, which has ended. It may be out of date.`}</FormMessage>
+        </div>
+      )}
+    </section>
+  )
+}
+
 /**
  * The knowledge base passages an answer cites (10.6c), numbered as in the answer. Each opens to
  * the passage itself, so a figure can be checked against what it applies to. Built in code from
@@ -484,8 +533,12 @@ function Sources({ citations }: { citations: NonNullable<Extract<ChatResponseBod
                 </span>
               </summary>
               <div className="mt-2 grid gap-2">
-                <p className="text-xs font-semibold text-muted-foreground">The passage Roma used</p>
-                <blockquote className="border-l-2 border-line pl-3 text-sm whitespace-pre-line text-ink">{c.passage}</blockquote>
+                <p className="text-xs font-semibold text-muted-foreground">{c.passages.length === 1 ? "The passage Roma used" : "The passages Roma used"}</p>
+                {c.passages.map((text, j) => (
+                  <blockquote key={j} className="border-l-2 border-line pl-3 text-sm whitespace-pre-line text-ink">
+                    {text}
+                  </blockquote>
+                ))}
                 {c.linkPending && <p className="text-xs text-muted-foreground">Link pending the publisher&rsquo;s permission.</p>}
                 {c.url && (
                   <a href={c.url} target="_blank" rel="noopener noreferrer nofollow" className="text-sm text-ink underline underline-offset-2">

@@ -438,7 +438,7 @@ describe("knowledge base routing (10.6c)", () => {
     expect(res.body).toMatchObject({
       status: "answer",
       answer: "An SIP invests a fixed amount at regular intervals. [1] (Test answer.)\n\nGeneral information, not personal advice.",
-      citations: [{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passage: "An SIP invests a fixed amount at regular intervals." }],
+      citations: [{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passages: ["An SIP invests a fixed amount at regular intervals."] }],
       basis: { records: false, knowledge: true },
     })
     expect(d.history.recorded[0]?.tools).toEqual(["knowledge_search"])

@@ -35,8 +35,8 @@ export type ChatHistory = {
 
 export const NO_HISTORY: ChatHistory = { summary: null, recent: [] }
 
-/** Tools that read neither the person's records nor the knowledge base. */
-const NEITHER_TOOLS = new Set(["web_price_lookup", "web_price_figures"])
+/** Tools that read neither the person's records nor the knowledge base (tax_estimate works on the figures the person typed). */
+const NEITHER_TOOLS = new Set(["web_price_lookup", "web_price_figures", "tax_estimate"])
 
 /** What an answer was built from, by the tools that actually ran: the chip above it. */
 export type AnswerBasis = { records: boolean; knowledge: boolean }

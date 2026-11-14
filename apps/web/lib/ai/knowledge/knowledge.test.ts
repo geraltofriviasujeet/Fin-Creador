@@ -122,31 +122,39 @@ describe("citations", () => {
   it("labels own explainers and official text, and links only what the publisher allows", () => {
     expect(sourceLabel({ kind: "own", publisher: "FinCreador", basedOn: "SEBI" })).toBe("FinCreador explainer, based on SEBI")
     expect(sourceLabel({ kind: "official", publisher: "AMFI", basedOn: null })).toBe("From AMFI")
-    expect(citationOf(passage(), 1, "2026-11-14")).toEqual({
+    expect(citationOf([passage()], 1, "2026-11-14")).toEqual({
       n: 1,
       title: "Building an emergency fund",
       source: "FinCreador explainer, based on RBI",
       url: "https://www.rbi.org.in/",
-      passage: "Text.",
+      passages: ["Text."],
     })
-    expect(citationOf(passage({ linkPending: true, readMoreUrl: null }), 1, "2026-11-14")).toMatchObject({ linkPending: true })
-    expect(citationOf(passage({ linkPending: true }), 1, "2026-11-14").url).toBeUndefined()
-    expect(citationOf(passage({ readMoreUrl: null }), 1, "2026-11-14").url).toBeUndefined()
-    expect(citationOf(passage({ readMoreUrl: "javascript:alert(1)" }), 1, "2026-11-14").url).toBeUndefined()
+    expect(citationOf([passage({ linkPending: true, readMoreUrl: null })], 1, "2026-11-14")).toMatchObject({ linkPending: true })
+    expect(citationOf([passage({ linkPending: true })], 1, "2026-11-14").url).toBeUndefined()
+    expect(citationOf([passage({ readMoreUrl: null })], 1, "2026-11-14").url).toBeUndefined()
+    expect(citationOf([passage({ readMoreUrl: "javascript:alert(1)" })], 1, "2026-11-14").url).toBeUndefined()
   })
 
   it("shows the financial year, and marks it out of date once it has ended in the person's today", () => {
     const fy = passage({ financialYear: "2026-27" })
-    expect(citationOf(fy, 1, "2027-03-31")).toMatchObject({ financialYear: "2026-27" })
-    expect(citationOf(fy, 1, "2027-03-31").outOfDate).toBeUndefined()
-    expect(citationOf(fy, 1, "2027-04-01")).toMatchObject({ financialYear: "2026-27", outOfDate: true })
+    expect(citationOf([fy], 1, "2027-03-31")).toMatchObject({ financialYear: "2026-27" })
+    expect(citationOf([fy], 1, "2027-03-31").outOfDate).toBeUndefined()
+    expect(citationOf([fy], 1, "2027-04-01")).toMatchObject({ financialYear: "2026-27", outOfDate: true })
   })
 
   it("numbers cited ids in order of first use and drops ids that weren't retrieved", () => {
-    const passages = [passage(), passage({ id: "k2", chunkId: "c2" })]
+    const passages = [passage(), passage({ id: "k2", chunkId: "c2", slug: "other-document" })]
     const { text, cited } = applyCitations("A [[k2]]. B [[k9]]. C [[K1]] and again [[k2]].", passages)
     expect(text).toBe("A [1]. B. C [2] and again [1].")
     expect(cited.map((p) => p.id)).toEqual(["k2", "k1"])
+  })
+
+  it("lists a document once, with each of its cited passages under one number", () => {
+    const passages = [passage({ content: "Slabs." }), passage({ id: "k2", chunkId: "c2", content: "Rebate." }), passage({ id: "k3", chunkId: "c3", slug: "other-document", title: "Other" })]
+    const { text, documents } = applyCitations("A [[k1]]. B [[k3]]. C [[k2]].", passages)
+    expect(text).toBe("A [1]. B [2]. C [1].")
+    expect(documents.map((d) => d.map((p) => p.id))).toEqual([["k1", "k2"], ["k3"]])
+    expect(citationOf(documents[0]!, 1, "2026-11-14")).toMatchObject({ n: 1, title: "Building an emergency fund", passages: ["Slabs.", "Rebate."] })
   })
 
   it("replaces a general answer with no cited passage, and keeps a records answer when the general part found nothing", async () => {
@@ -193,7 +201,7 @@ describe("Roma's chat loop with the knowledge base", () => {
       toolsRan: ["knowledge_search"],
       citations: [{ n: 1, title: "Building an emergency fund", source: "FinCreador explainer, based on RBI", url: "https://www.rbi.org.in/" }],
     })
-    expect(run.result.kind === "answer" && run.result.citations?.[0]?.passage).toContain("₹1,20,000")
+    expect(run.result.kind === "answer" && run.result.citations?.[0]?.passages.join("\n")).toContain("₹1,20,000")
   })
 
   it("refuses a figure from a passage the answer doesn't cite, and one from nowhere", async () => {

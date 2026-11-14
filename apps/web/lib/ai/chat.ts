@@ -2,12 +2,12 @@ import { type DateRange, currencyMinorDigits } from "@fin-creador/domain"
 import { type ChatHistory, NO_HISTORY } from "./history"
 import { allowedNumbers, checkAnswer, checkSubjects, literalStrings, normalizeNumber, saidNumbers } from "./output"
 import { figureId, fillPlaceholders, formatFigure, webAmounts, withoutPlaceholders } from "./placeholders"
-import { type Citation, knowledgeAnswer } from "./knowledge/citations"
+import { type Citation, NOT_ADVICE, knowledgeAnswer } from "./knowledge/citations"
 import type { Route } from "./knowledge/route"
 import { KNOWLEDGE_RULES, ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
-import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, NO_LOOKUPS, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
+import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, NO_LOOKUPS, type TaxBlock, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
 import {
   LlmError,
   type LlmMessage,
@@ -38,6 +38,8 @@ import {
 // From 10.6c the question's route (knowledge/route.ts) decides which tools were offered; a
 // general answer is shown only when it cites retrieved passages (knowledge/citations.ts), whose
 // numbers it may then quote; the citations, built in code from the passages, go with it.
+// From 10.6e tools are given the person's own words (to find the amounts they typed), and a tax
+// estimate's card, built in code, goes with the answer, which then always ends with NOT_ADVICE.
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -63,6 +65,8 @@ export type ChatResult =
       webNotices?: string[]
       /** Knowledge base passages the answer cites (10.6c), numbered as in the text. */
       citations?: Citation[]
+      /** A tax estimate's card (10.6e). */
+      tax?: TaxBlock
     }
   /** `unmatched`: the numbers that failed the check (for the server's diagnostic only; never the answer text). */
   | { kind: "unverified"; unmatched: string[] }
@@ -103,6 +107,7 @@ export async function runChat({
   deadlineMs = DEADLINE_MS,
 }: Options): Promise<ChatRun> {
   const deadline = Date.now() + deadlineMs
+  const toolContext: ToolContext = { ...context, asked: question, said: [question, ...history.recent.map((t) => t.question)].join("\n") }
   const toolDefs = tools.map(toToolDef)
   const webTools = tools.some((t) => t.name === "web_price_lookup")
   const knowledgeTools = tools.some((t) => t.name === "knowledge_search")
@@ -134,6 +139,7 @@ export async function runChat({
     subjectText: [],
     web: [],
     amounts: new Map(),
+    tax: null,
   }
   let usage = NO_USAGE
   let calls = 0
@@ -162,7 +168,7 @@ export async function runChat({
     if (response.stop === "tool_use" && response.toolCalls.length > 0) {
       messages.push({ role: "assistant", text: response.text, toolCalls: response.toolCalls, providerContent: response.providerContent })
       // All of a round's tools at once; their results are taken in the order they were called.
-      const runs = await Promise.all(response.toolCalls.map((call) => runTool(tools, context, call.id, call.name, call.input)))
+      const runs = await Promise.all(response.toolCalls.map((call) => runTool(tools, toolContext, call.id, call.name, call.input)))
       const results: LlmToolResult[] = runs.map((r) => applyTool(r, figures, periods, found))
       messages.push({ role: "tool_results", results })
       continue
@@ -172,9 +178,9 @@ export async function runChat({
     if (response.stop === "max_tokens") return done({ kind: "failed", reason: "max_tokens" })
     if (response.stop !== "end") return done({ kind: "failed", reason: "rejected" })
 
-    // A tool that needs more from the person (and no check that ran anyway): its own question,
-    // built in code, replaces whatever the model wrote.
-    if (found.needs.length > 0 && found.checks.length === 0) {
+    // A tool that needs more from the person (and no check or estimate that ran anyway): its own
+    // question, built in code, replaces whatever the model wrote.
+    if (found.needs.length > 0 && found.checks.length === 0 && !found.tax) {
       return done({
         kind: "answer",
         text: [...new Set(found.needs.map((n) => n.question))].join("\n\n"),
@@ -230,9 +236,11 @@ export async function runChat({
       })
     }
     const answer = withVerdict(filled.text, found.checks)
+    // A tax estimate always ends with the not-advice line, cited or not (once).
+    const tail = [known.tail, found.tax && known.tail !== NOT_ADVICE ? NOT_ADVICE : null].filter(Boolean).join("\n\n")
     return done({
       kind: "answer",
-      text: known.tail ? `${answer}\n\n${known.tail}` : answer,
+      text: tail ? `${answer}\n\n${tail}` : answer,
       figures,
       periods,
       descriptionsWithheld: found.descriptionsWithheld,
@@ -241,6 +249,7 @@ export async function runChat({
       descriptionsSent: found.descriptionsSent,
       ...webPart(found.web, context, found.checks),
       ...(known.citations.length > 0 ? { citations: known.citations } : {}),
+      ...(found.tax ? { tax: found.tax } : {}),
     })
   }
   return done({ kind: "failed", reason: "rounds" })
@@ -261,6 +270,8 @@ type Found = {
   web: WebBlock[]
   /** Each tool figure's formatted amount by placeholder key ("fig:trip_estimate"). */
   amounts: Map<string, string>
+  /** The last tax estimate's card (10.6e). */
+  tax: TaxBlock | null
 }
 
 /** The numbers a web block lets an answer quote: prices as written and in full, totals, nights and travellers. */
@@ -347,6 +358,7 @@ function applyTool(run: ToolRun, figures: Figure[], periods: DateRange[], found:
     found.subjectText.push(JSON.stringify(output.data))
   }
   if (output.web) found.web.push(output.web)
+  if (output.tax) found.tax = output.tax
   if (!output.untrusted) found.literals.push(...literalStrings(output.data), ...literalStrings(output.figures.map((f) => f.label)))
   found.toolsRan.push(run.tool)
   const content = placeholders.length > 0 ? { ...output.data, amounts: placeholders } : output.data

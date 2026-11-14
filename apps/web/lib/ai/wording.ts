@@ -12,3 +12,14 @@ export const ROMA_RETENTION = "Conversations are deleted 180 days after the last
 export function basisLabels(basis: { records: boolean; knowledge: boolean }): string[] {
   return [...(basis.records ? ["From your records"] : []), ...(basis.knowledge ? ["From the knowledge base"] : [])]
 }
+
+/**
+ * An answer split at Markdown bold ("**New regime**", 10.6e), for the page to show bold; a stray
+ * "**" with no pair is dropped, so none is ever shown as written.
+ */
+export function boldParts(text: string): { text: string; bold: boolean }[] {
+  return text
+    .split(/\*\*([^*\n]+?)\*\*/g)
+    .map((part, i) => ({ text: i % 2 === 1 ? part : part.replace(/\*\*/g, ""), bold: i % 2 === 1 }))
+    .filter((p) => p.text !== "")
+}

@@ -5,9 +5,10 @@ import type { KnowledgeSession, Passage } from "./session"
 
 // Citations and the code-built lines of a knowledge answer (Sprint 10.6c). The model cites
 // passages by id only ("[[k2]]"); code drops an id this question didn't retrieve, numbers the
-// rest in order of first use ("[1]") and builds each citation from the retrieved passage:
-// title, source label, link, financial year and the passage text itself, so the reader can
-// check that a figure is attached to the right thing.
+// rest by document in order of first use ("[1]"; two passages of one document share its number,
+// 10.6e) and builds each citation from the retrieved passages: title, source label, link,
+// financial year and the passages' text itself, so the reader can check that a figure is
+// attached to the right thing.
 
 export const NO_MATERIAL = "I don't have vetted material on this, so I won't answer it from general knowledge."
 export const NO_MATERIAL_PART = "I don't have vetted material on the general part of your question, so that part isn't answered."
@@ -35,7 +36,8 @@ export type Citation = {
   financialYear?: string
   /** That year has ended in the person's own time zone. */
   outOfDate?: true
-  passage: string
+  /** The document's cited passages, in order of first use. */
+  passages: string[]
 }
 
 const MARKER = /\s?\[\[\s*([kK]\d{1,2})\s*\]\]/g
@@ -45,7 +47,9 @@ export function sourceLabel(p: Pick<Passage, "kind" | "publisher" | "basedOn">):
   return p.basedOn ? `FinCreador explainer, based on ${p.basedOn}` : "FinCreador explainer"
 }
 
-export function citationOf(p: Passage, n: number, today: string): Citation {
+/** One document's citation, from its cited passages (all of the same document). */
+export function citationOf(doc: readonly Passage[], n: number, today: string): Citation {
+  const p = doc[0]!
   const url = p.readMoreUrl && !p.linkPending && /^https:\/\/[^\s"'<>]+$/.test(p.readMoreUrl) ? p.readMoreUrl : null
   return {
     n,
@@ -55,20 +59,27 @@ export function citationOf(p: Passage, n: number, today: string): Citation {
     ...(p.linkPending ? { linkPending: true as const } : {}),
     ...(p.financialYear ? { financialYear: p.financialYear } : {}),
     ...(p.financialYear && isPastFinancialYear(p.financialYear, today) ? { outOfDate: true as const } : {}),
-    passage: p.content,
+    passages: doc.map((d) => d.content),
   }
 }
 
-/** The text with valid markers numbered ("[1]") and unknown ones removed, and the passages cited, in order. */
-export function applyCitations(text: string, passages: readonly Passage[]): { text: string; cited: Passage[] } {
+/**
+ * The text with valid markers numbered by document ("[1]") and unknown ones removed; the
+ * passages cited, in order, and the same grouped by document in the order of the numbers.
+ */
+export function applyCitations(text: string, passages: readonly Passage[]): { text: string; cited: Passage[]; documents: Passage[][] } {
   const cited: Passage[] = []
+  const documents: Passage[][] = []
   const out = text.replace(MARKER, (marker, raw: string) => {
     const passage = passages.find((p) => p.id === raw.toLowerCase())
     if (!passage) return ""
     if (!cited.includes(passage)) cited.push(passage)
-    return `${marker.startsWith(" ") ? " " : ""}[${cited.indexOf(passage) + 1}]`
+    let doc = documents.find((d) => d[0]!.slug === passage.slug)
+    if (!doc) documents.push((doc = []))
+    if (!doc.includes(passage)) doc.push(passage)
+    return `${marker.startsWith(" ") ? " " : ""}[${documents.indexOf(doc) + 1}]`
   })
-  return { text: out, cited }
+  return { text: out, cited, documents }
 }
 
 export type KnowledgeAnswer =
@@ -91,7 +102,7 @@ export type KnowledgeAnswer =
  * copy is removed from every answer.
  */
 export function knowledgeAnswer(raw: string, session: KnowledgeSession | undefined, route: Route, today: string): KnowledgeAnswer {
-  const { text, cited } = applyCitations(withoutNotAdvice(raw), session?.passages ?? [])
+  const { text, cited, documents } = applyCitations(withoutNotAdvice(raw), session?.passages ?? [])
   const plain = { text, citations: [], numbers: [], tail: null }
   if (route === "knowledge") {
     if (session?.allFailed) return { replace: KNOWLEDGE_UNAVAILABLE }
@@ -100,7 +111,7 @@ export function knowledgeAnswer(raw: string, session: KnowledgeSession | undefin
   if (cited.length > 0) {
     return {
       text,
-      citations: cited.map((p, i) => citationOf(p, i + 1, today)),
+      citations: documents.map((d, i) => citationOf(d, i + 1, today)),
       numbers: cited.flatMap((p) => saidNumbers(p.content)),
       tail: NOT_ADVICE,
     }

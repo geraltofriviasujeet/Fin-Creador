@@ -47,13 +47,14 @@ export const KNOWLEDGE_RULES = `Knowledge base:
 - When a passage gives a financial year for its figures, say which year.
 - Never use the person's own figures in a general answer unless they asked about their own money too.`
 
-export type RomaRoute = "records" | "knowledge" | "both" | "neither"
+export type RomaRoute = "records" | "knowledge" | "both" | "neither" | "tax"
 
 const ROUTE_LINES: Record<RomaRoute, string> = {
   records: "",
   knowledge: " This is a general question: answer it only from knowledge_search, not from the person's records.",
   both: " This question may be about the person's own money, a general question, or both: use the records tools for their own money and knowledge_search for the general part.",
   neither: " This is a greeting or small talk: reply in one short sentence, with no figures.",
+  tax: " This asks for income tax to be worked out: call tax_estimate with the salary and any deductions exactly as the person wrote them, and knowledge_search for the regime rules, and cite the passages you use. Never work out tax yourself: give the totals and the difference by their placeholders, and say which regime is lower only as a fact, never which to choose.",
 }
 
 /** Per-request facts, sent after the stable prompt. */

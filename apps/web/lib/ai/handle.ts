@@ -19,9 +19,10 @@ import { goalProjectionTool } from "./tools/goals"
 import { knowledgeSearchTool } from "./tools/knowledge"
 import { loansAndCardsTool } from "./tools/liabilities"
 import { searchTransactionsTool } from "./tools/search"
+import { taxEstimateTool } from "./tools/tax"
 import { tripCheckTool } from "./tools/trip"
 import { spendingTool } from "./tools/spending"
-import type { FinanceTool, Figure, ToolContext, WebBlock } from "./tools/types"
+import type { FinanceTool, Figure, TaxBlock, ToolContext, WebBlock } from "./tools/types"
 import { webPriceFiguresTool, webPriceLookupTool } from "./tools/web-prices"
 import { loadPlanRecords } from "./plan/records"
 import { PICK_OUTPUT_TOKENS, type PlanRun, runPlan } from "./plan/run"
@@ -55,11 +56,12 @@ export const ROMA_TOOLS: readonly FinanceTool[] = [
 /** Offered only when web lookups are on for this question (10.8). */
 export const WEB_TOOLS: readonly FinanceTool[] = [webPriceLookupTool, webPriceFiguresTool] as FinanceTool[]
 
-/** The tools a route offers (10.6c): a general question gets knowledge_search alone. */
+/** The tools a route offers (10.6c): a general question gets knowledge_search alone; a tax calculation (10.6e) tax_estimate with it. */
 export function toolsFor(route: Route, web: boolean): readonly FinanceTool[] {
   const records = web ? [...ROMA_TOOLS, ...WEB_TOOLS] : ROMA_TOOLS
   if (route === "neither") return []
   if (route === "knowledge") return [knowledgeSearchTool as FinanceTool]
+  if (route === "tax") return [taxEstimateTool as FinanceTool, knowledgeSearchTool as FinanceTool]
   if (route === "both") return [...records, knowledgeSearchTool as FinanceTool]
   return records
 }
@@ -161,6 +163,8 @@ export type ChatResponseBody =
       webNotices?: string[]
       /** Knowledge base passages the answer cites (10.6c), numbered as in the answer, each with its passage to check. */
       citations?: Citation[]
+      /** A tax estimate (10.6e): both regimes' breakdown, the comparison and the assumptions, all built in code. */
+      tax?: TaxBlock
       /** A detailed plan (10.9): the checked plan the answer was written from, for the modal and the PDF. */
       plan?: CheckedPlan
       /** The plan's stored turn, and the goal added from it (null until one is): "Add to my goals" links the goal to the turn. Absent when the plan couldn't be saved. */
@@ -265,7 +269,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
   }
 
   const route: Route = deps.knowledge ? routeQuestion(parsed.data.question) : "records"
-  if (deps.knowledge && (route === "knowledge" || route === "both")) {
+  if (deps.knowledge && (route === "knowledge" || route === "both" || route === "tax")) {
     context = { ...context, knowledge: new KnowledgeSession({ embed: deps.knowledge.makeEmbedder(requestId), db: deps.knowledge.db, minSimilarity: deps.knowledge.minSimilarity }) }
   }
 
@@ -318,7 +322,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
         body: {
           status: "answer",
           answer: result.text,
-          figures: result.figures.filter((f) => !f.hideWhenZero || figureValue(f) !== 0).map((f) => ({ label: f.label, value: formatFigure(f) })),
+          figures: result.figures.filter((f) => !f.inCard && (!f.hideWhenZero || figureValue(f) !== 0)).map((f) => ({ label: f.label, value: formatFigure(f) })),
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
           basis: answerBasis(result.toolsRan),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
@@ -328,6 +332,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           ...(result.web ? { web: result.web } : {}),
           ...(result.webNotices ? { webNotices: result.webNotices } : {}),
           ...(result.citations ? { citations: result.citations } : {}),
+          ...(result.tax ? { tax: result.tax } : {}),
           conversationId: recorded?.conversationId ?? null,
           saved: recorded !== null,
         },
