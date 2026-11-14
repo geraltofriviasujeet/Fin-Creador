@@ -83,7 +83,7 @@ describe("Web lookup configuration", () => {
 describe("Knowledge base configuration", () => {
   it("is off unless KNOWLEDGE_ENABLED is exactly true, with the floor in range and no mock in production", () => {
     expect(readKnowledgeConfig({})).toEqual({ status: "off", reason: "not_enabled" })
-    expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true" })).toEqual({ status: "on", embedder: "supabase", minSimilarity: 0.82 })
+    expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true" })).toEqual({ status: "on", embedder: "supabase", minSimilarity: 0.85 })
     expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true", KNOWLEDGE_MIN_SIMILARITY: "0.78" })).toMatchObject({ minSimilarity: 0.78 })
     expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true", KNOWLEDGE_MIN_SIMILARITY: "0.2" })).toEqual({ status: "off", reason: "bad_floor" })
     expect(readKnowledgeConfig({ KNOWLEDGE_ENABLED: "true", KNOWLEDGE_MIN_SIMILARITY: "x" })).toEqual({ status: "off", reason: "bad_floor" })

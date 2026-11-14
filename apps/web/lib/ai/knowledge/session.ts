@@ -21,7 +21,7 @@ export const MAX_KNOWLEDGE_EMBEDS = 3
 /** Passages per search: match_knowledge_chunks allows up to 8. */
 export const KNOWLEDGE_COUNT = 4
 /** The floor, tuned with scripts/knowledge-eval.ts on dev (10.6d). */
-export const DEFAULT_MIN_SIMILARITY = 0.82
+export const DEFAULT_MIN_SIMILARITY = 0.85
 /** Passages kept: those within this much of the search's top similarity. */
 export const SIMILARITY_BAND = 0.05
 

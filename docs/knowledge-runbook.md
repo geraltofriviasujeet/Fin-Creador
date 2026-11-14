@@ -122,7 +122,7 @@ Works when: a table of hit@1, hit@4 and "nothing found correctly" per floor, the
 top passages (document, similarity, passage length). Questions whose document is still a draft
 are counted as skipped; `--include-drafts` ranks them in the script instead, reported apart.
 Pick the floor with the best hit@4 that still finds nothing for the 3 "nothing" questions, and
-set it as `KNOWLEDGE_MIN_SIMILARITY` (default 0.82; passages more than 0.05 below the top one are dropped) in the web app's environment.
+set it as `KNOWLEDGE_MIN_SIMILARITY` (default 0.85; passages more than 0.05 below the top one are dropped) in the web app's environment.
 
 ### 4b. Retrieval with aliases, merged passages and the model's query (10.6d)
 

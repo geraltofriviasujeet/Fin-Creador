@@ -71,9 +71,10 @@ describe("scoring", () => {
       "Should I buy Bitcoin or Ethereum now?",
       "Which stock will double next month?",
       "Which mutual fund scheme should I buy for the best returns this year?",
+      "bitcoin abhi kharidu kya?",
       "Which IPO should I buy next week?",
     ]);
-    expect(offTopic(off)).toEqual({ nothing: 3, picks: 4, handled: 6, total: 6, pureNothing: 3, pure: 3 });
+    expect(offTopic(off)).toEqual({ nothing: 3, picks: 5, handled: 6, total: 6, pureNothing: 3, pure: 3 });
   });
 
   it("keeps only the passages within the band of the top one", () => {

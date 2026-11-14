@@ -127,6 +127,16 @@ describe("product picks (10.6d)", () => {
       "What will give me the best returns?",
       "highest return investment?",
       "which ETF to invest in",
+      // Hinglish and coins by name (from the dev evaluation, 2026-11-15)
+      "bitcoin abhi kharidu kya?",
+      "ethereum lu kya abhi",
+      "kaunsa mutual fund lena chahiye",
+      "stock kharidna chahiye kya",
+      "kaun sa fund best hai 2027 ke liye",
+      "konsi policy best hai",
+      "will ETH go up this year?",
+      "Dogecoin price next month",
+      "sell my bitcoin now?",
     ])
       expect(isProductPick(q), q).toBe(true)
   })
@@ -145,6 +155,12 @@ describe("product picks (10.6d)", () => {
       "How much did I spend on stocks last month?",
       "Which health insurance policy covers pre-existing diseases?",
       "term vs endowment which is what",
+      "kitna cover lena chahiye",
+      "kaun sa regime best hai",
+      "emergency fund kitna rakhna chahiye",
+      "sip kya hota hai",
+      "what is a blockchain?",
+      "ppf aur nps mein kya fark hai",
     ])
       expect(isProductPick(q), q).toBe(false)
   })
@@ -244,8 +260,8 @@ describe("searching with the model's query and the person's words (10.6d)", () =
 })
 
 describe("KnowledgeSession", () => {
-  it("keeps only passages within 0.05 of the top one, at the 0.82 default floor", async () => {
-    expect(DEFAULT_MIN_SIMILARITY).toBe(0.82)
+  it("keeps only passages within 0.05 of the top one, at the 0.85 default floor", async () => {
+    expect(DEFAULT_MIN_SIMILARITY).toBe(0.85)
     const at = (similarity: number, n: number) => row({ chunk_id: `00000000-0000-4000-8000-00000000001${n}`, similarity })
     expect(withinBand([at(0.91, 1), at(0.86, 2), at(0.859, 3), at(0.83, 4)]).map((r) => r.similarity)).toEqual([0.91, 0.86])
     expect(withinBand([])).toEqual([])
