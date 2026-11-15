@@ -19,7 +19,7 @@ import { greeting } from "@/lib/greeting"
 import type { Database } from "@fin-creador/api"
 import { createClient } from "@/lib/supabase/server"
 import { checkedPlanSchema } from "@/lib/ai/plan/types"
-import { shownCitations, shownTax } from "@/lib/ai/stored-sources"
+import { shownCard, shownCitations, shownTax } from "@/lib/ai/stored-sources"
 
 export const metadata: Metadata = { title: "Roma" }
 
@@ -137,20 +137,24 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
 }
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
-type Message = Pick<Database["public"]["Tables"]["ai_messages"]["Row"], "id" | "seq" | "question" | "answer" | "as_of" | "periods" | "tools" | "plan" | "citations" | "tax">
+type Message = Pick<Database["public"]["Tables"]["ai_messages"]["Row"], "id" | "seq" | "question" | "answer" | "as_of" | "periods" | "tools" | "plan" | "citations" | "tax" | "card">
 
 /** A conversation's stored turns, newest first; null when it isn't the person's. */
 async function loadConversation(supabase: Supabase, id: string, timeZone: string): Promise<OpenConversation | null | "error"> {
   const read = (columns: string) => supabase.from("ai_messages").select(columns).eq("conversation_id", id).order("seq", { ascending: false })
-  const [conversation, withSources] = await Promise.all([
+  const [conversation, withCard] = await Promise.all([
     supabase.from("ai_conversations").select("id").eq("id", id).maybeSingle(),
-    read("id, seq, question, answer, as_of, periods, tools, plan, citations, tax").returns<Message[]>(),
+    read("id, seq, question, answer, as_of, periods, tools, plan, citations, tax, card").returns<Message[]>(),
   ])
-  // A database without 20261114180000_roma_turn_sources.sql (42703: no such column) still
-  // opens the conversation, without stored sources.
+  // A database without 20261115120000_roma_turn_card.sql or 20261114180000_roma_turn_sources.sql
+  // (42703: no such column) still opens the conversation, without the stored card or sources.
+  const withSources =
+    withCard.error?.code === "42703"
+      ? await read("id, seq, question, answer, as_of, periods, tools, plan, citations, tax").returns<Omit<Message, "card">[]>().then((r) => ({ ...r, data: r.data?.map((m) => ({ ...m, card: null })) ?? null }))
+      : withCard
   const messages =
     withSources.error?.code === "42703"
-      ? await read("id, seq, question, answer, as_of, periods, tools, plan").returns<Omit<Message, "citations" | "tax">[]>().then((r) => ({ ...r, data: r.data?.map((m) => ({ ...m, citations: null, tax: null })) ?? null }))
+      ? await read("id, seq, question, answer, as_of, periods, tools, plan").returns<Omit<Message, "citations" | "tax" | "card">[]>().then((r) => ({ ...r, data: r.data?.map((m) => ({ ...m, citations: null, tax: null, card: null })) ?? null }))
       : withSources
   if (conversation.error || messages.error || !messages.data) return "error"
   if (!conversation.data) return null
@@ -173,7 +177,12 @@ async function loadConversation(supabase: Supabase, id: string, timeZone: string
       reply: {
         status: "answer",
         answer: m.answer,
-        figures: [],
+        // A stored check card and its figures table (10.7a), shown only if it still parses; a turn
+        // recorded before the card was kept has none and shows its text only.
+        ...(() => {
+          const card = m.card === null ? null : shownCard(m.card)
+          return card ? { figures: card.figures, checks: [card.check] } : { figures: [] }
+        })(),
         periods: (m.periods as string[]).flatMap((p) => {
           const range = fromDateRangeLiteral(p)
           return range ? [{ from: range.start, to: range.end }] : []

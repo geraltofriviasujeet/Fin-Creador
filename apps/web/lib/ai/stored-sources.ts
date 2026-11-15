@@ -1,13 +1,16 @@
 import { isPastFinancialYear } from "@fin-creador/domain"
 import { z } from "zod"
 import type { Citation } from "./knowledge/citations"
-import type { TaxBlock } from "./tools/types"
+import type { GoalCheck, TaxBlock } from "./tools/types"
 
 // A turn's citations and tax card, kept on it (10.6d, 20261114180000_roma_turn_sources.sql) so
 // a reopened conversation shows them. Checked with these schemas, which mirror the database's
 // checks, before writing and again before showing; a value that fails is left out, never the
 // turn. "Out of date" is not stored: it is worked out from the year when the turn is shown.
 // Citations are trimmed in code to fit the column, so a turn never fails to save on size.
+// From 10.7a a goal check's, trip check's or what-if's card is kept the same way
+// (20261115120000_roma_turn_card.sql), with its figures table: one card per turn, so a turn with
+// several checks keeps its text only.
 
 /** ai_messages_citations_size is 32768 bytes of jsonb text; room is kept for the spaces it adds. */
 export const CITATIONS_MAX_BYTES = 32768 - 1024
@@ -86,4 +89,61 @@ export function shownTax(raw: unknown, today: string): TaxBlock | null {
   const checked = storedTaxSchema.safeParse(raw)
   if (!checked.success) return null
   return { ...checked.data, ...(isPastFinancialYear(checked.data.taxYear, today) ? { outOfDate: true as const } : {}) }
+}
+
+/** ai_messages_card_size is 16384 bytes, the same way. */
+export const CARD_MAX_BYTES = 16384 - 512
+export const MAX_STORED_FIGURES = 40
+
+/** A figures-table row as shown: label and value, both formatted in code. */
+export type ShownFigure = { label: string; value: string }
+
+export const storedCardSchema = z
+  .object({
+    kind: z.enum(["goal", "trip", "what_if"]),
+    goal: z.string(),
+    verdict: z.string(),
+    caveat: z.string().optional(),
+    assumptions: z.array(z.string()),
+    lines: z.array(z.string()).optional(),
+    comparison: z
+      .object({
+        before: z.string(),
+        after: z.string(),
+        rows: z.array(z.object({ label: z.string(), before: z.string(), after: z.string() }).strict()).min(1).max(6),
+      })
+      .strict()
+      .optional(),
+    web: z.object({ verdict: z.string(), summary: z.string(), webOnly: z.literal(true).optional() }).strict().optional(),
+    figures: z.array(z.object({ label: z.string(), value: z.string() }).strict()).max(MAX_STORED_FIGURES).optional(),
+  })
+  .strict()
+  .refine((card) => card.comparison === undefined || card.kind === "what_if")
+export type StoredCard = z.infer<typeof storedCardSchema>
+
+/** The card as shown with an answer, without its summary or web hook, and the figures table; null for no check, several, or one that fails the checks. */
+export function toStoredCard(checks: readonly GoalCheck[], figures: readonly ShownFigure[]): StoredCard | null {
+  if (checks.length !== 1) return null
+  const { kind, goal, verdict, caveat, assumptions, lines, comparison, web } = checks[0]!
+  const card = {
+    kind: kind ?? "goal",
+    goal,
+    verdict,
+    ...(caveat ? { caveat } : {}),
+    assumptions,
+    ...(lines ? { lines } : {}),
+    ...(comparison ? { comparison } : {}),
+    ...(web ? { web: { verdict: web.verdict, summary: web.summary, ...(web.webOnly ? { webOnly: true as const } : {}) } } : {}),
+    ...(figures.length > 0 ? { figures: figures.slice(0, MAX_STORED_FIGURES).map(({ label, value }) => ({ label, value })) } : {}),
+  }
+  const checked = storedCardSchema.safeParse(card)
+  return checked.success && jsonBytes(checked.data) <= CARD_MAX_BYTES ? checked.data : null
+}
+
+/** A stored card, shown only if it still parses: the check as the answer showed it, and its figures table. */
+export function shownCard(raw: unknown): { check: Omit<GoalCheck, "summary" | "withTarget">; figures: ShownFigure[] } | null {
+  const checked = storedCardSchema.safeParse(raw)
+  if (!checked.success) return null
+  const { kind, figures = [], ...rest } = checked.data
+  return { check: { ...(kind === "goal" ? {} : { kind }), ...rest }, figures }
 }

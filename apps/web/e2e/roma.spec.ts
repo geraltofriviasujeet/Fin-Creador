@@ -322,6 +322,27 @@ test("goal what if: saving more a month, the before/after card, the working out 
   await expect(answer.getByText("Only this goal changes: your other goals, loan payments and dues are taken as they are today.")).toBeVisible()
   await openWorkedOut(answer)
   await expect(figure(answer, "Saved more a month")).toHaveText("₹10,000")
+
+  // Kept with the turn (10.7a, 20261115120000): reloaded, and reopened from the list, the card
+  // is still there and "How this was worked out" starts closed again.
+  const answers = page.getByRole("list", { name: "Roma's answers" })
+  const history = page.getByRole("navigation", { name: "Past conversations" })
+  for (const reopen of [() => page.reload(), async () => {
+    await history.getByRole("button", { name: "New conversation" }).click()
+    await expect(answers).toHaveCount(0)
+    await history.getByRole("link", { name: "What if I save 10k more a month for Car 2027?" }).click()
+  }]) {
+    await reopen()
+    const kept = answers.getByRole("listitem").first()
+    await expect(kept.getByText("What if · Car 2027")).toBeVisible()
+    await expect(kept.getByText(/^Reached in \w+ \d{4} \(5 months\)\.$/)).toBeVisible()
+    await expect(kept.getByText("Your records show ₹50,000 free a month today; this assumes you find the extra ₹10,000.")).toBeVisible()
+    const keptRows = kept.getByRole("table", { name: "The goal as it is and with the change" })
+    await expect(keptRows.getByRole("row").filter({ hasText: "For this goal a month" }).getByRole("cell")).toHaveText(["₹50,000", "₹60,000"])
+    await openWorkedOut(kept)
+    await expect(figure(kept, "Saved more a month")).toHaveText("₹10,000")
+    await expect(kept.getByRole("listitem").filter({ hasText: "Only INR entries are counted" })).toBeVisible()
+  }
 })
 
 test("goal check: too early to say with under 3 months of records (10.4)", async ({ page }) => {
