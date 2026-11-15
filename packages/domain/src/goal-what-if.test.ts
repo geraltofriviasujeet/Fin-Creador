@@ -211,15 +211,65 @@ describe("goalWhatIf: changes", () => {
   it("no target amount: nothing to work out", () => {
     const none = { ...base, targetMinor: 0 };
     for (const change of [{ kind: "monthly", deltaMinor: 5_000 }, { kind: "cost", deltaMinor: 5_000 }, { kind: "by_month", month: "2027-06-01" }] as const) {
-      expect(goalWhatIf(none, change)).toStrictEqual({ outcome: "no_target", before: null, after: null, byMonth: null, floored: false });
+      expect(goalWhatIf(none, change)).toStrictEqual({ outcome: "no_target", before: null, after: null, byMonth: null, floored: false, freeUnknown: false });
     }
   });
 
-  it("under 3 months with records: too early, no figure", () => {
-    const early = fixtures["too early"]!;
-    expect(goalWhatIf(early, { kind: "monthly", deltaMinor: 5_000 })).toMatchObject({ outcome: "too_early", after: { medianNetMinor: null, reachMonth: null } });
-    expect(goalWhatIf(early, { kind: "by_month", month: "2027-06-01" })).toMatchObject({ outcome: "too_early", byMonth: null });
-    expect(goalWhatIf(early, { kind: "cost", deltaMinor: 5_000 })).toMatchObject({ outcome: "too_early", after: { reachMonth: null } });
+  describe("under 3 months with records: what is free is not known, so only the amount given counts", () => {
+    // From prod (10.7a): a Thailand trip of ₹1,85,000, nothing saved, no date, asked on 15 November 2026.
+    const thailand = (n: number): GoalProjectionInput => ({
+      ...base,
+      today: "2026-11-15",
+      targetMinor: 18_500_000,
+      targetDate: null,
+      // Records that would say otherwise, and a loan and another goal: none of them count.
+      months: [...Array.from({ length: n }, () => month(-9_000_000)), month(0), month(0)],
+      claims: [{ date: "2026-12-01", amountMinor: 5_000_000 }],
+      otherGoals: [{ monthlyMinor: 1_000_000, months: 12 }],
+    });
+
+    for (const n of [0, 1, 2]) {
+      it(`${n} complete months: ₹X more a month is what goes to the goal a month`, () => {
+        // ₹1,85,000 at ₹5,000 a month: 37 months, November 2026 to November 2029.
+        const r = goalWhatIf(thailand(n), { kind: "monthly", deltaMinor: 500_000 });
+        expect(r).toMatchObject({ outcome: "projected", freeUnknown: true, floored: false, before: { verdict: "too_early", monthsMeasured: n, medianNetMinor: null, freeThisMonthMinor: null } });
+        expect(r.after).toMatchObject({ medianNetMinor: null, freeThisMonthMinor: 500_000, reachMonth: "2029-11-01" });
+        // Too little to reach it within 10 years: not reached.
+        expect(goalWhatIf(thailand(n), { kind: "monthly", deltaMinor: 10_000 })).toMatchObject({ outcome: "not_reached", freeUnknown: true, after: { reachMonth: null } });
+        // Saving less: still too early.
+        expect(goalWhatIf(thailand(n), { kind: "monthly", deltaMinor: -500_000 })).toMatchObject({ outcome: "too_early", freeUnknown: true });
+      });
+
+      it(`${n} complete months: by a month, the full amount a month needed`, () => {
+        // ₹1,85,000 over 12 months (November to October): ₹15,416.67 a month.
+        const r = goalWhatIf(thailand(n), { kind: "by_month", month: "2027-10-01" });
+        expect(r).toMatchObject({ outcome: "projected", freeUnknown: true, floored: false });
+        expect(r.byMonth).toStrictEqual({ month: "2027-10-01", months: 12, neededMonthlyMinor: 1_541_667, extraMonthlyMinor: 1_541_667, availableMinor: 0 });
+        expect(r.after!.reachMonth).toBe("2027-10-01");
+        // Fed back in, it reaches it then; a rupee less a month doesn't.
+        expect(goalWhatIf(thailand(n), { kind: "monthly", deltaMinor: 1_541_667 }).after).toStrictEqual(r.after);
+        expect(goalWhatIf(thailand(n), { kind: "monthly", deltaMinor: 1_541_567 }).after!.reachMonth).toBe("2027-11-01");
+      });
+
+      it(`${n} complete months: costing more or less gives the new target, dated only with an amount a month`, () => {
+        const more = goalWhatIf(thailand(n), { kind: "cost", deltaMinor: 1_500_000 });
+        expect(more).toMatchObject({ outcome: "too_early", freeUnknown: true, after: { plan: { remainingMinor: 20_000_000 }, reachMonth: null, freeThisMonthMinor: null } });
+        // ₹2,00,000 at ₹5,000 a month: 40 months, February 2030.
+        const dated = goalWhatIf(thailand(n), { kind: "cost", deltaMinor: 1_500_000, monthlyMinor: 500_000 });
+        expect(dated).toMatchObject({ outcome: "projected", freeUnknown: true, after: { plan: { remainingMinor: 20_000_000 }, freeThisMonthMinor: 500_000, reachMonth: "2030-02-01" } });
+        // ₹1,70,000 at ₹5,000 a month: 34 months, August 2029.
+        expect(goalWhatIf(thailand(n), { kind: "cost", deltaMinor: -1_500_000, monthlyMinor: 500_000 })).toMatchObject({ outcome: "projected", after: { reachMonth: "2029-08-01" } });
+      });
+    }
+
+    it("the plain goal check stays too early", () => {
+      for (const n of [0, 1, 2]) expect(goalProjection(thailand(n))).toMatchObject({ verdict: "too_early", medianNetMinor: null, reachMonth: null });
+    });
+
+    it("an amount a month given with a cost change is not used with 3 or more months", () => {
+      expect(goalWhatIf(base, { kind: "cost", deltaMinor: 12_000, monthlyMinor: 500_000 })).toStrictEqual(goalWhatIf(base, { kind: "cost", deltaMinor: 12_000 }));
+      expect(goalWhatIf(base, { kind: "cost", deltaMinor: 12_000 })).toMatchObject({ freeUnknown: false });
+    });
   });
 
   it("3 to 5 months with records: worked out and marked thin, as the goal check does", () => {

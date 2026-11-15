@@ -18,16 +18,27 @@
 //    When nothing is free this month, free money counts from zero as above (`floored`): with
 //    nothing free in any month, the extra is the flat amount.
 //
+// Records too new (fewer than PROJECTION_MIN_MONTHS months, `freeUnknown`): what is free is not
+// known, which is no reason to refuse, since the arithmetic doesn't need it. Every month's free
+// money is zero (no median, claims or other goals), so the amount given is all that goes to the
+// goal a month. Saving more: that amount a month. By a month: the flat amount, all of it extra.
+// Costing more or less: the new target, and a month only with a monthly amount given with it
+// (`monthlyMinor`); without one, "too_early". Saving less: "too_early", as before.
+//
 // Parsing (what the person typed, never the model): amounts "5000", "5,000", "5k", "5 hazaar",
 // "2 lakh"; months "Dec 2027", "December 2027", "by next June", "in 18 months", "2 saal mein".
 // Anything else is not parsed, and the caller asks.
 import { type IsoDate, parseIsoDate } from "./dates";
-import { type GoalProjection, type GoalProjectionInput, PROJECTION_HORIZON_MONTHS, freeByMonth, goalProjection } from "./goal-projection";
+import { type GoalProjection, type GoalProjectionInput, PROJECTION_HORIZON_MONTHS, PROJECTION_MIN_MONTHS, freeByMonth, goalProjection } from "./goal-projection";
 import { rupeeAmountsIn } from "./income-tax";
 import { addMinor } from "./money";
 import { monthStart } from "./reports";
 
-export type WhatIfChange = { kind: "monthly"; deltaMinor: number } | { kind: "cost"; deltaMinor: number } | { kind: "by_month"; month: IsoDate };
+export type WhatIfChange =
+  | { kind: "monthly"; deltaMinor: number }
+  /** monthlyMinor: an amount a month given with it, used only when the records are too new. */
+  | { kind: "cost"; deltaMinor: number; monthlyMinor?: number }
+  | { kind: "by_month"; month: IsoDate };
 
 export type WhatIfOutcome =
   /** The goal's target is 0: nothing to work out. */
@@ -38,7 +49,7 @@ export type WhatIfOutcome =
   | "no_cost_left"
   /** Saved already (for cost: at the changed cost). */
   | "reached"
-  /** Fewer than 3 months with records: no figure. */
+  /** Fewer than 3 months with records and nothing to work out without them (see freeUnknown). */
   | "too_early"
   /** Not reached within the projection's horizon, or saving nothing at all after the change. */
   | "not_reached"
@@ -65,6 +76,8 @@ export interface GoalWhatIf {
   byMonth: ByMonth | null;
   /** Nothing was free this month, so free money was counted from zero (see above). */
   floored: boolean;
+  /** Fewer than 3 months with records: what is free is not known, and `after` counts only the amount given (see above). */
+  freeUnknown: boolean;
 }
 
 /** Months from the month of `from` to the month of `to` (same month = 0). */
@@ -84,41 +97,63 @@ const ceilDiv = (num: number, den: number) => {
 };
 
 const outcomeOf = (p: GoalProjection): WhatIfOutcome =>
-  p.plan.basis === "reached" ? "reached" : p.medianNetMinor === null ? "too_early" : p.reachMonth === null ? "not_reached" : "projected";
+  p.plan.basis === "reached" ? "reached" : p.freeThisMonthMinor === null ? "too_early" : p.reachMonth === null ? "not_reached" : "projected";
 
 export function goalWhatIf(input: GoalProjectionInput, change: WhatIfChange): GoalWhatIf {
-  const none = { after: null, byMonth: null, floored: false };
-  if (input.targetMinor === 0) return { outcome: "no_target", before: null, ...none };
+  if (input.targetMinor === 0) return { outcome: "no_target", before: null, after: null, byMonth: null, floored: false, freeUnknown: false };
   const before = goalProjection(input);
+  const freeUnknown = before.monthsMeasured < PROJECTION_MIN_MONTHS;
+  const none = { after: null, byMonth: null, floored: false, freeUnknown };
   const nothingFree = before.freeThisMonthMinor !== null && before.freeThisMonthMinor <= 0;
+  const unknown = freeUnknown ? { freeUnknown: true } : {};
 
   if (change.kind === "monthly") {
     if (!Number.isSafeInteger(change.deltaMinor)) throw new RangeError("Amounts must be whole minor units");
     const floored = nothingFree && change.deltaMinor > 0;
-    const after = goalProjection({ ...input, adjustMonthlyMinor: addMinor(input.adjustMonthlyMinor ?? 0, change.deltaMinor), ...(floored ? { floorFreeAtZero: true } : {}) });
+    const adjustMonthlyMinor = addMinor(input.adjustMonthlyMinor ?? 0, change.deltaMinor);
+    if (freeUnknown && change.deltaMinor > 0) {
+      const after = goalProjection({ ...input, adjustMonthlyMinor, ...unknown });
+      return { outcome: outcomeOf(after), before, after, byMonth: null, floored: false, freeUnknown };
+    }
+    const after = goalProjection({ ...input, adjustMonthlyMinor, ...(floored ? { floorFreeAtZero: true } : {}) });
     const outcome = outcomeOf(before);
-    if (outcome === "reached" || outcome === "too_early") return { outcome, before, after, byMonth: null, floored: false };
+    if (outcome === "reached" || outcome === "too_early") return { outcome, before, after, byMonth: null, floored: false, freeUnknown };
     // Saving less that leaves nothing a month for this goal: not reached, no date.
     if (change.deltaMinor < 0 && addMinor(before.freeThisMonthMinor!, change.deltaMinor) <= 0) {
-      return { outcome: "not_reached", before, after: { ...after, verdict: "no", reachMonth: null }, byMonth: null, floored: false };
+      return { outcome: "not_reached", before, after: { ...after, verdict: "no", reachMonth: null }, byMonth: null, floored: false, freeUnknown };
     }
-    return { outcome: outcomeOf(after), before, after, byMonth: null, floored };
+    return { outcome: outcomeOf(after), before, after, byMonth: null, floored, freeUnknown };
   }
 
   if (change.kind === "cost") {
     const targetMinor = addMinor(input.targetMinor, change.deltaMinor);
     if (targetMinor <= 0) return { outcome: "no_cost_left", before, ...none };
-    const after = goalProjection({ ...input, targetMinor });
-    return { outcome: outcomeOf(after), before, after, byMonth: null, floored: false };
+    const monthly = change.monthlyMinor ?? 0;
+    if (!Number.isSafeInteger(monthly) || monthly < 0) throw new RangeError("Amounts must be whole minor units");
+    const given = freeUnknown && monthly > 0 ? { ...unknown, adjustMonthlyMinor: addMinor(input.adjustMonthlyMinor ?? 0, monthly) } : {};
+    const after = goalProjection({ ...input, targetMinor, ...given });
+    return { outcome: outcomeOf(after), before, after, byMonth: null, floored: false, freeUnknown };
   }
 
   const months = monthIndex(input.today, change.month) + 1;
   if (months < 1) return { outcome: "past_month", before, ...none };
   if (before.plan.basis === "reached") return { outcome: "reached", before, ...none };
-  const floor = nothingFree ? { floorFreeAtZero: true } : {};
-  const free = freeByMonth({ ...input, ...floor }, months);
-  if (free === null) return { outcome: "too_early", before, ...none };
   const remaining = before.plan.remainingMinor;
+  if (freeUnknown) {
+    // Nothing known to be free: the flat amount, all of it extra.
+    const needed = ceilDiv(remaining, months);
+    const after = goalProjection({ ...input, ...unknown, adjustMonthlyMinor: addMinor(input.adjustMonthlyMinor ?? 0, needed) });
+    return {
+      outcome: "projected",
+      floored: false,
+      freeUnknown,
+      before,
+      after,
+      byMonth: { month: monthStart(change.month), months, neededMonthlyMinor: needed, extraMonthlyMinor: needed, availableMinor: 0 },
+    };
+  }
+  const floor = nothingFree ? { floorFreeAtZero: true } : {};
+  const free = freeByMonth({ ...input, ...floor }, months)!;
   // The least extra x with running[i] + (i + 1)·x ≥ remaining for some month i up to `month`.
   let running = 0;
   let extra = Number.MAX_SAFE_INTEGER;
@@ -130,6 +165,7 @@ export function goalWhatIf(input: GoalProjectionInput, change: WhatIfChange): Go
   return {
     outcome: "projected",
     floored: nothingFree,
+    freeUnknown,
     before,
     after,
     byMonth: { month: monthStart(change.month), months, neededMonthlyMinor: ceilDiv(remaining, months), extraMonthlyMinor: extra, availableMinor: running },
