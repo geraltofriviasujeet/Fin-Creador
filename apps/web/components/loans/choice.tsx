@@ -12,6 +12,7 @@ export function Choice<V extends string>({
   hint,
   className,
   grid = false,
+  disabled = false,
 }: {
   name: string
   legend: string
@@ -23,11 +24,13 @@ export function Choice<V extends string>({
   className?: string
   /** Wrap the options in a grid of equal cells (for longer lists). */
   grid?: boolean
+  /** Shown but not changeable (e.g. a loan's repayment start once payments are recorded). */
+  disabled?: boolean
 }) {
   const errorId = error ? `${name}-error` : undefined
   const hintId = hint ? `${name}-hint` : undefined
   return (
-    <fieldset className={cn("min-w-0", className)} aria-describedby={[hintId, errorId].filter(Boolean).join(" ") || undefined}>
+    <fieldset disabled={disabled} className={cn("min-w-0", className)} aria-describedby={[hintId, errorId].filter(Boolean).join(" ") || undefined}>
       <legend className="mb-1.5 text-sm font-semibold text-ink">{legend}</legend>
       <div className={cn(grid ? "grid grid-cols-2 gap-1.5 md:grid-cols-3" : "flex w-fit max-w-full flex-wrap gap-0.5 rounded-lg bg-canvas p-0.5")}>
         {options.map((o) => (

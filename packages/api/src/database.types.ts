@@ -1122,6 +1122,59 @@ export type Database = {
           },
         ]
       }
+      loan_revisions: {
+        Row: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          loan_id: string
+          new_terms: Json
+          old_terms: Json
+          owed_after_minor: number
+          owed_before_minor: number
+          pending_after: number
+          pending_before: number
+          rebuilt: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          loan_id: string
+          new_terms: Json
+          old_terms: Json
+          owed_after_minor: number
+          owed_before_minor: number
+          pending_after: number
+          pending_before: number
+          rebuilt: number
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          loan_id?: string
+          new_terms?: Json
+          old_terms?: Json
+          owed_after_minor?: number
+          owed_before_minor?: number
+          pending_after?: number
+          pending_before?: number
+          rebuilt?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_revisions_loan_owned"
+            columns: ["loan_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       loans: {
         Row: {
           account_id: string
@@ -2516,6 +2569,10 @@ export type Database = {
         }
       }
       loan_category_id: { Args: { p_key: string }; Returns: string }
+      loan_delete_instalments: {
+        Args: { p_after_seq?: number; p_loan_id: string }
+        Returns: number
+      }
       loan_due_date: {
         Args: { p_first_due: string; p_seq: number }
         Returns: string
@@ -2813,6 +2870,52 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "liability_payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      revise_loan: {
+        Args: {
+          p_before_tracking_on?: string
+          p_capitalised_minor?: number
+          p_disbursed_minor: number
+          p_emi_estimate_minor: number
+          p_emi_minor: number
+          p_first_due_date: string
+          p_idempotency_key: string
+          p_instalment_months: number
+          p_lender: string
+          p_loan_id: string
+          p_loan_type: string
+          p_moratorium_interest?: string
+          p_moratorium_interest_minor?: number
+          p_moratorium_months?: number
+          p_nickname?: string
+          p_outstanding_minor: number
+          p_rate_bps: number
+          p_rate_kind: string
+          p_sanctioned_minor: number
+          p_start_mode: string
+          p_tenure_months: number
+          p_type_other?: string
+        }
+        Returns: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          loan_id: string
+          new_terms: Json
+          old_terms: Json
+          owed_after_minor: number
+          owed_before_minor: number
+          pending_after: number
+          pending_before: number
+          rebuilt: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "loan_revisions"
           isOneToOne: true
           isSetofReturn: false
         }

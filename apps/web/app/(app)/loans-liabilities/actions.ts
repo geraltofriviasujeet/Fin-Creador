@@ -7,6 +7,7 @@ import {
   type FormInput,
   type LoanWriteResult,
   type PaymentWriteResult,
+  type RevisionPreviewResult,
   type StatutoryWriteResult,
   type WriteResult,
   addBorrowing,
@@ -33,8 +34,9 @@ import {
   voidLiabilityPayment,
   deleteLoan,
   editDuePayment,
-  editLoan,
   payDueItem,
+  previewLoanRevision,
+  reviseLoan,
   planDueItem,
   setLoanArchived,
   voidDuePayment,
@@ -79,10 +81,16 @@ export async function addLoanAction(input: unknown): Promise<LoanWriteResult> {
   return refreshed(await addLoan(await client(), fields(input, LOAN_FIELDS)))
 }
 
-const EDIT_FIELDS = ["loanId", "loanType", "typeOther", "lender", "nickname", "sanctioned", "rate", "rateKind", "emi"] as const
+const REVISE_FIELDS = ["loanId", ...LOAN_FIELDS] as const
 
-export async function editLoanAction(input: unknown): Promise<LoanWriteResult> {
-  return refreshed(await editLoan(await client(), fields(input, EDIT_FIELDS)))
+/** What saving a corrected loan would do (writes nothing). */
+export async function previewLoanRevisionAction(input: unknown): Promise<RevisionPreviewResult> {
+  return previewLoanRevision(await client(), fields(input, REVISE_FIELDS))
+}
+
+/** Corrects a loan's terms through revise_loan, once per request key. */
+export async function reviseLoanAction(input: unknown): Promise<LoanWriteResult> {
+  return refreshed(await reviseLoan(await client(), fields(input, REVISE_FIELDS)))
 }
 
 const loanRef = z.object({ loanId: z.uuid(), archived: z.boolean() })

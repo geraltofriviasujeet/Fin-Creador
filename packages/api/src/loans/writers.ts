@@ -12,6 +12,7 @@ import type { WriteResult } from "../income/types"
 import type { FormInput } from "../income/writers"
 import { cardErrorMessage } from "../cards/errors"
 import { type LoanErrorContext, loanErrorMessage } from "./errors"
+import { type RevisionPreview, type RevisionState, loanHasHistory, revisionPreview } from "./revise"
 
 // Writes for loans and their due items, shared by web and mobile. They run as the signed-in
 // user through the SECURITY INVOKER functions of migration 20261028120000 (RLS and grants
@@ -114,6 +115,102 @@ export async function editLoan(supabase: UserClient, input: FormInput): Promise<
     })
   if (error) return dbError(error)
   return { status: "success", message: "Loan saved.", loanId: l.loanId }
+}
+
+// ---------------------------------------------------------------------------
+// Correcting a loan's terms (revise_loan, migration 20261115180000)
+// ---------------------------------------------------------------------------
+
+export type RevisionPreviewResult = LoanWriteError | { status: "success"; preview: RevisionPreview; currency: string }
+
+const CHANGED_ELSEWHERE = "This change was already saved with other details. Close the form and try again."
+
+/**
+ * The add form's answers checked as on the day the loan was added (its dates rules apply
+ * against that day), with the loan's state. With payments recorded, capitalised moratorium
+ * interest stays as stored (it may already be on the loan).
+ */
+async function parseRevision(supabase: UserClient, input: FormInput) {
+  const { data: loan, error } = await supabase
+    .from("loans")
+    .select("id, account_id, currency, start_mode, opening_outstanding_minor, capitalised_minor, tracking_started_on, archived_at")
+    .eq("id", input.loanId ?? "")
+    .maybeSingle()
+  if (error) return { ok: false as const, result: { status: "error" as const, message: UNAVAILABLE } }
+  if (!loan) return { ok: false as const, result: { status: "error" as const, message: NOT_FOUND } }
+  if (loan.archived_at) return { ok: false as const, result: dbError({ code: "FC033" }) }
+  const items = await supabase.from("due_items").select("id, kind, seq, status, amount_due_minor").eq("loan_id", loan.id)
+  const ids = (items.data ?? []).map((i) => i.id)
+  const [payments, balance] = await Promise.all([
+    ids.length > 0 ? supabase.from("due_payments").select("due_item_id").in("due_item_id", ids) : Promise.resolve({ data: [], error: null }),
+    accountBalances(supabase, [loan.account_id]),
+  ])
+  if (items.error || payments.error || !payments.data || !balance) return { ok: false as const, result: { status: "error" as const, message: UNAVAILABLE } }
+  const paid = new Set(payments.data.map((p) => p.due_item_id))
+  const state: RevisionState = {
+    openingOutstandingMinor: loan.opening_outstanding_minor,
+    trackingStartedOn: loan.tracking_started_on,
+    owedMinor: outstandingFromBalance(balance.get(loan.account_id) ?? 0),
+    items: (items.data ?? []).map((i) => ({ kind: i.kind, seq: i.seq, status: i.status, amountDueMinor: i.amount_due_minor, hasPayment: paid.has(i.id) })),
+  }
+  const parsed = loanFormSchema({ today: loan.tracking_started_on, currency: loan.currency }).safeParse(input)
+  if (!parsed.success) return { ok: false as const, result: { status: "error" as const, message: FIX_FIELDS, fieldErrors: firstFieldErrors(parsed.error) } }
+  const l = loanHasHistory(state.items) ? { ...parsed.data, capitalisedMinor: loan.capitalised_minor } : parsed.data
+  return { ok: true as const, loan, state, l }
+}
+
+/** What saving would do: owed before and after, and the pending instalments rebuilt. Writes nothing. */
+export async function previewLoanRevision(supabase: UserClient, input: FormInput): Promise<RevisionPreviewResult> {
+  const r = await parseRevision(supabase, input)
+  if (!r.ok) return r.result
+  return { status: "success", preview: revisionPreview(r.state, r.l), currency: r.loan.currency }
+}
+
+/** Corrects a loan's terms once per request key. Payments already recorded don't change. */
+export async function reviseLoan(supabase: UserClient, input: FormInput): Promise<LoanWriteResult> {
+  const r = await parseRevision(supabase, input)
+  if (!r.ok) return r.result
+  const { l, loan } = r
+  const { data, error } = await supabase.rpc("revise_loan", {
+    p_loan_id: loan.id,
+    p_idempotency_key: l.idempotencyKey,
+    p_loan_type: l.loanType,
+    p_lender: l.lender,
+    p_sanctioned_minor: l.sanctionedMinor,
+    p_disbursed_minor: l.disbursedMinor,
+    p_rate_bps: l.rateBps,
+    p_rate_kind: l.rateKind,
+    p_tenure_months: l.tenureMonths,
+    p_start_mode: l.startMode,
+    p_outstanding_minor: l.outstandingMinor,
+    p_instalment_months: l.remainingMonths,
+    p_first_due_date: l.firstDueDate,
+    p_emi_estimate_minor: l.emiEstimateMinor,
+    p_emi_minor: l.emiMinor,
+    p_type_other: l.typeOther ?? undefined,
+    p_nickname: l.nickname ?? undefined,
+    p_before_tracking_on: l.beforeTrackingOn ?? undefined,
+    p_moratorium_months: l.moratoriumMonths,
+    p_moratorium_interest: l.moratoriumInterest ?? undefined,
+    p_capitalised_minor: l.capitalisedMinor,
+    p_moratorium_interest_minor: l.moratoriumMonthlyInterestMinor,
+  })
+  if (error) {
+    const minor = Number(error.details)
+    const amount = Number.isSafeInteger(minor) ? formatMoney(minor, { currency: loan.currency }) : null
+    const later = l.startMode === "starts_later"
+    if (error.code === "FC061") {
+      return { status: "error", message: FIX_FIELDS, fieldErrors: { [later ? "disbursed" : "outstanding"]: amount ? `This is less than the principal already repaid. Enter at least ${amount}` : "This is less than the principal already repaid" } }
+    }
+    if (error.code === "FC062") {
+      return { status: "error", message: FIX_FIELDS, fieldErrors: { [later ? "tenureMonths" : "remainingMonths"]: Number.isSafeInteger(minor) ? `EMI ${minor} is already paid. Keep at least ${minor} EMIs` : "Keep at least the EMIs already paid" } }
+    }
+    if (error.code === "FC043" && later) return { status: "error", message: FIX_FIELDS, fieldErrors: { firstEmiDate: "Check the first EMI date and try again." } }
+    if (error.code === "FC007") return { status: "error", message: CHANGED_ELSEWHERE }
+    return dbError(error)
+  }
+  if (!data || !data.id) return { status: "success", message: "Nothing changed.", loanId: loan.id }
+  return { status: "success", message: "Loan saved.", loanId: loan.id }
 }
 
 /** Archive (hidden, no reminders, no payments) or restore a loan with its account. */

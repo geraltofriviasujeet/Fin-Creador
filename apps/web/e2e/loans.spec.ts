@@ -272,13 +272,10 @@ test("starts later with a moratorium, then archive, restore and delete", async (
   await expect(page.getByRole("button", { name: /^Show archived/ })).toHaveCount(0)
 })
 
-// The owner's report (2026-11-15): editing an education loan doesn't show the amount taken,
-// so neither it nor the sanctioned amount (which can't go below it) can be reduced. Cause:
-// the edit form and update_loan cover only the names, sanctioned amount, rate and EMI, and
-// loans_validate refuses any change to the amount taken (FC009), for every loan type.
-// Marked as failing until revise_loan reaches the edit form; then drop test.fail.
-test("edit an education loan: the amount taken is shown and can be reduced", async ({ page }) => {
-  test.fail(true, "Known bug: the edit form has no Amount taken field")
+// The owner's report (2026-11-15): editing an education loan didn't show the amount taken, so
+// neither it nor the sanctioned amount (which can't go below it) could be reduced. The edit
+// form is now the add form, pre-filled, saved through revise_loan after one confirm step.
+test("edit an education loan: reduce the amount taken, then the sanctioned amount", async ({ page }) => {
   await newUser(page, "loans-edu-edit")
   await openLoans(page)
   await page.getByRole("button", { name: "Add loan" }).first().click()
@@ -296,9 +293,64 @@ test("edit an education loan: the amount taken is shown and can be reduced", asy
   await expect(toast(page, "Loan added.").first()).toBeVisible()
 
   const row = loansList(page).getByRole("listitem").filter({ hasText: "State Bank of India" })
+  await expect(row).toContainText("₹8,00,000")
+  await row.getByRole("button", { name: /^State Bank of India/ }).click()
+
+  // 1. The amount taken is shown and reduced: one confirm step, then saved.
+  await row.getByRole("button", { name: "Edit State Bank of India" }).click()
+  let edit = dialog(page, "Edit State Bank of India")
+  await expect(edit.getByLabel("Sanctioned amount (₹)")).toHaveValue("10,00,000")
+  await expect(edit.getByLabel("Amount taken (₹)")).toHaveValue("8,00,000")
+  await expect(edit.getByRole("radio", { name: "Starts later" })).toBeChecked()
+  await edit.getByLabel("Amount taken (₹)").fill("6,00,000")
+  await edit.getByRole("button", { name: "Review changes" }).click()
+  await expect(edit).toContainText("Check before saving")
+  await expect(edit).toContainText("Owed now ₹8,00,000 → ₹6,00,000")
+  await expect(edit).toContainText("60 pending EMIs will be rebuilt")
+  await edit.getByRole("button", { name: "Save changes" }).click()
+  await expect(toast(page, "Loan saved.")).toBeVisible()
+  await expect(edit).toBeHidden()
+  await expect(row).toContainText("₹6,00,000")
+
+  // 2. Now the sanctioned amount can come down too (not below the amount taken).
+  await row.getByRole("button", { name: "Edit State Bank of India" }).click()
+  edit = dialog(page, "Edit State Bank of India")
+  await expect(edit.getByLabel("Amount taken (₹)")).toHaveValue("6,00,000")
+  await edit.getByLabel("Sanctioned amount (₹)").fill("5,00,000")
+  await edit.getByRole("button", { name: "Review changes" }).click()
+  await expect(edit.getByText("The amount taken can't be more than the sanctioned amount")).toBeVisible()
+  await edit.getByLabel("Sanctioned amount (₹)").fill("7,00,000")
+  await edit.getByRole("button", { name: "Review changes" }).click()
+  await expect(edit).toContainText("Owed now ₹6,00,000 → ₹6,00,000")
+  await edit.getByRole("button", { name: "Save changes" }).click()
+  await expect(toast(page, "Loan saved.")).toBeVisible()
+  await expect(row).toContainText("of ₹7,00,000 sanctioned")
+  await shot(page, "loans-edit-education")
+})
+
+test("edit an ongoing loan with a payment: owed on the day it was added, dates locked", async ({ page }) => {
+  await newUser(page, "loans-ongoing-edit")
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "5,00,000" })
+  await openLoans(page)
+  await addPersonalLoan(page)
+  const row = loansList(page).getByRole("listitem").filter({ hasText: "State Bank of India" })
+  await dueSoon(page).getByRole("button", { name: "Pay EMI 1 of State Bank of India" }).click()
+  const pay = page.getByRole("dialog", { name: /^EMI 1, due / })
+  await expect(pay.getByLabel("Principal (₹)")).toHaveValue("23,654.64")
+  await pay.getByRole("button", { name: "Mark as paid" }).click()
+  await expect(toast(page, "EMI paid.")).toBeVisible()
+  await expect(pay).toBeHidden()
+
   await row.getByRole("button", { name: /^State Bank of India/ }).click()
   await row.getByRole("button", { name: "Edit State Bank of India" }).click()
   const edit = dialog(page, "Edit State Bank of India")
-  await expect(edit.getByLabel("Sanctioned amount (₹)")).toHaveValue("10,00,000")
-  await expect(edit.getByLabel("Amount taken (₹)")).toHaveValue("8,00,000", { timeout: 2_000 })
+  await expect(edit.getByLabel("Owed on the day you added this loan (₹)")).toHaveValue("3,00,000")
+  await expect(edit.getByLabel("This month's EMI date")).toBeDisabled()
+  // Below the principal already repaid (₹23,654.64) is refused with the least allowed.
+  await edit.getByLabel("Owed on the day you added this loan (₹)").fill("20,000")
+  await edit.getByRole("button", { name: "Review changes" }).click()
+  await expect(edit).toContainText("Check before saving")
+  await edit.getByRole("button", { name: "Save changes" }).click()
+  await expect(edit.getByText("This is less than the principal already repaid. Enter at least ₹23,654.64")).toBeVisible()
 })
