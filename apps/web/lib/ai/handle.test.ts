@@ -451,6 +451,8 @@ describe("knowledge base routing (10.6c)", () => {
     // Kept with the turn for reopening (10.6d), checked; no tax card to keep.
     expect(d.history.recorded[0]?.citations).toMatchObject([{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passages: ["An SIP invests a fixed amount at regular intervals."] }])
     expect(d.history.recorded[0]?.tax).toBeUndefined()
+    // No goal or trip check: no card (10.7a).
+    expect(d.history.recorded[0]?.card).toBeUndefined()
   })
 
   it("shows the knowledge chip only when a citation is shown", async () => {

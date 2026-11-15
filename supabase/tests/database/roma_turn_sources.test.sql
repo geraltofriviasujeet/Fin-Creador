@@ -55,9 +55,9 @@ select ok(
   to_regprocedure('public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb)') is null,
   'the nine-argument signature is gone (no overload left to call)');
 select ok(
-  has_function_privilege('authenticated', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb)', 'EXECUTE')
-  and not has_function_privilege('anon', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb)', 'EXECUTE')
-  and not has_function_privilege('public', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb)', 'EXECUTE'),
+  has_function_privilege('authenticated', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb, jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb, jsonb)', 'EXECUTE')
+  and not has_function_privilege('public', 'public.roma_record_turn(uuid, uuid, text, text, date, daterange[], text[], boolean, jsonb, jsonb, jsonb, jsonb)', 'EXECUTE'),
   'the new signature: signed-in users only');
 
 select set_config('request.jwt.claims', '{"sub": "a5000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
