@@ -60,6 +60,9 @@ export const EXPENSE_ICON_OPTIONS = [
   // Sprint 4: the Membership and Subscription defaults (icon CHECK extended in Phase 2).
   { value: "membership", label: "Membership" },
   { value: "subscription", label: "Subscription" },
+  // Fixes before Sprint 12: the Gift and Fuel defaults.
+  { value: "gift", label: "Gift" },
+  { value: "fuel", label: "Fuel" },
   { value: "other", label: "Other" },
 ] as const;
 export type ExpenseIcon = (typeof EXPENSE_ICON_OPTIONS)[number]["value"];

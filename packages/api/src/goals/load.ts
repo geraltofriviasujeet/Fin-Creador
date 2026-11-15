@@ -1,17 +1,20 @@
 import { monthRange } from "@fin-creador/domain"
 import { type UserClient, userToday } from "../income/client"
-import type { GoalsData } from "./view"
+import { type GoalsData, budgetMonthFromParam } from "./view"
 
 // Loads what the Goals page and the Overview cards need, as the signed-in user (RLS).
-// This month's spending per category comes from dashboard_breakdown (Sprint 5), in the
-// profile currency only.
+// Spending per category in the month shown comes from dashboard_breakdown (Sprint 5), in the
+// profile currency only. Budgets can be shown for a later month ("YYYY-MM"): nothing is
+// spent there yet, so no breakdown is read.
 
 export type GoalsDataLoad = { ok: true; data: GoalsData } | { ok: false; reason: "unauthenticated" | "unavailable" }
 
-export async function loadGoalsData(supabase: UserClient): Promise<GoalsDataLoad> {
+export async function loadGoalsData(supabase: UserClient, budgetMonth?: string): Promise<GoalsDataLoad> {
   const day = await userToday(supabase)
   if (!day.ok) return day
-  const month = monthRange(day.today)
+  const shown = budgetMonthFromParam(budgetMonth, day.today)
+  const month = monthRange(shown)
+  const later = shown > monthRange(day.today).start
   const [profile, goals, budgets, categories, breakdown] = await Promise.all([
     supabase.from("profiles").select("currency").eq("id", day.userId).maybeSingle(),
     supabase
@@ -19,14 +22,14 @@ export async function loadGoalsData(supabase: UserClient): Promise<GoalsDataLoad
       .select("id, type, name, target_amount_minor, saved_amount_minor, currency, target_date, details, archived_at, created_at"),
     supabase.from("budgets").select("category_id, effective_from, amount_minor, currency"),
     supabase.from("categories").select("id, name, icon, archived_at").eq("kind", "expense").order("name"),
-    supabase.rpc("dashboard_breakdown", { p_from: month.start, p_to: month.end }),
+    later ? null : supabase.rpc("dashboard_breakdown", { p_from: month.start, p_to: month.end }),
   ])
-  if (profile.error || goals.error || budgets.error || categories.error || breakdown.error || !Array.isArray(breakdown.data)) {
+  if (profile.error || goals.error || budgets.error || categories.error || (breakdown && (breakdown.error || !Array.isArray(breakdown.data)))) {
     return { ok: false, reason: "unavailable" }
   }
   const currency = profile.data?.currency ?? "INR"
   const spending = new Map<string, number>()
-  for (const row of breakdown.data) {
+  for (const row of breakdown?.data ?? []) {
     if (row.kind === "category" && row.currency === currency && row.category_id) spending.set(row.category_id, row.expense_minor)
   }
   return {
@@ -54,6 +57,7 @@ export async function loadGoalsData(supabase: UserClient): Promise<GoalsDataLoad
       })),
       categories: categories.data.map((c) => ({ id: c.id, name: c.name, icon: c.icon, archived: c.archived_at !== null })),
       spending,
+      budgetMonth: shown,
     },
   }
 }

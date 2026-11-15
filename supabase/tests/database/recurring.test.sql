@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 
 select plan(85);
 
--- Users A, B (fictional; sign-up gives them 15 expense defaults), and D, E who stand in for
+-- Users A, B (fictional; sign-up gives them 17 expense defaults), and D, E who stand in for
 -- users created before this migration.
 insert into auth.users (id, email) values
   ('11111111-1111-4111-8111-111111111111', 'asha@example.test'),
@@ -38,7 +38,7 @@ update public.categories set archived_at = now()
 where user_id = '44444444-4444-4444-8444-444444444444' and name = ' subscription ';
 
 -- ------------------------------------------------------------ backfill (1-6), as owner
-select is(public.backfill_default_expense_categories(), 3, 'the backfill creates the keyed defaults that are missing (D: 1, E: 2)');
+select is(public.backfill_default_expense_categories(), 7, 'the backfill creates the keyed defaults that are missing (D: 3, E: 4)');
 select ok(
   (select key = 'subscription' and archived_at is not null from public.categories
    where user_id = '44444444-4444-4444-8444-444444444444' and lower(btrim(name)) = 'subscription'),
@@ -50,12 +50,12 @@ select is(
 );
 select is(
   (select array_agg(key order by key) from public.categories where user_id = '55555555-5555-4555-8555-555555555555' and key is not null),
-  array['membership', 'subscription'], 'a user without them gets both keyed defaults'
+  array['fuel', 'gift', 'membership', 'subscription'], 'a user without them gets every keyed default'
 );
 select is(public.backfill_default_expense_categories(), 0, 'running the backfill again creates nothing');
 select is(
   (select count(*)::int from public.categories where user_id = '55555555-5555-4555-8555-555555555555' and kind = 'expense'),
-  15, 'and leaves E with its 12 classic, 2 keyed and 1 system (Bank charges & interest) defaults'
+  17, 'and leaves E with its 12 classic, 4 keyed and 1 system (Bank charges & interest) defaults'
 );
 
 select set_config('request.jwt.claims', '{"sub": "11111111-1111-4111-8111-111111111111", "role": "authenticated"}', true);
@@ -64,12 +64,13 @@ set local role authenticated;
 -- ------------------------------------------------------------ categories (7-11)
 select is(
   (select count(*)::int from public.categories where kind = 'expense' and is_default and icon is not null),
-  15, 'sign-up creates 15 default expense categories with icons'
+  17, 'sign-up creates 17 default expense categories with icons'
 );
 select results_eq(
   $$ select key, name, icon from public.categories where key is not null order by key $$,
-  $$ values ('membership'::text, 'Membership'::text, 'membership'::text), ('subscription', 'Subscription', 'subscription') $$,
-  'two of them carry the stable keys'
+  $$ values ('fuel'::text, 'Fuel'::text, 'fuel'::text), ('gift', 'Gift', 'gift'), ('membership', 'Membership', 'membership'),
+            ('subscription', 'Subscription', 'subscription') $$,
+  'four of them carry the stable keys'
 );
 select throws_ok(
   $$ insert into public.categories (kind, name, icon, key) values ('expense', 'Clubs', 'membership', 'membership') $$,

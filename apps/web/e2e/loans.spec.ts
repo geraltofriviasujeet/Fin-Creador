@@ -271,3 +271,32 @@ test("starts later with a moratorium, then archive, restore and delete", async (
   await expect(toast(page, "Loan deleted.")).toBeVisible()
   await expect(page.getByRole("button", { name: /^Show archived/ })).toHaveCount(0)
 })
+
+// The owner's report (2026-11-15): editing an education loan doesn't show the amount taken,
+// so neither it nor the sanctioned amount (which can't go below it) can be reduced. Cause:
+// the edit form and update_loan cover only the names, sanctioned amount, rate and EMI, and
+// loans_validate refuses any change to the amount taken (FC009), for every loan type.
+// Marked as failing until revise_loan reaches the edit form; then drop test.fail.
+test("edit an education loan: the amount taken is shown and can be reduced", async ({ page }) => {
+  test.fail(true, "Known bug: the edit form has no Amount taken field")
+  await newUser(page, "loans-edu-edit")
+  await openLoans(page)
+  await page.getByRole("button", { name: "Add loan" }).first().click()
+  const d = dialog(page, "Add loan")
+  await d.getByRole("radio", { name: "Education loan" }).check()
+  await d.getByRole("button", { name: "Next" }).click()
+  await d.getByLabel("Lender").fill("State Bank of India")
+  await d.getByLabel("Sanctioned amount (₹)").fill("10,00,000")
+  await d.getByLabel("Amount taken (₹)").fill("8,00,000")
+  await d.getByLabel("Interest rate (% a year)").fill("10")
+  await d.getByLabel("Tenure (months)").fill("60")
+  await d.getByRole("radio", { name: "Starts later" }).check()
+  await d.getByLabel("First EMI date").fill(monthsAhead(2))
+  await d.getByRole("button", { name: "Add loan" }).click()
+  await expect(toast(page, "Loan added.").first()).toBeVisible()
+
+  await loansList(page).getByRole("button", { name: "Edit State Bank of India" }).click()
+  const edit = dialog(page, "Edit State Bank of India")
+  await expect(edit.getByLabel("Sanctioned amount (₹)")).toHaveValue("10,00,000")
+  await expect(edit.getByLabel("Amount taken (₹)")).toHaveValue("8,00,000", { timeout: 2_000 })
+})

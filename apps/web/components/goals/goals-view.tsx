@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import Link from "next/link"
-import { Plus, Sparkles } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Sparkles } from "lucide-react"
 import type { BudgetCategory, BudgetItem, GoalItem, GoalsView, WriteResult } from "@fin-creador/api"
 import { type GoalType, formatPercentFromBasisPoints, minorToInputString } from "@fin-creador/domain"
 import { EMI_ROUNDING_NOTE_SHORT, GOAL_TYPE_OPTIONS, GOAL_UPFRONT_LABEL, ITEM_PAYMENTS, LOAN_PAYMENTS, VEHICLE_KIND_OPTIONS } from "@fin-creador/schemas"
@@ -15,7 +15,7 @@ import { Card, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage, SelectField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import { BudgetBadge, BudgetDonut, GOALS_HEADER, GoalSummary, IconChip, Meter, SET_BUDGET_AGAIN, budgetAmounts, goalIcon, pct, savingText } from "./display"
+import { BudgetBadge, BudgetDonut, GOALS_HEADER, GoalSummary, IconChip, Meter, SET_BUDGET_AGAIN, budgetAmounts, goalIcon, monthLabel, pct, savingText } from "./display"
 import { GoalForm } from "./goal-form"
 
 type Open =
@@ -43,6 +43,9 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
   const [showArchived, setShowArchived] = useState(false)
   const [busy, startBusy] = useTransition()
   const close = () => setOpen(null)
+  // Budgets for a later month: the ones that will apply then, nothing spent yet.
+  const later = view.budgetMonth.start > view.month.start
+  const shownMonth = monthLabel(view.budgetMonth.start)
 
   const restore = (item: GoalItem) =>
     startBusy(async () => {
@@ -119,7 +122,10 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
               Monthly budgets
             </h2>
             <p className="text-sm text-muted-foreground">
-              Spending this month ({fullDate(view.month.start)} to {fullDate(view.month.end)}) against each category&apos;s budget.
+              {later
+                ? `The budgets that will apply in ${shownMonth}. Nothing is spent yet.`
+                : `Spending this month (${fullDate(view.month.start)} to ${fullDate(view.month.end)}) against each category's budget.`}{" "}
+              A budget continues every month until you change it or remove it.
             </p>
           </div>
           {view.unbudgeted.length > 0 && (
@@ -129,16 +135,33 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
             </Button>
           )}
         </div>
+        <nav aria-label="Budget month" className="flex flex-wrap items-center gap-2 text-sm">
+          {view.previousBudgetMonth ? (
+            <Link href={budgetMonthHref(view, view.previousBudgetMonth)} scroll={false} className="inline-flex min-h-[44px] items-center gap-1 font-semibold text-ink underline-offset-4 hover:underline">
+              <ChevronLeft aria-hidden="true" className="size-4" />
+              Previous month
+            </Link>
+          ) : null}
+          <span className="font-semibold" aria-current="date">
+            {later ? shownMonth : `This month · ${shownMonth}`}
+          </span>
+          {view.nextBudgetMonth ? (
+            <Link href={budgetMonthHref(view, view.nextBudgetMonth)} scroll={false} className="inline-flex min-h-[44px] items-center gap-1 font-semibold text-ink underline-offset-4 hover:underline">
+              Next month
+              <ChevronRight aria-hidden="true" className="size-4" />
+            </Link>
+          ) : null}
+        </nav>
         {view.budgets.length === 0 ? (
           <Card className="grid justify-items-start gap-2">
-            <p className="font-semibold">No budgets this month</p>
+            <p className="font-semibold">{later ? `No budgets in ${shownMonth}` : "No budgets this month"}</p>
             <p className="text-sm text-muted-foreground">Set a monthly amount for a category. You&apos;ll see a warning at 80% and when it&apos;s used up.</p>
           </Card>
         ) : (
           <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,17rem)_1fr]">
             <Card aria-labelledby="budget-total-title" className="flex items-center gap-4 lg:grid lg:justify-items-center">
               <CardTitle id="budget-total-title" className="sr-only">
-                This month
+                {later ? shownMonth : "This month"}
               </CardTitle>
               {view.total ? (
                 <>
@@ -160,6 +183,11 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
                   <li key={b.category.id} className="flex min-h-[44px] items-center gap-3 border-b border-line py-1.5 last:border-b-0 md:[&:nth-last-child(2):nth-child(odd)]:border-b-0">
                     <div className="flex w-32 min-w-0 shrink-0 flex-col">
                       <span className="truncate text-sm font-semibold">{b.category.name}</span>
+                      {b.since && (
+                        <span className="text-xs text-muted-foreground">
+                          {later && "Carried forward · "}Since {monthLabel(b.since)}
+                        </span>
+                      )}
                       <BudgetBadge status={b.status} />
                     </div>
                     {b.status ? (
@@ -208,7 +236,7 @@ export function GoalsPageView({ view }: { view: GoalsView }) {
           </DialogContent>
         )}
         {open?.kind === "budget" && (
-          <DialogContent eyebrow="Monthly budgets" title={open.item ? `Budget for ${open.item.category.name}` : "Set a budget"} description="The amount applies from the month you choose onward. Past months keep their budget.">
+          <DialogContent eyebrow="Monthly budgets" title={open.item ? `Budget for ${open.item.category.name}` : "Set a budget"} description="A budget continues every month until you change it or remove it.">
             <BudgetForm view={view} item={open.item} onDone={close} />
           </DialogContent>
         )}
@@ -397,11 +425,16 @@ function DeleteForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
   )
 }
 
+/** The Goals page showing budgets for `month` (this month without a parameter). */
+function budgetMonthHref(view: GoalsView, month: string): string {
+  return month.slice(0, 7) === view.today.slice(0, 7) ? "/goals" : `/goals?month=${month.slice(0, 7)}`
+}
+
 function BudgetForm({ view, item, onDone }: { view: GoalsView; item?: BudgetItem; onDone: () => void }) {
-  const thisMonth = view.today.slice(0, 7)
   const options: BudgetCategory[] = item ? [item.category] : view.unbudgeted
   const [categoryId, setCategoryId] = useState(item?.category.id ?? "")
-  const [month, setMonth] = useState(thisMonth)
+  // From the month being viewed (this month or a later one).
+  const [month, setMonth] = useState(view.budgetMonth.start.slice(0, 7))
   const [amount, setAmount] = useState(item?.status ? minorToInputString(item.budget.amountMinor, view.currency) : "")
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -439,7 +472,14 @@ function BudgetForm({ view, item, onDone }: { view: GoalsView; item?: BudgetItem
       </SelectField>
       <div className="grid items-start gap-3 md:grid-cols-2">
         <AmountField compact name="amount" label="Monthly budget" currency={view.currency} defaultValue={amount} error={errors.amount} onChange={setAmount} hint={item ? "0 or blank removes it from that month on." : undefined} autoFocus />
-        <SelectField name="month" label="From" value={month} error={errors.month} onChange={(e) => setMonth(e.target.value)}>
+        <SelectField
+          name="month"
+          label="From"
+          value={month}
+          error={errors.month}
+          hint={`Applies from ${monthLabel(month)} onwards. Earlier months keep their amounts.`}
+          onChange={(e) => setMonth(e.target.value)}
+        >
           {monthOptions(view.today).map((m) => (
             <option key={m.value} value={m.value}>
               {m.label}
