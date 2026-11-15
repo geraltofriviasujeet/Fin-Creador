@@ -1,3 +1,4 @@
+import { rupeeAmountsIn } from "@fin-creador/domain"
 import { type LlmProvider, type LlmRequest, type LlmResponse, NO_USAGE } from "./types"
 
 // The mock provider: every automated test and the E2E server use it, so no test ever calls
@@ -38,11 +39,20 @@ export const mockToolCall = (name: string, input: unknown, id = `call-${name}`):
  * then reports the mock search's two prices with web_price_figures, then repeats trip_check's
  * code-built summary. A plan's round (10.9, the plan_pick tool) picks each line's prices whose
  * text says "per night" (as a night) or "per person" (as a person), and no names; for a
- * purchase shortlist, every model offered (by id).
+ * purchase shortlist, every model offered (by id). A general question (10.6c, knowledge_search the
+ * only tool) asks knowledge_search, then quotes the first passage's first sentence and cites it;
+ * with no passage it answers from "memory" with a figure, which the app must never show. A tax
+ * calculation (10.6e, tax_estimate offered) passes the question's first amount as written, then
+ * gives both totals by placeholder, in Markdown bold. Small talk (no tools) gets a one-line reply.
  */
 const defaultScript: MockScript = (request) => {
   const plan = planScript(request)
   if (plan) return plan
+  if (request.tools.length === 0) return mockText("Hello. Ask me about your money. (Test answer.)")
+  const knowledge = knowledgeScript(request)
+  if (knowledge) return knowledge
+  const tax = taxScript(request)
+  if (tax) return tax
   const last = request.messages.at(-1)
   const web = webScript(request)
   if (web) return web
@@ -131,4 +141,34 @@ function planScript(request: LlmRequest): LlmResponse | null {
     picks: l.prices.flatMap((p) => (/per night/i.test(p.text) ? [{ id: p.id, per: "night" }] : /per person/i.test(p.text) ? [{ id: p.id, per: "person" }] : [])).slice(0, 1),
   }))
   return mockToolCall("plan_pick", { lines, carriers: [], hotels: [] })
+}
+
+/** A general question's rounds (10.6c), when knowledge_search is the only tool offered. */
+function knowledgeScript(request: LlmRequest): LlmResponse | null {
+  if (request.tools.length !== 1 || request.tools[0]?.name !== "knowledge_search") return null
+  const last = request.messages.at(-1)
+  if (last?.role !== "tool_results") {
+    const question = request.messages.filter((m) => m.role === "user").at(-1)
+    return mockToolCall("knowledge_search", { query: question?.role === "user" ? question.text : "" })
+  }
+  const result = JSON.parse(last.results[0]?.content ?? "{}") as { passages?: { id: string; text: string }[] }
+  const first = result.passages?.[0]
+  if (!first) return mockText("From memory: it is worth ₹50,00,000. (Test answer.)")
+  const body = first.text.split("\n").filter((line) => line.trim() && !line.startsWith("<") && !line.startsWith("#"))[0] ?? ""
+  const sentence = /^.*?[.!?](?=\s|$)/.exec(body)?.[0] ?? body
+  return mockText(`${sentence} [[${first.id}]] (Test answer.)`)
+}
+
+/** A tax calculation's rounds (10.6e): tax_estimate with the question's first amount, then both totals by placeholder. */
+function taxScript(request: LlmRequest): LlmResponse | null {
+  if (!request.tools.some((t) => t.name === "tax_estimate")) return null
+  const last = request.messages.at(-1)
+  if (last?.role !== "tool_results") {
+    const question = request.messages.filter((m) => m.role === "user").at(-1)
+    const salary = rupeeAmountsIn(question?.role === "user" ? question.text : "")[0]?.text ?? null
+    return mockToolCall("tax_estimate", { salary })
+  }
+  const result = JSON.parse(last.results[0]?.content ?? "{}") as { amounts?: unknown[] }
+  if (!result.amounts) return mockText("Needs more. (Test answer.)")
+  return mockText("**New regime:** {fig:new_regime_total_tax}. **Old regime:** {fig:old_regime_total_tax}. (Test answer.)")
 }

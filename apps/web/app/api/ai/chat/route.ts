@@ -1,11 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { type Json, userToday } from "@fin-creador/api"
-import { readLlmConfig, readSearchConfig } from "@/lib/ai/config"
+import { readKnowledgeConfig, readLlmConfig, readSearchConfig } from "@/lib/ai/config"
 import { type BeginOutcome, type RomaDb, type RomaHistory, handleChat } from "@/lib/ai/handle"
 import { type StoredTurn, fromDateRangeLiteral, toDateRangeLiteral } from "@/lib/ai/history"
+import { functionEmbedder, mockEmbedder } from "@/lib/ai/knowledge/embedder"
+import type { KnowledgeDb } from "@/lib/ai/knowledge/session"
 import { createProvider } from "@/lib/ai/llm"
 import { createSearchProvider } from "@/lib/ai/search"
 import type { SearchBeginOutcome, SearchDb } from "@/lib/ai/search/session"
+import { getPublicEnv } from "@/lib/env"
 import { createClient } from "@/lib/supabase/server"
 
 // Roma (Sprint 10.1): one question, answered from the person's own records. Runs as the
@@ -17,6 +20,9 @@ import { createClient } from "@/lib/supabase/server"
 // roma_record_turn), never with a service key. From 10.8, with SEARCH_ENABLED, web lookups
 // are offered; their credits go through roma_search_begin / _settle / _release under the same
 // session, and the words a query must never carry are read here (RLS) and kept in memory.
+// From 10.6c, with KNOWLEDGE_ENABLED, general questions search the knowledge base: the
+// question is embedded by the embed Edge Function with the person's own access token (never a
+// service key) and matched with match_knowledge_chunks under the same session.
 //
 // maxDuration is the hard stop; the chat loop's own 45 s deadline (lib/ai/chat.ts) ends a
 // slow answer first with a clear message. Vercel Hobby allows up to 300 s.
@@ -93,6 +99,10 @@ export async function POST(request: NextRequest) {
         p_sent_descriptions: turn.sentDescriptions,
         // The checked plan (10.9); the database checks its shape, size and keys again.
         ...(turn.plan ? { p_plan: turn.plan as unknown as Json } : {}),
+        // The citations and tax card (10.6d), only when there are some: a database without
+        // 20261114180000_roma_turn_sources.sql still records every other turn.
+        ...(turn.citations ? { p_citations: turn.citations as unknown as Json } : {}),
+        ...(turn.tax ? { p_tax: turn.tax as unknown as Json } : {}),
       })
       const row = Array.isArray(data) ? data[0] : null
       // A turn that couldn't be saved logs its error code and message only (the function's own
@@ -124,6 +134,21 @@ export async function POST(request: NextRequest) {
     },
   }
 
+  const knowledgeDb: KnowledgeDb = {
+    async match(embedding, count, minSimilarity) {
+      const { data, error } = await supabase.rpc("match_knowledge_chunks", {
+        p_embedding: JSON.stringify(embedding),
+        p_count: count,
+        p_min_similarity: minSimilarity,
+      })
+      if (error) throw new Error(error.code ?? "match failed")
+      return data
+    },
+  }
+
+  const knowledgeConfig = readKnowledgeConfig(process.env)
+  // The person's access token for the embed function; read from the session already checked by getUser.
+  const accessToken = knowledgeConfig.status === "on" && knowledgeConfig.embedder === "supabase" ? ((await supabase.auth.getSession()).data.session?.access_token ?? "") : ""
   const searchConfig = readSearchConfig(process.env)
   const config = readLlmConfig(process.env)
   const result = await handleChat(await request.json().catch(() => null), {
@@ -135,6 +160,18 @@ export async function POST(request: NextRequest) {
       if (config.status !== "on") throw new Error("Roma is off")
       return createProvider(config)
     },
+    ...(knowledgeConfig.status === "on"
+      ? {
+          knowledge: {
+            db: knowledgeDb,
+            minSimilarity: knowledgeConfig.minSimilarity,
+            makeEmbedder: (requestId: string) =>
+              knowledgeConfig.embedder === "mock"
+                ? mockEmbedder
+                : functionEmbedder({ supabaseUrl: getPublicEnv().supabaseUrl, anonKey: getPublicEnv().supabasePublishableKey, accessToken, requestId }),
+          },
+        }
+      : {}),
     onUnverified: (unmatched) => console.warn(JSON.stringify({ event: "roma_unverified", unmatched })),
     ...(searchConfig.status === "on"
       ? {

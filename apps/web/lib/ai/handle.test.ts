@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest"
+import { basisLabels } from "./wording"
 import type { UserClient } from "@fin-creador/api"
 import type { ChatRun } from "./chat"
 import type { LlmConfig } from "./config"
 import { type BeginOutcome, type ChatDeps, type RomaDb, type RomaHistory, type TurnToRecord, handleChat } from "./handle"
 import { MAX_TURNS, type StoredTurn } from "./history"
-import { mockProvider } from "./llm/mock"
+import { mockProvider, mockText, mockToolCall } from "./llm/mock"
 import { LlmError, type LlmProvider, NO_USAGE } from "./llm/types"
 import { runPlan } from "./plan/run"
 import { mockSearchProvider } from "./search/mock"
+import { NOT_COVERED } from "./tools/tax"
 
 // The request flow with a fake ledger: what is reserved, settled and released. Mock provider only.
 
@@ -122,7 +124,12 @@ describe("POST /api/ai/chat flow", () => {
     const res = await handleChat(ask, d)
     expect(res).toMatchObject({
       status: 200,
-      body: { status: "answer", figures: [{ label: "Spent", value: "₹500" }, { label: "Expenses", value: "2" }], periods: [{ from: "2026-11-01", to: "2026-11-05" }] },
+      body: {
+        status: "answer",
+        figures: [{ label: "Spent", value: "₹500" }, { label: "Expenses", value: "2" }],
+        periods: [{ from: "2026-11-01", to: "2026-11-05" }],
+        basis: { records: true, knowledge: false },
+      },
     })
     expect(d.db.ledger.settled).toEqual([{ id: "req-1", inputTokens: 0, outputTokens: 0, costUsd: 0 }])
     expect(d.db.ledger.released).toEqual([])
@@ -388,5 +395,110 @@ describe("detailed plans (10.9)", () => {
   it("refuses a plan request with a field it doesn't know", async () => {
     const res = await handleChat({ question: "Plan my trip", plan: { ...goa, budget: 5 } }, deps({ search }))
     expect(res.body).toMatchObject({ code: "invalid" })
+  })
+})
+
+describe("knowledge base routing (10.6c)", () => {
+  const passageRow = {
+    chunk_id: "00000000-0000-4000-8000-000000000001",
+    document_slug: "sip-explained",
+    title: "What an SIP is and how it works",
+    content_kind: "own",
+    publisher: "FinCreador",
+    based_on_publisher: "AMFI",
+    source_url: null,
+    read_more_url: null,
+    link_permission_pending: true,
+    financial_year: null,
+    content: "An SIP invests a fixed amount at regular intervals.",
+    similarity: 0.9,
+  }
+  function knowledge(rows = [passageRow]) {
+    const embedded: { requestId: string; text: string }[] = []
+    return {
+      embedded,
+      knowledge: {
+        db: { match: async () => rows },
+        minSimilarity: 0.8,
+        makeEmbedder: (requestId: string) => async (text: string) => {
+          embedded.push({ requestId, text })
+          return Array(384).fill(0)
+        },
+      },
+    }
+  }
+  const offered = (seen: string[][]) => (req: { tools: { name: string }[] }) => seen.push(req.tools.map((t) => t.name))
+
+  it("gives a general question knowledge_search alone, embeds under the question's reservation, and returns the citations", async () => {
+    const seen: string[][] = []
+    const k = knowledge()
+    const base = mockProvider()
+    const d = deps({ ...k, makeProvider: () => ({ ...base, complete: (req, signal) => (offered(seen)(req), base.complete(req, signal)) }) })
+    const res = await handleChat({ question: "What is an SIP?" }, d)
+    expect(seen[0]).toEqual(["knowledge_search"])
+    // The model's query, then the person's own words (10.6d), both under the question's reservation.
+    expect(k.embedded).toEqual([
+      { requestId: "req-1", text: "What is an SIP?" },
+      { requestId: "req-1", text: "What is an SIP?" },
+    ])
+    expect(res.body).toMatchObject({
+      status: "answer",
+      answer: "An SIP invests a fixed amount at regular intervals. [1] (Test answer.)\n\nGeneral information, not personal advice.",
+      citations: [{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passages: ["An SIP invests a fixed amount at regular intervals."] }],
+      basis: { records: false, knowledge: true, calculated: false },
+    })
+    expect(d.history.recorded[0]?.tools).toEqual(["knowledge_search"])
+    // Kept with the turn for reopening (10.6d), checked; no tax card to keep.
+    expect(d.history.recorded[0]?.citations).toMatchObject([{ n: 1, title: "What an SIP is and how it works", source: "FinCreador explainer, based on AMFI", passages: ["An SIP invests a fixed amount at regular intervals."] }])
+    expect(d.history.recorded[0]?.tax).toBeUndefined()
+  })
+
+  it("shows the knowledge chip only when a citation is shown", async () => {
+    // From dev: a capital gains question searched the knowledge base, cited nothing, and still got the chip.
+    const script = (_r: unknown, round: number) =>
+      round === 0 ? mockToolCall("knowledge_search", { query: "capital gains tax" }) : round === 1 ? mockToolCall("tax_estimate", { salary: "5 lakh" }) : mockText("Uncited. (Test answer.)")
+    const d = deps({ ...knowledge(), makeProvider: () => mockProvider(script) })
+    const res = await handleChat({ question: "How much tax on my capital gains of 5 lakh?" }, d)
+    // No card was shown either, so no tax chip (10.6d).
+    expect(res.body).toMatchObject({ status: "answer", answer: NOT_COVERED, basis: { records: false, knowledge: false, calculated: false } })
+    expect(res.body.status === "answer" && res.body.citations).toBeFalsy()
+    expect(d.history.recorded[0]?.tools).toEqual([])
+  })
+
+  it("shows the tax chip beside Roma when the tax card is shown (10.6d)", async () => {
+    const d = deps({ ...knowledge() })
+    const res = await handleChat({ question: "my in hand salary is 1415000 how much i have to pay tax calculate it in old and new tax regime" }, d)
+    expect(res.body).toMatchObject({ status: "answer", tax: { taxYear: "2026-27" }, basis: { records: false, calculated: true } })
+    expect(res.body.status === "answer" && basisLabels(res.body.basis)).toContain("Calculated from the tax rules")
+    expect(d.history.recorded[0]?.tools).toContain("tax_estimate")
+    expect(d.history.recorded[0]?.tax).toMatchObject({ taxYear: "2026-27", regimes: [{ title: expect.any(String) }, { title: expect.any(String) }] })
+    expect(d.history.recorded[0]?.tax).not.toHaveProperty("outOfDate")
+  })
+
+  it("keeps the records tools only for the person's own money, offers no tools for small talk, and everything when both", async () => {
+    const seen: string[][] = []
+    const base = mockProvider()
+    const d = () => deps({ ...knowledge(), makeProvider: () => ({ ...base, complete: (req, signal) => (offered(seen)(req), base.complete(req, signal)) }) })
+    await handleChat({ question: "What did I spend this month?" }, d())
+    await handleChat({ question: "hello" }, d())
+    await handleChat({ question: "Is my savings rate good?" }, d())
+    expect(seen[0]).not.toContain("knowledge_search")
+    expect(seen[0]).toContain("spending_for_period")
+    expect(seen.find((t) => t.length === 0)).toEqual([])
+    expect(seen.at(-1)).toEqual(expect.arrayContaining(["spending_for_period", "savings_rate", "knowledge_search"]))
+  })
+
+  it("routes every question to the records when the knowledge base is off", async () => {
+    const seen: string[][] = []
+    const base = mockProvider()
+    await handleChat({ question: "What is an SIP?" }, deps({ makeProvider: () => ({ ...base, complete: (req, signal) => (offered(seen)(req), base.complete(req, signal)) }) }))
+    expect(seen[0]).toContain("spending_for_period")
+    expect(seen[0]).not.toContain("knowledge_search")
+  })
+
+  it("says there is no vetted material when nothing is above the floor", async () => {
+    const res = await handleChat({ question: "What is crypto staking?" }, deps(knowledge([])))
+    expect(res.body).toMatchObject({ status: "answer", answer: "I don't have vetted material on this, so I won't answer it from general knowledge." })
+    expect(JSON.stringify(res.body)).not.toContain("50,00,000")
   })
 })

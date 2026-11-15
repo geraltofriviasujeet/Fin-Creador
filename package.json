@@ -28,7 +28,9 @@
     "fixtures:loans": "LOAN_DATES_FIXTURE=write vitest run scripts/loan-dates-parity.test.ts",
     "fixtures:cards": "CARD_DATES_FIXTURE=write vitest run scripts/card-dates-parity.test.ts",
     "fixtures:borrowing": "BORROWING_FIXTURE=write vitest run scripts/borrowing-schedule-parity.test.ts",
-    "db:types": "supabase gen types typescript --linked --schema public > packages/api/src/database.types.ts"
+    "db:types": "supabase gen types typescript --linked --schema public > packages/api/src/database.types.ts",
+    "knowledge:ingest": "node scripts/ingest-knowledge.ts",
+    "knowledge:eval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/knowledge-eval.ts"
   },
   "devDependencies": {
     "@types/node": "^24",

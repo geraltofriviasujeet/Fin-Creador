@@ -35,6 +35,21 @@ export type ChatHistory = {
 
 export const NO_HISTORY: ChatHistory = { summary: null, recent: [] }
 
+/** Tools that read neither the person's records nor the knowledge base (tax_estimate works on the figures the person typed). */
+const NEITHER_TOOLS = new Set(["web_price_lookup", "web_price_figures", "tax_estimate"])
+
+/** What an answer was built from, by the tools that actually ran: the chip above it. */
+export type AnswerBasis = { records: boolean; knowledge: boolean; calculated: boolean }
+
+export function answerBasis(tools: readonly string[]): AnswerBasis {
+  return {
+    records: tools.some((t) => t !== "knowledge_search" && !NEITHER_TOOLS.has(t)),
+    knowledge: tools.includes("knowledge_search"),
+    // A tax estimate worked out in code from the tax rules (10.6d).
+    calculated: tools.includes("tax_estimate"),
+  }
+}
+
 export const WITHHELD_ANSWER = "(This answer quoted transaction descriptions, which are no longer shared, so it is left out.)"
 
 /**

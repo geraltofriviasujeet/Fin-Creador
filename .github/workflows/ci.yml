@@ -165,11 +165,13 @@ jobs:
       - name: Start local Supabase
         run: supabase start -x realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
-      # Fictional instruments for the Investments E2E tests (the throwaway database only).
+      # Fictional instruments for the Investments E2E tests and one test knowledge base passage
+      # for Roma's (the throwaway database only).
       - name: Seed E2E instruments
         run: |
           eval "$(supabase status -o env | grep -E '^DB_URL=')"
           psql "$DB_URL" -f apps/web/e2e/fixtures/instruments.sql
+          psql "$DB_URL" -f apps/web/e2e/fixtures/knowledge.sql
 
       # Only the public URL and the public (publishable/anon) key are exported.
       - name: Point the web app at the local Supabase

@@ -426,3 +426,8 @@ enabled = true
 # user JWT.
 [functions.refresh-prices]
 verify_jwt = false
+
+# Sprint 10.6: called by signed-in people (their access token) and by the owner's ingestion
+# script (the service-role key, which need not be a JWT); both are checked in the function.
+[functions.embed]
+verify_jwt = false

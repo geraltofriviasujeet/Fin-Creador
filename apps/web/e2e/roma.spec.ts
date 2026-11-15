@@ -56,6 +56,8 @@ test("turn Roma on, ask what I spent this month, find entries, allow description
   const answers = page.getByRole("list", { name: "Roma's answers" })
   await expect(answers.getByText(/^You spent ₹1,634\.50 from \d{4}-\d{2}-01 to \d{4}-\d{2}-\d{2}, across 2 expenses\./)).toBeVisible()
   await expect(answers.getByText(/^From your records · \d{4}-\d{2}-01 to \d{4}-\d{2}-\d{2}$/)).toBeVisible()
+  await expect(answers.getByText("From your records", { exact: true })).toBeVisible()
+  await expect(answers.getByText("From the knowledge base", { exact: true })).toHaveCount(0)
   // The figures are a table, with where they came from and the period under it.
   await expect(answers.getByRole("cell").first()).toHaveText("₹1,634.50")
   await expect(answers.getByRole("columnheader", { name: "Figure" })).toBeVisible()

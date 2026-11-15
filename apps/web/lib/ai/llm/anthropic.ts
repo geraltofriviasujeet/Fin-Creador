@@ -35,11 +35,16 @@ export function anthropicProvider({ apiKey, model, fetch }: Options): LlmProvide
             max_tokens: request.maxOutputTokens,
             system: request.system.map((text) => ({ type: "text" as const, text })),
             messages: request.messages.map(toMessageParam),
-            tools: request.tools.map((t) => ({
-              name: t.name,
-              description: t.description,
-              input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
-            })),
+            // Small talk (10.6c) is offered no tools: the field is left out.
+            ...(request.tools.length > 0
+              ? {
+                  tools: request.tools.map((t) => ({
+                    name: t.name,
+                    description: t.description,
+                    input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
+                  })),
+                }
+              : {}),
             output_config: { effort: "low" },
             ...(request.thinking === "off" ? thinkingOff(model) : {}),
           },
