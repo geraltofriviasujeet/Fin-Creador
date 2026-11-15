@@ -179,6 +179,56 @@ test("budgets: warning at 80%, over at 100%, on the page and the Overview", asyn
   await shot(page, "overview-budget-goals")
 })
 
+/** This month and next month as the page labels them ("November 2026"), in the profile time zone. */
+function kolkataMonths(): [string, string] {
+  const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", timeZone: "Asia/Kolkata" }).formatToParts(new Date())
+  const year = Number(parts.find((p) => p.type === "year")?.value)
+  const month = Number(parts.find((p) => p.type === "month")?.value)
+  const label = (y: number, m: number) =>
+    new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, 1)))
+  return [label(year, month), month === 12 ? label(year + 1, 1) : label(year, month + 1)]
+}
+
+test("a budget carries forward; a change in a later month leaves earlier months as they were", async ({ page }) => {
+  await newUser(page, "goals-carry")
+  const [thisMonth, nextMonth] = kolkataMonths()
+  await expect(budgets(page)).toContainText("A budget continues every month until you change it or remove it.")
+
+  await budgets(page).getByRole("button", { name: "Set a budget" }).click()
+  const set = dialog(page, "Set a budget")
+  await set.getByLabel("Category").selectOption({ label: "Transport" })
+  await set.getByLabel("Monthly budget").fill("2,000")
+  await expect(set.getByText(`Applies from ${thisMonth} onwards. Earlier months keep their amounts.`)).toBeVisible()
+  await set.getByRole("button", { name: "Save budget" }).click()
+  await expect(toast(page, "Budget saved.")).toBeVisible()
+  await expect(budgets(page)).toContainText("₹0 / ₹2,000")
+  await expect(budgets(page)).not.toContainText("Since")
+
+  // Next month: the budget is shown as carried forward, not empty.
+  await budgets(page).getByRole("link", { name: "Next month" }).click()
+  await expect(page).toHaveURL(/\/goals\?month=\d{4}-\d{2}$/)
+  await expect(budgets(page)).toContainText(nextMonth)
+  await expect(budgets(page)).toContainText(`Carried forward · Since ${thisMonth}`)
+  await expect(budgets(page)).toContainText("₹0 / ₹2,000")
+
+  // Changed there, it applies from next month on.
+  await budgets(page).getByRole("button", { name: "Change: Transport" }).click()
+  const change = dialog(page, "Budget for Transport")
+  await expect(change.getByText(`Applies from ${nextMonth} onwards. Earlier months keep their amounts.`)).toBeVisible()
+  await change.getByLabel("Monthly budget").fill("2,500")
+  await change.getByRole("button", { name: "Save budget" }).click()
+  await expect(toast(page, "Budget saved.")).toBeVisible()
+  await expect(budgets(page)).toContainText("₹0 / ₹2,500")
+  await expect(budgets(page)).not.toContainText("Since")
+
+  // Back to this month: still the old amount.
+  await budgets(page).getByRole("link", { name: "Previous month" }).click()
+  await expect(page).toHaveURL(/\/goals$/)
+  await expect(budgets(page)).toContainText(`This month · ${thisMonth}`)
+  await expect(budgets(page)).toContainText("₹0 / ₹2,000")
+  await expect(budgets(page)).not.toContainText("₹2,500")
+})
+
 test("a budget in another currency asks to be set again, with no percentage", async ({ page }) => {
   await newUser(page, "goals-currency")
   await budgets(page).getByRole("button", { name: "Set a budget" }).click()

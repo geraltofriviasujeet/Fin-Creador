@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { type GoalRecord, type GoalsData, buildGoalsView } from "./view"
+import { type GoalRecord, type GoalsData, budgetMonthFromParam, buildGoalsView } from "./view"
 
 const goal = (over: Partial<GoalRecord>): GoalRecord => ({
   id: "g1",
@@ -123,5 +123,63 @@ describe("buildGoalsView: budgets", () => {
     })
     expect(view.budgets).toEqual([])
     expect(view.total).toBeNull()
+  })
+})
+
+describe("buildGoalsView: budgets carried forward", () => {
+  const rows = [
+    { categoryId: "food", effectiveFrom: "2026-08-01", amountMinor: 10_000_00, currency: "INR" },
+    { categoryId: "fuel", effectiveFrom: "2026-10-01", amountMinor: 3_000_00, currency: "INR" },
+    { categoryId: "fuel", effectiveFrom: "2026-12-01", amountMinor: 4_000_00, currency: "INR" },
+  ]
+
+  it("this month: a budget from an earlier month says since when; one set this month doesn't", () => {
+    const view = buildGoalsView({ ...base, budgetRows: rows })
+    expect(view.budgetMonth).toEqual({ start: "2026-10-01", end: "2026-10-31" })
+    expect(view.budgets.map((b) => [b.category.id, b.since, b.budget.amountMinor])).toEqual([
+      ["food", "2026-08-01", 10_000_00],
+      ["fuel", null, 3_000_00],
+    ])
+    expect(view.previousBudgetMonth).toBeNull()
+    expect(view.nextBudgetMonth).toBe("2026-11-01")
+  })
+
+  it("a later month shows the budgets that will apply, carried forward, with nothing spent", () => {
+    const view = buildGoalsView({ ...base, budgetRows: rows, spending: new Map(), budgetMonth: "2026-11-01" })
+    expect(view.budgets.map((b) => [b.category.id, b.since, b.spentMinor, b.status?.level])).toEqual([
+      ["food", "2026-08-01", 0, "ok"],
+      ["fuel", "2026-10-01", 0, "ok"],
+    ])
+    expect(view.previousBudgetMonth).toBe("2026-10-01")
+    expect(view.nextBudgetMonth).toBe("2026-12-01")
+    // The month view of this month is unchanged.
+    expect(view.month).toEqual({ start: "2026-10-01", end: "2026-10-31" })
+  })
+
+  it("a change from a later month applies from then on; earlier months keep their amount", () => {
+    const dec = buildGoalsView({ ...base, budgetRows: rows, spending: new Map(), budgetMonth: "2026-12-01" })
+    expect(dec.budgets.find((b) => b.category.id === "fuel")).toMatchObject({ since: null, budget: { amountMinor: 4_000_00 } })
+    const oct = buildGoalsView({ ...base, budgetRows: rows })
+    expect(oct.budgets.find((b) => b.category.id === "fuel")?.budget.amountMinor).toBe(3_000_00)
+  })
+
+  it("the last month that can be shown has no next month", () => {
+    const view = buildGoalsView({ ...base, budgetMonth: "2028-09-01" })
+    expect(view.nextBudgetMonth).toBeNull()
+    expect(view.previousBudgetMonth).toBe("2028-08-01")
+  })
+})
+
+describe("budgetMonthFromParam", () => {
+  it("reads a month from this month up to 23 months ahead", () => {
+    expect(budgetMonthFromParam("2026-10", "2026-10-26")).toBe("2026-10-01")
+    expect(budgetMonthFromParam("2027-01", "2026-10-26")).toBe("2027-01-01")
+    expect(budgetMonthFromParam("2028-09", "2026-10-26")).toBe("2028-09-01")
+  })
+
+  it("anything else is this month", () => {
+    for (const value of [undefined, "", "2026-09", "2028-10", "2026-13", "2026-1", "2026-10-01", "next"]) {
+      expect(budgetMonthFromParam(value, "2026-10-26")).toBe("2026-10-01")
+    }
   })
 })

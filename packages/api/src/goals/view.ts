@@ -6,11 +6,13 @@ import {
   type GoalFigures,
   type IsoDate,
   type SavingPlan,
+  addDays,
   addMinor,
   budgetStatus,
   budgetsForMonth,
   goalFigures,
   monthRange,
+  previousMonthRange,
   savingPlan,
 } from "@fin-creador/domain"
 import { parseGoalDetails } from "@fin-creador/schemas"
@@ -48,6 +50,8 @@ export type BudgetItem = {
   spentMinor: number
   /** Null when the budget is in another currency: "Set your budget again", no percentage. */
   status: BudgetStatus | null
+  /** The month this amount started in, when earlier than the month shown (carried forward). */
+  since: IsoDate | null
 }
 
 export type GoalsView = {
@@ -61,6 +65,11 @@ export type GoalsView = {
   unbudgeted: BudgetCategory[]
   /** All budgets this month in the profile currency together; null when there are none. */
   total: BudgetStatus | null
+  /** The month the budgets are shown for: this month, or a later one (up to BUDGET_MONTHS_AHEAD). */
+  budgetMonth: DateRange
+  /** First days of the months before and after it that can be shown; null at either end. */
+  previousBudgetMonth: IsoDate | null
+  nextBudgetMonth: IsoDate | null
 }
 
 export type GoalsData = {
@@ -69,8 +78,30 @@ export type GoalsData = {
   goals: GoalRecord[]
   budgetRows: BudgetRow[]
   categories: BudgetCategory[]
-  /** Expense per category this month, profile currency only. */
+  /** Expense per category in the month shown, profile currency only (none yet in a later month). */
   spending: ReadonlyMap<string, number>
+  /** First day of the month the budgets are shown for; this month when left out. */
+  budgetMonth?: IsoDate
+}
+
+/** Budgets can be set this month and up to 23 months ahead (the budget form's months). */
+export const BUDGET_MONTHS_AHEAD = 23
+
+const nextMonthStart = (date: IsoDate): IsoDate => addDays(monthRange(date).end, 1)
+
+/**
+ * The month to show budgets for, from a "YYYY-MM" URL value: this month, or a later one up
+ * to BUDGET_MONTHS_AHEAD. Anything else (missing, malformed, past, too far) is this month.
+ */
+export function budgetMonthFromParam(value: string | undefined, today: IsoDate): IsoDate {
+  const thisMonth = monthRange(today).start
+  if (!value || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return thisMonth
+  let month = thisMonth
+  for (let k = 0; k <= BUDGET_MONTHS_AHEAD; k++) {
+    if (month.slice(0, 7) === value) return month
+    month = nextMonthStart(month)
+  }
+  return thisMonth
 }
 
 function goalItem(goal: GoalRecord, today: IsoDate): GoalItem {
@@ -104,7 +135,8 @@ export function buildGoalsView(data: GoalsData): GoalsView {
   const active = items.filter((i) => !i.goal.archivedAt).sort(byTargetDate)
   const archived = items.filter((i) => i.goal.archivedAt).sort(byTargetDate)
 
-  const current = budgetsForMonth(data.budgetRows, today)
+  const shown = monthRange(data.budgetMonth ?? today)
+  const current = budgetsForMonth(data.budgetRows, shown.start)
   const categories = new Map(data.categories.map((c) => [c.id, c]))
   const budgets: BudgetItem[] = []
   for (const [categoryId, budget] of current) {
@@ -114,7 +146,7 @@ export function buildGoalsView(data: GoalsData): GoalsView {
     // count as nothing spent, never below zero.
     const spentMinor = Math.max(data.spending.get(categoryId) ?? 0, 0)
     const status = budget.currency === currency ? budgetStatus(spentMinor, budget.amountMinor) : null
-    budgets.push({ category, budget, spentMinor, status })
+    budgets.push({ category, budget, spentMinor, status, since: budget.effectiveFrom < shown.start ? budget.effectiveFrom : null })
   }
   budgets.sort((a, b) => a.category.name.localeCompare(b.category.name))
 
@@ -127,5 +159,25 @@ export function buildGoalsView(data: GoalsData): GoalsView {
   const budgeted = new Set(budgets.map((b) => b.category.id))
   const unbudgeted = data.categories.filter((c) => !c.archived && !budgeted.has(c.id)).sort((a, b) => a.name.localeCompare(b.name))
 
-  return { today, currency, month: monthRange(today), active, archived, budgets, unbudgeted, total }
+  const thisMonth = monthRange(today).start
+  const lastMonth = lastBudgetMonth(thisMonth)
+  return {
+    today,
+    currency,
+    month: monthRange(today),
+    active,
+    archived,
+    budgets,
+    unbudgeted,
+    total,
+    budgetMonth: shown,
+    previousBudgetMonth: shown.start > thisMonth ? previousMonthRange(shown.start).start : null,
+    nextBudgetMonth: shown.start < lastMonth ? nextMonthStart(shown.start) : null,
+  }
+}
+
+function lastBudgetMonth(thisMonth: IsoDate): IsoDate {
+  let month = thisMonth
+  for (let k = 0; k < BUDGET_MONTHS_AHEAD; k++) month = nextMonthStart(month)
+  return month
 }

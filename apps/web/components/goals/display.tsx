@@ -63,6 +63,13 @@ export function BudgetBadge({ status }: { status: BudgetStatus | null }) {
   return null
 }
 
+const MONTH_FORMAT = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })
+
+/** "November 2026" for a date in that month ("YYYY-MM-DD" or "YYYY-MM"). */
+export function monthLabel(date: string): string {
+  return MONTH_FORMAT.format(new Date(Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, 1)))
+}
+
 /** "₹500 / ₹7,500" this month (profile currency only), or the budget's own currency on a mismatch. */
 export function budgetAmounts(item: BudgetItem, currency: string): string {
   if (!item.status) return money(item.budget.amountMinor, item.budget.currency)

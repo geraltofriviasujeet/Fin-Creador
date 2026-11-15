@@ -12,17 +12,21 @@ export const metadata: Metadata = { title: "Goals" }
 
 // Goals page (Sprint 6): planned expenses and monthly budgets, read as the signed-in user
 // (RLS). Every figure is computed in packages/domain from the amounts the person entered.
-export default function GoalsPage() {
+// ?month=YYYY-MM shows the budgets for a later month (this month otherwise).
+type SearchParams = Promise<Record<string, string | string[] | undefined>>
+
+export default function GoalsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <Suspense fallback={<GoalsSkeleton />}>
-      <GoalsContent />
+      <GoalsContent searchParams={searchParams} />
     </Suspense>
   )
 }
 
-async function GoalsContent() {
+async function GoalsContent({ searchParams }: { searchParams: SearchParams }) {
+  const month = (await searchParams).month
   const supabase = await createClient()
-  const data = await loadGoalsData(supabase)
+  const data = await loadGoalsData(supabase, typeof month === "string" ? month : undefined)
   if (!data.ok && data.reason === "unauthenticated") redirect("/sign-in?next=%2Fgoals")
   if (!data.ok) {
     return (

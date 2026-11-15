@@ -40,7 +40,7 @@ select results_eq(
 );
 select is(
   (select count(*)::int from public.categories where user_id = '1b000000-0000-4000-8000-000000000001' and kind = 'expense'),
-  15, 'a new user has 15 expense defaults'
+  17, 'a new user has 17 expense defaults'
 );
 select is(public.ensure_default_expense_categories('1b000000-0000-4000-8000-000000000001'), 0, 'the defaults again create nothing');
 select is(pg_temp.named('1b000000-0000-4000-8000-000000000001'), 1, 'and no second one');
@@ -69,8 +69,8 @@ select public.record_transaction('expense', gen_random_uuid(), 59000, current_da
   '1a000000-0000-4000-8000-000000000003', p_category_id => '1c000000-0000-4000-8000-000000000003');
 reset role;
 
-select is(public.backfill_default_expense_categories(), 1 + 15,
-  'the backfill creates one for B and the 15 defaults for F; C, D and E adopt theirs');
+select is(public.backfill_default_expense_categories(), 1 + 17,
+  'the backfill creates one for B and the 17 defaults for F; C, D and E adopt theirs');
 select isnt(pg_temp.bank('1b000000-0000-4000-8000-000000000002'), null, 'B gets the category');
 select is(pg_temp.bank('1b000000-0000-4000-8000-000000000003'), '1c000000-0000-4000-8000-000000000003'::uuid, 'C''s own category takes the key');
 select results_eq(
@@ -93,7 +93,7 @@ select ok(
 );
 select is(
   (select count(*)::int from public.categories where user_id = '1b000000-0000-4000-8000-000000000006' and kind = 'expense'),
-  15, 'F gets all 15 defaults'
+  17, 'F gets all 17 defaults'
 );
 
 -- ------------------------------------------------------------ re-runs (19-21)

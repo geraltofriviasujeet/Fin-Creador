@@ -19,6 +19,11 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC043: { message: "Check the EMI dates and try again.", field: "nextDueDate" },
   FC044: { message: "Archive the loan before deleting it." },
   FC053: { message: "This due is archived. Restore it first." },
+  // revise_loan (migration 20261115180000); FC061 and FC062 carry an amount and are read in reviseLoan.
+  FC059: { message: "The amount taken can't be more than the sanctioned amount.", field: "disbursed" },
+  FC060: { message: "Payments are recorded on this loan, so the repayment start, EMI dates and moratorium stay as they are." },
+  FC061: { message: "This is less than the principal already repaid.", field: "outstanding" },
+  FC062: { message: "Keep at least the EMIs already paid.", field: "remainingMonths" },
 }
 
 const NO_DIGITS = "Leave out card and account numbers"

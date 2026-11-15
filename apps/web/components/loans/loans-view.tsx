@@ -238,7 +238,7 @@ export function LoansPageView({ view, payId = null }: { view: LoansView; /** A r
           </DialogContent>
         )}
         {open?.kind === "edit" && (
-          <DialogContent eyebrow="Loans & Liabilities" title={`Edit ${open.loan.name}`} description="Amounts taken, dates and tenure stay as entered." className="md:max-w-[640px]">
+          <DialogContent eyebrow="Loans & Liabilities" title={`Edit ${open.loan.name}`} className="flex max-h-dvh flex-col md:max-h-[calc(100dvh-2rem)] md:max-w-[640px]">
             <EditLoanForm item={open.loan} onDone={close} />
           </DialogContent>
         )}
