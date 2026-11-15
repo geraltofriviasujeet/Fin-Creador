@@ -220,6 +220,15 @@ async function ask(page: Page, question: string) {
   return page.getByRole("list", { name: "Roma's answers" }).getByRole("listitem").first()
 }
 
+/** A goal check's or what-if's figures and assumptions (10.7a): one section, closed by default. */
+async function openWorkedOut(answer: ReturnType<Page["locator"]>) {
+  const section = answer.locator("details")
+  await expect(section).not.toHaveAttribute("open")
+  await expect(answer.getByRole("table", { name: "Figures from your records" })).toBeHidden()
+  await section.getByText("How this was worked out").click()
+  await expect(section).toHaveAttribute("open")
+}
+
 const figure = (answer: ReturnType<Page["locator"]>, label: string) =>
   answer.getByRole("row").filter({ has: answer.page().getByRole("rowheader", { name: label, exact: true }) }).getByRole("cell")
 
@@ -254,6 +263,7 @@ test("goal check: Yes for a goal within reach, No with what to change, the verdi
   await expect(yes.getByText("Goal check · Car 2027")).toBeVisible()
   await expect(yes.getByText("Yes.", { exact: true })).toBeVisible()
   await expect(yes.getByText(/^Yes\. At your current rate Car 2027 would be reached in \w+ \d{4}, by the target of December \d{4}\. Free for it this month: ₹50,000\./)).toBeVisible()
+  await openWorkedOut(yes)
   await expect(figure(yes, "Median monthly net (income minus spending)")).toHaveText("₹50,000")
   await expect(figure(yes, "Months with records")).toHaveText("6")
   await expect(figure(yes, "Car 2027: target")).toHaveText("₹1,00,000")
@@ -266,13 +276,14 @@ test("goal check: Yes for a goal within reach, No with what to change, the verdi
   const no = await ask(page, "Can I reach House fund?")
   await expect(no.getByText("Goal check · House fund")).toBeVisible()
   await expect(no.getByText("No.", { exact: true })).toBeVisible()
+  await openWorkedOut(no)
   await expect(no.getByText(/^No\. At your current rate House fund would be reached (in \w+ \d{4}|not within 10 years), after the target of December \d{4}\..* save ₹[\d,]+(\.\d{2})? more a month/)).toBeVisible()
   await expect(figure(no, "Assuming you keep saving for your other goals: Car 2027, a month")).toHaveText(/^₹[\d,]+(\.\d{2})?$/)
   await expect(figure(no, "Save more a month")).toHaveText(/^₹[\d,]+(\.\d{2})?$/)
   await expect(no.getByRole("listitem").filter({ hasText: "Assuming you keep saving for your other goals (Car 2027)" })).toBeVisible()
 })
 
-test("goal what if: saving more a month, the before/after card, the savings-only line (10.7a)", async ({ page }) => {
+test("goal what if: saving more a month, the before/after card, the working out closed (10.7a)", async ({ page }) => {
   const email = uniqueEmail("roma-what-if")
   await startWithRoma(page, "Kavya Rao", email)
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } })
@@ -299,13 +310,16 @@ test("goal what if: saving more a month, the before/after card, the savings-only
   const answer = await ask(page, "What if I save 10k more a month for Car 2027?")
   await expect(answer.getByText("What if · Car 2027")).toBeVisible()
   await expect(answer.getByText(/^Reached in \w+ \d{4}\.$/)).toBeVisible()
-  await expect(answer.getByText(/^Reached in \w+ \d{4}\. Saving ₹10,000 more a month \(₹60,000 for it this month\), Car 2027 would be reached in \w+ \d{4}, instead of \w+ \d{4}\./)).toBeVisible()
-  await expect(answer.getByText(/Savings only: no investment returns, no interest and no inflation\.$/).first()).toBeVisible()
+  // The card plus at most two sentences; "Savings only" once, on the card.
+  await expect(answer.getByText(/^Reached in \w+ \d{4}\. Saving ₹10,000 more a month \(₹60,000 for it this month\), it would be reached in \w+ \d{4} \(5 months\), instead of \w+ \d{4} \(6 months\)\.$/)).toBeVisible()
+  await expect(answer.getByText("Savings only: no investment returns, no interest and no inflation.", { exact: true })).toHaveCount(1)
+  await expect(answer.getByText(/Savings only/)).toHaveCount(1)
   const rows = answer.getByRole("table", { name: "The goal as it is and with the change" })
   await expect(rows.getByRole("columnheader", { name: "₹10,000 more a month" })).toBeVisible()
-  await expect(rows.getByRole("row").filter({ hasText: "For this goal this month" }).getByRole("cell")).toHaveText(["₹50,000", "₹60,000"])
+  await expect(rows.getByRole("row").filter({ hasText: "For this goal a month" }).getByRole("cell")).toHaveText(["₹50,000", "₹60,000"])
   await expect(answer.getByText("Your records show ₹50,000 free a month today; this assumes you find the extra ₹10,000.")).toBeVisible()
   await expect(answer.getByText("Only this goal changes: your other goals, loan payments and dues are taken as they are today.")).toBeVisible()
+  await openWorkedOut(answer)
   await expect(figure(answer, "Saved more a month")).toHaveText("₹10,000")
 })
 
@@ -317,6 +331,7 @@ test("goal check: too early to say with under 3 months of records (10.4)", async
   const early = await ask(page, "Can I reach Trip to Goa?")
   await expect(early.getByText("Goal check · Trip to Goa")).toBeVisible()
   await expect(early.getByText("Too early to say.", { exact: true })).toBeVisible()
+  await openWorkedOut(early)
   await expect(early.getByText(/^Too early to say\. There are only 0 complete months of records, too few to project from\. Trip to Goa needs ₹2,500 a month\./)).toBeVisible()
   await expect(figure(early, "Months with records")).toHaveText("0")
   await expect(figure(early, "Net recorded so far")).toHaveText("₹20,000")

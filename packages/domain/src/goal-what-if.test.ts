@@ -116,6 +116,48 @@ describe("goalWhatIf: changes", () => {
     expect(goalWhatIf(loan, { kind: "monthly", deltaMinor: -5_000 })).toMatchObject({ outcome: "not_reached", after: { reachMonth: null } });
   });
 
+  // From dev (10.7a): median net −₹49,819.30, free for the goal −₹2,90,659.13 this month.
+  const assam: GoalProjectionInput = {
+    ...base,
+    targetMinor: 10_000_000,
+    targetDate: null,
+    months: six(-4_981_930),
+    claims: [{ date: "2026-11-20", amountMinor: 24_083_983 }],
+  };
+
+  it("nothing free: saving more counts from zero, so the amount is what goes to the goal a month", () => {
+    const r = goalWhatIf(assam, { kind: "monthly", deltaMinor: 500_000 });
+    expect(r.before).toMatchObject({ freeThisMonthMinor: -29_065_913, reachMonth: null });
+    // ₹1,00,000 at ₹5,000 a month: 20 months, November 2026 to June 2028.
+    expect(r).toMatchObject({ outcome: "projected", floored: true, after: { freeThisMonthMinor: 500_000, reachMonth: "2028-06-01" } });
+    // A change of zero is still exactly the goal check: not reached.
+    const zero = goalWhatIf(assam, { kind: "monthly", deltaMinor: 0 });
+    expect(zero).toMatchObject({ outcome: "not_reached", floored: false });
+    expect(zero.after).toStrictEqual(goalProjection(assam));
+    // Less is still not reached.
+    expect(goalWhatIf(assam, { kind: "monthly", deltaMinor: -500_000 })).toMatchObject({ outcome: "not_reached", floored: false });
+  });
+
+  it("nothing free this month but money freed later: each month counts from zero", () => {
+    // A ₹20,000 claim this month only: this month counts as 0, then ₹10,000 a month, plus ₹2,000.
+    const r = goalWhatIf({ ...base, claims: [{ date: "2026-11-20", amountMinor: 20_000 }] }, { kind: "monthly", deltaMinor: 2_000 });
+    // November 2,000, then 12,000 a month: 2,000 + 12,000 × 10 = 122,000 by September 2027.
+    expect(r).toMatchObject({ floored: true, after: { reachMonth: "2027-09-01" } });
+  });
+
+  it("nothing free, by a month: the full monthly amount needed", () => {
+    const r = goalWhatIf(assam, { kind: "by_month", month: "2027-10-01" });
+    // ₹1,00,000 over 12 months: ₹8,333.34 a month, all of it on top of nothing free.
+    expect(r).toMatchObject({ outcome: "projected", floored: true });
+    expect(r.byMonth).toStrictEqual({ month: "2027-10-01", months: 12, neededMonthlyMinor: 833_334, extraMonthlyMinor: 833_334, availableMinor: 0 });
+    expect(r.after!.reachMonth).toBe("2027-10-01");
+  });
+
+  it("nothing free and costing more or less: still not reached", () => {
+    expect(goalWhatIf(assam, { kind: "cost", deltaMinor: 1_000_000 })).toMatchObject({ outcome: "not_reached", floored: false });
+    expect(goalWhatIf(assam, { kind: "cost", deltaMinor: -1_000_000 })).toMatchObject({ outcome: "not_reached" });
+  });
+
   it("nothing free: never reached, said so", () => {
     expect(goalWhatIf(fixtures["nothing free"]!, { kind: "monthly", deltaMinor: 0 })).toMatchObject({ outcome: "not_reached", after: { reachMonth: null } });
   });
@@ -164,7 +206,7 @@ describe("goalWhatIf: changes", () => {
   it("no target amount: nothing to work out", () => {
     const none = { ...base, targetMinor: 0 };
     for (const change of [{ kind: "monthly", deltaMinor: 5_000 }, { kind: "cost", deltaMinor: 5_000 }, { kind: "by_month", month: "2027-06-01" }] as const) {
-      expect(goalWhatIf(none, change)).toStrictEqual({ outcome: "no_target", before: null, after: null, byMonth: null });
+      expect(goalWhatIf(none, change)).toStrictEqual({ outcome: "no_target", before: null, after: null, byMonth: null, floored: false });
     }
   });
 

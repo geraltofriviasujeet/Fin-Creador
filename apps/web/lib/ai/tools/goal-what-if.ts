@@ -128,21 +128,23 @@ export const goalWhatIfTool: FinanceTool<WhatIfInput> = {
       },
       domainChange,
     )
-    const shown = describeWhatIf(r, { name: goal.name, targetMinor: goal.targetMinor, savedMinor: goal.savedMinor, change, deltaMinor, month, today, money })
+    const unit = 10 ** currencyMinorDigits(currency)
+    const shown = describeWhatIf(r, { name: goal.name, targetMinor: goal.targetMinor, savedMinor: goal.savedMinor, change, deltaMinor, month, today, currency })
     const noDateInvolved = goal.targetDate === null || others.some((g) => g.plan.basis === "assumed_months")
     const assumptions = r.before
       ? buildAssumptions({ ctx, projection: r.before, others, claims, otherCurrencies: cash.otherCurrencies, windowStart, lastComplete, noDateInvolved, hasLoan: false })
       : []
     const check: GoalCheck = { kind: "what_if", goal: goal.name, verdict: shown.verdict, summary: shown.summary, assumptions, lines: shown.lines, ...(shown.comparison ? { comparison: shown.comparison } : {}) }
 
+    // Whole units only (10.7a): the figures are rounded as the card and summary round them.
     const figures: Figure[] = [
-      { label: `${goal.name}: target`, kind: "money", minor: goal.targetMinor, currency },
-      { label: `${goal.name}: saved`, kind: "money", minor: goal.savedMinor, currency },
+      { label: `${goal.name}: target`, kind: "money", minor: wholeMinor(goal.targetMinor, unit), currency },
+      { label: `${goal.name}: saved`, kind: "money", minor: wholeMinor(goal.savedMinor, unit), currency },
       ...shown.figures.map(([label, minor]): Figure => ({ label, kind: "money", minor, currency })),
     ]
     if (r.before && r.before.plan.basis !== "reached") figures.push({ label: "Months with records", kind: "count", value: r.before.monthsMeasured })
     const median = r.before?.medianNetMinor ?? null
-    if (median !== null) figures.push({ label: "Median monthly net (income minus spending)", kind: "money", minor: median, currency })
+    if (median !== null) figures.push({ label: "Median monthly net (income minus spending)", kind: "money", minor: wholeMinor(median, unit), currency })
     if (noDateInvolved && median !== null) figures.push({ label: "Months assumed for a goal with no date", kind: "count", value: NO_DATE_ASSUMED_MONTHS })
     if (shown.notWithinYears) figures.push({ label: "Projected at most, years", kind: "count", value: YEARS })
 
@@ -157,7 +159,7 @@ export const goalWhatIfTool: FinanceTool<WhatIfInput> = {
         lines: shown.lines,
         thin_estimate: r.before?.thin ?? false,
         assumptions,
-        note: `Start the answer with "${check.verdict}" exactly; verdict_summary says it all in order. State the results as facts, with the amounts by their placeholders. Never advise: never say what the person should do, never recommend, suggest or rank goals, and never name a product or account. Say that it is savings only.`,
+        note: `Start the answer with "${check.verdict}" exactly; verdict_summary says it all in order. State the results as facts, with the amounts by their placeholders. Never advise: never say what the person should do, never recommend, suggest or rank goals, and never name a product or account. At most two sentences: the card shows the figures and says it is savings only.`,
       },
       figures,
       period: { start: windowStart, end: lastComplete },
@@ -173,60 +175,97 @@ type Shown = {
   summary: string
   lines: string[]
   comparison?: NonNullable<GoalCheck["comparison"]>
+  /** Labels and amounts, already in whole units. */
   figures: [string, number][]
   notWithinYears: boolean
 }
 
-/** Every word and row shown for a what-if, built from goalWhatIf's result. */
+/** A minor amount in whole units (rupees): rounded half away from zero, or up (away from zero) for an amount needed. */
+export function wholeMinor(minor: number, unit: number, up = false): number {
+  const rest = minor % unit
+  if (rest === 0) return minor
+  const towardZero = minor - rest
+  const away = towardZero + Math.sign(minor) * unit
+  return up || Math.abs(rest) * 2 >= unit ? away : towardZero
+}
+
+/** Months from this month to `month`, both counted. */
+const monthsTo = (today: IsoDate, month: IsoDate) => (Number(month.slice(0, 4)) - Number(today.slice(0, 4))) * 12 + Number(month.slice(5, 7)) - Number(today.slice(5, 7)) + 1
+
+/**
+ * Every word and row shown for a what-if, built from goalWhatIf's result: whole units only,
+ * never a negative "free" as a bare number, and a summary of at most two sentences (the verdict
+ * and one more); the thin-estimate note, savings-only and only-this-goal lines go on the card.
+ */
 export function describeWhatIf(
   r: GoalWhatIf,
-  a: { name: string; targetMinor: number; savedMinor: number; change: Change; deltaMinor: number; month: IsoDate | null; today: IsoDate; money: (minor: number) => string },
+  a: { name: string; targetMinor: number; savedMinor: number; change: Change; deltaMinor: number; month: IsoDate | null; today: IsoDate; currency: string },
 ): Shown {
-  const { name, money } = a
+  const { name, today } = a
+  const unit = 10 ** currencyMinorDigits(a.currency)
+  const whole = (minor: number, up = false) => wholeMinor(minor, unit, up)
+  const money = (minor: number, up = false) => formatMoney(whole(minor, up), { currency: a.currency })
+  /** What is free for this goal a month, never as a negative amount. */
+  const free = (minor: number) =>
+    minor > 0 ? money(minor) : minor === 0 ? "nothing free" : `nothing free: short by ${money(-minor, true)} a month before this goal`
   /** The goal's cost after the change (only a cost change changes it). */
   const costAfter = a.change === "cost_more" || a.change === "cost_less" ? a.targetMinor + a.deltaMinor : a.targetMinor
   const size = money(Math.abs(a.deltaMinor))
   const lines = [SAVINGS_ONLY, ONLY_THIS_GOAL]
   const done = (verdict: string, text: string, figures: [string, number][] = []): Shown => ({ verdict, summary: `${verdict} ${text}`.trim(), lines, figures, notWithinYears: false })
   const { before, after } = r
-  const thin = before?.thin ? ` This is based on only ${before.monthsMeasured} months of records, so the estimate is thin.` : ""
 
   switch (r.outcome) {
     case "no_target":
-      return done("No target amount.", `${name} has no target amount, so there is nothing to work out. A target can be set on the Goals page.`)
+      return done("No target amount.", `${name} has no target amount, so there is nothing to work out.`)
     case "past_month":
-      return done("That month has passed.", `${monthName(a.month!)} is before this month. Name a month from ${monthName(monthStart(a.today))} on.`)
+      return done("That month has passed.", `${monthName(a.month!)} is before this month; name a month from ${monthName(monthStart(today))} on.`)
     case "no_cost_left":
-      return done("Nothing left to save.", `At ${size} less, ${name} would cost nothing or less, so there is nothing left to work out.`, [["Change in cost", Math.abs(a.deltaMinor)]])
+      return done("Nothing left to save.", `At ${size} less, ${name} would cost nothing or less.`, [["Change in cost", whole(Math.abs(a.deltaMinor))]])
     case "reached":
       return done("Already reached.", `${name} is saved: ${money(a.savedMinor)} of ${money(costAfter)}${costAfter === a.targetMinor ? "" : `, at ${size} ${a.deltaMinor > 0 ? "more" : "less"}`}.`)
     case "too_early":
-      return done("Too early to say.", `There are only ${before!.monthsMeasured} complete months of records, too few to work this out from. At least 3 are needed.`)
+      return done("Too early to say.", `There are only ${before!.monthsMeasured} complete months of records, and at least 3 are needed.`)
   }
 
-  const reach = (p: GoalProjection) => (p.plan.basis === "reached" ? "already saved" : p.reachMonth ? monthName(p.reachMonth) : `not within ${YEARS} years`)
+  const reach = (p: GoalProjection) =>
+    p.plan.basis === "reached" ? "already saved" : p.reachMonth ? `${monthName(p.reachMonth)} (${monthsTo(today, p.reachMonth)} months)` : "not reached"
   const was = before!
+  const wasFree = was.freeThisMonthMinor!
   if (was.thin) lines.push(`Only ${was.monthsMeasured} months have records, so the estimate is thin.`)
   const notWithinYears = was.reachMonth === null || after?.reachMonth === null
+  if (notWithinYears) lines.push(`"Not reached" means not within ${YEARS} years at that rate.`)
+  /** The free-money figure: what is free, or what is short before this goal. */
+  const freeFigure = (label: string, minor: number): [string, number] => (minor >= 0 ? [label, whole(minor)] : [`${label}: short before this goal`, whole(-minor, true)])
+  const nothingFreeLine = (extra: string) => `Your records show nothing free a month today; this assumes you find the ${extra}.`
 
   if (a.change === "by_month") {
     const by = r.byMonth!
     const target = monthName(by.month)
     const figures: [string, number][] = [
-      ["Still needed", was.plan.remainingMinor],
-      [`Needed a month to reach it by ${target}`, by.neededMonthlyMinor],
-      [`Free from this month to ${target}`, by.availableMinor],
+      ["Still needed", whole(was.plan.remainingMinor)],
+      [`Needed a month to reach it by ${target}`, whole(by.neededMonthlyMinor, true)],
+      freeFigure("Free for this goal this month", wasFree),
     ]
-    const head = `To reach ${name} by ${target}: ${money(by.neededMonthlyMinor)} a month over ${by.months} ${by.months === 1 ? "month" : "months"}. Your records show ${money(by.availableMinor)} free from this month to ${target}`
+    const needed = `To reach ${name} by ${target}: ${money(by.neededMonthlyMinor, true)} a month over ${by.months} ${by.months === 1 ? "month" : "months"}`
     if (by.extraMonthlyMinor === 0) {
-      return { ...done("Covered by what is free.", `${head}, enough to reach it in ${reach(after!)}.${thin}`, figures), notWithinYears }
+      return { ...done("Covered by what is free.", `${needed}, which what your records show free covers (reached in ${reach(after!)}).`, figures), notWithinYears }
     }
-    figures.push(["Short a month", by.extraMonthlyMinor])
-    lines.push(`Short by ${money(by.extraMonthlyMinor)} a month: your records show ${money(by.availableMinor)} free from this month to ${target}, and ${money(was.plan.remainingMinor)} is still needed.`)
+    figures.push(["Short a month", whole(by.extraMonthlyMinor, true)])
+    const short = money(by.extraMonthlyMinor, true)
+    lines.push(r.floored ? nothingFreeLine(`${short} a month`) : `Short by ${short} a month on what your records show free from this month to ${target}.`)
+    const text = r.floored ? `${needed}; your records show ${free(wasFree)}, so all ${short} a month would have to come from elsewhere.` : `${needed}, ${short} a month more than your records show free.`
     return {
-      ...done("More than is free.", `${head}: short by ${money(by.extraMonthlyMinor)} a month.${thin}`, figures),
+      ...done("More than is free.", text, figures),
       notWithinYears,
-      comparison: { before: "As it is", after: `${money(by.extraMonthlyMinor)} more a month`, rows: [savingRow(was, after!, money), { label: "Reached in", before: reach(was), after: reach(after!) }] },
+      comparison: {
+        before: "As it is",
+        after: `${short} ${r.floored ? "a month" : "more a month"}`,
+        rows: [
+          { label: "For this goal a month", before: free(wasFree), after: money(after!.freeThisMonthMinor!) },
+          { label: "Reached in", before: reach(was), after: reach(after!) },
+        ],
+      },
     }
   }
 
@@ -234,50 +273,48 @@ export function describeWhatIf(
   const verdict = r.outcome === "projected" ? `Reached in ${monthName(now.reachMonth!)}.` : "Not reached."
   if (a.change === "save_more" || a.change === "save_less") {
     const more = a.deltaMinor > 0
-    const figures: [string, number][] = [
-      ["Free for this goal this month", was.freeThisMonthMinor!],
-      [more ? "Saved more a month" : "Saved less a month", Math.abs(a.deltaMinor)],
-      ["For this goal this month, with the change", now.freeThisMonthMinor!],
-    ]
-    if (more) {
-      const free = was.freeThisMonthMinor!
-      lines.push(`${free > 0 ? `Your records show ${money(free)} free a month today` : "Your records show nothing free a month today"}; this assumes you find the extra ${size}.`)
-    }
-    const nothingLeft = !more && now.freeThisMonthMinor! <= 0
+    const figures: [string, number][] = [freeFigure("Free for this goal this month", wasFree), [more ? "Saved more a month" : "Saved less a month", whole(Math.abs(a.deltaMinor))]]
+    if (now.freeThisMonthMinor! > 0) figures.push(["For this goal this month, with the change", whole(now.freeThisMonthMinor!)])
+    if (more) lines.push(wasFree > 0 ? `Your records show ${money(wasFree)} free a month today; this assumes you find the extra ${size}.` : nothingFreeLine(`extra ${size}`))
+    const going = r.floored ? `With ${size} a month going to ${name}` : `Saving ${size} ${more ? "more" : "less"} a month (${free(now.freeThisMonthMinor!)} for it this month)`
     const text =
       r.outcome === "projected"
-        ? `Saving ${size} ${more ? "more" : "less"} a month (${money(now.freeThisMonthMinor!)} for it this month), ${name} would be reached in ${monthName(now.reachMonth!)}, instead of ${reach(was)}.`
-        : nothingLeft
-          ? `Saving ${size} less a month leaves nothing for ${name} (${money(now.freeThisMonthMinor!)} this month), so it is not reached.`
-          : `Saving ${size} ${more ? "more" : "less"} a month, ${name} would not be reached within ${YEARS} years.`
+        ? `${going}, it would be reached in ${reach(now)}, instead of ${r.floored ? "not at all" : reach(was)}.`
+        : !more && now.freeThisMonthMinor! <= 0
+          ? `Saving ${size} less a month leaves nothing free for ${name}.`
+          : `${going}, it would not be reached within ${YEARS} years.`
     return {
       verdict,
-      summary: `${verdict} ${text}${thin}`,
+      summary: `${verdict} ${text}`,
       lines,
       figures,
-      notWithinYears: notWithinYears && !nothingLeft,
+      notWithinYears,
       comparison: {
         before: "As it is",
-        after: `${size} ${more ? "more" : "less"} a month`,
-        rows: [savingRow(was, now, money), { label: "Reached in", before: reach(was), after: nothingLeft ? "not reached" : reach(now) }],
+        after: r.floored ? `${size} a month` : `${size} ${more ? "more" : "less"} a month`,
+        rows: [
+          { label: "For this goal a month", before: free(wasFree), after: free(now.freeThisMonthMinor!) },
+          { label: "Reached in", before: reach(was), after: !more && now.freeThisMonthMinor! <= 0 ? "not reached" : reach(now) },
+        ],
       },
     }
   }
 
   const more = a.deltaMinor > 0
   const figures: [string, number][] = [
-    [more ? "Costs more" : "Costs less", Math.abs(a.deltaMinor)],
-    [`${name}: target, with the change`, costAfter],
-    ["Still needed, with the change", now.plan.remainingMinor],
+    [more ? "Costs more" : "Costs less", whole(Math.abs(a.deltaMinor))],
+    [`${name}: target, with the change`, whole(costAfter)],
+    ["Still needed, with the change", whole(now.plan.remainingMinor)],
+    freeFigure("Free for this goal this month", wasFree),
   ]
   const cost = money(costAfter)
   const text =
     r.outcome === "projected"
-      ? `If ${name} cost ${size} ${more ? "more" : "less"} (${cost} in all), it would be reached in ${monthName(now.reachMonth!)}, instead of ${reach(was)}.`
-      : `If ${name} cost ${size} ${more ? "more" : "less"} (${cost} in all), it would not be reached within ${YEARS} years.`
+      ? `If ${name} cost ${size} ${more ? "more" : "less"} (${cost} in all), it would be reached in ${reach(now)}, instead of ${reach(was)}.`
+      : `If ${name} cost ${size} ${more ? "more" : "less"} (${cost} in all), it would not be reached${wasFree <= 0 ? ": your records show nothing free for it" : ` within ${YEARS} years`}.`
   return {
     verdict,
-    summary: `${verdict} ${text}${thin}`,
+    summary: `${verdict} ${text}`,
     lines,
     figures,
     notWithinYears,
@@ -286,15 +323,9 @@ export function describeWhatIf(
       after: `Costing ${size} ${more ? "more" : "less"}`,
       rows: [
         { label: "Cost", before: money(a.targetMinor), after: cost },
-        { label: "Still needed", before: money(was.plan.remainingMinor), after: money(now.plan.remainingMinor) },
+        { label: "For this goal a month", before: free(wasFree), after: free(now.freeThisMonthMinor!) },
         { label: "Reached in", before: reach(was), after: reach(now) },
       ],
     },
   }
 }
-
-const savingRow = (was: GoalProjection, now: GoalProjection, money: (minor: number) => string) => ({
-  label: "For this goal this month",
-  before: money(was.freeThisMonthMinor!),
-  after: money(now.freeThisMonthMinor!),
-})

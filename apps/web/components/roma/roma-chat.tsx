@@ -390,6 +390,48 @@ function Reply({
     )
   }
   const period = reply.periods.map((p) => `${p.from} to ${p.to}`).join(", ")
+  // A goal check or what-if (10.7a): its figures and assumptions in one section, closed by default.
+  const collapse = reply.checks?.some((c) => c.kind !== "trip") ?? false
+  const figuresTable = reply.figures.length > 0 && (
+    <div className="overflow-x-auto rounded-xl border border-line">
+      <table className="w-full text-sm">
+        <caption className="sr-only">Figures from your records</caption>
+        <thead className="bg-canvas text-xs text-muted-foreground">
+          <tr>
+            <th scope="col" className="px-3 py-2 text-left font-semibold">
+              Figure
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-semibold">
+              Value
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {reply.figures.map((f, i) => (
+            <tr key={i}>
+              <th scope="row" className="px-3 py-2 text-left font-normal text-muted-foreground">
+                {f.label}
+              </th>
+              <td className="px-3 py-2 text-right font-semibold text-ink tabular-nums">{f.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+  const assumptionsList = reply.checks?.map(
+    (c, i) =>
+      c.assumptions.length > 0 && (
+        <div key={i} className="rounded-xl border border-line p-3">
+          <p className="text-xs font-semibold text-muted-foreground">Assumptions{reply.checks!.length > 1 ? ` · ${c.goal}` : ""}</p>
+          <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-ink">
+            {c.assumptions.map((a, j) => (
+              <li key={j}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      ),
+  )
   return (
     <div className="grid gap-3">
       {reply.checks?.map((c, i) => (
@@ -419,32 +461,16 @@ function Reply({
       ))}
       <p className="text-sm whitespace-pre-line text-ink">{withBold(reply.answer)}</p>
       {reply.tax && <TaxEstimate tax={reply.tax} />}
-      {reply.figures.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-line">
-          <table className="w-full text-sm">
-            <caption className="sr-only">Figures from your records</caption>
-            <thead className="bg-canvas text-xs text-muted-foreground">
-              <tr>
-                <th scope="col" className="px-3 py-2 text-left font-semibold">
-                  Figure
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">
-                  Value
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {reply.figures.map((f, i) => (
-                <tr key={i}>
-                  <th scope="row" className="px-3 py-2 text-left font-normal text-muted-foreground">
-                    {f.label}
-                  </th>
-                  <td className="px-3 py-2 text-right font-semibold text-ink tabular-nums">{f.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {collapse ? (
+        <details className="rounded-xl border border-line">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-ink">How this was worked out</summary>
+          <div className="grid gap-3 px-3 pb-3">
+            {figuresTable}
+            {assumptionsList}
+          </div>
+        </details>
+      ) : (
+        figuresTable
       )}
       {(reply.figures.length > 0 || period) && (
         <p className="text-xs text-muted-foreground">
@@ -459,19 +485,7 @@ function Reply({
           {n}
         </FormMessage>
       ))}
-      {reply.checks?.map(
-        (c, i) =>
-          c.assumptions.length > 0 && (
-            <div key={i} className="rounded-xl border border-line p-3">
-              <p className="text-xs font-semibold text-muted-foreground">Assumptions{reply.checks!.length > 1 ? ` · ${c.goal}` : ""}</p>
-              <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-ink">
-                {c.assumptions.map((a, j) => (
-                  <li key={j}>{a}</li>
-                ))}
-              </ul>
-            </div>
-          ),
-      )}
+      {!collapse && assumptionsList}
     </div>
   )
 }

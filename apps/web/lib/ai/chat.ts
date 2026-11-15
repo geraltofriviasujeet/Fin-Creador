@@ -8,7 +8,6 @@ import type { Route } from "./knowledge/route"
 import { KNOWLEDGE_RULES, ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
-import { SAVINGS_ONLY } from "./tools/goal-what-if"
 import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, NO_LOOKUPS, type TaxBlock, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
 import {
   LlmError,
@@ -45,8 +44,8 @@ import {
 // From 10.6d a product pick (which fund, stock or coin to buy) gets NO_PRODUCT_PICKS first, then
 // the general explanation only when it cites passages; otherwise that line alone.
 // From 10.7a a goal "what if" is stated as facts: an answer in advice phrasing ("you should",
-// "I recommend", "better to", "consider") is replaced by the checks' own summaries, and the
-// savings-only line is added by code.
+// "I recommend", "better to", "consider") is replaced by the checks' own summaries; the answer
+// is cut to two sentences, as the card shows the rest (the savings-only line once, on the card).
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -346,11 +345,17 @@ export function withVerdict(text: string, checks: readonly GoalCheck[]): string 
  */
 export const ADVICE = /\b(?:you\s+should(?!\s+(?:reach|be|take|have|get|hit|see)\b)|i\s+(?:would\s+)?(?:recommend|suggest)|better\s+to|best\s+to|consider(?:ing)?)\b/i
 
-/** A what-if answer (10.7a): its checks' summaries instead of advice, then the savings-only line, once. */
+/** A sentence: up to its full stop (or the end); an amount's decimal point isn't one. */
+const SENTENCE = /(?:[^.!?]|[.!?](?=\S))+(?:[.!?]+|$)/g
+
+export const WHAT_IF_SENTENCES = 2
+
+/** A what-if answer (10.7a): its checks' summaries instead of advice; at most two sentences, none about "savings only" (the card says it). */
 export function whatIfAnswer(text: string, checks: readonly GoalCheck[]): string {
   if (!checks.some((c) => c.kind === "what_if")) return text
-  const facts = ADVICE.test(text) ? checks.map((c) => c.summary).join("\n\n") : text
-  return facts.includes(SAVINGS_ONLY) ? facts : `${facts}\n\n${SAVINGS_ONLY}`
+  const facts = ADVICE.test(text) ? checks.map((c) => c.summary).join(" ") : text
+  const sentences = (facts.match(SENTENCE) ?? []).map((s) => s.trim()).filter((s) => s && !/\bsavings only\b/i.test(s))
+  return sentences.slice(0, WHAT_IF_SENTENCES).join(" ")
 }
 
 /** Every string in a tool result, at any depth. */
