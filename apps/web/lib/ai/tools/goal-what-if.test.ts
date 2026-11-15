@@ -5,7 +5,8 @@ import { ADVICE, runChat, whatIfAnswer } from "../chat"
 import { routeQuestion } from "../knowledge/route"
 import { mockProvider, mockText, mockToolCall } from "../llm/mock"
 import { ROMA_SYSTEM_PROMPT } from "../prompts/roma-system"
-import { ONLY_THIS_GOAL, SAVINGS_ONLY, goalWhatIfTool } from "./goal-what-if"
+import { ONLY_THE_AMOUNT, ONLY_THIS_GOAL, SAVINGS_ONLY, goalWhatIfTool } from "./goal-what-if"
+import { goalProjectionTool } from "./goals"
 import type { FinanceTool, GoalCheck, ToolContext } from "./types"
 
 // goal_what_if (10.7a) against stubbed page loaders, as goals.test.ts does; the Goals view, the
@@ -196,9 +197,93 @@ describe("goal_what_if", () => {
     setUp()
     expect((await goalWhatIfTool.run(ctx("Bike by Jan 2026?"), { goal: "Bike", change: "by_month" })).check!.verdict).toBe("That month has passed.")
     setUp({ nets: [0, 0, 0, 0, 1_000_000, 1_000_000, 0] })
-    const early = await goalWhatIfTool.run(ctx("save 5000 more for Bike"), { goal: "Bike", change: "save_more" })
+    // Saving less with records too new: nothing to work out (saving more is, below).
+    const early = await goalWhatIfTool.run(ctx("save 5000 less for Bike"), { goal: "Bike", change: "save_less" })
     expect(early.check!.verdict).toBe("Too early to say.")
     expect(early.figures.filter((f) => f.kind === "money").map((f) => f.label)).toStrictEqual(["Bike: target", "Bike: saved"])
+  })
+
+  describe("records too new to show what is free (the prod case): worked out on the amount given", () => {
+    // From prod (10.7a): Thailand trip, ₹1,85,000, nothing saved, no date; spending that would
+    // say otherwise in the months there are.
+    const thailand = (n: number) => {
+      const nets = [0, 0, 0, 0, 0, 0, 0].map((_, i) => (i >= 6 - n && i < 6 ? -9_000_000 : 0))
+      setUp({ goals: [goal({ name: "Thailand trip", targetMinor: 18_500_000, targetDate: null })], nets })
+    }
+    const recordFigures = (out: { figures: { label: string }[] }) => out.figures.map((f) => f.label).filter((l) => /free|short|median/i.test(l))
+    const tooNew = (n: number) => `Your records are too new (${n} complete ${n === 1 ? "month" : "months"}) to show what is free each month`
+
+    for (const n of [0, 1, 2]) {
+      it(`${n} complete months: ₹X more a month`, async () => {
+        thailand(n)
+        const out = await goalWhatIfTool.run(ctx("If I save 5000 more a month, when do I reach thailand trip?"), { goal: "thailand trip", change: "save_more", amount: "5000" })
+        // ₹1,85,000 at ₹5,000 a month from November 2026: 37 months.
+        expect(out.check).toMatchObject({ kind: "what_if", goal: "Thailand trip", verdict: "Reached in November 2029 (37 months)." })
+        expect(out.check!.caveat).toBe(`${tooNew(n)}; this assumes you set aside the ₹5,000.`)
+        expect(out.check!.summary).toBe("Reached in November 2029 (37 months). With ₹5,000 a month going to Thailand trip, it would be reached in November 2029 (37 months).")
+        expect(out.check!.comparison).toStrictEqual({
+          before: "As it is",
+          after: "₹5,000 a month",
+          rows: [
+            { label: "For this goal a month", before: "too early to say", after: "₹5,000" },
+            { label: "Reached in", before: "too early to say", after: "November 2029 (37 months)" },
+          ],
+        })
+        expect(out.check!.lines).toStrictEqual([SAVINGS_ONLY, ONLY_THE_AMOUNT])
+        expect(out.check!.assumptions.join(" ")).not.toMatch(/median/i)
+        expect(recordFigures(out)).toStrictEqual([])
+        expect(out.figures.filter((f) => f.kind === "money").map((f) => f.label)).toStrictEqual(["Thailand trip: target", "Thailand trip: saved", "Saved more a month"])
+        noPaise(out)
+      })
+
+      it(`${n} complete months: how much a month by a month`, async () => {
+        thailand(n)
+        const out = await goalWhatIfTool.run(ctx("How much a month to reach Thailand trip by Oct 2027?"), { goal: "Thailand trip", change: "by_month", by: "Oct 2027" })
+        // ₹1,85,000 over 12 months: ₹15,416.67, shown rounded up.
+        expect(out.check).toMatchObject({ verdict: "₹15,417 a month for 12 months.", caveat: `${tooNew(n)}; this assumes you set aside the ₹15,417.` })
+        expect(out.check!.summary).toBe("₹15,417 a month for 12 months. Your records are too new to show what is free, so that is the full amount a month for Thailand trip to be reached by October 2027.")
+        expect(out.check!.comparison!.rows).toStrictEqual([
+          { label: "For this goal a month", before: "too early to say", after: "₹15,417" },
+          { label: "Reached in", before: "too early to say", after: "October 2027 (12 months)" },
+        ])
+        expect(recordFigures(out)).toStrictEqual([])
+        noPaise(out)
+      })
+
+      it(`${n} complete months: costing more, with and without an amount a month`, async () => {
+        thailand(n)
+        const bare = await goalWhatIfTool.run(ctx("What if Thailand trip costs 15,000 more?"), { goal: "Thailand trip", change: "cost_more", amount: "15,000" })
+        expect(bare.check).toMatchObject({ verdict: "New target ₹2,00,000.", caveat: `${tooNew(n)}; an amount a month is needed to date it.` })
+        expect(bare.check!.comparison!.rows).toStrictEqual([
+          { label: "Cost", before: "₹1,85,000", after: "₹2,00,000" },
+          { label: "Reached in", before: "too early to say", after: "needs an amount a month" },
+        ])
+        expect(recordFigures(bare)).toStrictEqual([])
+
+        // ₹2,00,000 at ₹5,000 a month: 40 months, February 2030.
+        const dated = await goalWhatIfTool.run(ctx("What if Thailand trip costs 15,000 more and I save 5000 a month?"), { goal: "Thailand trip", change: "cost_more", amount: "15,000" })
+        expect(dated.check).toMatchObject({ verdict: "Reached in February 2030 (40 months).", caveat: `${tooNew(n)}; this assumes you set aside the ₹5,000.` })
+        expect(dated.check!.summary).toBe("Reached in February 2030 (40 months). If Thailand trip cost ₹15,000 more (₹2,00,000 in all), with ₹5,000 a month going to it, it would be reached in February 2030 (40 months).")
+        expect(dated.check!.comparison!.rows).toStrictEqual([
+          { label: "Cost", before: "₹1,85,000", after: "₹2,00,000" },
+          { label: "For this goal a month", before: "too early to say", after: "₹5,000" },
+          { label: "Reached in", before: "too early to say", after: "February 2030 (40 months)" },
+        ])
+        expect(recordFigures(dated)).toStrictEqual([])
+        noPaise(dated)
+
+        // Costing less, the amount a month pointed at by the model.
+        const less = await goalWhatIfTool.run(ctx("agar thailand trip 15000 sasta ho aur 5 hazaar bachau?"), { goal: "Thailand trip", change: "cost_less", amount: "15000", monthly: "5 hazaar" })
+        expect(less.check!.verdict).toBe("Reached in August 2029 (34 months).")
+      })
+    }
+
+    it("the plain goal check is still too early to say; saving less too", async () => {
+      thailand(1)
+      expect((await goalProjectionTool.run(ctx("Can I reach thailand trip?"), { goal: "thailand trip" })).check!.verdict).toBe("Too early to say.")
+      const less = await goalWhatIfTool.run(ctx("If I save 5000 less a month for thailand trip?"), { goal: "thailand trip", change: "save_less", amount: "5000" })
+      expect(less.check!.verdict).toBe("Too early to say.")
+    })
   })
 
   it("3 to 5 months with records: worked out, and said to be thin", async () => {

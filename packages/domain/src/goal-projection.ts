@@ -19,6 +19,8 @@
 //  - A "what if" (10.7a) may add a fixed amount to (or take it from) every month's free money;
 //    left out, it is zero and nothing changes. It may also count a month with less than nothing
 //    free as zero (before the amount is added), for money found from outside the records.
+//    Below PROJECTION_MIN_MONTHS it may project anyway with what is free not known: every
+//    month's free money is zero (no median, claims or other goals), so only that amount counts.
 import { type IsoDate, parseIsoDate } from "./dates";
 import { type SavingPlan, divRoundHalfAway, savingPlan } from "./goals";
 import { addMinor } from "./money";
@@ -55,6 +57,8 @@ export interface GoalProjectionInput {
   adjustMonthlyMinor?: number;
   /** Count each month's free money below zero as zero, before adjustMonthlyMinor (10.7a). Default false. */
   floorFreeAtZero?: boolean;
+  /** Below PROJECTION_MIN_MONTHS tracked months, project anyway with every month's free money at zero before adjustMonthlyMinor (10.7a). Ignored with more. Default false. */
+  freeUnknown?: boolean;
 }
 
 export interface GoalProjection {
@@ -64,12 +68,12 @@ export interface GoalProjection {
   monthsMeasured: number;
   /** PROJECTION_MIN_MONTHS to PROJECTION_MEASURED_MONTHS − 1 tracked months: say how few. */
   thin: boolean;
-  /** Null below PROJECTION_MIN_MONTHS. */
+  /** Null below PROJECTION_MIN_MONTHS (also with freeUnknown). */
   medianNetMinor: number | null;
   /** This month's claims (loans, dues) and other goals' saving. */
   claimsThisMonthMinor: number;
   otherGoalsThisMonthMinor: number;
-  /** Free for this goal this month (may be below zero); null without a median. */
+  /** Free for this goal this month (may be below zero); null without a median, unless freeUnknown. */
   freeThisMonthMinor: number | null;
   /** First day of the month the goal is reached at the current rate; null when not within the horizon or no projection. */
   reachMonth: IsoDate | null;
@@ -121,13 +125,13 @@ function monthlyClaims(input: GoalProjectionInput, horizon: number): { claims: n
 
 /**
  * Free money in each of the `horizon` months from this one (index 0), by the rules above; null
- * below PROJECTION_MIN_MONTHS tracked months.
+ * below PROJECTION_MIN_MONTHS tracked months, unless freeUnknown.
  */
 export function freeByMonth(input: GoalProjectionInput, horizon: number): number[] | null {
   const tracked = trackedMonths(input.months);
-  if (tracked.length < PROJECTION_MIN_MONTHS) return null;
   const adjust = input.adjustMonthlyMinor ?? 0;
   if (!Number.isSafeInteger(adjust)) throw new RangeError("Amounts must be whole minor units");
+  if (tracked.length < PROJECTION_MIN_MONTHS) return input.freeUnknown ? new Array<number>(horizon).fill(adjust) : null;
   const median = medianMinor(tracked.map((m) => addMinor(m.incomeMinor, -m.expenseMinor)));
   const { claims, others } = monthlyClaims(input, horizon);
   return claims.map((c, i) => {
@@ -156,11 +160,12 @@ export function goalProjection(input: GoalProjectionInput): GoalProjection {
   if (plan.basis === "reached") {
     return { ...base, ...none, verdict: "yes", medianNetMinor: null, freeThisMonthMinor: null };
   }
-  if (monthsMeasured < PROJECTION_MIN_MONTHS) {
+  const unknown = monthsMeasured < PROJECTION_MIN_MONTHS;
+  if (unknown && !input.freeUnknown) {
     return { ...base, ...none, verdict: plan.basis === "past_due" ? "no" : "too_early", medianNetMinor: null, freeThisMonthMinor: null };
   }
 
-  const median = medianMinor(tracked.map((m) => addMinor(m.incomeMinor, -m.expenseMinor)));
+  const median = unknown ? null : medianMinor(tracked.map((m) => addMinor(m.incomeMinor, -m.expenseMinor)));
   const free = freeByMonth(input, horizon)!;
   const running: number[] = [];
   let reachIndex: number | null = null;
