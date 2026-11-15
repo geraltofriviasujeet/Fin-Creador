@@ -7,7 +7,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(53);
+select plan(54);
 
 insert into auth.users (id, email) values
   ('5a000000-0000-4000-8000-000000000001', 'lr-asha@example.test'),
@@ -20,6 +20,8 @@ create function public.tr_month_start() returns date language sql stable set sea
   as $$ select pg_catalog.make_date(extract(year from public.tr_today())::integer, extract(month from public.tr_today())::integer, 1) $$;
 create function public.tr_loan(p_key uuid) returns uuid language sql stable set search_path = ''
   as $$ select l.id from public.loans as l where l.idempotency_key = p_key $$;
+create function public.tr_bank() returns uuid language sql stable set search_path = ''
+  as $$ select a.id from public.accounts as a where a.kind = 'bank' and a.name = 'Example Bank' $$;
 create function public.tr_account(p_key uuid) returns uuid language sql stable set search_path = ''
   as $$ select l.account_id from public.loans as l where l.idempotency_key = p_key $$;
 create function public.tr_due(p_key uuid, p_seq integer) returns uuid language sql stable set search_path = ''
@@ -52,7 +54,7 @@ begin
   return r;
 end;
 $$;
-grant execute on function public.tr_today(), public.tr_month_start(), public.tr_loan(uuid), public.tr_account(uuid),
+grant execute on function public.tr_bank(), public.tr_today(), public.tr_month_start(), public.tr_loan(uuid), public.tr_account(uuid),
   public.tr_due(uuid, integer), public.tr_items(uuid), public.tr_revisions(uuid), public.tr_balance_at(uuid, date),
   public.tr_revise(uuid, uuid, jsonb) to authenticated;
 
@@ -86,9 +88,9 @@ select public.create_loan('5b000000-0000-4000-8000-000000000004', 'vehicle', 'Ex
 
 -- L2: EMIs 1 and 2 paid today (₹440 principal, ₹120 interest each).
 select public.pay_due_item(public.tr_due('5b000000-0000-4000-8000-000000000002', 1), '5d000000-0000-4000-8000-000000000001',
-  (select id from public.accounts where name = 'Example Bank'), public.tr_today(), 44000, 12000, 0, true);
+  public.tr_bank(), public.tr_today(), 44000, 12000, 0, true);
 select public.pay_due_item(public.tr_due('5b000000-0000-4000-8000-000000000002', 2), '5d000000-0000-4000-8000-000000000002',
-  (select id from public.accounts where name = 'Example Bank'), public.tr_today(), 44000, 12000, 0, true);
+  public.tr_bank(), public.tr_today(), 44000, 12000, 0, true);
 
 -- L1 was added 40 days ago (so a past month-end falls inside its life).
 reset role;
@@ -290,12 +292,15 @@ select throws_ok(
   '42501', null, 'a revision can''t be updated'
 );
 
--- ------------------------------------------------------------ the write marks end with each function (46-53)
--- In this one transaction, after each loan function: a direct delete of instalments removes
--- nothing (the policy needs the mark) and a direct change of a schedule column is refused.
+-- ------------------------------------------------------------ the write marks end with each function (46-54)
+-- In this one transaction, after each loan function: a direct delete of instalments is
+-- refused (no DELETE grant), and so are a direct change of a schedule column (no write mark)
+-- and a direct call of the delete helper (no revise mark).
 select public.tr_revise('5b000000-0000-4000-8000-000000000002', '5e000000-0000-4000-8000-000000000005', '{"nickname": "Home"}');
-delete from public.due_items where loan_id = public.tr_loan('5b000000-0000-4000-8000-000000000002');
-select is(public.tr_items('5b000000-0000-4000-8000-000000000002'), 22, 'after revise_loan: a direct delete removes nothing');
+select throws_ok(
+  $$ delete from public.due_items where loan_id = public.tr_loan('5b000000-0000-4000-8000-000000000002') $$,
+  '42501', null, 'after revise_loan: a direct delete of instalments is refused'
+);
 select throws_ok(
   $$ update public.loans set disbursed_minor = 1 where idempotency_key = '5b000000-0000-4000-8000-000000000002' $$,
   'FC032', null, 'after revise_loan: a direct change of the amount taken is refused'
@@ -303,8 +308,10 @@ select throws_ok(
 
 select public.update_loan(public.tr_loan('5b000000-0000-4000-8000-000000000002'), 'home', 'Example Bank', 2000000, 900,
   'floating', 52000, p_nickname => 'Home loan');
-delete from public.due_items where loan_id = public.tr_loan('5b000000-0000-4000-8000-000000000002');
-select is(public.tr_items('5b000000-0000-4000-8000-000000000002'), 22, 'after update_loan: a direct delete removes nothing');
+select throws_ok(
+  $$ delete from public.due_items where loan_id = public.tr_loan('5b000000-0000-4000-8000-000000000002') $$,
+  '42501', null, 'after update_loan: a direct delete of instalments is refused'
+);
 select throws_ok(
   $$ update public.loans set disbursed_minor = 1 where idempotency_key = '5b000000-0000-4000-8000-000000000002' $$,
   'FC032', null, 'after update_loan: a direct change of the amount taken is refused'
@@ -313,13 +320,19 @@ select is(public.tr_revisions('5b000000-0000-4000-8000-000000000002'), 3, 'updat
 
 select public.create_loan('5b000000-0000-4000-8000-000000000005', 'gold', 'Example Bank', 300000, 300000, 900, 'fixed', 6,
   'starts_later', 300000, 6, public.tr_today() + 30, 51000, 51000);
-delete from public.due_items where loan_id = public.tr_loan('5b000000-0000-4000-8000-000000000005');
-select is(public.tr_items('5b000000-0000-4000-8000-000000000005'), 6, 'after create_loan: a direct delete removes nothing');
+select throws_ok(
+  $$ delete from public.due_items where loan_id = public.tr_loan('5b000000-0000-4000-8000-000000000005') $$,
+  '42501', null, 'after create_loan: a direct delete of instalments is refused'
+);
 select throws_ok(
   $$ update public.loans set disbursed_minor = 1 where idempotency_key = '5b000000-0000-4000-8000-000000000005' $$,
   'FC032', null, 'after create_loan: a direct change of the amount taken is refused'
 );
 select is(current_setting('fin_creador.loan_revise', true), '', 'the revise mark is clear');
+select throws_ok(
+  $$ select public.loan_delete_instalments(public.tr_loan('5b000000-0000-4000-8000-000000000005')) $$,
+  'FC032', null, 'the delete helper works only inside revise_loan'
+);
 reset role;
 
 select * from finish();

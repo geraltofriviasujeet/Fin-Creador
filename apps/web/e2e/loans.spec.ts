@@ -295,7 +295,9 @@ test("edit an education loan: the amount taken is shown and can be reduced", asy
   await d.getByRole("button", { name: "Add loan" }).click()
   await expect(toast(page, "Loan added.").first()).toBeVisible()
 
-  await loansList(page).getByRole("button", { name: "Edit State Bank of India" }).click()
+  const row = loansList(page).getByRole("listitem").filter({ hasText: "State Bank of India" })
+  await row.getByRole("button", { name: /^State Bank of India/ }).click()
+  await row.getByRole("button", { name: "Edit State Bank of India" }).click()
   const edit = dialog(page, "Edit State Bank of India")
   await expect(edit.getByLabel("Sanctioned amount (₹)")).toHaveValue("10,00,000")
   await expect(edit.getByLabel("Amount taken (₹)")).toHaveValue("8,00,000", { timeout: 2_000 })

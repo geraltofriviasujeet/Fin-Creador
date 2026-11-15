@@ -326,6 +326,35 @@ create trigger loan_revisions_guard
 -- revise_loan
 -- ---------------------------------------------------------------------------
 
+-- Removes a loan's instalments for revise_loan: all of them (p_after_seq null) or the EMIs
+-- after p_after_seq, never one that has a payment. SECURITY DEFINER so clients keep no
+-- DELETE on due_items (a direct delete stays refused, 42501); it acts only inside
+-- revise_loan (fin_creador.loan_revise, not reachable through the API) and only on the
+-- caller's own loan. Returns how many were removed.
+create function public.loan_delete_instalments(p_loan_id uuid, p_after_seq integer default null)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  n integer;
+begin
+  if pg_catalog.current_setting('fin_creador.loan_revise', true) is distinct from 'on' then
+    raise exception 'Loans change only through the loan functions' using errcode = 'FC032';
+  end if;
+  if not exists (select 1 from public.loans as l where l.id = p_loan_id and l.user_id = (select auth.uid())) then
+    raise exception 'Loan not found' using errcode = 'FC008';
+  end if;
+  delete from public.due_items as d
+  where d.loan_id = p_loan_id
+    and (p_after_seq is null or (d.kind = 'loan_emi' and d.seq > p_after_seq))
+    and not exists (select 1 from public.due_payments as p where p.due_item_id = d.id);
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
 -- Corrects a loan's terms once per request key (see the header). The parameters are
 -- create_loan's, with the loan first; the figures come from packages/domain. Returns the
 -- revision, or null when nothing changed.
@@ -538,7 +567,7 @@ begin
 
   if not v_has_history then
     -- No instalment has a payment: replace them all, as create_loan builds them.
-    delete from public.due_items as d where d.loan_id = v_loan.id;
+    perform public.loan_delete_instalments(v_loan.id);
 
     if p_before_tracking_on is not null then
       insert into public.due_items (kind, loan_id, seq, due_date, amount_due_minor, currency, status)
@@ -562,10 +591,7 @@ begin
     select count(*) into v_rebuilt from public.due_items as d where d.loan_id = v_loan.id and d.status = 'pending';
   else
     -- EMIs past the new count go (none has a payment: checked above).
-    delete from public.due_items as d
-    where d.loan_id = v_loan.id and d.kind = 'loan_emi' and d.seq > v_loan.instalment_months;
-    get diagnostics n = row_count;
-    v_rebuilt := v_rebuilt + n;
+    v_rebuilt := v_rebuilt + public.loan_delete_instalments(v_loan.id, v_loan.instalment_months);
 
     -- Pending instalments take the new amounts; dates never move.
     update public.due_items as d
@@ -685,6 +711,7 @@ $$;
 -- ---------------------------------------------------------------------------
 
 revoke execute on function public.loan_revisions_guard() from public, anon, authenticated;
+revoke execute on function public.loan_delete_instalments(uuid, integer) from public, anon;
 revoke execute on function public.loan_terms(public.loans, date, bigint) from public, anon;
 revoke execute on function public.loan_terms(uuid) from public, anon;
 revoke execute on function public.revise_loan(uuid, uuid, text, text, bigint, bigint, integer, text, integer, text, bigint, integer, date, bigint, bigint, text, text, date, integer, text, bigint, bigint) from public, anon;
@@ -692,6 +719,7 @@ revoke execute on function public.revise_loan(uuid, uuid, text, text, bigint, bi
 -- revise_loan and update_loan are invoker, so the caller needs EXECUTE on the helpers.
 grant execute on function public.loan_terms(public.loans, date, bigint) to authenticated;
 grant execute on function public.loan_terms(uuid) to authenticated;
+grant execute on function public.loan_delete_instalments(uuid, integer) to authenticated;
 grant execute on function public.revise_loan(uuid, uuid, text, text, bigint, bigint, integer, text, integer, text, bigint, integer, date, bigint, bigint, text, text, date, integer, text, bigint, bigint) to authenticated;
 
 -- revise_loan writes the schedule columns with the caller's grants; loans_validate refuses
@@ -700,14 +728,6 @@ grant execute on function public.revise_loan(uuid, uuid, text, text, bigint, big
 grant update (disbursed_minor, tenure_months, start_mode, opening_outstanding_minor, instalment_months, first_due_date,
               moratorium_months, moratorium_interest, capitalised_minor, emi_estimate_minor)
   on table public.loans to authenticated;
-
--- revise_loan removes instalments that have no payment. The policy allows it only while a
--- loan function marks its write; the setting is not reachable through the API. Cascades
--- (delete_loan, account deletion) are referential actions and don't check policies.
-grant delete on table public.due_items to authenticated;
-create policy due_items_delete_own on public.due_items
-  for delete to authenticated
-  using ((select auth.uid()) = user_id and pg_catalog.current_setting('fin_creador.loan_write', true) = 'on');
 
 revoke all on table public.loan_revisions from anon, authenticated;
 grant select on table public.loan_revisions to authenticated;
