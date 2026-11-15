@@ -390,15 +390,66 @@ function Reply({
     )
   }
   const period = reply.periods.map((p) => `${p.from} to ${p.to}`).join(", ")
+  // A goal check or what-if (10.7a): its figures and assumptions in one section, closed by default.
+  const collapse = reply.checks?.some((c) => c.kind !== "trip") ?? false
+  const figuresTable = reply.figures.length > 0 && (
+    <div className="overflow-x-auto rounded-xl border border-line">
+      <table className="w-full text-sm">
+        <caption className="sr-only">Figures from your records</caption>
+        <thead className="bg-canvas text-xs text-muted-foreground">
+          <tr>
+            <th scope="col" className="px-3 py-2 text-left font-semibold">
+              Figure
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-semibold">
+              Value
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {reply.figures.map((f, i) => (
+            <tr key={i}>
+              <th scope="row" className="px-3 py-2 text-left font-normal text-muted-foreground">
+                {f.label}
+              </th>
+              <td className="px-3 py-2 text-right font-semibold text-ink tabular-nums">{f.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+  const assumptionsList = reply.checks?.map(
+    (c, i) =>
+      c.assumptions.length > 0 && (
+        <div key={i} className="rounded-xl border border-line p-3">
+          <p className="text-xs font-semibold text-muted-foreground">Assumptions{reply.checks!.length > 1 ? ` · ${c.goal}` : ""}</p>
+          <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-ink">
+            {c.assumptions.map((a, j) => (
+              <li key={j}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      ),
+  )
   return (
     <div className="grid gap-3">
       {reply.checks?.map((c, i) => (
         <div key={i} className="rounded-xl border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
           <p className="text-xs font-semibold text-muted-foreground">
-            {c.kind === "trip" ? "Trip check" : "Goal check"} · {c.goal}
+            {c.kind === "trip" ? "Trip check" : c.kind === "what_if" ? "What if" : "Goal check"} · {c.goal}
             {c.web ? " · From your records" : ""}
           </p>
           <p className="font-heading text-lg font-bold text-ink">{c.verdict}</p>
+          {c.caveat && <p className="text-sm text-muted-foreground">{c.caveat}</p>}
+          {c.comparison && <WhatIfRows comparison={c.comparison} />}
+          {c.lines && c.lines.length > 0 && (
+            <ul className="mt-2 grid gap-1 text-sm text-ink" aria-label="About this what if">
+              {c.lines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
           {c.web && (
             <div className="mt-2 border-t border-dashed border-line pt-2" data-testid="web-verdict">
               <p className="text-xs font-semibold text-muted-foreground">
@@ -411,32 +462,16 @@ function Reply({
       ))}
       <p className="text-sm whitespace-pre-line text-ink">{withBold(reply.answer)}</p>
       {reply.tax && <TaxEstimate tax={reply.tax} />}
-      {reply.figures.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-line">
-          <table className="w-full text-sm">
-            <caption className="sr-only">Figures from your records</caption>
-            <thead className="bg-canvas text-xs text-muted-foreground">
-              <tr>
-                <th scope="col" className="px-3 py-2 text-left font-semibold">
-                  Figure
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">
-                  Value
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {reply.figures.map((f, i) => (
-                <tr key={i}>
-                  <th scope="row" className="px-3 py-2 text-left font-normal text-muted-foreground">
-                    {f.label}
-                  </th>
-                  <td className="px-3 py-2 text-right font-semibold text-ink tabular-nums">{f.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {collapse ? (
+        <details className="rounded-xl border border-line">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-ink">How this was worked out</summary>
+          <div className="grid gap-3 px-3 pb-3">
+            {figuresTable}
+            {assumptionsList}
+          </div>
+        </details>
+      ) : (
+        figuresTable
       )}
       {(reply.figures.length > 0 || period) && (
         <p className="text-xs text-muted-foreground">
@@ -451,19 +486,40 @@ function Reply({
           {n}
         </FormMessage>
       ))}
-      {reply.checks?.map(
-        (c, i) =>
-          c.assumptions.length > 0 && (
-            <div key={i} className="rounded-xl border border-line p-3">
-              <p className="text-xs font-semibold text-muted-foreground">Assumptions{reply.checks!.length > 1 ? ` · ${c.goal}` : ""}</p>
-              <ul className="mt-2 grid list-disc gap-1 pl-5 text-sm text-ink">
-                {c.assumptions.map((a, j) => (
-                  <li key={j}>{a}</li>
-                ))}
-              </ul>
-            </div>
-          ),
-      )}
+      {!collapse && assumptionsList}
+    </div>
+  )
+}
+
+/** A goal "what if" (10.7a): the goal as it is and with the change, every value formatted in code. */
+function WhatIfRows({ comparison }: { comparison: NonNullable<NonNullable<Extract<ChatResponseBody, { status: "answer" }>["checks"]>[number]["comparison"]> }) {
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full text-sm">
+        <caption className="sr-only">The goal as it is and with the change</caption>
+        <thead className="text-xs text-muted-foreground">
+          <tr>
+            <td />
+            <th scope="col" className="px-2 py-1 text-right font-semibold">
+              {comparison.before}
+            </th>
+            <th scope="col" className="px-2 py-1 text-right font-semibold">
+              {comparison.after}
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {comparison.rows.map((row) => (
+            <tr key={row.label}>
+              <th scope="row" className="py-1 pr-2 text-left font-normal text-muted-foreground">
+                {row.label}
+              </th>
+              <td className="px-2 py-1 text-right text-ink tabular-nums">{row.before}</td>
+              <td className="px-2 py-1 text-right font-semibold text-ink tabular-nums">{row.after}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

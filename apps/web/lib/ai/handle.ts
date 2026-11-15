@@ -15,6 +15,7 @@ import type { SearchProvider } from "./search/types"
 import { accountBalancesTool, netWorthTool } from "./tools/balances"
 import { incomeVsExpensesTool, savingsRateTool } from "./tools/cash-flow"
 import { categoryBreakdownTool } from "./tools/categories"
+import { goalWhatIfTool } from "./tools/goal-what-if"
 import { goalProjectionTool } from "./tools/goals"
 import { knowledgeSearchTool } from "./tools/knowledge"
 import { loansAndCardsTool } from "./tools/liabilities"
@@ -22,7 +23,7 @@ import { searchTransactionsTool } from "./tools/search"
 import { taxEstimateTool } from "./tools/tax"
 import { tripCheckTool } from "./tools/trip"
 import { spendingTool } from "./tools/spending"
-import type { FinanceTool, Figure, TaxBlock, ToolContext, WebBlock } from "./tools/types"
+import type { FinanceTool, Figure, TaxBlock, ToolContext, WebBlock, WhatIfComparison } from "./tools/types"
 import { webPriceFiguresTool, webPriceLookupTool } from "./tools/web-prices"
 import { loadPlanRecords } from "./plan/records"
 import { type StoredCitations, type StoredTax, toStoredCitations, toStoredTax } from "./stored-sources"
@@ -51,6 +52,7 @@ export const ROMA_TOOLS: readonly FinanceTool[] = [
   netWorthTool,
   loansAndCardsTool,
   goalProjectionTool,
+  goalWhatIfTool,
   tripCheckTool,
 ] as FinanceTool[]
 
@@ -164,7 +166,17 @@ export type ChatResponseBody =
       descriptionsNotice?: true
       /** Goal and trip checks (10.4, 10.5): the verdict computed in code and its assumptions. */
       /** `web`: the separate web-assisted line (10.8), shown after the records' verdict, never instead of it. */
-      checks?: { kind?: "trip"; goal: string; verdict: string; assumptions: string[]; web?: { verdict: string; summary: string; webOnly?: true } }[]
+      /** `comparison` and `lines`: a goal "what if" (10.7a), built in code. */
+      checks?: {
+        kind?: "trip" | "what_if"
+        goal: string
+        verdict: string
+        caveat?: string
+        assumptions: string[]
+        web?: { verdict: string; summary: string; webOnly?: true }
+        comparison?: WhatIfComparison
+        lines?: string[]
+      }[]
       /** Web estimates (10.8): prices as found with their site and link, totals per currency; never part of the verdict. */
       web?: WebBlock
       /** Why web lookups were skipped (caps, timeouts). */
@@ -344,7 +356,18 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           basis: answerBasis(used),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
           ...(result.checks.length > 0
-            ? { checks: result.checks.map(({ kind, goal, verdict, assumptions, web }) => ({ ...(kind ? { kind } : {}), goal, verdict, assumptions, ...(web ? { web } : {}) })) }
+            ? {
+                checks: result.checks.map(({ kind, goal, verdict, caveat, assumptions, web, comparison, lines }) => ({
+                  ...(kind ? { kind } : {}),
+                  goal,
+                  verdict,
+                  ...(caveat ? { caveat } : {}),
+                  assumptions,
+                  ...(web ? { web } : {}),
+                  ...(comparison ? { comparison } : {}),
+                  ...(lines ? { lines } : {}),
+                })),
+              }
             : {}),
           ...(result.web ? { web: result.web } : {}),
           ...(result.webNotices ? { webNotices: result.webNotices } : {}),
