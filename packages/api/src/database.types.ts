@@ -93,6 +93,7 @@ export type Database = {
         Row: {
           answer: string
           as_of: string
+          card: Json | null
           citations: Json | null
           conversation_id: string
           created_at: string
@@ -110,6 +111,7 @@ export type Database = {
         Insert: {
           answer: string
           as_of: string
+          card?: Json | null
           citations?: Json | null
           conversation_id: string
           created_at?: string
@@ -127,6 +129,7 @@ export type Database = {
         Update: {
           answer?: string
           as_of?: string
+          card?: Json | null
           citations?: Json | null
           conversation_id?: string
           created_at?: string
@@ -2830,6 +2833,7 @@ export type Database = {
         Args: {
           p_answer: string
           p_as_of: string
+          p_card?: Json
           p_citations?: Json
           p_conversation_id: string
           p_periods: unknown[]

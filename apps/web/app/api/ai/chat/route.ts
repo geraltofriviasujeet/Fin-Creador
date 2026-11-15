@@ -103,6 +103,9 @@ export async function POST(request: NextRequest) {
         // 20261114180000_roma_turn_sources.sql still records every other turn.
         ...(turn.citations ? { p_citations: turn.citations as unknown as Json } : {}),
         ...(turn.tax ? { p_tax: turn.tax as unknown as Json } : {}),
+        // The check card (10.7a), the same way: a database without 20261115120000_roma_turn_card.sql
+        // still records every turn that has none.
+        ...(turn.card ? { p_card: turn.card as unknown as Json } : {}),
       })
       const row = Array.isArray(data) ? data[0] : null
       // A turn that couldn't be saved logs its error code and message only (the function's own
