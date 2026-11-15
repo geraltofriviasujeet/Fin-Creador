@@ -26,7 +26,7 @@ import { spendingTool } from "./tools/spending"
 import type { FinanceTool, Figure, TaxBlock, ToolContext, WebBlock, WhatIfComparison } from "./tools/types"
 import { webPriceFiguresTool, webPriceLookupTool } from "./tools/web-prices"
 import { loadPlanRecords } from "./plan/records"
-import { type StoredCitations, type StoredTax, toStoredCitations, toStoredTax } from "./stored-sources"
+import { type StoredCard, type StoredCitations, type StoredTax, toStoredCard, toStoredCitations, toStoredTax } from "./stored-sources"
 import { PICK_OUTPUT_TOKENS, type PlanRun, runPlan } from "./plan/run"
 import { type CheckedPlan, checkedPlanSchema, planRequest } from "./plan/types"
 
@@ -97,6 +97,8 @@ export type TurnToRecord = Omit<StoredTurn, "seq"> & {
   /** The citations and tax card shown (10.6d), checked and trimmed to fit (stored-sources.ts). */
   citations?: StoredCitations
   tax?: StoredTax
+  /** The goal check, trip check or what-if card and its figures table (10.7a). */
+  card?: StoredCard
 }
 
 export type RomaHistory = {
@@ -332,6 +334,8 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
       // Kept with the turn for reopening (10.6d); one that can't be stored is left out, not the turn.
       const citations = result.citations ? toStoredCitations(result.citations) : null
       const tax = result.tax ? toStoredTax(result.tax) : null
+      const figures = result.figures.filter((f) => !f.inCard && (!f.hideWhenZero || figureValue(f) !== 0)).map((f) => ({ label: f.label, value: formatFigure(f) }))
+      const card = toStoredCard(result.checks, figures)
       const turn: TurnToRecord = {
         requestId,
         conversationId,
@@ -343,6 +347,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
         sentDescriptions: result.descriptionsSent,
         ...(citations ? { citations } : {}),
         ...(tax ? { tax } : {}),
+        ...(card ? { card } : {}),
       }
       // Recording is idempotent per request id, so one retry can't store the turn twice.
       const recorded = (await recordQuietly(deps.history, turn)) ?? (await recordQuietly(deps.history, turn))
@@ -351,7 +356,7 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
         body: {
           status: "answer",
           answer: result.text,
-          figures: result.figures.filter((f) => !f.inCard && (!f.hideWhenZero || figureValue(f) !== 0)).map((f) => ({ label: f.label, value: formatFigure(f) })),
+          figures,
           periods: result.periods.map((p) => ({ from: p.start, to: p.end })),
           basis: answerBasis(used),
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
