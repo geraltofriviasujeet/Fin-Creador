@@ -309,9 +309,10 @@ test("goal what if: saving more a month, the before/after card, the working out 
   // ₹60,000 a month instead of ₹50,000: ₹3,00,000 in 5 months instead of 6 (this month counted).
   const answer = await ask(page, "What if I save 10k more a month for Car 2027?")
   await expect(answer.getByText("What if · Car 2027")).toBeVisible()
-  await expect(answer.getByText(/^Reached in \w+ \d{4}\.$/)).toBeVisible()
+  // The answer first, its caveat second.
+  await expect(answer.getByText(/^Reached in \w+ \d{4} \(5 months\)\.$/)).toBeVisible()
   // The card plus at most two sentences; "Savings only" once, on the card.
-  await expect(answer.getByText(/^Reached in \w+ \d{4}\. Saving ₹10,000 more a month \(₹60,000 for it this month\), it would be reached in \w+ \d{4} \(5 months\), instead of \w+ \d{4} \(6 months\)\.$/)).toBeVisible()
+  await expect(answer.getByText(/^Reached in \w+ \d{4} \(5 months\)\. Saving ₹10,000 more a month \(₹60,000 for it this month\), it would be reached in \w+ \d{4} \(5 months\), instead of \w+ \d{4} \(6 months\)\.$/)).toBeVisible()
   await expect(answer.getByText("Savings only: no investment returns, no interest and no inflation.", { exact: true })).toHaveCount(1)
   await expect(answer.getByText(/Savings only/)).toHaveCount(1)
   const rows = answer.getByRole("table", { name: "The goal as it is and with the change" })

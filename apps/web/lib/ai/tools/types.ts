@@ -59,6 +59,8 @@ export type GoalCheck = {
   withTarget?: (targetMinor: number, costLines: readonly string[], bound?: TotalBound) => WebVerdict
   /** The web-assisted verdict, when web prices were kept for this answer. */
   web?: WebVerdict
+  /** A what-if's second line (10.7a): the caveat under the answer. */
+  caveat?: string
   /** A what-if's before/after rows (10.7a), every value formatted in code. */
   comparison?: WhatIfComparison
   /** Lines shown on a what-if's card, under the rows (10.7a). */

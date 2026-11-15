@@ -441,6 +441,7 @@ function Reply({
             {c.web ? " · From your records" : ""}
           </p>
           <p className="font-heading text-lg font-bold text-ink">{c.verdict}</p>
+          {c.caveat && <p className="text-sm text-muted-foreground">{c.caveat}</p>}
           {c.comparison && <WhatIfRows comparison={c.comparison} />}
           {c.lines && c.lines.length > 0 && (
             <ul className="mt-2 grid gap-1 text-sm text-ink" aria-label="About this what if">

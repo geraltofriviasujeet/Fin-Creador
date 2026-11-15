@@ -138,6 +138,11 @@ describe("goalWhatIf: changes", () => {
     expect(goalWhatIf(assam, { kind: "monthly", deltaMinor: -500_000 })).toMatchObject({ outcome: "not_reached", floored: false });
   });
 
+  it("counts this month as month 1: ₹95,000 at ₹5,000 a month from November 2026 is May 2028 (month 19)", () => {
+    const r = goalWhatIf({ ...assam, today: "2026-11-15", targetMinor: 9_500_000 }, { kind: "monthly", deltaMinor: 500_000 });
+    expect(r).toMatchObject({ floored: true, after: { reachMonth: "2028-05-01" } });
+  });
+
   it("nothing free this month but money freed later: each month counts from zero", () => {
     // A ₹20,000 claim this month only: this month counts as 0, then ₹10,000 a month, plus ₹2,000.
     const r = goalWhatIf({ ...base, claims: [{ date: "2026-11-20", amountMinor: 20_000 }] }, { kind: "monthly", deltaMinor: 2_000 });

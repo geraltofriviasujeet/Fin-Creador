@@ -58,8 +58,9 @@ describe("goal_what_if", () => {
     setUp()
     // ₹10,000 free a month; ₹2,000 more makes ₹12,000: ₹1,20,000 in 10 months, by August 2027.
     const out = await goalWhatIfTool.run(ctx("What if I save 2000 more a month for Bike?"), { goal: "Bike", change: "save_more", amount: "2000" })
-    expect(out.check).toMatchObject({ kind: "what_if", goal: "Bike", verdict: "Reached in August 2027." })
-    expect(out.check!.summary).toBe("Reached in August 2027. Saving ₹2,000 more a month (₹12,000 for it this month), it would be reached in August 2027 (10 months), instead of October 2027 (12 months).")
+    expect(out.check).toMatchObject({ kind: "what_if", goal: "Bike", verdict: "Reached in August 2027 (10 months)." })
+    expect(out.check!.caveat).toBe("Your records show ₹10,000 free a month today; this assumes you find the extra ₹2,000.")
+    expect(out.check!.summary).toBe("Reached in August 2027 (10 months). Saving ₹2,000 more a month (₹12,000 for it this month), it would be reached in August 2027 (10 months), instead of October 2027 (12 months).")
     expect(out.check!.comparison).toStrictEqual({
       before: "As it is",
       after: "₹2,000 more a month",
@@ -68,7 +69,7 @@ describe("goal_what_if", () => {
         { label: "Reached in", before: "October 2027 (12 months)", after: "August 2027 (10 months)" },
       ],
     })
-    expect(out.check!.lines).toStrictEqual([SAVINGS_ONLY, ONLY_THIS_GOAL, "Your records show ₹10,000 free a month today; this assumes you find the extra ₹2,000."])
+    expect(out.check!.lines).toStrictEqual([SAVINGS_ONLY, ONLY_THIS_GOAL])
     expect(out.subject).toStrictEqual({ checked: "Bike", goals: ["Bike"] })
     expect(out.figures.map((f) => f.label)).toContain("Saved more a month")
   })
@@ -76,14 +77,14 @@ describe("goal_what_if", () => {
   it("saving more than is free is still worked out, with the line about finding the extra", async () => {
     setUp()
     const out = await goalWhatIfTool.run(ctx("agar 50 hazaar zyada bachau to Bike kab tak"), { goal: "Bike", change: "save_more" })
-    expect(out.check!.verdict).toBe("Reached in December 2026.")
-    expect(out.check!.lines).toContain("Your records show ₹10,000 free a month today; this assumes you find the extra ₹50,000.")
+    expect(out.check!.verdict).toBe("Reached in December 2026 (2 months).")
+    expect(out.check!.caveat).toBe("Your records show ₹10,000 free a month today; this assumes you find the extra ₹50,000.")
   })
 
   it("saving less that leaves nothing: not reached, no date", async () => {
     setUp()
     const out = await goalWhatIfTool.run(ctx("if I save 10k less a month for Bike?"), { goal: "Bike", change: "save_less", amount: "10k" })
-    expect(out.check).toMatchObject({ verdict: "Not reached." })
+    expect(out.check).toMatchObject({ verdict: "Not reached.", caveat: "₹10,000 less a month leaves nothing free for it." })
     expect(out.check!.summary).toBe("Not reached. Saving ₹10,000 less a month leaves nothing free for Bike.")
     expect(out.check!.comparison!.rows).toStrictEqual([
       { label: "For this goal a month", before: "₹10,000", after: "nothing free" },
@@ -94,8 +95,9 @@ describe("goal_what_if", () => {
   it("the amount a month by a month: the shortfall as a figure, and nothing more", async () => {
     setUp({ nets: [900_000, 900_000, 900_000, 900_000, 900_000, 900_000, 0] })
     const out = await goalWhatIfTool.run(ctx("How much a month do I need to reach Bike by Oct 2027?"), { goal: "Bike", change: "by_month", by: "Oct 2027" })
-    expect(out.check!.verdict).toBe("More than is free.")
-    expect(out.check!.summary).toBe("More than is free. To reach Bike by October 2027: ₹10,000 a month over 12 months, ₹1,000 a month more than your records show free.")
+    // The answer first, the caveat second, and the sentence under the card starts with the amount.
+    expect(out.check).toMatchObject({ verdict: "₹10,000 a month for 12 months.", caveat: "More than your records show is free today." })
+    expect(out.check!.summary).toBe("₹10,000 a month for 12 months. That is ₹1,000 a month more than your records show free, to reach Bike by October 2027.")
     expect(out.check!.lines).toContain("Short by ₹1,000 a month on what your records show free from this month to October 2027.")
     expect(ADVICE.test(out.check!.summary)).toBe(false)
   })
@@ -120,8 +122,9 @@ describe("goal_what_if", () => {
   it("nothing free: ₹X more is what goes to the goal a month, never a negative bare amount (the dev case)", async () => {
     assam()
     const out = await goalWhatIfTool.run(ctx("If I save 5000 more a month, when do I reach assam trip?"), { goal: "assam trip", change: "save_more", amount: "5000" })
-    expect(out.check!.verdict).toBe("Reached in June 2028.")
-    expect(out.check!.summary).toBe("Reached in June 2028. With ₹5,000 a month going to Assam trip, it would be reached in June 2028 (20 months), instead of not at all.")
+    // ₹1,00,000 at ₹5,000 a month, asked on 6 November 2026: this month is month 1, so month 20 is June 2028.
+    expect(out.check!.verdict).toBe("Reached in June 2028 (20 months).")
+    expect(out.check!.summary).toBe("Reached in June 2028 (20 months). With ₹5,000 a month going to Assam trip, it would be reached in June 2028 (20 months), instead of not at all.")
     expect(out.check!.comparison).toStrictEqual({
       before: "As it is",
       after: "₹5,000 a month",
@@ -130,7 +133,7 @@ describe("goal_what_if", () => {
         { label: "Reached in", before: "not reached", after: "June 2028 (20 months)" },
       ],
     })
-    expect(out.check!.lines).toContain("Your records show nothing free a month today; this assumes you find the extra ₹5,000.")
+    expect(out.check!.caveat).toBe("Your records show nothing free a month today; this assumes you find the extra ₹5,000.")
     expect(out.figures.find((f) => f.label === "Free for this goal this month: short before this goal")).toMatchObject({ minor: 29_066_000 })
     expect(out.figures.find((f) => f.label === "Median monthly net (income minus spending)")).toMatchObject({ minor: -4_981_900 })
     noPaise(out)
@@ -139,9 +142,9 @@ describe("goal_what_if", () => {
   it("nothing free, by a month: the full monthly amount, with the same line", async () => {
     assam()
     const out = await goalWhatIfTool.run(ctx("How much a month to reach Assam trip by Oct 2027?"), { goal: "Assam trip", change: "by_month", by: "Oct 2027" })
-    expect(out.check!.verdict).toBe("More than is free.")
+    expect(out.check).toMatchObject({ verdict: "₹8,334 a month for 12 months.", caveat: "More than your records show is free today." })
     expect(out.check!.summary).toBe(
-      "More than is free. To reach Assam trip by October 2027: ₹8,334 a month over 12 months; your records show nothing free: short by ₹2,90,660 a month before this goal, so all ₹8,334 a month would have to come from elsewhere.",
+      "₹8,334 a month for 12 months. Your records show nothing free: short by ₹2,90,660 a month before this goal, so all of it would have to come from elsewhere to reach Assam trip by October 2027.",
     )
     expect(out.check!.lines).toContain("Your records show nothing free a month today; this assumes you find the ₹8,334 a month.")
     expect(out.check!.comparison!.rows.at(-1)).toStrictEqual({ label: "Reached in", before: "not reached", after: "October 2027 (12 months)" })
@@ -151,22 +154,35 @@ describe("goal_what_if", () => {
   it("nothing free, costing more or less: not reached, said without a negative amount", async () => {
     assam()
     const out = await goalWhatIfTool.run(ctx("What if Assam trip costs 10,000 less?"), { goal: "Assam trip", change: "cost_less", amount: "10,000" })
+    expect(out.check!.caveat).toBe("If it costs ₹10,000 less (₹90,000 in all).")
     expect(out.check!.summary).toBe("Not reached. If Assam trip cost ₹10,000 less (₹90,000 in all), it would not be reached: your records show nothing free for it.")
     expect(out.check!.comparison!.rows[1]).toStrictEqual({ label: "For this goal a month", before: "nothing free: short by ₹2,90,660 a month before this goal", after: "nothing free: short by ₹2,90,660 a month before this goal" })
     noPaise(out)
   })
 
+  it("counts this month as month 1: ₹95,000 at ₹5,000 a month, asked in November 2026, is May 2028, 19 months", async () => {
+    assam()
+    api.loadGoalsData.mockResolvedValue({
+      ok: true,
+      data: { today: "2026-11-15", currency: "INR", goals: [goal({ name: "Assam trip", targetMinor: 9_500_000, targetDate: null })], budgetRows: [], categories: [], spending: new Map() },
+    })
+    const out = await goalWhatIfTool.run({ ...ctx("If I save 5000 more a month, when do I reach assam trip?"), today: "2026-11-15" }, { goal: "assam trip", change: "save_more", amount: "5000" })
+    expect(out.check!.verdict).toBe("Reached in May 2028 (19 months).")
+    expect(out.check!.comparison!.rows.at(-1)).toStrictEqual({ label: "Reached in", before: "not reached", after: "May 2028 (19 months)" })
+  })
+
   it("the amount a month by a month, covered by what is free", async () => {
     setUp()
     const out = await goalWhatIfTool.run(ctx("bike 2 saal mein ke liye kitna har mahine?"), { goal: "Bike", change: "by_month" })
-    expect(out.check!.verdict).toBe("Covered by what is free.")
+    expect(out.check).toMatchObject({ verdict: "₹4,800 a month for 25 months.", caveat: "Within what your records show is free today." })
     expect(out.check!.comparison).toBeUndefined()
   })
 
   it("costing more or less", async () => {
     setUp()
     const more = await goalWhatIfTool.run(ctx("What if Bike costs 20,000 more?"), { goal: "Bike", change: "cost_more", amount: "20,000" })
-    expect(more.check!.summary).toBe("Reached in December 2027. If Bike cost ₹20,000 more (₹1,40,000 in all), it would be reached in December 2027 (14 months), instead of October 2027 (12 months).")
+    expect(more.check!.caveat).toBe("If it costs ₹20,000 more (₹1,40,000 in all).")
+    expect(more.check!.summary).toBe("Reached in December 2027 (14 months). If Bike cost ₹20,000 more (₹1,40,000 in all), it would be reached in December 2027 (14 months), instead of October 2027 (12 months).")
     expect(more.check!.comparison!.rows[0]).toStrictEqual({ label: "Cost", before: "₹1,20,000", after: "₹1,40,000" })
     const zero = await goalWhatIfTool.run(ctx("What if Bike costs 2 lakh less?"), { goal: "Bike", change: "cost_less", amount: "2 lakh" })
     expect(zero.check!.verdict).toBe("Nothing left to save.")
@@ -188,7 +204,7 @@ describe("goal_what_if", () => {
   it("3 to 5 months with records: worked out, and said to be thin", async () => {
     setUp({ nets: [0, 0, 1_000_000, 1_000_000, 1_000_000, 1_000_000, 0] })
     const out = await goalWhatIfTool.run(ctx("save 2000 more for Bike"), { goal: "Bike", change: "save_more" })
-    expect(out.check!.verdict).toBe("Reached in August 2027.")
+    expect(out.check!.verdict).toBe("Reached in August 2027 (10 months).")
     expect(out.check!.lines).toContain("Only 4 months have records, so the estimate is thin.")
   })
 
@@ -256,7 +272,7 @@ describe("what-if answers in the chat loop", () => {
       provider: mockProvider((req, round) =>
         round === 0
           ? mockToolCall("goal_what_if", { goal: "Bike", change: "save_more", amount: "2000" })
-          : mockText("Reached in August 2027. With {fig:saved_more_a_month} more a month, Bike would be reached in August 2027. I recommend starting now."),
+          : mockText("Reached in August 2027 (10 months). With {fig:saved_more_a_month} more a month, Bike would be reached then. I recommend starting now."),
       ),
       tools: [goalWhatIfTool as FinanceTool],
       context: base,
@@ -264,7 +280,7 @@ describe("what-if answers in the chat loop", () => {
     })
     expect(run.result.kind).toBe("answer")
     if (run.result.kind !== "answer") return
-    expect(run.result.text).toBe("Reached in August 2027. Saving ₹2,000 more a month (₹12,000 for it this month), it would be reached in August 2027 (10 months), instead of October 2027 (12 months).")
+    expect(run.result.text).toBe("Reached in August 2027 (10 months). Saving ₹2,000 more a month (₹12,000 for it this month), it would be reached in August 2027 (10 months), instead of October 2027 (12 months).")
     expect(run.result.checks[0]?.comparison?.after).toBe("₹2,000 more a month")
   })
 
@@ -274,13 +290,13 @@ describe("what-if answers in the chat loop", () => {
       provider: mockProvider((req, round) =>
         round === 0
           ? mockToolCall("goal_what_if", { goal: "Bike", change: "save_more", amount: "2000" })
-          : mockText("Reached in August 2027. With {fig:saved_more_a_month} more a month, Bike would be reached in August 2027."),
+          : mockText("Reached in August 2027 (10 months). With {fig:saved_more_a_month} more a month, Bike would be reached then."),
       ),
       tools: [goalWhatIfTool as FinanceTool],
       context: base,
       question: "What if I save 2000 more a month for Bike?",
     })
-    expect(run.result).toMatchObject({ kind: "answer", text: "Reached in August 2027. With ₹2,000 more a month, Bike would be reached in August 2027." })
+    expect(run.result).toMatchObject({ kind: "answer", text: "Reached in August 2027 (10 months). With ₹2,000 more a month, Bike would be reached then." })
   })
 })
 

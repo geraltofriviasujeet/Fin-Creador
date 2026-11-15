@@ -171,6 +171,7 @@ export type ChatResponseBody =
         kind?: "trip" | "what_if"
         goal: string
         verdict: string
+        caveat?: string
         assumptions: string[]
         web?: { verdict: string; summary: string; webOnly?: true }
         comparison?: WhatIfComparison
@@ -356,10 +357,11 @@ export async function handleChat(body: unknown, deps: ChatDeps): Promise<{ statu
           ...(result.descriptionsWithheld ? { descriptionsNotice: true as const } : {}),
           ...(result.checks.length > 0
             ? {
-                checks: result.checks.map(({ kind, goal, verdict, assumptions, web, comparison, lines }) => ({
+                checks: result.checks.map(({ kind, goal, verdict, caveat, assumptions, web, comparison, lines }) => ({
                   ...(kind ? { kind } : {}),
                   goal,
                   verdict,
+                  ...(caveat ? { caveat } : {}),
                   assumptions,
                   ...(web ? { web } : {}),
                   ...(comparison ? { comparison } : {}),
