@@ -16,6 +16,8 @@
 //    left. A month with less than nothing free reduces the running total.
 //  - Horizon: PROJECTION_HORIZON_MONTHS months from this month, both counted, or up to the
 //    target month when that is later.
+//  - A "what if" (10.7a) may add a fixed amount to (or take it from) every month's free money;
+//    left out, it is zero and nothing changes.
 import { type IsoDate, parseIsoDate } from "./dates";
 import { type SavingPlan, divRoundHalfAway, savingPlan } from "./goals";
 import { addMinor } from "./money";
@@ -48,6 +50,8 @@ export interface GoalProjectionInput {
   claims: readonly ProjectionClaim[];
   /** Each other active goal's saving plan (savingPlan): monthlyMinor for its `months`. */
   otherGoals: readonly Pick<SavingPlan, "monthlyMinor" | "months">[];
+  /** Added to every month's free money (10.7a "what if"); below zero takes it off. Default 0. */
+  adjustMonthlyMinor?: number;
 }
 
 export interface GoalProjection {
@@ -93,13 +97,12 @@ function monthIndex(from: IsoDate, to: IsoDate): number {
 /** ceil(num / den) for num ≥ 0, den > 0. */
 const ceilDiv = (num: number, den: number) => Number((BigInt(num) + BigInt(den) - 1n) / BigInt(den));
 
-export function goalProjection(input: GoalProjectionInput): GoalProjection {
-  const { today, targetDate } = input;
-  const plan = savingPlan({ targetMinor: input.targetMinor, savedMinor: input.savedMinor, targetDate, today });
-  const tracked = input.months.filter((m) => m.incomeMinor !== 0 || m.expenseMinor !== 0);
-  const monthsMeasured = tracked.length;
-  const horizon = plan.basis === "target_date" ? Math.max(PROJECTION_HORIZON_MONTHS, plan.months) : PROJECTION_HORIZON_MONTHS;
+/** Months with any income or spending: the ones the median is taken over. */
+const trackedMonths = (months: readonly MeasuredMonth[]) => months.filter((m) => m.incomeMinor !== 0 || m.expenseMinor !== 0);
 
+/** This month's and later months' claims and other goals' saving, per month, for `horizon` months. */
+function monthlyClaims(input: GoalProjectionInput, horizon: number): { claims: number[]; others: number[] } {
+  const { today } = input;
   const claims = new Array<number>(horizon).fill(0);
   for (const c of input.claims) {
     if (!Number.isSafeInteger(c.amountMinor) || c.amountMinor < 0) throw new RangeError("Claims must be non-negative minor units");
@@ -110,6 +113,30 @@ export function goalProjection(input: GoalProjectionInput): GoalProjection {
   for (const g of input.otherGoals) {
     for (let i = 0; i < Math.min(g.months, horizon); i++) others[i] = addMinor(others[i]!, g.monthlyMinor);
   }
+  return { claims, others };
+}
+
+/**
+ * Free money in each of the `horizon` months from this one (index 0), by the rules above; null
+ * below PROJECTION_MIN_MONTHS tracked months.
+ */
+export function freeByMonth(input: GoalProjectionInput, horizon: number): number[] | null {
+  const tracked = trackedMonths(input.months);
+  if (tracked.length < PROJECTION_MIN_MONTHS) return null;
+  const adjust = input.adjustMonthlyMinor ?? 0;
+  if (!Number.isSafeInteger(adjust)) throw new RangeError("Amounts must be whole minor units");
+  const median = medianMinor(tracked.map((m) => addMinor(m.incomeMinor, -m.expenseMinor)));
+  const { claims, others } = monthlyClaims(input, horizon);
+  return claims.map((c, i) => addMinor(median, -c, -others[i]!, adjust));
+}
+
+export function goalProjection(input: GoalProjectionInput): GoalProjection {
+  const { today, targetDate } = input;
+  const plan = savingPlan({ targetMinor: input.targetMinor, savedMinor: input.savedMinor, targetDate, today });
+  const tracked = trackedMonths(input.months);
+  const monthsMeasured = tracked.length;
+  const horizon = plan.basis === "target_date" ? Math.max(PROJECTION_HORIZON_MONTHS, plan.months) : PROJECTION_HORIZON_MONTHS;
+  const { claims, others } = monthlyClaims(input, horizon);
 
   const base = {
     plan,
@@ -128,7 +155,7 @@ export function goalProjection(input: GoalProjectionInput): GoalProjection {
   }
 
   const median = medianMinor(tracked.map((m) => addMinor(m.incomeMinor, -m.expenseMinor)));
-  const free = claims.map((c, i) => addMinor(median, -c, -others[i]!));
+  const free = freeByMonth(input, horizon)!;
   const running: number[] = [];
   let reachIndex: number | null = null;
   for (let i = 0; i < horizon; i++) {

@@ -272,6 +272,43 @@ test("goal check: Yes for a goal within reach, No with what to change, the verdi
   await expect(no.getByRole("listitem").filter({ hasText: "Assuming you keep saving for your other goals (Car 2027)" })).toBeVisible()
 })
 
+test("goal what if: saving more a month, the before/after card, the savings-only line (10.7a)", async ({ page }) => {
+  const email = uniqueEmail("roma-what-if")
+  await startWithRoma(page, "Kavya Rao", email)
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } })
+  expect((await supabase.auth.signInWithPassword({ email, password: PASSWORD })).error).toBeNull()
+  const account = await supabase.from("accounts").select("id").eq("kind", "bank").single()
+  const salary = await supabase.from("categories").select("id").eq("kind", "income").limit(1).single()
+  expect(account.error ?? salary.error).toBeNull()
+  // ₹50,000 of income in each of the last 6 complete months: ₹50,000 free a month.
+  for (let offset = -6; offset <= -1; offset++) {
+    const recorded = await supabase.rpc("record_transaction", {
+      p_type: "income",
+      p_idempotency_key: crypto.randomUUID(),
+      p_amount_minor: 50_000_00,
+      p_occurred_on: monthDay(offset),
+      p_account_id: account.data!.id,
+      p_category_id: salary.data!.id,
+    })
+    expect(recorded.error).toBeNull()
+  }
+  const nextYear = Number(todayInIndia().slice(0, 4)) + 1
+  await addOtherGoal(page, "Car 2027", "3,00,000", `${nextYear}-12-31`)
+
+  // ₹60,000 a month instead of ₹50,000: ₹3,00,000 in 5 months instead of 6 (this month counted).
+  const answer = await ask(page, "What if I save 10k more a month for Car 2027?")
+  await expect(answer.getByText("What if · Car 2027")).toBeVisible()
+  await expect(answer.getByText(/^Reached in \w+ \d{4}\.$/)).toBeVisible()
+  await expect(answer.getByText(/^Reached in \w+ \d{4}\. Saving ₹10,000 more a month \(₹60,000 for it this month\), Car 2027 would be reached in \w+ \d{4}, instead of \w+ \d{4}\./)).toBeVisible()
+  await expect(answer.getByText(/Savings only: no investment returns, no interest and no inflation\.$/).first()).toBeVisible()
+  const rows = answer.getByRole("table", { name: "The goal as it is and with the change" })
+  await expect(rows.getByRole("columnheader", { name: "₹10,000 more a month" })).toBeVisible()
+  await expect(rows.getByRole("row").filter({ hasText: "For this goal this month" }).getByRole("cell")).toHaveText(["₹50,000", "₹60,000"])
+  await expect(answer.getByText("Your records show ₹50,000 free a month today; this assumes you find the extra ₹10,000.")).toBeVisible()
+  await expect(answer.getByText("Only this goal changes: your other goals, loan payments and dues are taken as they are today.")).toBeVisible()
+  await expect(figure(answer, "Saved more a month")).toHaveText("₹10,000")
+})
+
 test("goal check: too early to say with under 3 months of records (10.4)", async ({ page }) => {
   await startWithRoma(page, "Arjun Mehta", uniqueEmail("roma-goal-early"))
   await page.goto("/income")

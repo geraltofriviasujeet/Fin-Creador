@@ -395,10 +395,18 @@ function Reply({
       {reply.checks?.map((c, i) => (
         <div key={i} className="rounded-xl border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
           <p className="text-xs font-semibold text-muted-foreground">
-            {c.kind === "trip" ? "Trip check" : "Goal check"} · {c.goal}
+            {c.kind === "trip" ? "Trip check" : c.kind === "what_if" ? "What if" : "Goal check"} · {c.goal}
             {c.web ? " · From your records" : ""}
           </p>
           <p className="font-heading text-lg font-bold text-ink">{c.verdict}</p>
+          {c.comparison && <WhatIfRows comparison={c.comparison} />}
+          {c.lines && c.lines.length > 0 && (
+            <ul className="mt-2 grid gap-1 text-sm text-ink" aria-label="About this what if">
+              {c.lines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
           {c.web && (
             <div className="mt-2 border-t border-dashed border-line pt-2" data-testid="web-verdict">
               <p className="text-xs font-semibold text-muted-foreground">
@@ -464,6 +472,39 @@ function Reply({
             </div>
           ),
       )}
+    </div>
+  )
+}
+
+/** A goal "what if" (10.7a): the goal as it is and with the change, every value formatted in code. */
+function WhatIfRows({ comparison }: { comparison: NonNullable<NonNullable<Extract<ChatResponseBody, { status: "answer" }>["checks"]>[number]["comparison"]> }) {
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full text-sm">
+        <caption className="sr-only">The goal as it is and with the change</caption>
+        <thead className="text-xs text-muted-foreground">
+          <tr>
+            <td />
+            <th scope="col" className="px-2 py-1 text-right font-semibold">
+              {comparison.before}
+            </th>
+            <th scope="col" className="px-2 py-1 text-right font-semibold">
+              {comparison.after}
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {comparison.rows.map((row) => (
+            <tr key={row.label}>
+              <th scope="row" className="py-1 pr-2 text-left font-normal text-muted-foreground">
+                {row.label}
+              </th>
+              <td className="px-2 py-1 text-right text-ink tabular-nums">{row.before}</td>
+              <td className="px-2 py-1 text-right font-semibold text-ink tabular-nums">{row.after}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

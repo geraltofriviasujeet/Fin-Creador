@@ -8,6 +8,7 @@ import type { Route } from "./knowledge/route"
 import { KNOWLEDGE_RULES, ROMA_SYSTEM_PROMPT, WEB_RULES, romaContext } from "./prompts/roma-system"
 import { lookupsLine } from "./search/session"
 import { decimalToMinor } from "./search/totals"
+import { SAVINGS_ONLY } from "./tools/goal-what-if"
 import { type CheckSubject, type FinanceTool, type Figure, type GoalCheck, type InputNeeded, NO_LOOKUPS, type TaxBlock, type ToolContext, type ToolOutput, ToolError, type WebBlock, toToolDef } from "./tools/types"
 import {
   LlmError,
@@ -43,6 +44,9 @@ import {
 // estimate's card, built in code, goes with the answer, which then always ends with NOT_ADVICE.
 // From 10.6d a product pick (which fund, stock or coin to buy) gets NO_PRODUCT_PICKS first, then
 // the general explanation only when it cites passages; otherwise that line alone.
+// From 10.7a a goal "what if" is stated as facts: an answer in advice phrasing ("you should",
+// "I recommend", "better to", "consider") is replaced by the checks' own summaries, and the
+// savings-only line is added by code.
 
 export const MAX_ROUNDS = 4
 export const DEADLINE_MS = 45_000
@@ -246,7 +250,8 @@ export async function runChat({
         descriptionsSent: found.descriptionsSent,
       })
     }
-    const answer = pick ? `${NO_PRODUCT_PICKS}\n\n${withVerdict(filled.text, found.checks)}` : withVerdict(filled.text, found.checks)
+    const stated = whatIfAnswer(withVerdict(filled.text, found.checks), found.checks)
+    const answer = pick ? `${NO_PRODUCT_PICKS}\n\n${stated}` : stated
     // A tax estimate always ends with the not-advice line, cited or not (once).
     const tail = [known.tail, found.tax && known.tail !== NOT_ADVICE ? NOT_ADVICE : null].filter(Boolean).join("\n\n")
     return done({
@@ -333,6 +338,19 @@ export function offSubjectText(checked: string, goals: readonly string[]): strin
 export function withVerdict(text: string, checks: readonly GoalCheck[]): string {
   if (checks.length === 0 || checks.some((c) => text.startsWith(c.verdict))) return text
   return checks.map((c) => c.summary).join("\n\n")
+}
+
+/**
+ * Advice phrasing (10.7a). "You should reach it by March" is a result, not advice, so "should"
+ * followed by reach, be, take, have, get, hit or see is left alone.
+ */
+export const ADVICE = /\b(?:you\s+should(?!\s+(?:reach|be|take|have|get|hit|see)\b)|i\s+(?:would\s+)?(?:recommend|suggest)|better\s+to|best\s+to|consider(?:ing)?)\b/i
+
+/** A what-if answer (10.7a): its checks' summaries instead of advice, then the savings-only line, once. */
+export function whatIfAnswer(text: string, checks: readonly GoalCheck[]): string {
+  if (!checks.some((c) => c.kind === "what_if")) return text
+  const facts = ADVICE.test(text) ? checks.map((c) => c.summary).join("\n\n") : text
+  return facts.includes(SAVINGS_ONLY) ? facts : `${facts}\n\n${SAVINGS_ONLY}`
 }
 
 /** Every string in a tool result, at any depth. */

@@ -12,6 +12,8 @@ import { isProductPick } from "./picks"
 //   * tax (10.6e): tax to be worked out on a salary: tax_estimate and knowledge_search only.
 // A product pick (10.6d: which fund, scheme, stock, policy or coin to buy, or what gives the
 // best returns, picks.ts) goes to the knowledge route; chat.ts puts a code-built line before the answer.
+// A goal "what if" (10.7a: saving more or less, the amount a month to reach a goal by a month, a
+// goal costing more or less; English or Hinglish) goes to records: it is about the person's own goal.
 // Unclear questions go to "both", never to "neither".
 
 export type Route = RomaRoute
@@ -32,6 +34,14 @@ const TAX = /\btax(?:es)?\b/i
 const WORK_OUT = /\b(?:calculat\w*|comput\w*|work(?:ing)? out|estimat\w*|how much|tax on|payable|liability)\b/i
 const SALARY_WORDS = /\b(?:salary|ctc|lpa|in[\s-]?hand|take[\s-]?home|income|regimes?|records?)\b/i
 
+/** A goal "what if" (10.7a), in English or Hinglish. */
+const WHAT_IF =
+  /\b(?:what if|agar|if i|if it|if my|suppose)\b[^?]*\b(?:save|saved|saving|bacha\w*|costs?|costing|kharch\w*|mehe?ng\w*|sast\w*|zyada|jyada|kam|more|less|extra)\b|\bhow much (?:do i need |would i need |should i save |to save )?(?:a|per|each|every) month\b|\bkitna (?:har )?mahine\b|\bhar mahine\b[^?]*\bkitna\b|\bkab tak\b/i
+
+export function isWhatIf(text: string): boolean {
+  return WHAT_IF.test(text)
+}
+
 export function isTaxCalculation(text: string): boolean {
   return TAX.test(text) && WORK_OUT.test(text) && (SALARY_WORDS.test(text) || rupeeAmountsIn(text).length > 0)
 }
@@ -41,6 +51,7 @@ export function routeQuestion(question: string): Route {
   if (SMALL_TALK.test(text)) return "neither"
   if (isProductPick(text)) return "knowledge"
   if (isTaxCalculation(text)) return "tax"
+  if (isWhatIf(text)) return "records"
   const records = RECORDS.test(text)
   const knowledge = KNOWLEDGE.test(text)
   if (records && !knowledge) return "records"

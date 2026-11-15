@@ -32,7 +32,8 @@ export const mockToolCall = (name: string, input: unknown, id = `call-${name}`):
  * (with its description when one was sent); anything else asks spending_for_period for "last
  * month" when the question says so, otherwise "this month", then repeats the tool's own
  * figures. Labelled as a test answer. "Can I reach <goal>?" asks goal_projection and repeats its
- * code-built verdict summary (10.4). "Trip to <place>, <scope>, <YYYY-MM>, <n> nights, <n>
+ * code-built verdict summary (10.4); "What if I save <amount> more|less a month for <goal>?"
+ * asks goal_what_if and does the same (10.7a). "Trip to <place>, <scope>, <YYYY-MM>, <n> nights, <n>
  * travellers" asks trip_check, optionally confirming one run: "; <from> to <to> was <scope>
  * for <n>, <travel|all_spending>" (10.5). "Web prices for a trip to <place>, <YYYY-MM>, <n>
  * nights, <n> travellers" (10.8) asks trip_check, then web_price_lookup for stay and transport,
@@ -81,6 +82,8 @@ const defaultScript: MockScript = (request) => {
   const question = request.messages.filter((m) => m.role === "user").at(-1)
   const text = question?.role === "user" ? question.text : ""
   if (/^find\b/i.test(text)) return mockToolCall("search_transactions", { period: "this_month" })
+  const whatIf = /^what if i save (.+?) (more|less) a month for (.+?)\??$/i.exec(text.trim())
+  if (whatIf) return mockToolCall("goal_what_if", { goal: whatIf[3], change: `save_${whatIf[2]!.toLowerCase()}`, amount: whatIf[1] })
   const goal = /^can i reach (.+?)\??$/i.exec(text.trim())
   if (goal) return mockToolCall("goal_projection", { goal: goal[1] })
   const trip = /^trip to (.+?), (domestic|international), (\d{4}-\d{2}), (\d+) nights, (\d+) travellers(?:; (\S+) to (\S+) was (domestic|international) for (\d+), (travel|all_spending))?$/i.exec(text.trim())

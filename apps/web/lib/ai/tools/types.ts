@@ -44,8 +44,8 @@ export const NO_LOOKUPS = "No outside prices were looked up."
 
 /** A goal check (10.4): the verdict computed in code, the same said in full, and its assumptions. */
 export type GoalCheck = {
-  /** A trip check (10.5) labels the card "Trip check"; `goal` is then the destination. */
-  kind?: "trip"
+  /** A trip check (10.5) labels the card "Trip check"; `goal` is then the destination. A goal "what if" (10.7a): "What if". */
+  kind?: "trip" | "what_if"
   goal: string
   /** "Yes.", "No." or "Too early to say.": the answer must start with it. */
   verdict: string
@@ -59,7 +59,14 @@ export type GoalCheck = {
   withTarget?: (targetMinor: number, costLines: readonly string[], bound?: TotalBound) => WebVerdict
   /** The web-assisted verdict, when web prices were kept for this answer. */
   web?: WebVerdict
+  /** A what-if's before/after rows (10.7a), every value formatted in code. */
+  comparison?: WhatIfComparison
+  /** Lines shown on a what-if's card, under the rows (10.7a). */
+  lines?: string[]
 }
+
+/** Column heads and rows of a what-if's comparison (10.7a). */
+export type WhatIfComparison = { before: string; after: string; rows: { label: string; before: string; after: string }[] }
 
 /** A verdict that rests on web estimates (10.8), worked out in code and always shown second. */
 export type WebVerdict = { verdict: string; summary: string; webOnly?: true }
