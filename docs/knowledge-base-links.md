@@ -5,14 +5,17 @@ site, so each publisher's hyperlinking policy applies (checked 2026-11-13):
 
 | Publisher | Linking policy | What we link |
 |---|---|---|
-| RBI | Home page after notifying RBI in writing; other pages need prior permission | Home page only, until permission for deep links |
+| RBI | Home page after notifying RBI in writing; other pages need prior permission | Home page only, until permission for deep links. Notice sent 2026-11-15 (see below) |
 | SEBI | Direct links allowed without prior permission; asks to be told | Investor site pages |
 | AMFI | Home page only | Home page |
 | IRDAI (policyholder.gov.in, irdai.gov.in) | Direct links allowed without prior permission | Pages |
 | EPFO | Direct links allowed without prior permission; asks to be told | Home page |
 | Income Tax Department (incometaxindia.gov.in, incometax.gov.in), indiabudget.gov.in | Prior permission for any link | Nothing: tax explainers name the department with `link_permission_pending: true` until permission is given |
 
-## Notification to RBI (owner sends)
+## Notification to RBI (sent)
+
+Sent 2026-11-15 to helpdoc@rbi.org.in: the home-page link notified and permission for deep
+links requested. No reply yet; links stay on the home page until RBI gives permission.
 
 To: the RBI contact listed on the website's "Contact Us" page
 
@@ -63,10 +66,13 @@ Subject: Request for permission to link to the Income Tax Department's website
 > its name or emblem to suggest endorsement, or load its pages in a frame; links open in a new
 > window.
 >
-> Pages we would link to: the Department's pages for sections 2, 19, 123, 124, 126, 156,
-> 196, 197, 198 and 202 of the Income-tax Act, 2025.
+> Pages we would link to: the Department's pages for sections 2, 19, 76, 123, 124, 126,
+> 156, 196, 197, 198 and 202 of the Income-tax Act, 2025.
 >
 > Exact link text: "Read more on the Income Tax Department's website".
+>
+> The application is at https://<your-app>.vercel.app, and we would be glad to send
+> screenshots of the pages where the links would appear.
 >
 > We would be glad to provide anything else you need.
 >
