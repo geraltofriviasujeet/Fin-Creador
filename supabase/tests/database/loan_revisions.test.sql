@@ -7,7 +7,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(56);
 
 insert into auth.users (id, email) values
   ('5a000000-0000-4000-8000-000000000001', 'lr-asha@example.test'),
@@ -292,7 +292,7 @@ select throws_ok(
   '42501', null, 'a revision can''t be updated'
 );
 
--- ------------------------------------------------------------ the write marks end with each function (46-54)
+-- ------------------------------------------------------------ the write marks end with each function (46-56)
 -- In this one transaction, after each loan function: a direct delete of instalments is
 -- refused (no DELETE grant), and so are a direct change of a schedule column (no write mark)
 -- and a direct call of the delete helper (no revise mark).
@@ -332,6 +332,17 @@ select is(current_setting('fin_creador.loan_revise', true), '', 'the revise mark
 select throws_ok(
   $$ select public.loan_delete_instalments(public.tr_loan('5b000000-0000-4000-8000-000000000005')) $$,
   'FC032', null, 'the delete helper works only inside revise_loan'
+);
+-- Even called with the mark on and nothing excluded, it never removes a settled instalment
+-- (L4's EMI 1 is paid without a payment row).
+select set_config('fin_creador.loan_revise', 'on', true);
+select is(public.loan_delete_instalments(public.tr_loan('5b000000-0000-4000-8000-000000000004')), 11,
+  'the helper removes only pending and before-tracking instalments');
+select set_config('fin_creador.loan_revise', '', true);
+select results_eq(
+  $$ select seq, status from public.due_items where loan_id = public.tr_loan('5b000000-0000-4000-8000-000000000004') $$,
+  $$ values (1, 'paid'::text) $$,
+  'the settled instalment stays'
 );
 reset role;
 

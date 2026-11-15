@@ -327,7 +327,7 @@ create trigger loan_revisions_guard
 -- ---------------------------------------------------------------------------
 
 -- Removes a loan's instalments for revise_loan: all of them (p_after_seq null) or the EMIs
--- after p_after_seq, never one that has a payment. SECURITY DEFINER so clients keep no
+-- after p_after_seq, never a settled one: only pending or before_tracking, with no payment. SECURITY DEFINER so clients keep no
 -- DELETE on due_items (a direct delete stays refused, 42501); it acts only inside
 -- revise_loan (fin_creador.loan_revise, not reachable through the API) and only on the
 -- caller's own loan. Returns how many were removed.
@@ -349,6 +349,7 @@ begin
   delete from public.due_items as d
   where d.loan_id = p_loan_id
     and (p_after_seq is null or (d.kind = 'loan_emi' and d.seq > p_after_seq))
+    and d.status in ('pending', 'before_tracking')
     and not exists (select 1 from public.due_payments as p where p.due_item_id = d.id);
   get diagnostics n = row_count;
   return n;
