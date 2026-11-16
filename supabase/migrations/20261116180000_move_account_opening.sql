@@ -39,7 +39,8 @@
 
 -- ---------------------------------------------------------------------------
 -- accounts_validate: + the move_account_opening exception to the as-of date lock.
--- Everything else is unchanged from 20261022190000.
+-- Both exceptions now treat an unset setting as off (coalesce). Everything else is unchanged
+-- from 20261022190000.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.accounts_validate()
@@ -87,10 +88,12 @@ begin
     -- entries exist. The exceptions mark their own update (transaction-local settings, not
     -- reachable through the API): set_cash_on_hand() may move a cash account's as-of date to
     -- today; move_account_opening() may move an account's as-of date earlier.
-    v_cash_on_hand := pg_catalog.current_setting('fin_creador.cash_on_hand', true) = old.id::text
+    -- coalesce (both): an unset setting reads as null, which must not switch the lock off. Before
+    -- this version a cash account's date could be moved to today by a plain update that way.
+    v_cash_on_hand := coalesce(pg_catalog.current_setting('fin_creador.cash_on_hand', true) = old.id::text, false)
       and new.kind = 'cash'
       and new.opening_balance_date = public.user_local_today(new.user_id);
-    v_opening_move := pg_catalog.current_setting('fin_creador.opening_move', true) = old.id::text
+    v_opening_move := coalesce(pg_catalog.current_setting('fin_creador.opening_move', true) = old.id::text, false)
       and new.opening_balance_date < old.opening_balance_date;
     if new.opening_balance_date <> old.opening_balance_date and v_has_entries and not v_cash_on_hand and not v_opening_move then
       raise exception 'Opening balance date cannot change once the account has entries' using errcode = 'FC011';

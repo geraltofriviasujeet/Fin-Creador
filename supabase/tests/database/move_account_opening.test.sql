@@ -6,7 +6,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(39);
 
 -- A (Asia/Kolkata) and B.
 insert into auth.users (id, email) values
@@ -142,8 +142,9 @@ select throws_ok(
 );
 select public.create_card('9fc00000-0000-4000-8000-000000000001', 'Example Card', 10000000, 20, 8, 0, 'Card');
 select throws_ok(
-  format($$ select public.move_account_opening(gen_random_uuid(), %L, '[{"key": "9fe00000-0000-4000-8000-000000000015", "type": "expense", "amount_minor": 100, "occurred_on": "2000-01-01", "account_id": %L}]'::jsonb) $$,
-    (select id from public.accounts where kind = 'card'), (select id from public.accounts where kind = 'card')),
+  format($$ select public.move_account_opening(gen_random_uuid(), %1$L, jsonb_build_array(jsonb_build_object(
+      'key', '9fe00000-0000-4000-8000-000000000015', 'type', 'expense', 'amount_minor', 100, 'occurred_on', '2000-01-01', 'account_id', %1$L))) $$,
+    (select id from public.accounts where kind = 'card')),
   'FC063', null, 'a card''s opening date does not move'
 );
 select throws_ok(
@@ -151,15 +152,19 @@ select throws_ok(
   'FC010', null, 'another person''s account is not found'
 );
 
--- ------------------------------------------------------------ cash within zero; the date lock (28-29)
+-- ------------------------------------------------------------ cash within zero; the date lock (28-30)
 select isnt((public.move_account_opening(gen_random_uuid(), '9fa00000-0000-4000-8000-000000000002', jsonb_build_array(pg_temp.entry('17', 'expense', 2000, 22, '2')))).id,
   null, 'a cash account moves when it stays at or above zero');
 select throws_ok(
   $$ update public.accounts set opening_balance_date = opening_balance_date - 1 where id = '9fa00000-0000-4000-8000-000000000001' $$,
   'FC011', null, 'outside the function the opening date stays locked'
 );
+select throws_ok(
+  $$ update public.accounts set opening_balance_date = public.user_local_today('9f000000-0000-4000-8000-00000000000a') where id = '9fa00000-0000-4000-8000-000000000002' $$,
+  'FC011', null, 'a cash account with entries can''t move its date to today by a plain update either'
+);
 
--- ------------------------------------------------------------ the self-check (31-33)
+-- ------------------------------------------------------------ the self-check (31-34)
 -- account_balances_at with a drifted sign rule (every entry an outflow), rolled back with the test.
 reset role;
 create or replace function public.account_balances_at(p_dates date[])
@@ -182,7 +187,7 @@ select is((select (opening_balance_date, opening_balance_minor) from public.acco
   (pg_temp.today() - 20, 500000::bigint), '... the opening is unchanged');
 select is((select count(*)::int from public.transactions where idempotency_key = '9fe00000-0000-4000-8000-000000000018'), 0, '... and the entry is not saved');
 
--- ------------------------------------------------------------ the trace (34-38)
+-- ------------------------------------------------------------ the trace (35-39)
 select throws_ok(
   $$ insert into public.account_opening_moves (account_id, request_key, old_opening_date, new_opening_date, old_opening_minor, new_opening_minor, entries_added, entries_counted)
      values ('9fa00000-0000-4000-8000-000000000001', gen_random_uuid(), current_date, current_date - 1, 0, 0, 0, 0) $$,
