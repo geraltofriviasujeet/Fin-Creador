@@ -50,6 +50,12 @@ const BY_CODE: Record<string, LedgerMessage> = {
   FC055: { message: "Refunds can't add up to more than the purchase.", field: "amount" },
   FC056: { message: "That entry can't take a refund. Save the refund without linking it." },
   FC057: { message: "A refund can't be dated before its purchase.", field: "occurredOn" },
+  // Moving an account's opening date back (9e statement import).
+  FC063: { message: "Only a bank, cash or other account's opening date can move." },
+  FC064: { message: "Cash and other accounts can't open below zero. Leave these payments out or correct the account's amount first." },
+  FC065: { message: "A transfer's other account opens after the transfer. Leave it out, or move that account's opening date first." },
+  FC066: { message: "Opening dates move only through the statement import." },
+  FC067: { message: "The account's balance would have changed, so nothing was saved. Please try again." },
 }
 
 /** `dateField` names the date input on the current form (occurredOn or openingBalanceDate). */

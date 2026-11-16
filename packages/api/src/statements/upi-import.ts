@@ -1,5 +1,5 @@
-import { type IsoDate, type UpiApp, parseAmount, upiBankLabelKey, upiRowKey } from "@fin-creador/domain"
-import { upiAccountMatchInputSchema, upiMatchesInputSchema, upiSaveInputSchema } from "@fin-creador/schemas"
+import { type IsoDate, UPI_ROW_KEY_NAMESPACE, type UpiApp, parseAmount, upiBankLabelKey, upiRowKey, uuidV5 } from "@fin-creador/domain"
+import { upiAccountMatchInputSchema, upiMatchesInputSchema, upiOpeningMoveInputSchema, upiOpeningPreviewInputSchema, upiSaveInputSchema } from "@fin-creador/schemas"
 import { TODAY_UNAVAILABLE, type UserClient, userToday } from "../income/client"
 import { accountLabel } from "../income/load"
 import { ledgerErrorMessage } from "../ledger-errors"
@@ -213,6 +213,95 @@ export async function saveUpiImportLines(supabase: UserClient, input: unknown): 
     }
   }
   return { ok: true, results }
+}
+
+export type UpiOpeningPreview = { ok: true; oldDate: IsoDate; oldMinor: number; earlierNetMinor: number } | { ok: false; message: string }
+
+/**
+ * What moving an account's opening back to `newDate` starts from: its opening date and amount, and
+ * the net of the live entries already saved between the new and the old date (the old date leaves
+ * them out today; the move counts them, so the opening amount absorbs them too).
+ */
+export async function loadUpiOpeningPreview(supabase: UserClient, input: unknown): Promise<UpiOpeningPreview> {
+  const parsed = upiOpeningPreviewInputSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, message: INVALID }
+  const { accountId, newDate } = parsed.data
+  const account = await supabase.from("accounts").select("opening_balance_date, opening_balance_minor").eq("id", accountId).maybeSingle()
+  if (account.error) return { ok: false, message: UNAVAILABLE }
+  if (!account.data) return { ok: false, message: ledgerErrorMessage({ code: "FC010" }).message }
+  const oldDate = account.data.opening_balance_date
+  let earlierNetMinor = 0
+  if (newDate < oldDate) {
+    const entries = await supabase
+      .from("transactions")
+      .select("type, amount_minor, counter_account_id")
+      .or(`account_id.eq.${accountId},counter_account_id.eq.${accountId}`)
+      .is("voided_at", null)
+      .gte("occurred_on", newDate)
+      .lt("occurred_on", oldDate)
+      .limit(MAX_ENTRIES)
+    if (entries.error) return { ok: false, message: UNAVAILABLE }
+    for (const e of entries.data) {
+      const into = e.type === "income" || e.type === "refund" || (e.type === "transfer" && e.counter_account_id === accountId)
+      earlierNetMinor += into ? e.amount_minor : -e.amount_minor
+    }
+  }
+  return { ok: true, oldDate, oldMinor: account.data.opening_balance_minor, earlierNetMinor }
+}
+
+export type UpiOpeningMoveResult =
+  | { ok: true; keys: string[]; move: { oldDate: IsoDate; newDate: IsoDate; oldMinor: number; newMinor: number; added: number } }
+  | { ok: false; message: string }
+
+/**
+ * Adds one account's payments dated before its opening and moves the opening back
+ * (move_account_opening: one transaction, today's balance unchanged, checked by the database).
+ * Each payment is checked as a saved one is, except against this account's opening date; the
+ * request key comes from the account and the payments' keys, so a retry adds nothing.
+ */
+export async function moveUpiOpening(supabase: UserClient, input: unknown): Promise<UpiOpeningMoveResult> {
+  const parsed = upiOpeningMoveInputSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, message: INVALID }
+  const loaded = await loadUpiImport(supabase)
+  if (!loaded.ok) return { ok: false, message: loaded.reason === "unauthenticated" ? SIGNED_OUT : UNAVAILABLE }
+  const { options, currency } = loaded
+  const day = await userToday(supabase)
+  if (!day.ok) return { ok: false, message: day.reason === "unauthenticated" ? SIGNED_OUT : TODAY_UNAVAILABLE }
+  const { accountId, lines } = parsed.data
+  const account = options.accounts.find((a) => a.id === accountId)
+  if (!account) return { ok: false, message: ledgerErrorMessage({ code: "FC010" }).message }
+
+  const keys: string[] = []
+  const entries = []
+  for (const line of lines) {
+    const key = upiRowKey(line.original)
+    const transfer = line.type === "transfer"
+    const amount = parseAmount(line.amount, currency)
+    const errors = upiLineErrors(line, options, { today: day.today, currency }, accountId)
+    const touches = line.accountId === accountId || (transfer && line.counterAccountId === accountId)
+    if (!amount.ok || Object.keys(errors).length > 0 || !touches || line.date >= account.openingBalanceDate || (line.type === "expense" || transfer) !== (line.original.direction === "debit")) {
+      return { ok: false, message: "A payment here can't be added. Reload the statement and try again." }
+    }
+    keys.push(key)
+    entries.push({
+      key,
+      type: line.type,
+      amount_minor: amount.minor,
+      occurred_on: line.date,
+      account_id: line.accountId,
+      counter_account_id: transfer ? line.counterAccountId : null,
+      category_id: transfer ? null : line.categoryId,
+      note: line.original.payee === "" ? null : line.original.payee,
+    })
+  }
+  const requestKey = uuidV5(JSON.stringify(["upi-opening:v1", accountId, [...keys].sort()]), UPI_ROW_KEY_NAMESPACE)
+  const { data, error } = await supabase.rpc("move_account_opening", { p_request_key: requestKey, p_account_id: accountId, p_entries: entries })
+  if (error || !data) return { ok: false, message: ledgerErrorMessage(error).message }
+  return {
+    ok: true,
+    keys,
+    move: { oldDate: data.old_opening_date, newDate: data.new_opening_date, oldMinor: data.old_opening_minor, newMinor: data.new_opening_minor, added: data.entries_added },
+  }
 }
 
 export type UpiLiteResult = { ok: true; account: { id: string; name: string; openingBalanceDate: IsoDate }; match: UpiAccountMatch } | { ok: false; message: string }

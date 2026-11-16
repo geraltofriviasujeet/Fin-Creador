@@ -1,12 +1,12 @@
 -- pgTAP tests for move_account_opening (migration 20261116180000): payments dated before an
 -- account's opening added and the opening moved back, with the balance today and on every date
 -- on or after the old opening date identical before and after; the trace; the request key; and
--- every refusal. Fictional users and data only. Run with `supabase test db` (CI). Everything is
+-- every refusal, including the self-check against account_balances_at. Fictional users and data only. Run with `supabase test db` (CI). Everything is
 -- rolled back.
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(34);
+select plan(38);
 
 -- A (Asia/Kolkata) and B.
 insert into auth.users (id, email) values
@@ -24,6 +24,7 @@ insert into public.accounts (id, user_id, kind, bank_type, name, currency, openi
   ('9fa00000-0000-4000-8000-000000000001', '9f000000-0000-4000-8000-00000000000a', 'bank', 'savings', 'Bank', 'INR', 1000000, pg_temp.today() - 20),
   ('9fa00000-0000-4000-8000-000000000002', '9f000000-0000-4000-8000-00000000000a', 'cash', null, 'Cash in hand', 'INR', 10000, pg_temp.today() - 20),
   ('9fa00000-0000-4000-8000-000000000003', '9f000000-0000-4000-8000-00000000000a', 'bank', 'savings', 'Old bank', 'INR', 0, pg_temp.today() - 20),
+  ('9fa00000-0000-4000-8000-000000000004', '9f000000-0000-4000-8000-00000000000a', 'bank', 'savings', 'Drift bank', 'INR', 500000, pg_temp.today() - 20),
   ('9fa00000-0000-4000-8000-0000000000b1', '9f000000-0000-4000-8000-00000000000b', 'bank', 'savings', 'B bank', 'INR', 0, pg_temp.today() - 20);
 update public.accounts set archived_at = now() where id = '9fa00000-0000-4000-8000-000000000003';
 
@@ -62,6 +63,7 @@ create function pg_temp.a1_balances() returns table (as_of date, balance_minor b
 
 -- ------------------------------------------------------------ the function (1-6)
 select has_function('public', 'move_account_opening', array['uuid', 'uuid', 'jsonb'], 'move_account_opening(uuid, uuid, jsonb) exists');
+select is((select p.prosecdef from pg_catalog.pg_proc as p where p.oid = 'public.account_balance_check(uuid, date)'::regprocedure), false, 'account_balance_check is security invoker');
 select is((select p.prosecdef from pg_catalog.pg_proc as p where p.oid = 'public.move_account_opening(uuid, uuid, jsonb)'::regprocedure), false, 'security invoker');
 select is((select p.proconfig from pg_catalog.pg_proc as p where p.oid = 'public.move_account_opening(uuid, uuid, jsonb)'::regprocedure), array['search_path=""'], 'search_path is empty');
 select ok(not has_function_privilege('anon', 'public.move_account_opening(uuid, uuid, jsonb)', 'EXECUTE'), 'anon cannot execute it');
@@ -157,7 +159,30 @@ select throws_ok(
   'FC011', null, 'outside the function the opening date stays locked'
 );
 
--- ------------------------------------------------------------ the trace (30-34)
+-- ------------------------------------------------------------ the self-check (31-33)
+-- account_balances_at with a drifted sign rule (every entry an outflow), rolled back with the test.
+reset role;
+create or replace function public.account_balances_at(p_dates date[])
+returns table (as_of date, account_id uuid, balance_minor bigint)
+language sql stable security invoker set search_path = ''
+as $$
+  select d.day, a.id, (a.opening_balance_minor - coalesce((
+    select sum(t.amount_minor) from public.transactions as t
+    where (t.account_id = a.id or t.counter_account_id = a.id) and t.voided_at is null
+      and t.occurred_on >= a.opening_balance_date and t.occurred_on <= d.day), 0))::bigint
+  from pg_catalog.unnest(p_dates) as d(day)
+  join public.accounts as a on a.opening_balance_date <= d.day
+$$;
+set local role authenticated;
+select throws_ok(
+  $$ select public.move_account_opening(gen_random_uuid(), '9fa00000-0000-4000-8000-000000000004', jsonb_build_array(pg_temp.entry('18', 'income', 10000, 25, '4'))) $$,
+  'FC067', null, 'when account_balances_at and the move disagree, the move is refused'
+);
+select is((select (opening_balance_date, opening_balance_minor) from public.accounts where id = '9fa00000-0000-4000-8000-000000000004'),
+  (pg_temp.today() - 20, 500000::bigint), '... the opening is unchanged');
+select is((select count(*)::int from public.transactions where idempotency_key = '9fe00000-0000-4000-8000-000000000018'), 0, '... and the entry is not saved');
+
+-- ------------------------------------------------------------ the trace (34-38)
 select throws_ok(
   $$ insert into public.account_opening_moves (account_id, request_key, old_opening_date, new_opening_date, old_opening_minor, new_opening_minor, entries_added, entries_counted)
      values ('9fa00000-0000-4000-8000-000000000001', gen_random_uuid(), current_date, current_date - 1, 0, 0, 0, 0) $$,

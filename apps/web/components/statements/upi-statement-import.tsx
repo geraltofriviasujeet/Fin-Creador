@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   type LineSaveResult,
   UPI_CATEGORY_SOURCE_LABELS,
@@ -62,6 +62,7 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { RULES_ONLY_TEXT, type RulesOnlyReason } from "@/lib/ai/import-categories-text"
 import { PDF_READ_MESSAGES } from "@/lib/statements/pdf-reader"
+import { UpiOpeningMoves } from "./upi-opening-moves"
 import { CheckAlert, LineHead, type SaveOutcome, type StatementText, StatementFileSection, UnreadableNotice, lineText, saveInChunks, savedOutcome, useStatementReader } from "./statement-shared"
 
 // UPI app statement import (Sprint 9e). The PDF is read on this device (the existing reader, with
@@ -437,7 +438,7 @@ function UpiReviewSection({
   header,
   initial,
   note,
-  options,
+  options: loaded,
   today,
   currency,
 }: {
@@ -449,6 +450,12 @@ function UpiReviewSection({
   currency: string
 }) {
   const [lines, setLines] = useState(initial.lines)
+  // Opening dates moved back on this screen (upi-opening-moves).
+  const [openings, setOpenings] = useState<Record<string, string>>({})
+  const options = useMemo(
+    () => ({ ...loaded, accounts: loaded.accounts.map((a) => (openings[a.id] ? { ...a, openingBalanceDate: openings[a.id]! } : a)) }),
+    [loaded, openings],
+  )
   const dupCount = initial.lines.filter((l) => l.status === "duplicate").length
   const [dupsAnswered, setDupsAnswered] = useState(dupCount === 0)
   const [dupsOpen, setDupsOpen] = useState(dupCount > 0)
@@ -516,6 +523,27 @@ function UpiReviewSection({
       {note && <FormMessage tone="info">{note}</FormMessage>}
       <CheckAlert reasons={reasons} confirmed={checkConfirmed} onConfirm={setCheckConfirmed} />
       <SkipSummary skipped={totals.skipped} />
+      <UpiOpeningMoves
+        lines={lines}
+        options={options}
+        context={context}
+        accountName={accountName}
+        onMoved={(accountId, keys, newDate) => {
+          const moved = new Set(keys)
+          setOpenings((o) => ({ ...o, [accountId]: newDate }))
+          // The payments added are saved; the rest on that account dated from the new opening wait to be ticked.
+          setLines((ls) =>
+            ls.map((l) =>
+              moved.has(l.key)
+                ? { ...l, status: "imported", skipReason: null, ticked: false }
+                : l.skipReason === "before_account" && (l.accountId === accountId || l.counterAccountId === accountId) && l.date >= newDate && !opensLater(l, options, accountId)
+                  ? { ...l, status: "new", skipReason: null, ticked: false }
+                  : l,
+            ),
+          )
+          setOutcome({ tone: "success", text: `${lineText(keys.length)} added; the opening date is now ${fullDate(newDate)}.` })
+        }}
+      />
       <UnreadableNotice count={initial.unreadableRows} rows={initial.unreadable} />
       {totals.needChoice > 0 && (
         <FormMessage tone="info">
@@ -623,6 +651,10 @@ function UpiReviewSection({
     </section>
   )
 }
+
+/** Another account of the line (not the one just moved) still opens after its date. */
+const opensLater = (line: UpiReviewLine, options: UpiImportOptions, moved: string) =>
+  options.accounts.some((a) => a.id !== moved && (a.id === line.accountId || (line.type === "transfer" && a.id === line.counterAccountId)) && line.date < a.openingBalanceDate)
 
 function SkipSummary({ skipped }: { skipped: Partial<Record<keyof typeof UPI_SKIP_TEXT, number>> }) {
   const parts = (Object.entries(skipped) as [keyof typeof UPI_SKIP_TEXT, number][]).filter(([, n]) => n > 0)

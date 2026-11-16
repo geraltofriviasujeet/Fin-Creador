@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_opening_moves: {
+        Row: {
+          account_id: string
+          created_at: string
+          entries_added: number
+          entries_counted: number
+          id: string
+          new_opening_date: string
+          new_opening_minor: number
+          old_opening_date: string
+          old_opening_minor: number
+          request_key: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          entries_added: number
+          entries_counted: number
+          id?: string
+          new_opening_date: string
+          new_opening_minor: number
+          old_opening_date: string
+          old_opening_minor: number
+          request_key: string
+          user_id?: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          entries_added?: number
+          entries_counted?: number
+          id?: string
+          new_opening_date?: string
+          new_opening_minor?: number
+          old_opening_date?: string
+          old_opening_minor?: number
+          request_key?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_opening_moves_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "account_opening_moves_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       accounts: {
         Row: {
           archived_at: string | null
@@ -2072,6 +2129,10 @@ export type Database = {
       }
     }
     Functions: {
+      account_balance_check: {
+        Args: { p_account_id: string; p_day: string }
+        Returns: number[]
+      }
       account_balances_at: {
         Args: { p_dates: string[] }
         Returns: {
@@ -2737,6 +2798,28 @@ export type Database = {
       model_spend_since: {
         Args: { p_since: string; p_user: string }
         Returns: number
+      }
+      move_account_opening: {
+        Args: { p_account_id: string; p_entries: Json; p_request_key: string }
+        Returns: {
+            account_id: string
+            created_at: string
+            entries_added: number
+            entries_counted: number
+            id: string
+            new_opening_date: string
+            new_opening_minor: number
+            old_opening_date: string
+            old_opening_minor: number
+            request_key: string
+            user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "account_opening_moves"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       pay_card: {
         Args: {

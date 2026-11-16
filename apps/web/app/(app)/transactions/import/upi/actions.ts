@@ -6,9 +6,13 @@ import {
   type UpiLiteResult,
   type UpiMatchSaveResult,
   type UpiMatchesLoad,
+  type UpiOpeningMoveResult,
+  type UpiOpeningPreview,
   chooseUpiLite,
   loadPayeeHistory,
   loadUpiMatches,
+  loadUpiOpeningPreview,
+  moveUpiOpening,
   saveUpiAccountMatch,
   saveUpiImportLines,
   setImportPayeesConsent,
@@ -88,6 +92,22 @@ export async function suggestUpiCategoriesAction(input: unknown): Promise<Sugges
 export async function saveUpiImportLinesAction(input: unknown): Promise<ImportSaveResult> {
   const result = await saveUpiImportLines(await createClient(), input)
   if (result.ok && result.results.some((r) => r.status === "saved")) {
+    revalidatePath("/income")
+    revalidatePath("/")
+    revalidatePath("/transactions")
+  }
+  return result
+}
+
+/** What moving an account's opening back starts from (its opening, and entries the old date leaves out). */
+export async function upiOpeningPreviewAction(input: unknown): Promise<UpiOpeningPreview> {
+  return loadUpiOpeningPreview(await createClient(), input)
+}
+
+/** Adds one account's payments dated before its opening and moves the opening back. */
+export async function moveUpiOpeningAction(input: unknown): Promise<UpiOpeningMoveResult> {
+  const result = await moveUpiOpening(await createClient(), input)
+  if (result.ok) {
     revalidatePath("/income")
     revalidatePath("/")
     revalidatePath("/transactions")

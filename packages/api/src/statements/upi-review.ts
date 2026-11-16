@@ -40,7 +40,11 @@ import type { ReviewCategory, ReviewStatus, UnreadableRow } from "./review"
 //   entry on the same account with the same amount and direction within a day either side (a late
 //   payment can post the next day), typed by hand or from a bank statement; each entry marks one
 //   payment, the nearest date first. Possible duplicates wait for the person's answer in one dialog.
-// - Payments before the account's opening balance date, or in the future, are skipped.
+// - Payments before the account's opening balance date, or in the future, are skipped. Those before
+//   an opening keep their type and category: per account, the review offers to add them and move
+//   the opening date back to the earliest (upiOpeningMoves), today's balance unchanged. A transfer
+//   whose two accounts both open after its date can't be added that way and stays skipped, named;
+//   a payment received still waiting for a choice is left out and counted.
 
 export type UpiLineType = "expense" | "income" | "refund" | "transfer" | "skip"
 
@@ -321,7 +325,7 @@ export function buildUpiReview(parse: UpiStatementParse, input: UpiReviewInput):
     if (!line.accountId || (line.type === "transfer" && (!line.counterAccountId || line.counterAccountId === line.accountId))) return skip("unmatched")
     if (row.date > context.today) return skip("future")
     const opens = [opening.get(line.accountId), line.type === "transfer" ? opening.get(line.counterAccountId) : undefined].filter((d): d is string => !!d)
-    if (opens.some((d) => row.date < d)) return skip("before_account")
+    if (opens.some((d) => row.date < d)) return { ...line, status: "skipped", skipReason: "before_account" }
     if (imported.has(key)) return { ...line, status: "imported" }
     if (deleted.has(key)) return { ...line, status: "deleted" }
     return { ...line, ticked: line.type !== "" && (line.type === "transfer" || line.categoryId !== "") }
@@ -373,25 +377,93 @@ export function setUpiLineType(line: UpiReviewLine, type: UpiLineType | ""): Upi
 
 export type UpiLineErrors = Partial<Record<"date" | "amount" | "type" | "category" | "account", string>>
 
-export function upiLineErrors(line: Pick<UpiReviewLine, "type" | "date" | "amount" | "accountId" | "counterAccountId" | "categoryId">, options: UpiImportOptions, context: UpiReviewContext): UpiLineErrors {
+/** `movingOpening`: the account whose opening date the payment will move (its opening is not checked). */
+export function upiLineErrors(
+  line: Pick<UpiReviewLine, "type" | "date" | "amount" | "accountId" | "counterAccountId" | "categoryId">,
+  options: UpiImportOptions,
+  context: UpiReviewContext,
+  movingOpening?: string,
+): UpiLineErrors {
   const errors: UpiLineErrors = {}
   const account = options.accounts.find((a) => a.id === line.accountId)
   if (!account) errors.account = "Match this account first"
   if (!isIsoDate(line.date)) errors.date = "Enter a date"
   else if (line.date > context.today) errors.date = "Can't be in the future"
-  else if (account && line.date < account.openingBalanceDate) errors.date = "Before the account's opening balance date"
+  else if (account && account.id !== movingOpening && line.date < account.openingBalanceDate) errors.date = "Before the account's opening balance date"
   const amount = parseAmount(line.amount, context.currency)
   if (!amount.ok) errors.amount = "Enter an amount above zero"
   if (line.type === "" || line.type === "skip") errors.type = "Choose what this is"
   else if (line.type === "transfer") {
     const counter = options.accounts.find((a) => a.id === line.counterAccountId)
     if (!counter || counter.id === line.accountId) errors.account = "Match both accounts first"
-    else if (isIsoDate(line.date) && line.date < counter.openingBalanceDate) errors.date = "Before the account's opening balance date"
+    else if (isIsoDate(line.date) && counter.id !== movingOpening && line.date < counter.openingBalanceDate) errors.date = "Before the account's opening balance date"
   } else if (line.type === "income") {
     if (!options.incomeSources.some((s) => s.id === line.categoryId)) errors.category = "Choose an income source"
   } else if (!options.expenseCategories.some((c) => c.id === line.categoryId)) errors.category = "Choose a category"
   return errors
 }
+
+/** Payments before one account's opening date, offered to be added with its opening moved back. */
+export type UpiOpeningMove = {
+  accountId: string
+  accountName: string
+  oldDate: IsoDate
+  /** The earliest payment added; null when none can be. */
+  newDate: IsoDate | null
+  /** Keys of the payments it adds. */
+  keys: string[]
+  /** Their net for this account (money in less money out), minor units. */
+  netMinor: number
+  /** Transfers left out: their other account opens after their date too (named on the review). */
+  blocked: UpiReviewLine[]
+  /** Payments left out until they are complete (a payment received waiting for income or refund). */
+  incomplete: number
+}
+
+/** The accounts of a line whose opening is after its date. */
+const opensAfter = (line: UpiReviewLine, options: UpiImportOptions) =>
+  options.accounts.filter((a) => (a.id === line.accountId || (line.type === "transfer" && a.id === line.counterAccountId)) && line.date < a.openingBalanceDate)
+
+/**
+ * Per account, the payments skipped as before its opening date that moving its opening back would
+ * add, and their net for it. Matches what move_account_opening checks: each payment touches the
+ * account, and a transfer's other account is already open on its date.
+ */
+export function upiOpeningMoves(lines: readonly UpiReviewLine[], options: UpiImportOptions, context: UpiReviewContext): UpiOpeningMove[] {
+  const moves = new Map<string, UpiOpeningMove>()
+  const moveFor = (accountId: string) => {
+    let move = moves.get(accountId)
+    if (!move) {
+      const account = options.accounts.find((a) => a.id === accountId)!
+      move = { accountId, accountName: account.name, oldDate: account.openingBalanceDate, newDate: null, keys: [], netMinor: 0, blocked: [], incomplete: 0 }
+      moves.set(accountId, move)
+    }
+    return move
+  }
+  for (const line of lines) {
+    if (line.status !== "skipped" || line.skipReason !== "before_account") continue
+    const after = opensAfter(line, options)
+    if (after.length === 0) continue
+    if (after.length > 1) {
+      moveFor(line.accountId).blocked.push(line)
+      continue
+    }
+    const move = moveFor(after[0]!.id)
+    const amount = parseAmount(line.amount, context.currency)
+    if (!amount.ok || Object.keys(upiLineErrors(line, options, context, move.accountId)).length > 0) {
+      move.incomplete++
+      continue
+    }
+    const out = line.type === "expense" || (line.type === "transfer" && line.accountId === move.accountId)
+    move.keys.push(line.key)
+    move.netMinor += out ? -amount.minor : amount.minor
+    if (move.newDate === null || line.date < move.newDate) move.newDate = line.date
+  }
+  return [...moves.values()]
+}
+
+/** The opening amount after a move: the old one less the net the new dates bring in (the payments added, and entries saved before that the old date left out). */
+export const upiNewOpeningMinor = (oldMinor: number, paymentsNetMinor: number, earlierNetMinor: number) => oldMinor - paymentsNetMinor - earlierNetMinor
 
 export type UpiTotals = {
   ticked: number

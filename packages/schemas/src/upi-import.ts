@@ -143,24 +143,31 @@ const upiRowSchema = z.object({
     .refine((v) => v === v.trim() && !hasDigitRun(v, 4) && !v.includes("@"), "No account numbers or UPI ids"),
 })
 
-/** Ticked payments to save: the row as read, and the type, date, amount, accounts and category as reviewed. */
-export const upiSaveInputSchema = z.object({
-  lines: z
-    .array(
-      z.object({
-        original: upiRowSchema,
-        type: z.enum(["expense", "income", "refund", "transfer"]),
-        date: z.string().max(10),
-        amount: z.string().max(40),
-        /** The account the money left (expense, transfer) or arrived in (income, refund). */
-        accountId: z.uuid(),
-        /** Transfers only: the account it went to. */
-        counterAccountId: optionalId,
-        categoryId: optionalId,
-      }),
-    )
-    .min(1)
-    .max(IMPORT_SAVE_CHUNK),
+/** A payment to save: the row as read, and the type, date, amount, accounts and category as reviewed. */
+const upiSaveLineSchema = z.object({
+  original: upiRowSchema,
+  type: z.enum(["expense", "income", "refund", "transfer"]),
+  date: z.string().max(10),
+  amount: z.string().max(40),
+  /** The account the money left (expense, transfer) or arrived in (income, refund). */
+  accountId: z.uuid(),
+  /** Transfers only: the account it went to. */
+  counterAccountId: optionalId,
+  categoryId: optionalId,
 })
+
+/** Ticked payments to save. */
+export const upiSaveInputSchema = z.object({
+  lines: z.array(upiSaveLineSchema).min(1).max(IMPORT_SAVE_CHUNK),
+})
+
+/** Payments dated before an account's opening date, added with its opening moved back (one account, one call). */
+export const upiOpeningMoveInputSchema = z.object({
+  accountId: z.uuid(),
+  lines: z.array(upiSaveLineSchema).min(1).max(MAX_UPI_ROWS),
+})
+
+/** The opening move's preview: the account and the earliest payment's date. */
+export const upiOpeningPreviewInputSchema = z.object({ accountId: z.uuid(), newDate: isoDate })
 
 export type UpiSaveInput = z.infer<typeof upiSaveInputSchema>

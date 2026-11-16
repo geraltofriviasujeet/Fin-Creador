@@ -24,6 +24,10 @@
 --     app leaves those payments out and counts them.
 --   * accounts_validate (replaced) lets this one change through its as-of date lock (FC011),
 --     marked by a transaction-local setting that the API can't reach, as set_cash_on_hand does.
+--   * A self-check: the balance on the old opening date and today, read through
+--     account_balances_at before and after the change, must be identical, or the call raises
+--     (FC067) and nothing is saved. It guards against this function's sign rule and
+--     account_balances_at's drifting apart.
 --   * account_opening_moves keeps a trace of every move (old and new date and amount, entries
 --     added and counted, when), written only by the function in the same transaction, never
 --     changed, readable by its owner only.
@@ -31,6 +35,7 @@
 -- New error codes:
 --   FC063 the opening date of this kind of account can't move   FC064 cash or other below zero
 --   FC065 a transfer's other account opens after its date       FC066 written only by move_account_opening
+--   FC067 the balance self-check failed
 
 -- ---------------------------------------------------------------------------
 -- accounts_validate: + the move_account_opening exception to the as-of date lock.
@@ -177,6 +182,21 @@ create policy account_opening_moves_insert_own on public.account_opening_moves
 -- move_account_opening
 -- ---------------------------------------------------------------------------
 
+-- The account's balance on p_day and today, as account_balances_at gives them (null for a day
+-- it doesn't count). For move_account_opening's self-check.
+create function public.account_balance_check(p_account_id uuid, p_day date)
+returns bigint[]
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select array[
+    (select b.balance_minor from public.account_balances_at(array[p_day]) as b where b.account_id = p_account_id),
+    (select b.balance_minor from public.account_balances_at(array[public.user_local_today((select auth.uid()))]) as b where b.account_id = p_account_id)
+  ];
+$$;
+
 -- p_entries: a JSON array (1 to 3,000) of
 --   { "key": uuid, "type": "expense" | "income" | "refund" | "transfer", "amount_minor": n,
 --     "occurred_on": "yyyy-mm-dd", "account_id": uuid, "counter_account_id": uuid | null,
@@ -200,6 +220,8 @@ declare
   v_counted integer;
   v_added integer := 0;
   v_new_minor numeric;
+  v_before bigint[];
+  v_after bigint[];
 begin
   if v_uid is null then
     raise exception 'Not signed in' using errcode = '42501';
@@ -261,6 +283,7 @@ begin
     raise exception 'Dates from 1970' using errcode = '22023';
   end if;
 
+  v_before := public.account_balance_check(p_account_id, v_account.opening_balance_date);
   perform pg_catalog.set_config('fin_creador.opening_move', p_account_id::text, true);
 
   for v_entry in select e from pg_catalog.jsonb_array_elements(p_entries) as e loop
@@ -306,6 +329,11 @@ begin
          opening_balance_minor = v_new_minor::bigint
    where a.id = p_account_id;
 
+  v_after := public.account_balance_check(p_account_id, v_account.opening_balance_date);
+  if v_after is distinct from v_before then
+    raise exception 'The balance would change; nothing was saved' using errcode = 'FC067';
+  end if;
+
   insert into public.account_opening_moves (
     account_id, request_key, old_opening_date, new_opening_date, old_opening_minor, new_opening_minor, entries_added, entries_counted
   ) values (
@@ -322,5 +350,7 @@ comment on function public.move_account_opening(uuid, uuid, jsonb) is
   'Adds entries dated before an account''s opening date and moves the opening back to the earliest, the opening amount less their net, so the balance on and after the old date is unchanged. Once per request key; records account_opening_moves.';
 
 revoke execute on function public.account_opening_moves_guard() from public, anon, authenticated;
+revoke execute on function public.account_balance_check(uuid, date) from public, anon;
+grant execute on function public.account_balance_check(uuid, date) to authenticated;
 revoke execute on function public.move_account_opening(uuid, uuid, jsonb) from public, anon;
 grant execute on function public.move_account_opening(uuid, uuid, jsonb) to authenticated;

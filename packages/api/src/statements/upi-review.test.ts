@@ -13,6 +13,8 @@ import {
   upiAccountsNeeded,
   upiLineErrors,
   upiLiteNeeded,
+  upiNewOpeningMinor,
+  upiOpeningMoves,
   upiReviewTotals,
 } from "./upi-review"
 
@@ -251,6 +253,70 @@ describe("Google Pay: self transfers and UPI Lite", () => {
   it("a self transfer with an unmatched side is never an expense", () => {
     const r = review(parse("google_pay", [rows()[2]!]), { matches: gm() })
     expect(r.lines[0]).toMatchObject({ status: "skipped", skipReason: "unmatched", type: "" })
+  })
+})
+
+describe("payments before an account's opening date", () => {
+  // "early" opens 14 Oct, "later" 20 Oct.
+  const opts: UpiImportOptions = {
+    ...options,
+    accounts: [
+      { id: "early", name: "New Bank ··1234", kind: "bank", openingBalanceDate: "2026-10-14" },
+      { id: "later", name: "Newer Bank ··5678", kind: "bank", openingBalanceDate: "2026-10-20" },
+    ],
+  }
+  const matches: UpiAccountMatch[] = [
+    { kind: "bank", app: "google_pay", bankLabel: "new bank", digits: "1234", accountId: "early" },
+    { kind: "bank", app: "google_pay", bankLabel: "newer bank", digits: "5678", accountId: "later" },
+  ]
+  const acct = { bankLabel: "New Bank", digits: "1234" }
+  const to = { bankLabel: "Newer Bank", digits: "5678" }
+  const build = () =>
+    review(
+      parse("google_pay", [
+        row({ account: acct, date: "2026-10-12", amountMinor: 10_000 }),
+        row({ account: acct, date: "2026-10-11", kind: "received", direction: "credit", amountMinor: 50_000 }),
+        row({ account: acct, date: "2026-10-10", amountMinor: 5_000, payee: "Corner Store" }),
+        row({ account: acct, date: "2026-10-13", kind: "self_transfer", payee: "", toAccount: to, amountMinor: 20_000 }),
+        row({ account: acct, date: "2026-10-15", kind: "self_transfer", payee: "", toAccount: to, amountMinor: 10_000 }),
+        row({ account: acct, date: "2026-10-21", amountMinor: 1_000 }),
+      ]),
+      { options: opts, matches },
+    )
+
+  it("keep their type and category, still skipped", () => {
+    const lines = build().lines
+    expect(lines.slice(0, 5).map((l) => [l.status, l.skipReason, l.type])).toEqual([
+      ["skipped", "before_account", "expense"],
+      ["skipped", "before_account", ""],
+      ["skipped", "before_account", "expense"],
+      ["skipped", "before_account", "transfer"],
+      ["skipped", "before_account", "transfer"],
+    ])
+    expect(lines[0]!.categoryId).not.toBe("")
+    expect(lines[5]!.status).toBe("new")
+  })
+
+  it("are grouped per account to move: the earliest date, the net, transfers left out and named, choices left out and counted", () => {
+    const lines = build().lines
+    const moves = upiOpeningMoves(lines, opts, context)
+    expect(moves.map((m) => ({ ...m, blocked: m.blocked.map((l) => l.date) }))).toEqual([
+      { accountId: "early", accountName: "New Bank ··1234", oldDate: "2026-10-14", newDate: "2026-10-10", keys: [lines[0]!.key, lines[2]!.key], netMinor: -15_000, blocked: ["2026-10-13"], incomplete: 1 },
+      { accountId: "later", accountName: "Newer Bank ··5678", oldDate: "2026-10-20", newDate: "2026-10-15", keys: [lines[4]!.key], netMinor: 10_000, blocked: [], incomplete: 0 },
+    ])
+  })
+
+  it("the new opening amount: the old less the payments' net and the entries the old date left out", () => {
+    expect(upiNewOpeningMinor(100_000, -15_000, -700)).toBe(115_700)
+    expect(upiNewOpeningMinor(100_000, 10_000, 0)).toBe(90_000)
+  })
+
+  it("a payment moving its account's opening is not refused for that account's date, only for the other's", () => {
+    const line = { type: "expense" as const, date: "2026-10-12", amount: "100", accountId: "early", counterAccountId: "", categoryId: "food" }
+    expect(upiLineErrors(line, opts, context).date).toBe("Before the account's opening balance date")
+    expect(upiLineErrors(line, opts, context, "early")).toEqual({})
+    const transfer = { ...line, type: "transfer" as const, counterAccountId: "later", categoryId: "" }
+    expect(upiLineErrors(transfer, opts, context, "early").date).toBe("Before the account's opening balance date")
   })
 })
 

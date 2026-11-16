@@ -117,6 +117,32 @@ test("Paytm: match accounts, allow suggestions, save; the same file adds nothing
   await expect(review(page).getByText("1 line saved.")).toBeVisible()
 })
 
+test("payments before an account's opening date: move it back and import them, the balance today unchanged", async ({ page }) => {
+  await signUpConfirmed(page, "Kiran Rao", uniqueEmail("upi-opening"))
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "", opening: "1,00,000", asOf: "2026-09-01" })
+  // Opened on 14 Oct: the statement's Green Leaf Cafe payment (₹65, 12 Oct) is earlier.
+  await addBank(page, { bank: "State Bank of India", last4: "", opening: "1,000", asOf: "2026-10-14" })
+
+  await openImport(page)
+  await chooser(page).setInputFiles(statement)
+  await page.getByLabel("Account for State Bank Of India ··12").selectOption({ label: "State Bank of India" })
+  await page.getByLabel("Account for Example Bank ··34").selectOption({ label: "HDFC Bank" })
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.getByRole("button", { name: "Not now" }).click()
+
+  await expect(payment(page, "Green Leaf Cafe")).toContainText("Skipped: before the account's opening balance date")
+  await review(page).getByRole("button", { name: /^Move opening date to .+ and import 1 payment$/ }).click()
+  const move = dialog(page, "Move the opening date?")
+  await expect(move.getByText("Only the payments in this statement are added. Other money in or out of this account before", { exact: false })).toBeVisible()
+  await expect(move).toContainText("₹1,000")
+  await expect(move).toContainText("₹1,065")
+  await shot(page, "upi-opening-move")
+  await move.getByRole("button", { name: "Move and import 1 payment" }).click()
+  await expect(review(page).getByText("1 line added; the opening date is now", { exact: false })).toBeVisible()
+  await expect(payment(page, "Green Leaf Cafe")).toContainText("Already imported")
+})
+
 test("an unknown file gets the honest message with Copy layout", async ({ page }) => {
   await signUpConfirmed(page, "Ravi Rao", uniqueEmail("upi-unknown"))
   await openImport(page)
