@@ -150,7 +150,7 @@ test("a double-submitted entry is saved once, and a stale edit is refused", asyn
 test("search treats symbols as text; filters narrow the list and the totals", async ({ page }) => {
   await newUserWithBank(page, "tx-search")
   await addEntry(page, { amount: "1,200", category: "Shopping", from: "HDFC Bank ··4821", note: "Shoes 50% off" })
-  await addEntry(page, { amount: "400", category: "Transport", from: "HDFC Bank ··4821", note: "Bus pass" })
+  await addEntry(page, { amount: "400", category: "Transport & Cabs", from: "HDFC Bank ··4821", note: "Bus pass" })
 
   const search = page.getByRole("searchbox", { name: "Search" }).last()
   await search.fill("%")
@@ -166,7 +166,7 @@ test("search treats symbols as text; filters narrow the list and the totals", as
   await expect(row(page, "Shoes 50% off")).toHaveCount(0)
 
   await page.getByRole("button", { name: "Clear search" }).click()
-  await page.getByLabel("Category").selectOption({ label: "Transport" })
+  await page.getByLabel("Category").selectOption({ label: "Transport & Cabs" })
   await expect(row(page, "Shoes 50% off")).toHaveCount(0)
   await expect(stat(page, "Expenses")).toContainText("₹400")
   await page.getByRole("link", { name: "Clear filters" }).first().click()

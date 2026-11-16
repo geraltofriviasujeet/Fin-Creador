@@ -969,6 +969,48 @@ export type Database = {
           },
         ]
       }
+      import_category_usage: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          provider: string
+          reserved_usd: number
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          input_tokens?: number | null
+          model: string
+          output_tokens?: number | null
+          provider: string
+          reserved_usd: number
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          provider?: string
+          reserved_usd?: number
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       knowledge_documents: {
         Row: {
           approved_at: string | null
@@ -1340,6 +1382,7 @@ export type Database = {
           currency: string
           display_name: string | null
           id: string
+          import_payees_ok_at: string | null
           phone: string | null
           roma_descriptions_ok_at: string | null
           roma_enabled: boolean
@@ -1353,6 +1396,7 @@ export type Database = {
           currency?: string
           display_name?: string | null
           id: string
+          import_payees_ok_at?: string | null
           phone?: string | null
           roma_descriptions_ok_at?: string | null
           roma_enabled?: boolean
@@ -1366,6 +1410,7 @@ export type Database = {
           currency?: string
           display_name?: string | null
           id?: string
+          import_payees_ok_at?: string | null
           phone?: string | null
           roma_descriptions_ok_at?: string | null
           roma_enabled?: boolean
@@ -1566,6 +1611,8 @@ export type Database = {
         Row: {
           enabled: boolean
           id: boolean
+          import_enabled: boolean
+          import_user_daily_calls: number
           monthly_budget_usd: number
           reserve_usd: number
           search_enabled: boolean
@@ -1580,6 +1627,8 @@ export type Database = {
         Insert: {
           enabled?: boolean
           id?: boolean
+          import_enabled?: boolean
+          import_user_daily_calls?: number
           monthly_budget_usd?: number
           reserve_usd?: number
           search_enabled?: boolean
@@ -1594,6 +1643,8 @@ export type Database = {
         Update: {
           enabled?: boolean
           id?: boolean
+          import_enabled?: boolean
+          import_user_daily_calls?: number
           monthly_budget_usd?: number
           reserve_usd?: number
           search_enabled?: boolean
@@ -1870,6 +1921,57 @@ export type Database = {
             columns: ["replaces_id", "user_id"]
             isOneToOne: false
             referencedRelation: "transactions"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      upi_account_matches: {
+        Row: {
+          account_id: string | null
+          app: string
+          bank_label: string
+          created_at: string
+          id: string
+          kind: string
+          last_digits: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          app: string
+          bank_label?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          last_digits?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          account_id?: string | null
+          app?: string
+          bank_label?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          last_digits?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upi_account_matches_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["account_id", "user_id"]
+          },
+          {
+            foreignKeyName: "upi_account_matches_account_owned"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id", "user_id"]
           },
         ]
@@ -2478,6 +2580,18 @@ export type Database = {
         Args: { p_min_run?: number; p_text: string }
         Returns: boolean
       }
+      import_categories_begin: {
+        Args: { p_model: string; p_provider: string }
+        Returns: {
+          outcome: string
+          request_id: string
+        }[]
+      }
+      import_categories_release: { Args: { p_request_id: string }; Returns: boolean }
+      import_categories_settle: {
+        Args: { p_cost_usd: number; p_input_tokens: number; p_output_tokens: number; p_request_id: string }
+        Returns: boolean
+      }
       is_liability_kind: { Args: { p_kind: string }; Returns: boolean }
       liability_owed: {
         Args: { p_account_id: string; p_as_of?: string }
@@ -2673,6 +2787,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      payee_key: { Args: { p_name: string }; Returns: string }
+      payee_last_categories: {
+        Args: { p_names: string[] }
+        Returns: {
+          category_id: string
+          payee: string
+        }[]
       }
       post_liability_payment: {
         Args: {
@@ -3163,6 +3285,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      set_import_payees_consent: { Args: { p_allow: boolean }; Returns: string }
       set_loan_archived: {
         Args: { p_archived: boolean; p_loan_id: string }
         Returns: {

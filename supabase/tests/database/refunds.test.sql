@@ -303,7 +303,7 @@ select is(public.liability_owed(public.t_card_acct('e2000000-0000-4000-8000-0000
 select results_eq(
   $$ select s.owed_at_statement_minor, s.difference_minor
      from public.enter_card_statement(public.t_card('e2000000-0000-4000-8000-000000000001'), 'e2000000-0000-4000-8000-000000000021',
-       public.t_today(), 250000, 0, null, 0, public.t_cat('Other expenses')) as s $$,
+       public.t_today(), 250000, 0, null, 0, public.t_cat('Miscellaneous')) as s $$,
   $$ values (250000::bigint, 0::bigint) $$,
   'a statement net of the refund matches what is owed: no difference');
 
@@ -318,7 +318,7 @@ end $$;
 select results_eq(
   $$ select s.owed_at_statement_minor, s.difference_minor
      from public.enter_card_statement(public.t_card('e2000000-0000-4000-8000-000000000002'), 'e2000000-0000-4000-8000-000000000022',
-       public.t_today(), 80000, 0, null, 0, public.t_cat('Other expenses')) as s $$,
+       public.t_today(), 80000, 0, null, 0, public.t_cat('Miscellaneous')) as s $$,
   $$ values (60000::bigint, 20000::bigint) $$,
   'enter_card_statement measures owed net of refunds, so the difference is bill − (purchases − refunds)');
 select is(public.liability_owed(public.t_card_acct('e2000000-0000-4000-8000-000000000002')), 80000::bigint,
@@ -352,7 +352,7 @@ select is(public.t_bal(public.t_card_acct('e2000000-0000-4000-8000-000000000003'
 select results_eq(
   $$ select s.owed_at_statement_minor, s.difference_minor, s.difference_transaction_id is null
      from public.enter_card_statement(public.t_card('e2000000-0000-4000-8000-000000000003'), 'e2000000-0000-4000-8000-000000000023',
-       public.t_today(), 0, 0, null, 0, public.t_cat('Other expenses')) as s $$,
+       public.t_today(), 0, 0, null, 0, public.t_cat('Miscellaneous')) as s $$,
   $$ values (-20000::bigint, 0::bigint, true) $$,
   'a zero statement for a card in credit posts no difference');
 select is((select count(*)::int from public.due_items as d join public.card_statements as s on s.id = d.card_statement_id
@@ -366,7 +366,7 @@ end $$;
 select results_eq(
   $$ select s.owed_at_statement_minor, s.difference_minor
      from public.enter_card_statement(public.t_card('e2000000-0000-4000-8000-000000000004'), 'e2000000-0000-4000-8000-000000000024',
-       public.t_today(), 30000, 0, null, 0, public.t_cat('Other expenses')) as s $$,
+       public.t_today(), 30000, 0, null, 0, public.t_cat('Miscellaneous')) as s $$,
   $$ values (-5000::bigint, 35000::bigint) $$,
   'a bill above zero for a card in credit: the difference is bill − owed (300 + 50)');
 select throws_ok(

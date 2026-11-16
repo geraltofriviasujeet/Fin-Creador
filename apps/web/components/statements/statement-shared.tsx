@@ -3,13 +3,13 @@
 import type * as React from "react"
 import { useRef, useState } from "react"
 import { type LineSaveResult, type UnreadableRow, unreadableLayoutText } from "@fin-creador/api"
-import { type BankTableRow, MAX_STATEMENT_PDF_BYTES } from "@fin-creador/domain"
+import type { BankTableRow } from "@fin-creador/domain"
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { loadPdfjs } from "@/lib/statements/load-pdfjs"
-import { PDF_READ_MESSAGES, readStatementPdf } from "@/lib/statements/pdf-reader"
+import { type PdfLimits, STATEMENT_PDF_LIMITS, pdfReadMessages, readStatementPdf } from "@/lib/statements/pdf-reader"
 
 // The parts of a statement import shared by card statements (9a) and bank statements (9b): the
 // file picker with its reading and password steps, the "Check this statement" alert, the skipped
@@ -42,13 +42,17 @@ export function useStatementReader<R>({
   cannotRead,
   wrongPassword,
   csv = false,
+  limits = STATEMENT_PDF_LIMITS,
 }: {
   onText: (read: StatementText) => Promise<void>
   cannotRead: () => FilePhase<R>
   wrongPassword: string
   /** Also take CSV files (bank statements): read as text on this device, no password. */
   csv?: boolean
+  /** The largest file and the most pages (UPI app statements allow more, 9e). */
+  limits?: PdfLimits
 }) {
+  const messages = pdfReadMessages(limits)
   const [phase, setPhase] = useState<FilePhase<R>>({ step: "choose" })
   const [password, setPassword] = useState("")
   const file = useRef<File | null>(null)
@@ -62,7 +66,7 @@ export function useStatementReader<R>({
     setPhase({ step: "reading" })
     try {
       const lib = await loadPdfjs()
-      const result = await readStatementPdf(lib, new Uint8Array(await pdf.arrayBuffer()), pass)
+      const result = await readStatementPdf(lib, new Uint8Array(await pdf.arrayBuffer()), pass, limits)
       if (id !== attempt.current) return
       if (result.status === "ok") {
         read.current = { text: result.text, format: "pdf", pageRowCounts: result.pageRowCounts, rowLayouts: result.rowLayouts, rows: result.rows }
@@ -70,7 +74,7 @@ export function useStatementReader<R>({
       } else if (result.status === "needs_password") setPhase({ step: "password" })
       else if (result.status === "wrong_password") setPhase({ step: "password", message: wrongPassword })
       else if (result.status === "no_text" || result.status === "unreadable") setPhase(cannotRead())
-      else setPhase({ step: "choose", message: PDF_READ_MESSAGES[result.status] })
+      else setPhase({ step: "choose", message: messages[result.status] })
     } catch {
       if (id === attempt.current) setPhase(cannotRead())
     } finally {
@@ -105,7 +109,7 @@ export function useStatementReader<R>({
     const asCsv = csv && isCsv(picked)
     if (!asCsv && !/\.pdf$/i.test(picked.name) && picked.type !== "application/pdf")
       return setPhase({ step: "choose", message: csv ? "Choose a PDF or CSV file." : "Choose a PDF file." })
-    if (picked.size > MAX_STATEMENT_PDF_BYTES) return setPhase({ step: "choose", message: PDF_READ_MESSAGES.too_large })
+    if (picked.size > limits.bytes) return setPhase({ step: "choose", message: messages.too_large })
     file.current = picked
     void (asCsv ? openCsv(picked) : open(picked))
   }
@@ -115,7 +119,7 @@ export function useStatementReader<R>({
     if (file.current && password !== "") void open(file.current, password)
   }
 
-  return { phase, setPhase, password, setPassword, choose, openWithPassword, readRef: read, attemptRef: attempt, busy: phase.step === "reading" || phase.step === "matching" }
+  return { phase, setPhase, password, setPassword, choose, openWithPassword, readRef: read, attemptRef: attempt, busy: phase.step === "reading" || phase.step === "matching", limits }
 }
 
 /** The file picker and the reading, password and message steps. `children`: extra content of a message (e.g. a parser offer). */
@@ -125,6 +129,7 @@ export function StatementFileSection<R>({
   onRetry,
   messageExtra,
   csv = false,
+  from = "your bank",
 }: {
   label: string
   reader: ReturnType<typeof useStatementReader<R>>
@@ -132,8 +137,10 @@ export function StatementFileSection<R>({
   messageExtra?: React.ReactNode
   /** The picker also takes CSV files. */
   csv?: boolean
+  /** Where the file comes from, for the hint ("your bank", "your UPI app"). */
+  from?: string
 }) {
-  const { phase, password, setPassword, choose, openWithPassword, busy } = reader
+  const { phase, password, setPassword, choose, openWithPassword, busy, limits } = reader
   return (
     <section aria-labelledby="pdf-heading" className="grid gap-3 rounded-2xl border border-line bg-surface p-4 md:p-5">
       <h2 id="pdf-heading" className="text-base font-semibold">
@@ -153,8 +160,8 @@ export function StatementFileSection<R>({
           className="text-sm file:mr-3 file:rounded-lg file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:font-semibold"
         />
         <p id="statement-pdf-hint" className="text-xs text-muted-foreground">
-          Read on this device only: the file and any password are never uploaded or saved. {csv ? "Text PDFs or CSV files" : "Text PDFs"} from your
-          bank, up to {MAX_STATEMENT_PDF_BYTES / 1024 / 1024} MB.
+          Read on this device only: the file and any password are never uploaded or saved. {csv ? "Text PDFs or CSV files" : "Text PDFs"} from{" "}
+          {from}, up to {limits.bytes / 1024 / 1024} MB.
         </p>
       </div>
       {phase.step === "choose" && phase.message && <FormMessage tone="error">{phase.message}</FormMessage>}
@@ -180,7 +187,7 @@ export function StatementFileSection<R>({
           {phase.message ? (
             <FormMessage tone="error">{phase.message}</FormMessage>
           ) : (
-            <FormMessage tone="info">This PDF is protected. Enter the password your bank gave for it.</FormMessage>
+            <FormMessage tone="info">This PDF is protected. Enter the password {from === "your bank" ? "your bank" : "the app"} gave for it.</FormMessage>
           )}
           <TextField
             name="pdf-password"

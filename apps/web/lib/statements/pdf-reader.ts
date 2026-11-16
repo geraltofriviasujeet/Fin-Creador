@@ -40,13 +40,22 @@ export type PdfReadResult =
   | { status: "too_many_pages" }
   | { status: "unreadable" }
 
-export const PDF_READ_MESSAGES: Record<Exclude<PdfReadResult["status"], "ok" | "needs_password">, string> = {
-  wrong_password: "That password didn't open the PDF. Check it and try again.",
-  no_text: "This looks like a scanned PDF; only text PDFs can be read.",
-  too_large: `This file is over ${MAX_STATEMENT_PDF_BYTES / 1024 / 1024} MB. Choose the statement PDF from your bank.`,
-  too_many_pages: `This PDF has more than ${MAX_STATEMENT_PDF_PAGES} pages. Choose a single statement.`,
-  unreadable: "We couldn't read this PDF. Check that it is a statement PDF and try again.",
+/** The largest file and the most pages read; card and bank statements use the defaults, UPI app statements more (9e). */
+export type PdfLimits = { bytes: number; pages: number }
+export const STATEMENT_PDF_LIMITS: PdfLimits = { bytes: MAX_STATEMENT_PDF_BYTES, pages: MAX_STATEMENT_PDF_PAGES }
+
+/** The messages for a read that failed, for these limits. */
+export function pdfReadMessages(limits: PdfLimits = STATEMENT_PDF_LIMITS): Record<Exclude<PdfReadResult["status"], "ok" | "needs_password">, string> {
+  return {
+    wrong_password: "That password didn't open the PDF. Check it and try again.",
+    no_text: "This looks like a scanned PDF; only text PDFs can be read.",
+    too_large: `This file is over ${limits.bytes / 1024 / 1024} MB. Choose the statement PDF from your bank.`,
+    too_many_pages: `This PDF has more than ${limits.pages} pages. Choose a single statement.`,
+    unreadable: "We couldn't read this PDF. Check that it is a statement PDF and try again.",
+  }
 }
+
+export const PDF_READ_MESSAGES = pdfReadMessages()
 
 // pdf.js PasswordException codes (PasswordResponses).
 const NEED_PASSWORD = 1
@@ -56,8 +65,8 @@ const isTextItem = (item: unknown): item is { str: string; transform: number[]; 
   typeof item === "object" && item !== null && "str" in item && "transform" in item
 
 /** The statement's text, one row per line (rows by y, cells by x), or why it can't be read. */
-export async function readStatementPdf(lib: PdfLib, data: Uint8Array, password?: string): Promise<PdfReadResult> {
-  if (data.byteLength > MAX_STATEMENT_PDF_BYTES) return { status: "too_large" }
+export async function readStatementPdf(lib: PdfLib, data: Uint8Array, password?: string, limits: PdfLimits = STATEMENT_PDF_LIMITS): Promise<PdfReadResult> {
+  if (data.byteLength > limits.bytes) return { status: "too_large" }
   const task = lib.getDocument({
     // pdf.js may transfer the buffer to its worker, so it gets a copy.
     data: data.slice(),
@@ -80,7 +89,7 @@ export async function readStatementPdf(lib: PdfLib, data: Uint8Array, password?:
       }
       return { status: "unreadable" }
     }
-    if (doc.numPages > MAX_STATEMENT_PDF_PAGES) return { status: "too_many_pages" }
+    if (doc.numPages > limits.pages) return { status: "too_many_pages" }
 
     const pages: PdfTextItem[][] = []
     for (let n = 1; n <= doc.numPages; n++) {

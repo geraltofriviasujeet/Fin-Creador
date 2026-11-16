@@ -96,7 +96,7 @@ test("a month equals the Overview's; the trend's last point plus investments equ
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
   await addCash(page, "500")
   await addEntry(page, { amount: "250", category: "Groceries", from: "HDFC Bank ··4821" })
-  await addEntry(page, { amount: "400", category: "Transport", from: "HDFC Bank ··4821" })
+  await addEntry(page, { amount: "400", category: "Transport & Cabs", from: "HDFC Bank ··4821" })
   await addEntry(page, { type: "Income", amount: "5,000", category: "Salary", from: "HDFC Bank ··4821" })
   await addEntry(page, { type: "Transfer", amount: "1,000", from: "HDFC Bank ··4821", to: "Cash in hand" })
   // A holding (fictional instrument, e2e/fixtures/instruments.sql): 10 units at ₹1,250.50 = ₹12,505.
@@ -171,7 +171,7 @@ test("CSV export: injection neutralised, Amount numeric, voided left out by defa
   await page.goto("/income")
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
   await addEntry(page, { amount: "1,250.50", category: "Groceries", from: "HDFC Bank ··4821", mode: "UPI", note: '=HYPERLINK("http://example.test","x")' })
-  await addEntry(page, { amount: "75", category: "Transport", from: "HDFC Bank ··4821", note: "Entered twice" })
+  await addEntry(page, { amount: "75", category: "Transport & Cabs", from: "HDFC Bank ··4821", note: "Entered twice" })
   const supabase = await asUser(email)
   const twice = await supabase.from("transactions").select("id").eq("note", "Entered twice").single()
   expect(twice.error).toBeNull()

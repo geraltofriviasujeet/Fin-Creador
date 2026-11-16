@@ -18,10 +18,12 @@ import {
   Plane,
   Repeat,
   Scissors,
+  Send,
   ShoppingBag,
   ShoppingCart,
   Store,
   Utensils,
+  Wrench,
   Zap,
 } from "lucide-react-native";
 import { StyleSheet, View } from "react-native";
@@ -45,6 +47,8 @@ const ICONS: Record<string, LucideIcon> = {
   subscription: Repeat,
   gift: Gift,
   fuel: Fuel,
+  services: Wrench,
+  money_sent: Send,
   other: Ellipsis,
   salary: Briefcase,
   freelance: Laptop,

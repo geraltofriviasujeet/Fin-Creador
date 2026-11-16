@@ -31,7 +31,7 @@ test("turn Roma on, ask what I spent this month, find entries, allow description
   await page.goto("/income")
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
   await addEntry(page, { amount: "1,234.50", category: "Groceries", from: "HDFC Bank ··4821" })
-  await addEntry(page, { amount: "400", category: "Transport", from: "HDFC Bank ··4821", note: "Auto to office, ride 98765432" })
+  await addEntry(page, { amount: "400", category: "Transport & Cabs", from: "HDFC Bank ··4821", note: "Auto to office, ride 98765432" })
 
   await page.goto("/settings")
   await page.getByRole("button", { name: "Turn Roma on" }).click()

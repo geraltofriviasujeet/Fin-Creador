@@ -16,3 +16,4 @@ export * from "./card-data";
 export * from "./digits";
 export * from "./statutory-forms";
 export * from "./statement-import"
+export * from "./upi-import"

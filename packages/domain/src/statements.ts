@@ -41,7 +41,10 @@ export interface StatementLine {
 }
 
 /** balance_mismatch (generic bank reader): read, but its balance or its Dr / Cr disagrees with the rows around it. */
-export type StatementIssueReason = "no_amount" | "bad_date" | "bad_amount" | "no_description" | "too_many_lines" | "too_long" | "balance_mismatch";
+/** no_reference, no_account (UPI app statements, 9e): a payment without its UPI reference or its bank account. */
+export type StatementIssueReason =
+  | "no_amount" | "bad_date" | "bad_amount" | "no_description" | "too_many_lines" | "too_long" | "balance_mismatch"
+  | "no_reference" | "no_account";
 
 /**
  * A line the reader could not use; `line` is its 1-based number in the text (0: the whole text).

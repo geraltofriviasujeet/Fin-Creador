@@ -45,8 +45,12 @@ export const mockToolCall = (name: string, input: unknown, id = `call-${name}`):
  * with no passage it answers from "memory" with a figure, which the app must never show. A tax
  * calculation (10.6e, tax_estimate offered) passes the question's first amount as written, then
  * gives both totals by placeholder, in Markdown bold. Small talk (no tools) gets a one-line reply.
+ * Import category suggestions (9e, the set_categories tool): a name with "cafe" or "kitchen" is
+ * food, "mart" or "stores" groceries, "zz invalid" gets a key outside the list, anything else services.
  */
 const defaultScript: MockScript = (request) => {
+  const categories = categoriesScript(request)
+  if (categories) return categories
   const plan = planScript(request)
   if (plan) return plan
   if (request.tools.length === 0) return mockText("Hello. Ask me about your money. (Test answer.)")
@@ -174,4 +178,19 @@ function taxScript(request: LlmRequest): LlmResponse | null {
   const result = JSON.parse(last.results[0]?.content ?? "{}") as { amounts?: unknown[] }
   if (!result.amounts) return mockText("Needs more. (Test answer.)")
   return mockText("**New regime:** {fig:new_regime_total_tax}. **Old regime:** {fig:old_regime_total_tax}. (Test answer.)")
+}
+
+/** set_categories (9e): one key per "<id>: <name>" line, from the name's words. */
+function categoriesScript(request: LlmRequest): LlmResponse | null {
+  if (!request.tools.some((t) => t.name === "set_categories")) return null
+  const last = request.messages.at(-1)
+  const lines = last?.role === "user" ? last.text.split("\n") : []
+  const items = lines.flatMap((line) => {
+    const m = /^([a-z0-9]+): (.*)$/.exec(line)
+    if (!m) return []
+    const name = m[2]!.toLowerCase()
+    const key = /cafe|kitchen/.test(name) ? "food" : /mart|stores/.test(name) ? "groceries" : /zz invalid/.test(name) ? "not_a_key" : "services"
+    return [{ id: m[1]!, key }]
+  })
+  return mockToolCall("set_categories", { items })
 }

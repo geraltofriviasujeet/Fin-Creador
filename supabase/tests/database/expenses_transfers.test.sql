@@ -123,7 +123,7 @@ set local role authenticated;
 -- ------------------------------------------------------------ expense categories (14-20)
 select is(
   (select count(*)::int from public.categories where kind = 'expense' and is_default and icon is not null),
-  17, 'sign-up creates 17 default expense categories with icons'
+  19, 'sign-up creates 19 default expense categories with icons'
 );
 select is(public.ensure_my_expense_categories(), 0, 'the lazy fallback does nothing when defaults exist');
 select lives_ok(
@@ -464,7 +464,7 @@ select throws_ok(
 -- A's entries from 25 to 21 days ago (nothing else is in this range):
 --   e1 expense 100.00 HDFC, Groceries, "Big Bazaar 50% off"      (25 days ago)
 --   e5 expense   3.00 USD wallet, Shopping                         (25 days ago)
---   e2 expense  25.00 cash, Transport, "auto_rickshaw"             (24 days ago)
+--   e2 expense  25.00 cash, Transport & Cabs, "auto_rickshaw"             (24 days ago)
 --   i1 income 5000.00 HDFC, Salary                                (23 days ago)
 --   t1 transfer 200.00 HDFC -> cash                               (22 days ago)
 --   e3 expense  75.00 HDFC, Food & dining, "dinner (team), paid"   (21 days ago, voided)
@@ -475,7 +475,7 @@ select public.record_transaction('expense', 'e0000000-0000-4000-8000-00000000005
 select public.record_transaction('expense', 'e0000000-0000-4000-8000-000000000055', 300, current_date - 25,
   'a0000000-0000-4000-8000-000000000003', p_category_id => (select id from public.categories where kind = 'expense' and name = 'Shopping'));
 select public.record_transaction('expense', 'e0000000-0000-4000-8000-000000000052', 2500, current_date - 24,
-  'a0000000-0000-4000-8000-000000000002', p_category_id => (select id from public.categories where kind = 'expense' and name = 'Transport'),
+  'a0000000-0000-4000-8000-000000000002', p_category_id => (select id from public.categories where kind = 'expense' and name = 'Transport & Cabs'),
   p_note => 'auto_rickshaw');
 select public.record_transaction('income', 'e0000000-0000-4000-8000-000000000053', 500000, current_date - 23,
   'a0000000-0000-4000-8000-000000000001', p_category_id => (select id from public.categories where kind = 'income' and name = 'Salary'));
@@ -592,7 +592,7 @@ select throws_ok(
 update public.categories set archived_at = now() where kind = 'expense' and system_key is null;
 select is(public.ensure_my_expense_categories(), 0, 'archived defaults are not re-created');
 select set_config('request.jwt.claims', '{"sub": "33333333-3333-4333-8333-333333333333", "role": "authenticated"}', true);
-select is(public.ensure_my_expense_categories(), 17, 'the lazy fallback creates the 17 defaults');
+select is(public.ensure_my_expense_categories(), 19, 'the lazy fallback creates the 19 defaults');
 
 select * from finish();
 rollback;

@@ -63,6 +63,9 @@ export const EXPENSE_ICON_OPTIONS = [
   // Fixes before Sprint 12: the Gift and Fuel defaults.
   { value: "gift", label: "Gift" },
   { value: "fuel", label: "Fuel" },
+  // Sprint 9e: the Services and Money sent to people defaults.
+  { value: "services", label: "Services" },
+  { value: "money_sent", label: "Money sent" },
   { value: "other", label: "Other" },
 ] as const;
 export type ExpenseIcon = (typeof EXPENSE_ICON_OPTIONS)[number]["value"];

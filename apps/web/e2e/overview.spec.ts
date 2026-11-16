@@ -44,7 +44,7 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
   await addCash(page, "500")
   await addEntry(page, { amount: "250", category: "Groceries", from: "HDFC Bank ··4821" })
-  await addEntry(page, { amount: "400", category: "Transport", from: "HDFC Bank ··4821" })
+  await addEntry(page, { amount: "400", category: "Transport & Cabs", from: "HDFC Bank ··4821" })
   await addEntry(page, { type: "Income", amount: "5,000", category: "Salary", from: "HDFC Bank ··4821" })
   await addEntry(page, { type: "Transfer", amount: "1,000", from: "HDFC Bank ··4821", to: "Cash in hand" })
 
@@ -84,7 +84,7 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await page.getByRole("navigation", { name: "Chart type for Spending by category" }).getByRole("link", { name: "Pie" }).click()
   await expect(page).toHaveURL(/\?spending=line&categories=pie$/)
   const pie = panel(page, "Spending by category")
-  await expect(pie.getByRole("img")).toHaveAttribute("aria-label", /Transport ₹400, Groceries ₹250/)
+  await expect(pie.getByRole("img")).toHaveAttribute("aria-label", /Transport & Cabs ₹400, Groceries ₹250/)
   await expect(pie.getByRole("list", { name: "Categories" }).getByRole("listitem").first()).toContainText("₹400 · 61.5%")
   await page.getByRole("navigation", { name: "Chart type for Income vs expenses" }).getByRole("link", { name: "Line" }).click()
   await expect(page).toHaveURL(/\?spending=line&flow=line&categories=pie$/)

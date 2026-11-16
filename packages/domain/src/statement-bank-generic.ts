@@ -228,6 +228,8 @@ const ISSUE_TEXT: Record<StatementIssue["reason"], string> = {
   too_many_lines: "unreadable: too many lines",
   too_long: "unreadable: file too long",
   balance_mismatch: "flagged: balance doesn't follow",
+  no_reference: "unreadable: no UPI reference",
+  no_account: "unreadable: no bank account",
 };
 
 /** Reads a bank statement's table by structure; null when it can't be read or doesn't add up. */

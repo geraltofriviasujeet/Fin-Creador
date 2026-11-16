@@ -121,6 +121,9 @@ export function IncomeView({ data, upcoming, rules = [] }: { data: IncomePageDat
               <Plus aria-hidden="true" />
               Add bank account
             </Button>
+            <Button variant="secondary" size="lg" onClick={() => router.push("/income/import/upi")}>
+              Import UPI statement
+            </Button>
             <Button size="lg" onClick={() => show({ type: "income" })}>
               <Plus aria-hidden="true" />
               Add income
