@@ -2,7 +2,9 @@ import {
   type IsoDate,
   type UpiAccountRef,
   type UpiApp,
+  type UpiAccountCount,
   type UpiCheck,
+  type UpiCount,
   type UpiRow,
   type UpiStatementParse,
   addDays,
@@ -119,6 +121,8 @@ export type UpiReview = {
   lines: UpiReviewLine[]
   period: UpiStatementParse["period"]
   checks: UpiCheck[]
+  count: UpiCount
+  accountCounts: UpiAccountCount[]
   unreadableRows: number
   unreadable: UnreadableRow[]
 }
@@ -341,7 +345,16 @@ export function buildUpiReview(parse: UpiStatementParse, input: UpiReviewInput):
       const place = input.pageRowCounts ? linePosition(issue.line, input.pageRowCounts) : null
       return { page: place?.page ?? null, row: place?.row ?? issue.line, shape: issue.shape ?? "", layout: input.rowLayouts?.[issue.line - 1] ?? "" }
     })
-  return { app: parse.app, lines, period: parse.period, checks: parse.checks, unreadableRows: parse.issues.length, unreadable }
+  return {
+    app: parse.app,
+    lines,
+    period: parse.period,
+    checks: parse.checks,
+    count: parse.count,
+    accountCounts: parse.accountCounts,
+    unreadableRows: parse.issues.length,
+    unreadable,
+  }
 }
 
 /** "Add all", "Skip all" or one payment's answer in the duplicates dialog: a tick, nothing else. */
@@ -411,6 +424,25 @@ export function upiCheckReasons(checks: readonly UpiCheck[], currency: string): 
   return checks
     .filter((c) => c.status === "mismatch" && c.expectedMinor !== null)
     .map((c) => `The statement's total ${label[c.name]} is ${formatMoney(c.expectedMinor!, { currency })}; the payments read add up to ${formatMoney(c.foundMinor, { currency })}.`)
+}
+
+/** "123 of 123 payments read": against the count the statement prints, else every payment found in it. */
+export const upiReadText = (count: UpiCount): string => `${count.read} of ${count.total} ${count.total === 1 ? "payment" : "payments"} read`
+
+const payments = (n: number) => (n === 1 ? "1 payment" : `${n} payments`)
+
+/** "Check this statement" reasons from the statement's own counts: all payments, and each account's made and received (Paytm's summary). */
+export function upiCountReasons(review: Pick<UpiReview, "count" | "accountCounts">): string[] {
+  const reasons: string[] = []
+  if (review.count.printed && review.count.read !== review.count.total) {
+    reasons.push(`The statement lists ${payments(review.count.total)}; ${review.count.read} were read.`)
+  }
+  for (const c of review.accountCounts) {
+    if (c.found === c.expected) continue
+    const side = c.direction === "debit" ? "made" : "received"
+    reasons.push(`${c.account.bankLabel} ··${c.account.digits}: the statement lists ${payments(c.expected)} ${side}; ${c.found} were read.`)
+  }
+  return reasons
 }
 
 /** The range to look for existing entries in: a day either side of the payments. */

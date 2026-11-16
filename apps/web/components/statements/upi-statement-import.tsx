@@ -23,6 +23,8 @@ import {
   setUpiLineType,
   upiAccountsNeeded,
   upiCheckReasons,
+  upiCountReasons,
+  upiReadText,
   upiLineErrors,
   upiLiteChoice,
   upiLiteNeeded,
@@ -186,7 +188,7 @@ function UpiFlow({ load, parse, read, suggestionsOn }: { load: Load; parse: UpiS
   const header = (
     <p className="text-sm text-muted-foreground">
       {UPI_APP_NAMES[parse.app]} statement
-      {parse.period.from && parse.period.to ? `, ${fullDate(parse.period.from)} to ${fullDate(parse.period.to)}` : ""} · {parse.rows.length} payments read
+      {parse.period.from && parse.period.to ? `, ${fullDate(parse.period.from)} to ${fullDate(parse.period.to)}` : ""} · {upiReadText(parse.count)}
     </p>
   )
 
@@ -459,7 +461,7 @@ function UpiReviewSection({
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null)
   const context = { today, currency }
   const totals = upiReviewTotals(lines, currency)
-  const reasons = upiCheckReasons(initial.checks, currency)
+  const reasons = [...upiCheckReasons(initial.checks, currency), ...upiCountReasons(initial)]
   const accountName = (id: string) => options.accounts.find((a) => a.id === id)?.name ?? ""
   const ticked = lines.filter((l) => l.ticked)
   const errors = ticked.some((l) => Object.keys(upiLineErrors(l, options, context)).length > 0)

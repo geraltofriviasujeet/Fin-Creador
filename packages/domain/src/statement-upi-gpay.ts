@@ -17,6 +17,7 @@ import {
   type UpiStatementParse,
   type UpiTextRow,
   cleanUpiPayee,
+  emptyUpiParse,
   parseUpiAccount,
   parseUpiAmount,
   parseUpiDate,
@@ -24,6 +25,7 @@ import {
   upiBlocks,
   upiCells,
   upiChecks,
+  upiCount,
   upiIssue,
   upiPeriod,
   upiStatusOf,
@@ -48,8 +50,7 @@ function totalIn(text: string, label: string): number | null {
 
 export function parseGooglePayStatement(rows: readonly UpiTextRow[]): UpiStatementParse {
   const text = rows.map((r) => r.text).join("\n");
-  const empty: UpiStatementParse = { app: "google_pay", period: { from: null, to: null }, rows: [], issues: [], checks: [] };
-  if (text.length > MAX_STATEMENT_TEXT_CHARS) return { ...empty, issues: [{ line: 0, reason: "too_long" }] };
+  if (text.length > MAX_STATEMENT_TEXT_CHARS) return emptyUpiParse("google_pay");
 
   const { blocks } = upiBlocks(rows, (row) => DATE.test(row.cells[0]!) && parseUpiDate(row.cells[0]!) !== null);
   const start = blocks[0]?.[0]?.line ?? Infinity;
@@ -112,5 +113,5 @@ export function parseGooglePayStatement(rows: readonly UpiTextRow[]): UpiStateme
 
   const headerText = header.map((r) => r.text).join("\n");
   const totals = { sentMinor: totalIn(headerText, "Sent"), receivedMinor: totalIn(headerText, "Received") };
-  return { app: "google_pay", period: upiPeriod(printed, out), rows: out, issues, checks: upiChecks(out, totals) };
+  return { app: "google_pay", period: upiPeriod(printed, out), rows: out, issues, checks: upiChecks(out, totals), count: upiCount(out, issues), accountCounts: [] };
 }

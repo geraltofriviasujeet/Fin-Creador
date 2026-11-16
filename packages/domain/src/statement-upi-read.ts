@@ -1,5 +1,6 @@
 // Which UPI app a statement is from (its header text) and its reader (Sprint 9e). PhonePe's
-// "Transaction Statement for" is checked before Google Pay's "Transaction statement".
+// "Transaction Statement for" is checked before Google Pay's "Transaction statement", and BHIM's
+// Sender / Receiver / Status columns before Paytm (BHIM rows can carry "@paytm" UPI ids).
 import { linePosition } from "./pdf-rows";
 import { parseBhimStatement, isBhimStatement } from "./statement-upi-bhim";
 import { isGooglePayStatement, parseGooglePayStatement } from "./statement-upi-gpay";
@@ -11,8 +12,8 @@ import { type UpiApp, type UpiStatementParse, upiTextRows } from "./statement-up
 export function detectUpiApp(text: string): UpiApp | null {
   if (isPhonePeStatement(text)) return "phonepe";
   if (isGooglePayStatement(text)) return "google_pay";
-  if (isPaytmStatement(text)) return "paytm";
   if (isBhimStatement(text)) return "bhim";
+  if (isPaytmStatement(text)) return "paytm";
   return null;
 }
 

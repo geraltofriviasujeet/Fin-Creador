@@ -62,7 +62,15 @@ const row = (over: Partial<UpiRow>): UpiRow => ({
   ref: `6123456${String(n).padStart(5, "0")}`,
   ...over,
 })
-const parse = (app: UpiStatementParse["app"], rows: UpiRow[]): UpiStatementParse => ({ app, period: { from: "2026-10-01", to: "2026-10-31" }, rows, issues: [], checks: [] })
+const parse = (app: UpiStatementParse["app"], rows: UpiRow[]): UpiStatementParse => ({
+  app,
+  period: { from: "2026-10-01", to: "2026-10-31" },
+  rows,
+  issues: [],
+  checks: [],
+  count: { read: rows.length, total: rows.length, printed: false },
+  accountCounts: [],
+})
 const none: UpiMatches = { importedKeys: [], deletedKeys: [], entries: [] }
 const review = (p: UpiStatementParse, over: Partial<Parameters<typeof buildUpiReview>[1]> = {}) =>
   buildUpiReview(p, { matches: [bankMatch], options, existing: none, history: new Map(), suggestions: new Map(), context, ...over })

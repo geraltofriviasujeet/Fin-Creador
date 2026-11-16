@@ -150,6 +150,31 @@ describe("Paytm", () => {
     expect(JSON.stringify(parse.issues)).not.toMatch(/Cafe|Corner/);
   });
 
+  it("a label wrapped over three lines is joined, and a short one is resolved from the summary's accounts", () => {
+    const parse = readUpiStatement(
+      rows(
+        "Paytm Statement",
+        "01 Oct'26 - 31 Oct'26",
+        ["1 Payments made", "1 Payments received"],
+        ["Punjab National Bank - 66", "Rs.65 (1 payment)", "Rs.0 (0 payments)"],
+        ["Canara Bank - 22", "Rs.0 (0 payments)", "Rs.500 (1 payment)"],
+        ["Date & Time", "Transaction Details", "Your Account", "Amount"],
+        ["12 Oct", "Paid to Green Leaf Cafe", "Punjab", "- Rs.65"],
+        ["UPI ID: cafe@okexample", "National"],
+        ["UPI Ref No: 612345678907", "Bank - 66"],
+        ["13 Oct", "Received from Meera N", "+ Rs.500"],
+        ["UPI Ref No: 612345678908", "Bank - 22"],
+      ),
+    )!;
+    expect(parse.issues).toEqual([]);
+    expect(parse.rows.map((r) => [r.account.bankLabel, r.account.digits, r.direction])).toEqual([
+      ["Punjab National Bank", "66", "debit"],
+      ["Canara Bank", "22", "credit"],
+    ]);
+    expect(parse.count).toEqual({ read: 2, total: 2, printed: true });
+    expect(parse.accountCounts.every((c) => c.found === c.expected)).toBe(true);
+  });
+
   it("failed payments are read and marked, never imported as spending", () => {
     const parse = readUpiStatement(paytm(["12 Oct", "Paid to Green Leaf Cafe", "Example Bank - 12", "- Rs.65"], "UPI Ref No: 612345678906", "Failed"))!;
     expect(parse.rows[0]!.status).toBe("failed");
@@ -183,6 +208,22 @@ describe("PhonePe", () => {
     ]);
     expect(JSON.stringify(parse.rows.map(({ ref: _ref, ...r }) => r))).not.toContain("9000000042");
   });
+
+  it("an amount of 10,000 or more wrapped under INR is read; a masked payee keeps no name", () => {
+    const parse = readUpiStatement(
+      rows(
+        "Transaction Statement for 9000000042",
+        ["Nov 02, 2026", "Paid to XXXXXX4321", "Debit", "INR"],
+        ["09:15 AM", "12000.00"],
+        ["Transaction ID : T2611021024000004"],
+        ["UTR No : 612345678914"],
+        "Debited from XX1234",
+      ),
+    )!;
+    expect(parse.issues).toEqual([]);
+    expect(parse.rows.map((r) => [r.amountMinor, r.payee, r.account.digits])).toEqual([[1_200_000, "", "1234"]]);
+    expect(parse.count).toEqual({ read: 1, total: 1, printed: false });
+  });
 });
 
 describe("BHIM", () => {
@@ -209,6 +250,29 @@ describe("BHIM", () => {
       ["2026-10-15", "received", "credit", 50_000, "Meera N", "success", "Example Bank", "1234"],
     ]);
     noPersonal(parse.rows.map(({ ref: _ref, ...r }) => r));
+  });
+
+  it("reads the real column order (Pay/Collect, amount, DR/CR, status), @paytm ids, and the last 4 digits", () => {
+    const me = "asha@paytm(asha example)";
+    const parse = readUpiStatement(
+      rows(
+        "Transaction History",
+        ["Customer Mobile Number: +919000000042", "Transaction History from 01/10/2026 to 31/10/2026"],
+        ["Date", "Time", "Bank Name", "Account Number", "Sender", "Receiver", "Payment ID/Reference Number", "Pay/Collect", "Amount (in Rs.)", "DR/CR", "Status"],
+        ["12/10/2026", "10:24:15", "Punjab National Bank", "4321XXXXXXXX5678", me, "cafe@paytm(Green", "leaf cafe)", "612345678931", "PAY", "1234.50", "DR", "SUCCESS"],
+        ["12/10/2026", "10:24:20", "Canara Bank", "XXXXXXXXXX12345", "cashback@npci(NPCI", "BHIM)", me, "612345678932", "PAY", "5.00", "CR", "SUCCESS"],
+        ["13/10/2026", "11:00:00", "HDFC Bank LTD", "XXXXXXXXXX1234", me, "shop@ybl", "612345678933", "COLLECT", "80.00", "DR", "Pending"],
+      ),
+    )!;
+    expect(parse.app).toBe("bhim");
+    expect(parse.issues).toEqual([]);
+    expect(parse.period).toEqual({ from: "2026-10-01", to: "2026-10-31" });
+    expect(parse.rows.map((r) => [r.kind, r.direction, r.amountMinor, r.payee, r.status, r.account.bankLabel, r.account.digits])).toEqual([
+      ["paid", "debit", 123_450, "Green leaf cafe", "success", "Punjab National Bank", "5678"],
+      ["cashback", "credit", 500, "BHIM cashback", "success", "Canara Bank", "2345"],
+      ["paid", "debit", 8_000, "", "pending", "HDFC Bank LTD", "1234"],
+    ]);
+    expect(JSON.stringify(parse.rows.map(({ ref: _ref, ...r }) => r))).not.toMatch(/@|asha|9000000042/);
   });
 });
 

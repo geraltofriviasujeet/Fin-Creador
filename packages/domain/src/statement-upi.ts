@@ -73,6 +73,25 @@ export interface UpiCheck {
   expectedMinor: number | null;
 }
 
+/**
+ * Payments read against the payments the statement has: the count it prints where it prints one
+ * (Paytm's "N Payments made" and "N Payments received"), else every payment start found (read or
+ * not), so a short read is plain either way.
+ */
+export interface UpiCount {
+  read: number;
+  total: number;
+  printed: boolean;
+}
+
+/** One account's payments made or received as the statement's summary counts them (Paytm), against those read. */
+export interface UpiAccountCount {
+  account: UpiAccountRef;
+  direction: StatementDirection;
+  expected: number;
+  found: number;
+}
+
 export interface UpiStatementParse {
   app: UpiApp;
   /** As printed in the header; else the first and last payment dates; null when neither. */
@@ -80,7 +99,27 @@ export interface UpiStatementParse {
   rows: UpiRow[];
   issues: StatementIssue[];
   checks: UpiCheck[];
+  count: UpiCount;
+  accountCounts: UpiAccountCount[];
 }
+
+/** The count for a parse: `printed` when the statement prints one, else the payments read plus those that couldn't be. */
+export const upiCount = (rows: readonly UpiRow[], issues: readonly StatementIssue[], printed: number | null = null): UpiCount => ({
+  read: rows.length,
+  total: printed ?? rows.length + issues.filter((i) => i.line > 0).length,
+  printed: printed !== null,
+});
+
+/** A parse with nothing read (the text was too long). */
+export const emptyUpiParse = (app: UpiApp): UpiStatementParse => ({
+  app,
+  period: { from: null, to: null },
+  rows: [],
+  issues: [{ line: 0, reason: "too_long" }],
+  checks: [],
+  count: { read: 0, total: 0, printed: false },
+  accountCounts: [],
+});
 
 /** One row of the PDF (or text line) with its 1-based line number and, from a PDF, each cell's x range. */
 export interface UpiTextRow {
@@ -296,4 +335,4 @@ export function upiBlocks(rows: readonly UpiTextRow[], isStart: (row: UpiTextRow
 
 /** Rows that repeat on every page or close a page: never part of a payment. */
 export const isUpiPageFurniture = (cell: string): boolean =>
-  /^(?:page \d+(?: of \d+)?|\d+ ?\/ ?\d+|date ?(?:&|and) ?time|transaction details|your account|amount|date|details|type)$/i.test(cell.trim());
+  /^(?:page \d+(?: of \d+)?|\d+ ?\/ ?\d+|date ?(?:&|and) ?time|transaction details|notes ?& ?tags|your account|amount|date|details|type)$/i.test(cell.trim());

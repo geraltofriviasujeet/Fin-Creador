@@ -95,9 +95,11 @@ function contentStream(page: SyntheticPage, noText: boolean): string {
 
 /**
  * A PDF with the given pages. `password` protects it (anyone opening it needs that password);
- * `noText` draws shapes instead of text, as a scanned statement has no text layer.
+ * `noText` draws shapes instead of text, as a scanned statement has no text layer; `landscape`
+ * turns the pages A4 landscape (842 wide, 595 high: a row's baseline 800 - r * 14 is then off the
+ * page, so callers move rows down with `dy`).
  */
-export function syntheticPdf(pages: readonly SyntheticPage[], options: { password?: string; noText?: boolean } = {}): Uint8Array {
+export function syntheticPdf(pages: readonly SyntheticPage[], options: { password?: string; noText?: boolean; landscape?: boolean } = {}): Uint8Array {
   const id = md5(latin1(`synthetic-${pages.length}-${options.password ?? ""}-${options.noText ? 1 : 0}`))
   const sec = options.password === undefined ? null : security(options.password, "synthetic-owner", id, -4)
 
@@ -109,7 +111,7 @@ export function syntheticPdf(pages: readonly SyntheticPage[], options: { passwor
   objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [129 /uni20B9] >> >>"
   pages.forEach((page, i) => {
     const num = pageNums[i]!
-    objects[num] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${num + 1} 0 R >>`
+    objects[num] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${options.landscape ? "842 595" : "612 842"}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${num + 1} 0 R >>`
     let data: Uint8Array = latin1(contentStream(page, options.noText === true))
     if (sec) data = rc4(objectKey(sec.fileKey, num + 1, 0), data)
     objects[num + 1] = data
