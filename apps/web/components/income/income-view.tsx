@@ -1,8 +1,10 @@
 "use client"
 
 import { useActionState, useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
+import { cn } from "cn"
 import { BriefcaseBusiness, ChevronRight, House, MoreHorizontal, Plus } from "lucide-react"
 import {
   type AccountKind,
@@ -27,8 +29,9 @@ import { SourceForm } from "@/components/income/source-form"
 import { StatCard } from "@/components/income/stat-card"
 import { useFormSuccess } from "@/components/income/use-form-success"
 import { PageHeader } from "@/components/shell/app-shell"
+import { upiImportHref } from "@/components/statements/upi-links"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
@@ -121,9 +124,9 @@ export function IncomeView({ data, upcoming, rules = [] }: { data: IncomePageDat
               <Plus aria-hidden="true" />
               Add bank account
             </Button>
-            <Button variant="secondary" size="lg" onClick={() => router.push("/income/import/upi")}>
+            <Link href={upiImportHref("income")} className={cn(buttonVariants({ variant: "secondary", size: "lg" }))}>
               Import UPI statement
-            </Button>
+            </Link>
             <Button size="lg" onClick={() => show({ type: "income" })}>
               <Plus aria-hidden="true" />
               Add income

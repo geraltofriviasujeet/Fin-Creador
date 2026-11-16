@@ -29,8 +29,19 @@ const payment = (page: Page, text: string) => review(page).getByRole("list", { n
 
 async function openImport(page: Page) {
   await page.goto("/income")
-  await page.getByRole("button", { name: "Import UPI statement" }).click()
+  await page.getByRole("main").getByRole("link", { name: "Import UPI statement" }).click()
   await expect(page.getByRole("heading", { level: 1, name: "Import UPI statement" })).toBeVisible()
+}
+
+/** The import page, opened from somewhere: its Back link names where it returns. */
+async function expectImportFrom(page: Page, origin: "Transactions" | "Income") {
+  await expect(page.getByRole("heading", { level: 1, name: "Import UPI statement" })).toBeVisible()
+  await expect(page.getByRole("link", { name: `Back to ${origin}` })).toBeVisible()
+}
+
+const menuItem = async (page: Page) => {
+  await page.getByRole("button", { name: "More ways to add" }).click()
+  return page.getByRole("menuitem", { name: "Import UPI statement" })
 }
 
 test("Paytm: match accounts, allow suggestions, save; the same file adds nothing; a near duplicate waits for an answer", async ({ page }) => {
@@ -105,4 +116,40 @@ test("an unknown file gets the honest message with Copy layout", async ({ page }
   await chooser(page).setInputFiles(pdf("other.pdf", syntheticPdf([[[{ x: 40, text: "Monthly account summary" }], [{ x: 40, text: "Opening balance 1,000.00" }]]])))
   await expect(page.getByText("We couldn't read this file as a Paytm, PhonePe, BHIM or Google Pay statement.", { exact: false })).toBeVisible()
   await expect(page.getByRole("button", { name: "Copy layout" })).toBeVisible()
+})
+
+test("reach the import from Transactions, the Add expense menu (any page, phones too) and Income; Back returns there", async ({ page }) => {
+  await signUpConfirmed(page, "Meena Rao", uniqueEmail("upi-entry"))
+
+  // Transactions: the button beside Add expense.
+  await page.goto("/transactions")
+  await page.getByRole("main").getByRole("link", { name: "Import UPI statement" }).click()
+  await expect(page).toHaveURL(/\/income\/import\/upi\?from=transactions$/)
+  await expectImportFrom(page, "Transactions")
+  await page.getByRole("link", { name: "Back to Transactions" }).click()
+  await expect(page).toHaveURL(/\/transactions$/)
+
+  // The Add expense menu on another page: back to Transactions by default.
+  await page.goto("/goals")
+  await (await menuItem(page)).click()
+  await expectImportFrom(page, "Transactions")
+
+  // The menu on Income, and Income's own button: back to Income.
+  await page.goto("/income")
+  await (await menuItem(page)).click()
+  await expectImportFrom(page, "Income")
+  await page.getByRole("link", { name: "Back to Income" }).click()
+  await expect(page).toHaveURL(/\/income$/)
+  await page.getByRole("main").getByRole("link", { name: "Import UPI statement" }).click()
+  await expectImportFrom(page, "Income")
+
+  // The bare route still works and defaults to Transactions.
+  await page.goto("/income/import/upi")
+  await expectImportFrom(page, "Transactions")
+
+  // Phones: the same item in the add menu.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/")
+  await (await menuItem(page)).click()
+  await expectImportFrom(page, "Transactions")
 })

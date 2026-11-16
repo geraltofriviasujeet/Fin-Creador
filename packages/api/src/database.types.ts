@@ -842,6 +842,48 @@ export type Database = {
           },
         ]
       }
+      import_category_usage: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          provider: string
+          reserved_usd: number
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          input_tokens?: number | null
+          model: string
+          output_tokens?: number | null
+          provider: string
+          reserved_usd: number
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          provider?: string
+          reserved_usd?: number
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       instruments: {
         Row: {
           created_at: string
@@ -968,48 +1010,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      import_category_usage: {
-        Row: {
-          cost_usd: number | null
-          created_at: string
-          ended_at: string | null
-          id: string
-          input_tokens: number | null
-          model: string
-          output_tokens: number | null
-          provider: string
-          reserved_usd: number
-          status: string
-          user_id: string | null
-        }
-        Insert: {
-          cost_usd?: number | null
-          created_at?: string
-          ended_at?: string | null
-          id?: string
-          input_tokens?: number | null
-          model: string
-          output_tokens?: number | null
-          provider: string
-          reserved_usd: number
-          status?: string
-          user_id?: string | null
-        }
-        Update: {
-          cost_usd?: number | null
-          created_at?: string
-          ended_at?: string | null
-          id?: string
-          input_tokens?: number | null
-          model?: string
-          output_tokens?: number | null
-          provider?: string
-          reserved_usd?: number
-          status?: string
-          user_id?: string | null
-        }
-        Relationships: []
       }
       knowledge_documents: {
         Row: {
@@ -2587,10 +2587,24 @@ export type Database = {
           request_id: string
         }[]
       }
-      import_categories_release: { Args: { p_request_id: string }; Returns: boolean }
-      import_categories_settle: {
-        Args: { p_cost_usd: number; p_input_tokens: number; p_output_tokens: number; p_request_id: string }
+      import_categories_release: {
+        Args: { p_request_id: string }
         Returns: boolean
+      }
+      import_categories_settle: {
+        Args: {
+          p_cost_usd: number
+          p_input_tokens: number
+          p_output_tokens: number
+          p_request_id: string
+        }
+        Returns: boolean
+      }
+      import_counted_usd: {
+        Args: {
+          p_row: Database["public"]["Tables"]["import_category_usage"]["Row"]
+        }
+        Returns: number
       }
       is_liability_kind: { Args: { p_kind: string }; Returns: boolean }
       liability_owed: {
@@ -2719,6 +2733,10 @@ export type Database = {
           title: string
           verified_on: string
         }[]
+      }
+      model_spend_since: {
+        Args: { p_since: string; p_user: string }
+        Returns: number
       }
       pay_card: {
         Args: {
@@ -2974,6 +2992,7 @@ export type Database = {
         Args: { p_refund: Database["public"]["Tables"]["transactions"]["Row"] }
         Returns: undefined
       }
+      rename_default_expense_categories: { Args: never; Returns: number }
       repay_borrowing: {
         Args: {
           p_account_id: string
