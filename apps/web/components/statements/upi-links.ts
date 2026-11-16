@@ -1,13 +1,3 @@
-// Where the UPI import is reached from (Sprint 9e): its page returns there. Transactions by default.
-
-export type UpiImportOrigin = "transactions" | "income"
-
-export const UPI_IMPORT_ORIGINS: Record<UpiImportOrigin, { label: string; href: string }> = {
-  transactions: { label: "Transactions", href: "/transactions" },
-  income: { label: "Income", href: "/income" },
-}
-
-export const upiImportHref = (from: UpiImportOrigin) => `/income/import/upi?from=${from}`
-
-/** The origin named by `?from=`, else Transactions. */
-export const upiImportOrigin = (from: unknown): UpiImportOrigin => (from === "income" ? "income" : "transactions")
+// The UPI import's address (Sprint 9e). Reached from Transactions and the Add expense menu; it
+// returns to Transactions. /income/import/upi redirects here.
+export const UPI_IMPORT_HREF = "/transactions/import/upi"

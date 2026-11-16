@@ -23,7 +23,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, money, rangeText, signedAmount } from "./display"
-import { upiImportHref } from "@/components/statements/upi-links"
+import { UPI_IMPORT_HREF } from "@/components/statements/upi-links"
 import { AddEntryDialog, EditEntryDialog, HistoryDialog, RefundEntryDialog, VoidEntryDialog } from "./entry-modals"
 import type { EntryType } from "./transaction-form"
 
@@ -132,7 +132,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         {...TRANSACTIONS_HEADER}
         actions={
           <div className="flex flex-wrap gap-3">
-            <Link href={upiImportHref("transactions")} className={cn(buttonVariants({ variant: "secondary", size: "lg" }))}>
+            <Link href={UPI_IMPORT_HREF} className={cn(buttonVariants({ variant: "secondary", size: "lg" }))}>
               Import UPI statement
             </Link>
             {addLink("expense", "Add expense")}

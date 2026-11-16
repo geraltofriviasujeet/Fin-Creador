@@ -1,11 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
 import { ChevronDown, Plus } from "lucide-react"
 import { cn } from "cn"
-import { upiImportHref } from "@/components/statements/upi-links"
+import { UPI_IMPORT_HREF } from "@/components/statements/upi-links"
 import { buttonVariants } from "@/components/ui/button"
 
 // Topbar add actions: "Add expense" is the primary action (fast daily entry); the menu
@@ -22,7 +21,6 @@ const MORE = [
 ] as const
 
 export function AddMenu() {
-  const pathname = usePathname()
   const itemClass = "flex h-11 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
   return (
     <div className="flex items-center">
@@ -62,7 +60,7 @@ export function AddMenu() {
               ))}
               <Menu.LinkItem
                 closeOnClick
-                render={<Link href={upiImportHref(pathname.startsWith("/income") ? "income" : "transactions")} />}
+                render={<Link href={UPI_IMPORT_HREF} />}
                 className={itemClass}
               >
                 Import UPI statement

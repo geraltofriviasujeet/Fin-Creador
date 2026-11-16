@@ -52,7 +52,7 @@ import {
   suggestUpiCategoriesAction,
   upiHistoryAction,
   upiMatchesAction,
-} from "@/app/(app)/income/import/upi/actions"
+} from "@/app/(app)/transactions/import/upi/actions"
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

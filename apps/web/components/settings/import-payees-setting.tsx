@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { setImportPayeesConsentAction } from "@/app/(app)/income/import/upi/actions"
+import { setImportPayeesConsentAction } from "@/app/(app)/transactions/import/upi/actions"
 import { Button } from "@/components/ui/button"
 import { FormMessage } from "@/components/ui/field"
 

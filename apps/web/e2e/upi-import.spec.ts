@@ -28,15 +28,17 @@ const review = (page: Page) => page.getByRole("region", { name: "Review the paym
 const payment = (page: Page, text: string) => review(page).getByRole("list", { name: "Payments" }).getByRole("listitem").filter({ hasText: new RegExp(`^${text}`) })
 
 async function openImport(page: Page) {
-  await page.goto("/income")
+  await page.goto("/transactions")
   await page.getByRole("main").getByRole("link", { name: "Import UPI statement" }).click()
   await expect(page.getByRole("heading", { level: 1, name: "Import UPI statement" })).toBeVisible()
 }
 
-/** The import page, opened from somewhere: its Back link names where it returns. */
-async function expectImportFrom(page: Page, origin: "Transactions" | "Income") {
+/** The import page, however it was reached: under Transactions (its address, Back, and on wide screens the left menu's highlight). */
+async function expectImport(page: Page, wide = true) {
+  await expect(page).toHaveURL(/\/transactions\/import\/upi$/)
   await expect(page.getByRole("heading", { level: 1, name: "Import UPI statement" })).toBeVisible()
-  await expect(page.getByRole("link", { name: `Back to ${origin}` })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Back to Transactions" })).toBeVisible()
+  if (wide) await expect(page.getByRole("navigation", { name: "Main" }).locator('[aria-current="page"]')).toHaveAccessibleName(/^Transactions/)
 }
 
 /** Opens the Add expense menu (again until the page has hydrated) and returns its UPI item. */
@@ -123,38 +125,29 @@ test("an unknown file gets the honest message with Copy layout", async ({ page }
   await expect(page.getByRole("button", { name: "Copy layout" })).toBeVisible()
 })
 
-test("reach the import from Transactions, the Add expense menu (any page, phones too) and Income; Back returns there", async ({ page }) => {
+test("reach the import from Transactions and the Add expense menu (any page, phones too); always under Transactions", async ({ page }) => {
   await signUpConfirmed(page, "Meena Rao", uniqueEmail("upi-entry"))
 
   // Transactions: the button beside Add expense.
   await page.goto("/transactions")
   await page.getByRole("main").getByRole("link", { name: "Import UPI statement" }).click()
-  await expect(page).toHaveURL(/\/income\/import\/upi\?from=transactions$/)
-  await expectImportFrom(page, "Transactions")
+  await expectImport(page)
   await page.getByRole("link", { name: "Back to Transactions" }).click()
   await expect(page).toHaveURL(/\/transactions$/)
 
-  // The Add expense menu on another page: back to Transactions by default.
-  await page.goto("/goals")
-  await (await menuItem(page)).click()
-  await expectImportFrom(page, "Transactions")
-
-  // The menu on Income, and Income's own button: back to Income.
+  // The Add expense menu on Income: still under Transactions. Income has no import button.
   await page.goto("/income")
+  await expect(page.getByRole("main").getByRole("link", { name: "Import UPI statement" })).toHaveCount(0)
   await (await menuItem(page)).click()
-  await expectImportFrom(page, "Income")
-  await page.getByRole("link", { name: "Back to Income" }).click()
-  await expect(page).toHaveURL(/\/income$/)
-  await page.getByRole("main").getByRole("link", { name: "Import UPI statement" }).click()
-  await expectImportFrom(page, "Income")
+  await expectImport(page)
 
-  // The bare route still works and defaults to Transactions.
+  // The first address redirects.
   await page.goto("/income/import/upi")
-  await expectImportFrom(page, "Transactions")
+  await expectImport(page)
 
   // Phones: the same item in the add menu.
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/")
   await (await menuItem(page)).click()
-  await expectImportFrom(page, "Transactions")
+  await expectImport(page, false)
 })
