@@ -2577,6 +2577,16 @@ export type Database = {
         Args: { p_first_due: string; p_seq: number }
         Returns: string
       }
+      loan_terms:
+        | {
+            Args: {
+              p_before_tracking_on: string
+              p_loan: Database["public"]["Tables"]["loans"]["Row"]
+              p_moratorium_interest_minor: number
+            }
+            Returns: Json
+          }
+        | { Args: { p_loan_id: string }; Returns: Json }
       match_knowledge_chunks: {
         Args: { p_count: number; p_embedding: string; p_min_similarity: number }
         Returns: {
@@ -2931,6 +2941,7 @@ export type Database = {
         Args: { p_row: Database["public"]["Tables"]["roma_usage"]["Row"] }
         Returns: number
       }
+      roma_knowledge_embed: { Args: { p_request_id: string }; Returns: boolean }
       roma_prune_conversations: { Args: never; Returns: number }
       roma_record_turn: {
         Args: {
@@ -2952,7 +2963,6 @@ export type Database = {
           seq: number
         }[]
       }
-      roma_knowledge_embed: { Args: { p_request_id: string }; Returns: boolean }
       roma_release_request: { Args: { p_request_id: string }; Returns: boolean }
       roma_search_begin: {
         Args: { p_plan?: boolean; p_provider: string; p_request_id: string }
