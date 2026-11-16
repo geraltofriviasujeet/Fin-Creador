@@ -69,8 +69,9 @@ select is(
 select results_eq(
   $$ select key, name, icon from public.categories where key is not null order by key $$,
   $$ values ('fuel'::text, 'Fuel'::text, 'fuel'::text), ('gift', 'Gift', 'gift'), ('membership', 'Membership', 'membership'),
+            ('money_sent', 'Money sent to people', 'money_sent'), ('services', 'Services', 'services'),
             ('subscription', 'Subscription', 'subscription') $$,
-  'four of them carry the stable keys'
+  'six of them carry the stable keys'
 );
 select throws_ok(
   $$ insert into public.categories (kind, name, icon, key) values ('expense', 'Clubs', 'membership', 'membership') $$,
