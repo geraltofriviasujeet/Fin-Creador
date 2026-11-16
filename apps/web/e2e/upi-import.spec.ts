@@ -39,9 +39,14 @@ async function expectImportFrom(page: Page, origin: "Transactions" | "Income") {
   await expect(page.getByRole("link", { name: `Back to ${origin}` })).toBeVisible()
 }
 
+/** Opens the Add expense menu (again until the page has hydrated) and returns its UPI item. */
 const menuItem = async (page: Page) => {
-  await page.getByRole("button", { name: "More ways to add" }).click()
-  return page.getByRole("menuitem", { name: "Import UPI statement" })
+  const item = page.getByRole("menuitem", { name: "Import UPI statement" })
+  await expect(async () => {
+    if (!(await item.isVisible())) await page.getByRole("button", { name: "More ways to add" }).click()
+    await expect(item).toBeVisible({ timeout: 1_000 })
+  }).toPass({ timeout: 15_000 })
+  return item
 }
 
 test("Paytm: match accounts, allow suggestions, save; the same file adds nothing; a near duplicate waits for an answer", async ({ page }) => {
