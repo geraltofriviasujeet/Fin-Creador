@@ -77,7 +77,8 @@ function objectKey(fileKey: Uint8Array, num: number, gen: number) {
 
 // "₹" is not in WinAnsi: it is drawn with code 0x81, which the font's encoding maps to the glyph
 // uni20B9, so pdf.js reads it back as "₹" (Google Pay statements, 9e).
-const escape = (text: string) => text.replace(/[\\()]/g, (c) => `\\${c}`).replace(/₹/g, "\x81")
+// "…" is WinAnsi 0x85 (Paytm truncates a long note or name with it).
+const escape = (text: string) => text.replace(/[\\()]/g, (c) => `\\${c}`).replace(/₹/g, "\x81").replace(/…/g, "\x85")
 
 function contentStream(page: SyntheticPage, noText: boolean): string {
   if (noText) return "0.8 0.8 0.8 rg 40 500 500 250 re f 0 0 0 rg 60 700 300 12 re f\n"

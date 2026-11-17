@@ -7,6 +7,9 @@
 //   UPI ID: <handle> ... (dropped)   [Note: <text>] (dropped)   Tag: / # <tag>   <account label>
 //   [<rest of the payee's name>]
 //   UPI Ref No: <reference>         (the key only)
+// A long UPI ID wraps after a "." ("UPI ID: <first part>." then the rest alone on the next row);
+// a long note runs down the notes column over several rows, pushing "Tag:" and "# <tag>" down to
+// the block's last rows; a long payee name wraps onto a row of its own, above or below the UPI ID.
 // The date and amount sit on the "Paid to" row or about 3 points above it, so a block runs from its
 // date to the next date. The account label wraps down its column over up to three rows, its digits
 // on a later row ("Punjab" / "National" / "Bank - 66"; "HDFC Bank -" / "00"): the whole column of
@@ -60,8 +63,8 @@ const TAG = /\bTag\s*:?\s*#\s*([A-Za-z][A-Za-z &]*?)\s*$/i;
 // In the notes and tags column, "Tag:" and "# <tag>" may sit on different rows, around a note.
 const TAG_IN_COLUMN = /#\s*([A-Za-z][A-Za-z &]*?)\s*(?=Tag\s*:|Note\s*:|#|$)/i;
 const DROPPED = /^(?:UPI\s*ID|Note)\b/i;
-// The UPI ID line, and what the PDF reader may have merged after it (the payee's name running on).
-const UPI_ID_LINE = /^UPI\s*ID\s*:?\s*\S+(?:\s+on\b)?\s*(.*)$/i;
+// The UPI ID in a details cell; the PDF reader may have merged the payee's name running on before or after it.
+const UPI_ID = /\bUPI\s*ID\s*:?\s*(\S+)(\s+on\b)?\s*/i;
 const ACCOUNT_END = /-\s*\d{2,4}$/;
 const WORDS = /^[A-Za-z][A-Za-z .&()']*$/;
 const STATUS_WORD = /^(?:success(?:ful)?|failed|failure|declined|cancell?ed|canceled|reversed|pending|processing|in progress)$/i;
@@ -112,13 +115,16 @@ function summaryAccounts(header: readonly UpiTextRow[]): { account: UpiAccountRe
 
 const sameAccount = (a: UpiAccountRef, b: UpiAccountRef) => a.digits === b.digits && a.bankLabel.toLowerCase() === b.bankLabel.toLowerCase();
 
+/** A label as compared with the summary's: lower case, no spaces (tightly set words can be read run together, "HDFCBank"). */
+const labelKey = (label: string) => label.toLowerCase().replace(/\s+/g, "");
+
 /** The summary's account a label read in a block is: the same, else the only one with its digits whose name ends (or starts) with it. */
-function resolveAccount(read: UpiAccountRef, known: readonly UpiAccountRef[]): UpiAccountRef {
-  const exact = known.find((k) => sameAccount(k, read));
+function resolveAccount(read: UpiAccountRef, known: readonly UpiAccountRef[]): UpiAccountRef | null {
+  const label = labelKey(read.bankLabel);
+  const exact = known.find((k) => k.digits === read.digits && labelKey(k.bankLabel) === label);
   if (exact) return exact;
-  const label = read.bankLabel.toLowerCase();
-  const near = known.filter((k) => k.digits === read.digits && (k.bankLabel.toLowerCase().endsWith(label) || k.bankLabel.toLowerCase().startsWith(label)));
-  return near.length === 1 ? near[0]! : read;
+  const near = known.filter((k) => k.digits === read.digits && (labelKey(k.bankLabel).endsWith(label) || labelKey(k.bankLabel).startsWith(label)));
+  return near.length === 1 ? near[0]! : null;
 }
 
 /** Plain text: "<Bank> - <digits>", with up to two lines of the label above it (in its column, or just before it). */
@@ -156,6 +162,34 @@ function columnOf(cell: UpiCell, starts: typeof DEFAULT_COLUMNS): Column {
   return x >= starts.amount ? "amount" : x >= starts.account ? "account" : x >= starts.notes ? "notes" : x >= starts.details ? "details" : "date";
 }
 
+/**
+ * The payee's name running on in the details cells after the payment type: plain words, before or
+ * after the UPI ID in a cell. A UPI ID ending "." without "on" wrapped: its rest is the next word,
+ * in the same cell or starting the next one, and is dropped with it.
+ */
+function nameRunOn(cells: readonly string[]): string[] {
+  const out: string[] = [];
+  let wrapped = false;
+  let afterId = false;
+  for (const cell of cells) {
+    // The UPI ID's "on" set apart, as a cell of its own.
+    if (afterId && /^on$/i.test(cell)) continue;
+    const text = wrapped ? cell.replace(/^\S+\s*/, "") : cell;
+    wrapped = false;
+    const id = UPI_ID.exec(text);
+    afterId = id !== null && !id[2];
+    if (id) {
+      let after = text.slice(id.index + id[0].length);
+      if (id[1]!.endsWith(".") && !id[2]) {
+        if (after === "") wrapped = true;
+        else after = after.replace(/^\S+\s*/, "");
+      }
+      out.push(text.slice(0, id.index).trim(), after.trim());
+    } else out.push(text);
+  }
+  return out.filter((c) => WORDS.test(c) && !DROPPED.test(c) && !REF.test(c) && !STATUS_WORD.test(c) && !isUpiTime(c));
+}
+
 /** What a block holds, read by column (PDF) or by what each cell looks like (text). */
 type BlockRead = { type: RegExpExecArray | null; payee: string; amount: RegExpExecArray | null; tag: string | null; account: UpiAccountRef | null };
 
@@ -164,12 +198,9 @@ function readByColumn(cells: readonly UpiCell[], starts: typeof DEFAULT_COLUMNS)
   const details = by("details");
   const typeAt = details.findIndex((c) => TYPE.test(c));
   const type = typeAt === -1 ? null : TYPE.exec(details[typeAt]!);
-  // The payee's name can run onto a row of its own below the UPI ID (plain words in the details
-  // column), which the PDF reader may merge into the UPI ID's cell.
-  const more = details
-    .slice(typeAt + 1)
-    .map((c) => UPI_ID_LINE.exec(c)?.[1] ?? c)
-    .filter((c) => WORDS.test(c) && !DROPPED.test(c) && !REF.test(c) && !STATUS_WORD.test(c) && !isUpiTime(c));
+  // The payee's name can run onto a row of its own (plain words in the details column), which the
+  // PDF reader may merge into the UPI ID's cell.
+  const more = typeAt === -1 ? [] : nameRunOn(details.slice(typeAt + 1));
   const label = by("account").join(" ");
   return {
     type,
@@ -205,6 +236,7 @@ export function parsePaytmStatement(rows: readonly UpiTextRow[]): UpiStatementPa
   for (const row of header) for (const cell of [row.text, ...row.cells]) printed ??= parseUpiPeriod(cell);
   const summary = summaryAccounts(header);
   const starts = columnStarts(rows);
+  const counted = summary.some((a) => a.made !== null);
 
   const out: UpiRow[] = [];
   const issues: StatementIssue[] = [];
@@ -213,8 +245,12 @@ export function parsePaytmStatement(rows: readonly UpiTextRow[]): UpiStatementPa
     const cells = upiCells(block);
     const texts = cells.map((c) => c.text);
     const read = cells.every((c) => c.span) ? readByColumn(cells, starts) : readByShape(cells);
-    // A date row with no payment type (the summary's tail, a printed date in a footer): not a payment.
-    if (!read.type) continue;
+    // A date row with no payment type (the summary's tail, a printed date in a footer): not a
+    // payment. With a UPI reference it is one that couldn't be read, and is listed.
+    if (!read.type) {
+      if (start !== Infinity && first.line > start && texts.some((c) => REF.test(c))) issues.push(upiIssue(first, "no_description"));
+      continue;
+    }
     if (out.length + issues.length >= MAX_UPI_ROWS) {
       issues.push({ line: first.line, reason: "too_many_lines" });
       break;
@@ -235,7 +271,13 @@ export function parsePaytmStatement(rows: readonly UpiTextRow[]): UpiStatementPa
       issues.push(upiIssue(first, "no_reference"));
       continue;
     }
-    if (!read.account || read.account.bankLabel === "") {
+    // When the summary counts each account's payments, a label that is none of them was misread:
+    // listed, not kept under a stray name that leaves an account's count short unsaid.
+    const account =
+      read.account && read.account.bankLabel !== ""
+        ? (resolveAccount(read.account, summary.map((a) => a.account)) ?? (counted ? null : read.account))
+        : null;
+    if (!account) {
       issues.push(upiIssue(first, "no_account"));
       continue;
     }
@@ -247,7 +289,7 @@ export function parsePaytmStatement(rows: readonly UpiTextRow[]): UpiStatementPa
       amountMinor: minor,
       payee: cleanUpiPayee(read.payee),
       tag: read.tag,
-      account: resolveAccount(read.account, summary.map((a) => a.account)),
+      account,
       viaLite: false,
       toAccount: null,
       status: upiStatusOf(texts),

@@ -53,9 +53,11 @@ export type PaytmLayoutPayment = {
   note: boolean
   /** The payee name wraps onto a row of its own below the UPI ID. */
   wrappedName: boolean
+  /** One of the five odd blocks (PAYTM_ODD_BLOCKS), laid out as it is; else null. */
+  odd: number | null
 }
 
-/** The owner's counts: 300 paid (HDFC 146, PNB 71, SBI 61, Canara 22) and 13 received (Canara); 161 blocks raised. */
+/** The owner's counts: 300 paid (HDFC 146, PNB 71, SBI 61, Canara 22) and 13 received (Canara); 161 blocks raised; five odd blocks (2 PNB, 3 HDFC). */
 export function paytmLayoutPayments(): PaytmLayoutPayment[] {
   const banks: { bank: PaytmBank; received: boolean }[] = []
   const add = (bank: PaytmBank, n: number, received = false) => {
@@ -68,7 +70,7 @@ export function paytmLayoutPayments(): PaytmLayoutPayment[] {
   add("canara", 13, true)
   const total = banks.length
   // A fixed shuffle (97 is coprime with 313) so banks and layouts mix on every page.
-  return banks.map((_, i) => {
+  const payments = banks.map((_, i): PaytmLayoutPayment => {
     const { bank, received } = banks[(i * 97) % total]!
     const { day, month } = dayOf(i, total)
     const sent = !received && bank === "hdfc" && i % 9 === 0
@@ -85,12 +87,117 @@ export function paytmLayoutPayments(): PaytmLayoutPayment[] {
       tag: received ? "Money Received" : sent ? "Money Transfer" : ["Food", "Shopping", "Miscellaneous", "Groceries", "Taxi"][i % 5]!,
       note: bank === "hdfc" && !received && i % 7 === 3,
       wrappedName: bank === "sbi" && i % 3 === 0,
+      odd: null,
     }
   })
+  // The odd blocks replace plain "Paid to" blocks of their bank, spread through the file.
+  PAYTM_ODD_BLOCKS.forEach((odd, k) => {
+    const plain = payments.filter((p) => p.bank === odd.bank && p.kind === "Paid to" && !p.note && p.odd === null)
+    const p = plain[Math.floor(((k + 1) * plain.length) / 7)]!
+    Object.assign(p, { odd: k, name: odd.name, tag: odd.tag })
+  })
+  return payments
+}
+
+type OddRow = [top: number, words: [x: number, text: string][]]
+
+/**
+ * The five blocks of the owner's file that differ from the rest, word by word at their masked x
+ * and row offsets (pdftotext's top, from the block's first row); every word invented. Each has a
+ * note that runs down the notes column (x 288) over several rows, and "Tag:" and "# <tag>" pushed
+ * down to its last rows. 0, 2 and 4: the UPI ID wraps ("UPI ID: <first part>." then the rest
+ * alone at x 91). 0: the payee name wraps ("... Services Private" then "Limited"). 3: a word alone
+ * at x 91 below the UPI ID, as a wrapped name. DATE, TIME, AMOUNT and REF are the payment's own.
+ */
+export const PAYTM_ODD_BLOCKS: { bank: PaytmBank; name: string; payee: string; tag: string; rows: OddRow[] }[] = [
+  {
+    bank: "pnb", name: "Kiran Services Private", payee: "Kiran Services Private Limited", tag: "Services",
+    rows: [
+      [0, [[22, "DAY"], [36, "MON"], [91, "Paid"], [113, "to"], [124, "Kiran"], [167, "Services"], [208, "Private"], [288, "Note:"], [315, "Payment"], [358, "for"], [413, "Punjab"], [491, "-"], [497, "AMOUNT"]]],
+      [12, [[22, "TIME"], [51, "AM"]]],
+      [15, [[91, "Limited"], [288, "rent"]]],
+      [18, [[413, "National"]]],
+      [30, [[288, "Sharma…"]]],
+      [33, [[91, "UPI"], [108, "ID:"], [124, "kiranservice12345."], [413, "Bank"], [439, "-"], [445, "66"]]],
+      [42, [[288, "Kumar"]]],
+      [48, [[91, "rzp@icici"]]],
+      [60, [[91, "UPI"], [108, "Ref"], [126, "No:"], [144, "REF"], [302, "Tag:"]]],
+      [78, [[294, "#"], [302, "Services"]]],
+    ],
+  },
+  {
+    bank: "pnb", name: "Mehta…", payee: "Mehta…", tag: "Medical",
+    rows: [
+      [0, [[22, "DAY"], [36, "MON"], [491, "-"], [497, "AMOUNT"]]],
+      [3, [[91, "Paid"], [113, "to"], [124, "Mehta…"], [288, "Note:"], [315, "Payment"], [358, "for"], [413, "Punjab"]]],
+      [12, [[22, "TIME"], [45, "PM"]]],
+      [15, [[288, "UPI"], [305, "bill"]]],
+      [18, [[413, "National"]]],
+      [21, [[91, "UPI"], [108, "ID:"], [124, "mehta.care@okaxis"], [236, "on"]]],
+      [33, [[302, "Tag:"]]],
+      [36, [[413, "Bank"], [439, "-"], [445, "66"]]],
+      [48, [[91, "UPI"], [108, "Ref"], [126, "No:"], [144, "REF"]]],
+      [51, [[294, "#"], [302, "Medical"]]],
+    ],
+  },
+  {
+    bank: "hdfc", name: "Ravi", payee: "Ravi", tag: "Taxi",
+    rows: [
+      [0, [[22, "DAY"], [36, "MON"], [491, "-"], [497, "AMOUNT"]]],
+      [3, [[91, "Paid"], [113, "to"], [124, "Ravi"], [288, "Note:"], [315, "Go"], [334, "to"], [413, "HDFC"], [441, "Bank"], [467, "-"]]],
+      [12, [[22, "TIME"], [45, "PM"]]],
+      [15, [[288, "Airport…"]]],
+      [18, [[413, "00"]]],
+      [21, [[91, "UPI"], [108, "ID:"], [124, "cabsride."]]],
+      [33, [[91, "pay@axisbank"], [302, "Tag:"]]],
+      [48, [[91, "UPI"], [108, "Ref"], [126, "No:"], [144, "REF"]]],
+      [51, [[294, "#"], [302, "Taxi"]]],
+    ],
+  },
+  {
+    bank: "hdfc", name: "Gupta…", payee: "Gupta… Stores", tag: "Miscellaneous",
+    rows: [
+      [0, [[22, "DAY"], [36, "MON"], [288, "Note:"], [315, "Spares…"], [491, "-"], [497, "AMOUNT"]]],
+      [3, [[91, "Paid"], [113, "to"], [124, "Gupta…"], [413, "HDFC"], [441, "Bank"], [467, "-"]]],
+      [12, [[22, "TIME"], [45, "PM"]]],
+      [15, [[288, "Bolts…"]]],
+      [18, [[91, "UPI"], [108, "ID:"], [124, "gupta.store@ybl"], [413, "00"]]],
+      [30, [[288, "Paint"]]],
+      [33, [[91, "Stores"]]],
+      [48, [[91, "UPI"], [108, "Ref"], [126, "No:"], [144, "REF"], [302, "Tag:"]]],
+      [63, [[294, "#"], [302, "Miscellaneous"]]],
+    ],
+  },
+  {
+    bank: "hdfc", name: "Arun", payee: "Arun", tag: "Taxi",
+    rows: [
+      [0, [[22, "DAY"], [36, "MON"], [491, "-"], [497, "AMOUNT"]]],
+      [3, [[91, "Paid"], [113, "to"], [124, "Arun"], [288, "Note:"], [315, "Go"], [334, "to"], [413, "HDFC"], [441, "Bank"], [467, "-"]]],
+      [12, [[22, "TIME"], [45, "PM"]]],
+      [15, [[288, "Station…"]]],
+      [18, [[413, "00"]]],
+      [21, [[91, "UPI"], [108, "ID:"], [124, "autoride."]]],
+      [33, [[91, "pay@okicici"], [302, "Tag:"]]],
+      [48, [[91, "UPI"], [108, "Ref"], [126, "No:"], [144, "REF"]]],
+      [51, [[294, "#"], [302, "Taxi"]]],
+    ],
+  },
+]
+
+/** An odd block's words, the payment's own date, time, amount and reference put in; the next block 36 points below its last row. */
+function paytmOddBlock(p: PaytmLayoutPayment): { items: Placed[]; height: number } {
+  const [day, mon] = p.date.split(" ")
+  const fill: Record<string, string> = { DAY: day!, MON: mon!, TIME: `${(p.i % 12) + 1}:${String(p.i % 60).padStart(2, "0")}`, AMOUNT: rupees(p.minor), REF: p.ref }
+  const rows = PAYTM_ODD_BLOCKS[p.odd!]!.rows
+  return {
+    items: rows.flatMap(([top, words]) => words.map(([x, text]) => ({ x, top, text: fill[text] ?? text }))),
+    height: rows.at(-1)![0] + 36,
+  }
 }
 
 /** A Paytm block's words, `top` relative to the block's first row; and the block's height. */
 function paytmBlock(p: PaytmLayoutPayment): { items: Placed[]; height: number } {
+  if (p.odd !== null) return paytmOddBlock(p)
   const a = p.raised ? 3 : 0
   const items: Placed[] = [
     { x: 22, top: 0, text: p.date },
@@ -116,7 +223,7 @@ function paytmBlock(p: PaytmLayoutPayment): { items: Placed[]; height: number } 
 }
 
 /** The payee name as the reader should keep it. */
-export const paytmLayoutPayee = (p: PaytmLayoutPayment) => (p.wrappedName ? `${p.name} Traders` : p.name)
+export const paytmLayoutPayee = (p: PaytmLayoutPayment) => (p.odd !== null ? PAYTM_ODD_BLOCKS[p.odd]!.payee : p.wrappedName ? `${p.name} Traders` : p.name)
 
 /** `drop`: payments the summary counts but whose blocks are left out (a short read). */
 export function paytmLayoutPages(payments: PaytmLayoutPayment[] = paytmLayoutPayments(), drop: ReadonlySet<number> = new Set()): SyntheticPage[] {

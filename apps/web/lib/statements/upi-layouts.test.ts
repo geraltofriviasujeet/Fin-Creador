@@ -5,10 +5,11 @@
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs"
 import { describe, expect, it } from "vitest"
 import { upiCountReasons, upiReadText } from "@fin-creador/api"
-import { MAX_UPI_PDF_BYTES, MAX_UPI_PDF_PAGES, type UpiRow, readUpiStatement } from "@fin-creador/domain"
+import { MAX_UPI_PDF_BYTES, MAX_UPI_PDF_PAGES, type UpiRow, linePosition, readUpiStatement } from "@fin-creador/domain"
 import { syntheticPdf } from "../../test-support/synthetic-pdf"
 import {
   PAYTM_ACCOUNTS,
+  PAYTM_ODD_BLOCKS,
   bhimLayoutPages,
   bhimLayoutPayments,
   paytmLayoutPages,
@@ -21,13 +22,15 @@ import { type PdfLib, readStatementPdf } from "./pdf-reader"
 
 const lib = pdfjs as unknown as PdfLib
 
-async function read(pages: Parameters<typeof syntheticPdf>[0], landscape = false) {
+async function readPdf(pages: Parameters<typeof syntheticPdf>[0], landscape = false) {
   const result = await readStatementPdf(lib, syntheticPdf(pages, { landscape }), undefined, { bytes: MAX_UPI_PDF_BYTES, pages: MAX_UPI_PDF_PAGES })
   if (result.status !== "ok") throw new Error(result.status)
   const parse = readUpiStatement(result)
   if (!parse) throw new Error("not read")
-  return parse
+  return { parse, result }
 }
+
+const read = async (pages: Parameters<typeof syntheticPdf>[0], landscape = false) => (await readPdf(pages, landscape)).parse
 
 const tally = (rows: readonly UpiRow[], key: (r: UpiRow) => string) => {
   const out: Record<string, number> = {}
@@ -85,6 +88,46 @@ describe("Paytm, as laid out", () => {
       ])
     }
     nothingPersonal(parse.rows)
+  })
+
+  it("reads the five odd blocks: a note over several rows, a wrapped UPI ID, a wrapped name, the tag pushed down", async () => {
+    const odd = payments.filter((p) => p.odd !== null)
+    expect(odd.map((p) => p.bank)).toEqual(PAYTM_ODD_BLOCKS.map((b) => b.bank))
+    const parse = await read(paytmLayoutPages())
+    const byRef = new Map(parse.rows.map((r) => [r.ref, r]))
+    for (const p of odd) {
+      const row = byRef.get(p.ref)
+      expect(row && [row.amountMinor, row.payee, row.tag, row.account.bankLabel, row.account.digits], `odd block ${p.odd}`).toEqual([
+        p.minor,
+        PAYTM_ODD_BLOCKS[p.odd!]!.payee,
+        p.tag,
+        PAYTM_ACCOUNTS[p.bank].label,
+        PAYTM_ACCOUNTS[p.bank].digits,
+      ])
+    }
+  })
+
+  it("an odd block that still can't be read is listed by its page and row, and the count says so", async () => {
+    // No UPI reference in one PNB and one HDFC odd block: 311 of 313, as the owner's file read before.
+    const broken = new Set([PAYTM_ODD_BLOCKS.findIndex((b) => b.bank === "pnb"), PAYTM_ODD_BLOCKS.findIndex((b) => b.bank === "hdfc")])
+    const changed = payments.map((p) => (p.odd !== null && broken.has(p.odd) ? { ...p, ref: "" } : p))
+    const { parse, result } = await readPdf(paytmLayoutPages(changed))
+    expect(parse.count).toEqual({ read: 311, total: 313, printed: true })
+    expect(parse.issues.map((i) => i.reason)).toEqual(["no_reference", "no_reference"])
+    expect(upiCountReasons(parse)).toEqual([
+      "The statement lists 313 payments; 311 were read.",
+      "HDFC Bank ··00: the statement lists 146 payments made; 145 were read.",
+      "Punjab National Bank ··66: the statement lists 71 payments made; 70 were read.",
+    ])
+    const dates = changed.filter((p) => p.ref === "").map((p) => p.date).sort()
+    const placed = parse.issues.map((i) => {
+      const at = linePosition(i.line, result.pageRowCounts)!
+      expect(at.page).toBeGreaterThan(1)
+      // The page's row is the block's date row.
+      const before = result.pageRowCounts.slice(0, at.page - 1).reduce((a, n) => a + n, 0)
+      return result.rows[before + at.row - 1]!.cells[0]
+    })
+    expect(placed.sort()).toEqual(dates)
   })
 
   it("a short read is said: the summary's counts against the payments read", async () => {

@@ -150,6 +150,38 @@ describe("Paytm", () => {
     expect(JSON.stringify(parse.issues)).not.toMatch(/Cafe|Corner/);
   });
 
+  it("a payment whose type isn't read is listed, never skipped unsaid; a date with no reference is not a payment", () => {
+    const parse = readUpiStatement(
+      paytm(
+        ["12 Oct", "Paid to Green Leaf Cafe", "Example Bank - 12", "- Rs.65"],
+        "UPI Ref No: 612345678901",
+        ["13 Oct", "Paid", "Example Bank - 12", "- Rs.70"],
+        "UPI Ref No: 612345678902",
+        ["14 Oct", "For any queries, write to us"],
+      ),
+    )!;
+    expect(parse.rows.map((r) => r.ref)).toEqual(["612345678901"]);
+    expect(parse.issues).toEqual([{ line: 11, reason: "no_description", shape: expect.any(String) }]);
+  });
+
+  it("a label that is none of the summary's counted accounts is listed, not read under a stray name", () => {
+    const parse = readUpiStatement(
+      rows(
+        "Paytm Statement",
+        "01 Oct'26 - 31 Oct'26",
+        ["2 Payments made", "0 Payments received"],
+        ["HDFC Bank - 00", "Rs.135 (2 payments)", "Rs.0 (0 payments)"],
+        ["Date & Time", "Transaction Details", "Your Account", "Amount"],
+        ["12 Oct", "Paid to Green Leaf Cafe", "HDFCBank - 00", "- Rs.65"],
+        "UPI Ref No: 612345678901",
+        ["13 Oct", "Paid to Corner Store", "Example Bank - 34", "- Rs.70"],
+        "UPI Ref No: 612345678902",
+      ),
+    )!;
+    expect(parse.rows.map((r) => [r.ref, r.account.bankLabel])).toEqual([["612345678901", "HDFC Bank"]]);
+    expect(parse.issues.map((i) => i.reason)).toEqual(["no_account"]);
+  });
+
   it("a label wrapped over three lines is joined, and a short one is resolved from the summary's accounts", () => {
     const parse = readUpiStatement(
       rows(
