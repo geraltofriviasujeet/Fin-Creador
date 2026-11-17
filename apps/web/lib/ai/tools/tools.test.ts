@@ -27,7 +27,7 @@ function fakeClient(rpc: Record<string, unknown[] | null | ((args: Record<string
   const query = (rows: unknown[] | undefined) => {
     const result = rows ? { data: rows, error: null } : { data: null, error: { code: "XX000", message: "down" } }
     const chain: Record<string, unknown> = { then: (resolve: (r: unknown) => unknown) => resolve(result) }
-    for (const m of ["select", "eq", "in", "is", "order"]) chain[m] = () => chain
+    for (const m of ["select", "eq", "in", "is", "order", "gte", "lte", "lt"]) chain[m] = () => chain
     return chain
   }
   return {
@@ -37,7 +37,8 @@ function fakeClient(rpc: Record<string, unknown[] | null | ((args: Record<string
       const rows = typeof answer === "function" ? answer(args as Record<string, unknown>) : answer
       return rows ? { data: rows, error: null } : { data: null, error: { code: "XX000", message: "down" } }
     },
-    from: (table: string) => query(tables[table]),
+    // No opening moved unless a test says so.
+    from: (table: string) => query({ account_opening_moves: [], ...tables }[table]),
   } as unknown as UserClient
 }
 
@@ -96,6 +97,31 @@ describe("income_vs_expenses and savings_rate", () => {
     const out = await savingsRateTool.run(ctx(fakeClient({ transaction_summary: [] })), { period: "this_month" })
     expect(out.data).toMatchObject({ savings_rate: null, income: "₹0", spent: "₹0" })
     expect(out.figures.some((f) => f.kind === "percent")).toBe(false)
+  })
+
+  // The bank's opening was moved back from 4 Nov: entries dated before it came from a statement.
+  const moved = (entries: { type: string; amount_minor: number }[]) => ({
+    account_opening_moves: [{ account_id: "bank", old_opening_date: "2026-11-04" }],
+    transactions: entries.map((e) => ({ ...e, currency: "INR", occurred_on: "2026-11-02", category_id: "c1" })),
+  })
+
+  it("a period with only imported entries: income is not recorded, so no savings rate or net", async () => {
+    const tables = moved([{ type: "expense", amount_minor: 3_000_00 }, { type: "expense", amount_minor: 1_000_00 }])
+    for (const tool of [savingsRateTool, incomeVsExpensesTool]) {
+      const out = await tool.run(ctx(fakeClient({ transaction_summary: [summary(0, 4_000_00, { income: 0, expense: 2 })] }, tables)), { period: "this_month" })
+      expect(out.data).toMatchObject({ income_recorded: false })
+      expect(String(out.data.note)).toMatch(/^Income for this period is not recorded/)
+      expect(out.figures).toEqual([])
+    }
+  })
+
+  it("imported entries are left out of the savings rate and income versus expenses, and said", async () => {
+    const tables = moved([{ type: "expense", amount_minor: 30_000_00 }])
+    const out = await savingsRateTool.run(ctx(fakeClient({ transaction_summary: [summary(1_00_000_00, 80_000_00, { income: 1, expense: 2 })] }, tables)), { period: "this_month" })
+    expect(out.data).toMatchObject({ savings_rate: "50%", income: "₹1,00,000", spent: "₹50,000" })
+    expect(String(out.data.left_out)).toMatch(/^1 entry in this period is dated before tracking/)
+    const flow = await incomeVsExpensesTool.run(ctx(fakeClient({ transaction_summary: [summary(1_00_000_00, 80_000_00, { income: 1, expense: 2 })] }, tables)), { period: "this_month" })
+    expect(flow.data).toMatchObject({ spent: "₹50,000", net: "₹50,000", expense_count: 1 })
   })
 
   it("says plainly when the figures can't be loaded, or the period is bad", async () => {

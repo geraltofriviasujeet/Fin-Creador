@@ -106,9 +106,9 @@ test("review: ticks, defaults, a possible duplicate, edits, bulk category and th
   await expect(tick(page, "LATE PAYMENT FEE")).not.toBeChecked()
   await expect(lineFor(page, "LATE PAYMENT FEE")).toContainText("Possible duplicate")
 
-  // Default categories: Other expenses; fees, interest and GST: Bank charges & interest.
+  // Default categories: Miscellaneous; fees, interest and GST: Bank charges & interest.
   const category = (text: string) => review(page).getByRole("combobox", { name: new RegExp(`^Category for ${text}`) })
-  await expect(category("FRESH BASKET").locator("option:checked")).toHaveText("Other expenses")
+  await expect(category("FRESH BASKET").locator("option:checked")).toHaveText("Miscellaneous")
   await expect(category("IGST").locator("option:checked")).toHaveText("Bank charges & interest")
 
   // Ticked total beside the bill total; edits change the total.

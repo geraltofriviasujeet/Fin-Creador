@@ -8,6 +8,7 @@ import { signOutAction } from "@/app/(auth)/actions"
 import { setRomaDescriptionsAction, setRomaEnabledAction, updateProfileAction } from "@/app/(app)/settings/actions"
 import { PageHeader } from "@/components/shell/app-shell"
 import { ExpenseCategories } from "@/components/settings/expense-categories"
+import { ImportPayeesSetting } from "@/components/settings/import-payees-setting"
 import { ProfileForm } from "@/components/settings/profile-form"
 import { RomaConversationsSetting, RomaDescriptionsSetting, RomaSetting } from "@/components/settings/roma-setting"
 import { Button } from "@/components/ui/button"
@@ -21,7 +22,7 @@ export const metadata: Metadata = { title: "Settings" }
 export default function SettingsPage() {
   return (
     <>
-      <PageHeader title="Settings" description="Manage your profile, regional preferences, expense categories and Roma." />
+      <PageHeader title="Settings" description="Manage your profile, regional preferences, expense categories, Roma and statement import." />
       <Suspense fallback={<SettingsSkeleton />}>
         <SettingsContent />
       </Suspense>
@@ -35,7 +36,7 @@ async function SettingsContent() {
   if (!auth.user) redirect("/sign-in?next=%2Fsettings")
 
   const [{ data: profile, error }, categories, conversations] = await Promise.all([
-    supabase.from("profiles").select(`${PROFILE_FORM_COLUMNS}, roma_enabled, roma_descriptions_ok_at`).eq("id", auth.user.id).maybeSingle(),
+    supabase.from("profiles").select(`${PROFILE_FORM_COLUMNS}, roma_enabled, roma_descriptions_ok_at, import_payees_ok_at`).eq("id", auth.user.id).maybeSingle(),
     loadExpenseCategories(supabase),
     supabase.from("ai_conversations").select("id", { count: "exact", head: true }),
   ])
@@ -90,6 +91,20 @@ async function SettingsContent() {
             {/* Shown while Roma is off too: turning her off keeps the conversations. */}
             <RomaConversationsSetting count={conversations.error ? null : (conversations.count ?? 0)} />
           </>
+        ) : (
+          <FormMessage tone="error" className="mt-4">
+            We couldn’t load this setting. Refresh the page to try again.
+          </FormMessage>
+        )}
+      </Card>
+
+      <Card>
+        <CardTitle>Statement import</CardTitle>
+        <CardDescription className="mt-1">
+          UPI statements are read on this device. Amounts, dates, account details and your name are never sent anywhere.
+        </CardDescription>
+        {profile ? (
+          <ImportPayeesSetting allowedAt={profile.import_payees_ok_at} timeZone={profile.time_zone} />
         ) : (
           <FormMessage tone="error" className="mt-4">
             We couldn’t load this setting. Refresh the page to try again.

@@ -115,7 +115,7 @@ export async function loadProjectionBasis(ctx: ToolContext): Promise<ProjectionB
   const { today, currency } = ctx
   const windowStart = monthStart(today, -PROJECTION_MEASURED_MONTHS)
   const months = Array.from({ length: PROJECTION_MEASURED_MONTHS + 1 }, (_, i) => monthStart(today, i - PROJECTION_MEASURED_MONTHS))
-  const [goals, cash, loans] = await Promise.all([loadGoalsData(ctx.supabase), loadCashFlow(ctx.supabase, months), loadLoansData(ctx.supabase)])
+  const [goals, cash, loans] = await Promise.all([loadGoalsData(ctx.supabase), loadCashFlow(ctx.supabase, months, { beforeOriginalOpening: "leave_out" }), loadLoansData(ctx.supabase)])
   if (!goals.ok) throw new ToolError("The goals couldn't be loaded.")
   if (!cash.ok) throw new ToolError("The income and spending figures couldn't be loaded.")
   if (!loans.ok) throw new ToolError("The loans and dues couldn't be loaded.")

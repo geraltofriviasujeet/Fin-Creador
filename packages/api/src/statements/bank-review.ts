@@ -15,14 +15,14 @@ import {
 } from "@fin-creador/domain"
 import { fullDate } from "../transactions/format"
 import { type RefundCandidate, suggestRefundLinks } from "./refunds"
-import { OTHER_EXPENSES_NAME, type ReviewCategory, type ReviewStatus, type UnreadableRow } from "./review"
+import { type ReviewCategory, type ReviewStatus, type UnreadableRow, miscCategoryId } from "./review"
 
 // The review of an imported bank account statement (Sprint 9b), shared by web and mobile. Pure:
 // built from the parse, what the database already holds (BankImportMatches) and the person's
 // categories, income sources, accounts and cards.
 //
 // - Keys come from the line exactly as read (bankStatementLineKey), never from edits.
-// - Each line has a type. A debit starts ticked as an expense (Other expenses); it may become a
+// - Each line has a type. A debit starts ticked as an expense (Miscellaneous); it may become a
 //   transfer to another own account, a card payment (through the card payment path) or be skipped.
 //   A credit starts unticked with no type: income (with an income source), a transfer from another
 //   own account, a refund (Sprint 9c: in an expense category, linked to the purchase it reverses
@@ -131,8 +131,7 @@ export type BankReviewContext = { accountId: string; openingBalanceDate: IsoDate
 export const bankReviewKeys = (accountId: string, parse: Pick<BankStatementParse, "lines">): string[] =>
   parse.lines.map((line) => bankStatementLineKey(accountId, line))
 
-const otherExpenses = (categories: readonly ReviewCategory[]) =>
-  categories.find((c) => c.name.trim().toLowerCase() === OTHER_EXPENSES_NAME.toLowerCase())?.id ?? ""
+const otherExpenses = (categories: readonly ReviewCategory[]) => miscCategoryId(categories)
 
 /** A pool of (date, amount, direction) to mark lines against; each entry marks one line. */
 function pool(items: readonly { date: string; amountMinor: number; direction: string }[]) {

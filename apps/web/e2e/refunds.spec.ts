@@ -182,7 +182,7 @@ test("a card statement refund: linked to the purchase it reverses, taken off wha
   await expect(cardRow(page)).toContainText("₹2,050")
   await page.goto("/transactions?type=refund")
   await expect(page.getByRole("main")).toContainText("REFUND FRESH BASKET STORES")
-  await expect(page.getByRole("main")).toContainText("Refund · Other expenses")
+  await expect(page.getByRole("main")).toContainText("Refund · Miscellaneous")
 
   // A second import: the refund is Already imported too.
   await importStatement(page, syntheticPdf(pnbStatementPages(false, { invoiceDate: today, lineDate: today, refundMinor: 178_400 })))

@@ -29,6 +29,7 @@ function fakeClient(rows: Rows, rpc: (call: Rpc) => unknown = () => [], { signed
       gt: (c: string, v: number) => ((result = result.filter((r) => (r[c] as number) > v)), builder),
       gte: (c: string, v: string) => ((result = result.filter((r) => (r[c] as string) >= v)), builder),
       lte: (c: string, v: string) => ((result = result.filter((r) => (r[c] as string) <= v)), builder),
+      lt: (c: string, v: string) => ((result = result.filter((r) => (r[c] as string) < v)), builder),
       or: (expr: string) => {
         const clauses = expr.split(",").map((c) => c.split(".eq."))
         result = result.filter((r) => clauses.some(([col, v]) => r[col!] === v))
@@ -193,6 +194,46 @@ describe("loadCashFlow", () => {
     const oct = r.data.report.rows[1]!
     expect([oct.incomeMinor, oct.expenseMinor, oct.soFar, oct.topCategory]).toEqual([50_000_00, 3_000_00, true, { categoryId: FOOD, expenseMinor: 3_000_00 }])
     expect(r.data.otherCurrencies).toEqual(["USD"])
+  })
+})
+
+describe("loadCashFlow: entries before an account's original opening date", () => {
+  // The bank's opening was moved back twice; the original is 1 Oct (the earliest old date). A
+  // statement added three September entries on it: 3,000 spent and 500 refunded on Food, 1,000 in.
+  const moves = [
+    { account_id: BANK, old_opening_date: "2026-10-05" },
+    { account_id: BANK, old_opening_date: "2026-10-01" },
+  ]
+  const tx = (type: string, minor: number, on: string, account = BANK) =>
+    entry(`${type}-${on}`, { type, amount_minor: minor, occurred_on: on, account_id: account, category_id: type === "income" ? null : FOOD })
+  const imported = [tx("expense", 3_000_00, "2026-09-20"), tx("income", 1_000_00, "2026-09-25"), tx("refund", 500_00, "2026-09-26")]
+  // Kept: the bank after its original opening, and cash (never moved) in September.
+  const kept = [tx("expense", 200_00, "2026-10-02"), tx("expense", 700_00, "2026-09-20", CASH)]
+  const sept = (extra: { income: number; expense: number }) => [
+    { kind: "day", currency: "INR", bucket_start: "2026-09-10", category_id: null, income_minor: 40_000_00 + extra.income, expense_minor: 10_000_00 + extra.expense },
+    { kind: "category", currency: "INR", bucket_start: null, category_id: FOOD, income_minor: 0, expense_minor: 10_000_00 + extra.expense },
+  ]
+  const oct = [
+    { kind: "day", currency: "INR", bucket_start: "2026-10-02", category_id: null, income_minor: 0, expense_minor: 200_00 },
+    { kind: "category", currency: "INR", bucket_start: null, category_id: FOOD, income_minor: 0, expense_minor: 200_00 },
+  ]
+  const breakdown = (septRows: Record<string, unknown>[]) => ({ args }: Rpc) => (args.p_from === "2026-09-01" ? septRows : oct)
+  const before = fakeClient({ ...BASE, account_opening_moves: [], transactions: kept }, breakdown(sept({ income: 0, expense: 0 })))
+  const after = fakeClient({ ...BASE, account_opening_moves: moves, transactions: [...kept, ...imported] }, breakdown(sept({ income: 1_000_00, expense: 2_500_00 })))
+  const months = ["2026-09-01", "2026-10-01"]
+
+  it("left out (Roma's projection), the months are exactly what they were before the move", async () => {
+    const was = await loadCashFlow(before.client, months)
+    const now = await loadCashFlow(after.client, months, { beforeOriginalOpening: "leave_out" })
+    if (!was.ok || !now.ok) throw new Error("load failed")
+    expect(now.data.report).toEqual(was.data.report)
+  })
+
+  it("kept (Reports, spending): the imported month includes the imported entries", async () => {
+    const r = await loadCashFlow(after.client, months)
+    if (!r.ok) throw new Error("load failed")
+    const september = r.data.report.rows[0]!
+    expect([september.incomeMinor, september.expenseMinor, september.topCategory]).toEqual([41_000_00, 12_500_00, { categoryId: FOOD, expenseMinor: 12_500_00 }])
   })
 })
 

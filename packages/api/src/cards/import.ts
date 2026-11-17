@@ -32,14 +32,14 @@ export async function loadImportCard(supabase: UserClient, cardId: string): Prom
       .select("id, issuer, product, product_other, nickname, currency, tracking_started_on, archived_at")
       .eq("id", cardId)
       .maybeSingle(),
-    supabase.from("categories").select("id, name, system_key").eq("kind", "expense").is("archived_at", null).order("name"),
+    supabase.from("categories").select("id, name, system_key, icon").eq("kind", "expense").is("archived_at", null).order("name"),
   ])
   if (error || categories.error) return { ok: false, reason: "unavailable" }
   if (!data || data.archived_at !== null) return { ok: false, reason: "not_found" }
   return {
     ok: true,
     today: day.today,
-    categories: categories.data.map((c) => ({ id: c.id, name: c.name, systemKey: c.system_key })),
+    categories: categories.data.map((c) => ({ id: c.id, name: c.name, systemKey: c.system_key, icon: c.icon })),
     card: {
       id: data.id,
       name: cardName({ nickname: data.nickname, issuer: data.issuer, product: data.product, productOther: data.product_other }),

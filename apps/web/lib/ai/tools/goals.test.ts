@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { GoalRecord, LoansView, UserClient } from "@fin-creador/api"
+import { type GoalRecord, type LoansView, type UserClient, monthlyWithout } from "@fin-creador/api"
 import { cashFlowReport, monthStart } from "@fin-creador/domain"
 import { withVerdict } from "../chat"
 import { allowedNumbers, checkAnswer, literalStrings } from "../output"
@@ -58,6 +58,31 @@ const passes = (text: string, out: Out) =>
   ).ok
 
 beforeEach(() => vi.clearAllMocks())
+
+describe("goal_projection after an account's opening moved back", () => {
+  it("asks for the months without entries before the original opening date", async () => {
+    setUp()
+    await goalProjectionTool.run(ctx, { goal: "bike" })
+    expect(api.loadCashFlow).toHaveBeenCalledWith(ctx.supabase, expect.any(Array), { beforeOriginalOpening: "leave_out" })
+  })
+
+  it("is identical before and after: imported spending in earlier months, left out", async () => {
+    const months = Array.from({ length: 7 }, (_, i) => monthStart(TODAY, i - 6))
+    const monthly = months.map((m) => ({ month: m, incomeMinor: 1_000_000, expenseMinor: 0, categories: [] as { categoryId: string | null; expenseMinor: number }[] }))
+    // Four of the six months measured, so the median would move if they counted.
+    const early = [0, 1, 2, 3]
+    const imported = early.map((i) => ({ type: "expense" as const, amountMinor: 900_000, currency: "INR", occurredOn: months[i]!.replace(/01$/, "15"), categoryId: "food" }))
+    const withImported = monthly.map((r, i) => (early.includes(i) ? { ...r, expenseMinor: 900_000, categories: [{ categoryId: "food", expenseMinor: 900_000 }] } : r))
+    const run = async (rows: typeof monthly) => {
+      setUp()
+      api.loadCashFlow.mockResolvedValue({ ok: true, data: { today: TODAY, currency: "INR", report: cashFlowReport(rows, TODAY), otherCurrencies: [] } })
+      return goalProjectionTool.run(ctx, { goal: "bike" })
+    }
+    const was = await run(monthly)
+    expect(await run(monthlyWithout(withImported, imported, "INR"))).toEqual(was)
+    expect(await run(withImported)).not.toEqual(was)
+  })
+})
 
 describe("goal_projection", () => {
   it("says Yes with the month it is reached and the figures it used", async () => {

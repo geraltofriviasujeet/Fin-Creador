@@ -157,7 +157,7 @@ test("budgets: warning at 80%, over at 100%, on the page and the Overview", asyn
 
   // A fuller page for the screenshot: a second budget and two planned expenses.
   await budgets(page).getByRole("button", { name: "Set a budget" }).click()
-  await dialog(page, "Set a budget").getByLabel("Category").selectOption({ label: "Transport" })
+  await dialog(page, "Set a budget").getByLabel("Category").selectOption({ label: "Transport & Cabs" })
   await dialog(page, "Set a budget").getByLabel("Monthly budget").fill("2,000")
   await dialog(page, "Set a budget").getByRole("button", { name: "Save budget" }).click()
   await expect(toast(page, "Budget saved.")).toBeVisible()
@@ -196,7 +196,7 @@ test("a budget carries forward; a change in a later month leaves earlier months 
 
   await budgets(page).getByRole("button", { name: "Set a budget" }).click()
   const set = dialog(page, "Set a budget")
-  await set.getByLabel("Category").selectOption({ label: "Transport" })
+  await set.getByLabel("Category").selectOption({ label: "Transport & Cabs" })
   await set.getByLabel("Monthly budget").fill("2,000")
   await expect(set.getByText(`Applies from ${thisMonth} onwards. Earlier months keep their amounts.`)).toBeVisible()
   await set.getByRole("button", { name: "Save budget" }).click()
@@ -232,7 +232,7 @@ test("a budget carries forward; a change in a later month leaves earlier months 
 test("a budget in another currency asks to be set again, with no percentage", async ({ page }) => {
   await newUser(page, "goals-currency")
   await budgets(page).getByRole("button", { name: "Set a budget" }).click()
-  await dialog(page, "Set a budget").getByLabel("Category").selectOption({ label: "Transport" })
+  await dialog(page, "Set a budget").getByLabel("Category").selectOption({ label: "Transport & Cabs" })
   await dialog(page, "Set a budget").getByLabel("Monthly budget").fill("2,000")
   await dialog(page, "Set a budget").getByRole("button", { name: "Save budget" }).click()
   await expect(toast(page, "Budget saved.")).toBeVisible()
@@ -251,7 +251,7 @@ test("a budget in another currency asks to be set again, with no percentage", as
   await expect(d).toContainText("This budget is in INR. Enter it again in USD.")
   await d.getByLabel("Monthly budget").fill("25")
   await d.getByRole("button", { name: "Save budget" }).click()
-  await expect(budgets(page).getByRole("progressbar", { name: "Transport: 0% of budget used" })).toBeVisible()
+  await expect(budgets(page).getByRole("progressbar", { name: "Transport & Cabs: 0% of budget used" })).toBeVisible()
   await expect(budgets(page)).not.toContainText("Set your budget again")
 })
 

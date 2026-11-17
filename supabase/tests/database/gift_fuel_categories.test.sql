@@ -40,7 +40,7 @@ select results_eq(
 );
 select is(
   (select count(*)::int from public.categories where user_id = '6f000000-0000-4000-8000-000000000001' and kind = 'expense'),
-  17, 'a new user has 17 expense defaults'
+  19, 'a new user has 19 expense defaults'
 );
 select is(public.ensure_default_expense_categories('6f000000-0000-4000-8000-000000000001'), 0, 'the defaults again create nothing');
 

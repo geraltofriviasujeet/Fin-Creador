@@ -59,7 +59,7 @@ test("'Repeat this?' on a back-dated expense saves it once and makes the later d
   const d = dialog(page, "Add expense")
   await expect(d.getByRole("radio", { name: "Just once" })).toBeChecked()
   await d.getByLabel("Amount").fill("1,200")
-  await d.getByLabel("Category").selectOption({ label: "Health" })
+  await d.getByLabel("Category").selectOption({ label: "Medical" })
   await d.getByLabel("Paid from").selectOption({ label: "HDFC Bank ··4821" })
   await d.getByLabel("Date").fill(daysAgo(40))
   await d.getByLabel("Note").fill("Gym")

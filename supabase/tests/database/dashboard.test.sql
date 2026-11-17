@@ -54,7 +54,7 @@ select public.edit_transaction((select id from ids where name = 'edited'), 'e000
 select public.record_transaction('transfer', 'e0000000-0000-4000-8000-000000000009', 5000, '2024-01-31', 'a0000000-0000-4000-8000-000000000001',
   p_counter_account_id => 'a0000000-0000-4000-8000-000000000002');
 select public.record_transaction('expense', 'e0000000-0000-4000-8000-000000000010', 700, '2024-02-29', 'a0000000-0000-4000-8000-000000000001',
-  (select id from public.categories where kind = 'expense' and name = 'Transport'));
+  (select id from public.categories where kind = 'expense' and name = 'Transport & Cabs'));
 select public.record_transaction('income', 'e0000000-0000-4000-8000-000000000011', 50000, '2024-03-01', 'a0000000-0000-4000-8000-000000000001',
   (select id from public.categories where kind = 'income' and name = 'Salary'));
 -- The Pets category is archived after use; its spending stays in the history.

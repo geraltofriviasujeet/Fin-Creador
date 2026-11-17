@@ -75,7 +75,10 @@ function objectKey(fileKey: Uint8Array, num: number, gen: number) {
   return md5(fileKey, Uint8Array.from([num & 255, (num >> 8) & 255, (num >> 16) & 255, gen & 255, (gen >> 8) & 255])).slice(0, 16)
 }
 
-const escape = (text: string) => text.replace(/[\\()]/g, (c) => `\\${c}`)
+// "₹" is not in WinAnsi: it is drawn with code 0x81, which the font's encoding maps to the glyph
+// uni20B9, so pdf.js reads it back as "₹" (Google Pay statements, 9e).
+// "…" is WinAnsi 0x85 (Paytm truncates a long note or name with it).
+const escape = (text: string) => text.replace(/[\\()]/g, (c) => `\\${c}`).replace(/₹/g, "\x81").replace(/…/g, "\x85")
 
 function contentStream(page: SyntheticPage, noText: boolean): string {
   if (noText) return "0.8 0.8 0.8 rg 40 500 500 250 re f 0 0 0 rg 60 700 300 12 re f\n"
@@ -93,9 +96,11 @@ function contentStream(page: SyntheticPage, noText: boolean): string {
 
 /**
  * A PDF with the given pages. `password` protects it (anyone opening it needs that password);
- * `noText` draws shapes instead of text, as a scanned statement has no text layer.
+ * `noText` draws shapes instead of text, as a scanned statement has no text layer; `landscape`
+ * turns the pages A4 landscape (842 wide, 595 high: a row's baseline 800 - r * 14 is then off the
+ * page, so callers move rows down with `dy`).
  */
-export function syntheticPdf(pages: readonly SyntheticPage[], options: { password?: string; noText?: boolean } = {}): Uint8Array {
+export function syntheticPdf(pages: readonly SyntheticPage[], options: { password?: string; noText?: boolean; landscape?: boolean } = {}): Uint8Array {
   const id = md5(latin1(`synthetic-${pages.length}-${options.password ?? ""}-${options.noText ? 1 : 0}`))
   const sec = options.password === undefined ? null : security(options.password, "synthetic-owner", id, -4)
 
@@ -104,10 +109,10 @@ export function syntheticPdf(pages: readonly SyntheticPage[], options: { passwor
   const pageNums = pages.map((_, i) => 4 + i * 2)
   objects[1] = "<< /Type /Catalog /Pages 2 0 R >>"
   objects[2] = `<< /Type /Pages /Kids [${pageNums.map((n) => `${n} 0 R`).join(" ")}] /Count ${pages.length} >>`
-  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [129 /uni20B9] >> >>"
   pages.forEach((page, i) => {
     const num = pageNums[i]!
-    objects[num] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${num + 1} 0 R >>`
+    objects[num] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${options.landscape ? "842 595" : "612 842"}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${num + 1} 0 R >>`
     let data: Uint8Array = latin1(contentStream(page, options.noText === true))
     if (sec) data = rc4(objectKey(sec.fileKey, num + 1, 0), data)
     objects[num + 1] = data

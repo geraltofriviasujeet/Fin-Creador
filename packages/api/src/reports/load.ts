@@ -17,6 +17,7 @@ import {
 } from "@fin-creador/domain"
 import { type UserClient, userToday } from "../income/client"
 import { loadNetWorthData } from "../net-worth/load"
+import { loadEntriesBeforeOriginalOpening, monthlyWithout } from "./original-opening"
 import { loadStatutoryData } from "../statutory/load"
 import { buildStatutoryView } from "../statutory/view"
 
@@ -30,7 +31,15 @@ export type ReportsLoad<T> = { ok: true; data: T } | { ok: false; reason: "unaut
 
 export type CashFlowData = { today: IsoDate; currency: string; report: CashFlowReport; otherCurrencies: string[] }
 
-export async function loadCashFlow(supabase: UserClient, months: readonly IsoDate[]): Promise<ReportsLoad<CashFlowData>> {
+/**
+ * `beforeOriginalOpening: "leave_out"` (Roma's projection and what-if): without entries dated before
+ * their account's original opening date (original-opening.ts). Reports keep them.
+ */
+export async function loadCashFlow(
+  supabase: UserClient,
+  months: readonly IsoDate[],
+  options: { beforeOriginalOpening?: "leave_out" } = {},
+): Promise<ReportsLoad<CashFlowData>> {
   const day = await userToday(supabase)
   if (!day.ok) return day
   const profile = await supabase.from("profiles").select("currency").eq("id", day.userId).maybeSingle()
@@ -51,7 +60,13 @@ export async function loadCashFlow(supabase: UserClient, months: readonly IsoDat
       categories: same.filter((row) => row.kind === "category").map((row) => ({ categoryId: row.category_id, expenseMinor: row.expense_minor })),
     }
   })
-  return { ok: true, data: { today: day.today, currency, report: cashFlowReport(monthly, day.today), otherCurrencies: [...other].sort() } }
+  let rows = monthly
+  if (options.beforeOriginalOpening === "leave_out" && months.length > 0) {
+    const before = await loadEntriesBeforeOriginalOpening(supabase, months[0]!, monthRange(months.at(-1)!).end)
+    if (!before.ok) return { ok: false, reason: "unavailable" }
+    rows = monthlyWithout(monthly, before.entries, currency)
+  }
+  return { ok: true, data: { today: day.today, currency, report: cashFlowReport(rows, day.today), otherCurrencies: [...other].sort() } }
 }
 
 export type TrendData = {

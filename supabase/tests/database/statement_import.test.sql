@@ -16,7 +16,7 @@ create function pg_temp.card_acct(p_key uuid) returns uuid language sql stable
 create function pg_temp.cat(p_key text) returns uuid language sql stable
   as $$ select c.id from public.categories as c where c.system_key = p_key $$;
 create function pg_temp.other() returns uuid language sql stable
-  as $$ select c.id from public.categories as c where c.kind = 'expense' and c.name = 'Other expenses' $$;
+  as $$ select c.id from public.categories as c where c.kind = 'expense' and c.name = 'Miscellaneous' $$;
 create function pg_temp.tx_count(p_key uuid) returns integer language sql stable
   as $$ select count(*)::int from public.transactions as t where t.idempotency_key = p_key $$;
 

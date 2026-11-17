@@ -32,13 +32,13 @@ export async function loadImportAccount(supabase: UserClient, accountId: string)
   const [account, accounts, categories, cards] = await Promise.all([
     supabase.from("accounts").select("id, kind, name, last4, institution, currency, opening_balance_date, archived_at").eq("id", accountId).maybeSingle(),
     supabase.from("accounts").select("id, kind, name, last4, currency").in("kind", ["bank", "cash", "other"]).is("archived_at", null).order("name"),
-    supabase.from("categories").select("id, name, kind, system_key").in("kind", ["expense", "income"]).is("archived_at", null).order("name"),
+    supabase.from("categories").select("id, name, kind, system_key, icon").in("kind", ["expense", "income"]).is("archived_at", null).order("name"),
     supabase.from("credit_cards").select("id, issuer, product, product_other, nickname, currency").is("archived_at", null),
   ])
   if (account.error || accounts.error || categories.error || cards.error) return { ok: false, reason: "unavailable" }
   const a = account.data
   if (!a || a.kind !== "bank" || a.archived_at !== null) return { ok: false, reason: "not_found" }
-  const pick = (kind: string) => categories.data.filter((c) => c.kind === kind).map((c) => ({ id: c.id, name: c.name, systemKey: c.system_key }))
+  const pick = (kind: string) => categories.data.filter((c) => c.kind === kind).map((c) => ({ id: c.id, name: c.name, systemKey: c.system_key, icon: c.icon }))
   return {
     ok: true,
     today: day.today,

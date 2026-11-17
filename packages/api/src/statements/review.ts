@@ -32,12 +32,26 @@ import { type RefundCandidate, suggestRefundLinks } from "./refunds"
 //   for a debit, a refund for a credit) is a "Possible duplicate" and starts unticked (each
 //   existing entry marks one line).
 // - Fee, interest and tax lines default to the system category Bank charges & interest; other
-//   lines to Other expenses. Nothing is ever unticked by the app after the person ticks it.
+//   lines to Miscellaneous (the default with icon other, "Other expenses" before 9e). Nothing is ever
+//   unticked by the app after the person ticks it.
 
 export const BANK_CHARGES_KEY = "bank_charges"
-export const OTHER_EXPENSES_NAME = "Other expenses"
+/** The catch-all default's names, current first ("Other expenses" until 9e renamed it). */
+export const MISC_CATEGORY_NAMES = ["Miscellaneous", "Other expenses"]
 
-export type ReviewCategory = { id: string; name: string; systemKey: string | null }
+/** `icon`: the category's icon when read (the catch-all default has icon other, whatever its name). */
+export type ReviewCategory = { id: string; name: string; systemKey: string | null; icon?: string | null }
+
+/** The catch-all expense category: the one with icon other, else one named Miscellaneous or Other expenses; "" when none. */
+export function miscCategoryId(categories: readonly ReviewCategory[]): string {
+  const byIcon = categories.find((c) => c.icon === "other" && c.systemKey === null)
+  if (byIcon) return byIcon.id
+  for (const name of MISC_CATEGORY_NAMES) {
+    const byName = categories.find((c) => c.name.trim().toLowerCase() === name.toLowerCase())
+    if (byName) return byName.id
+  }
+  return ""
+}
 
 /** What the database already holds, read for this card and statement (loadImportMatches). */
 export type ImportMatches = {
@@ -103,7 +117,7 @@ function defaultCategory(line: StatementLine, categories: readonly ReviewCategor
     const bank = categories.find((c) => c.systemKey === BANK_CHARGES_KEY)
     if (bank) return bank.id
   }
-  return categories.find((c) => c.name.trim().toLowerCase() === OTHER_EXPENSES_NAME.toLowerCase())?.id ?? ""
+  return miscCategoryId(categories)
 }
 
 export function buildReview(

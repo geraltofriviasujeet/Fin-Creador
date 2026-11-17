@@ -4,11 +4,13 @@ import Link from "next/link"
 import { Menu } from "@base-ui/react/menu"
 import { ChevronDown, Plus } from "lucide-react"
 import { cn } from "cn"
+import { UPI_IMPORT_HREF } from "@/components/statements/upi-links"
 import { buttonVariants } from "@/components/ui/button"
 
 // Topbar add actions: "Add expense" is the primary action (fast daily entry); the menu
-// beside it holds the other three. Every one is a real link to the add dialog on Transactions
-// (?add=), so it works from any page and with the keyboard.
+// beside it holds the other three and the UPI statement import (9e; it returns to Income when
+// opened there, else to Transactions). Every one is a real link, so it works from any page and
+// with the keyboard; on phones the same menu opens from the arrow.
 
 const href = (type: "expense" | "income" | "transfer" | "refund") => `/transactions?add=${type}`
 
@@ -19,6 +21,7 @@ const MORE = [
 ] as const
 
 export function AddMenu() {
+  const itemClass = "flex h-11 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
   return (
     <div className="flex items-center">
       <Link
@@ -50,11 +53,18 @@ export function AddMenu() {
                   key={m.type}
                   closeOnClick
                   render={<Link href={href(m.type)} />}
-                  className="flex h-11 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
+                  className={itemClass}
                 >
                   {m.label}
                 </Menu.LinkItem>
               ))}
+              <Menu.LinkItem
+                closeOnClick
+                render={<Link href={UPI_IMPORT_HREF} />}
+                className={itemClass}
+              >
+                Import UPI statement
+              </Menu.LinkItem>
             </Menu.Popup>
           </Menu.Positioner>
         </Menu.Portal>
