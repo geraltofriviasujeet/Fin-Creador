@@ -90,7 +90,7 @@ describe("Paytm, as laid out", () => {
     nothingPersonal(parse.rows)
   })
 
-  it("reads the five odd blocks: a note over several rows, a wrapped UPI ID, a wrapped name, the tag pushed down", async () => {
+  it("reads the seven odd blocks: a note over several rows, a wrapped UPI ID, a wrapped name, the tag pushed down, a name wrapped whole", async () => {
     const odd = payments.filter((p) => p.odd !== null)
     expect(odd.map((p) => p.bank)).toEqual(PAYTM_ODD_BLOCKS.map((b) => b.bank))
     const parse = await read(paytmLayoutPages())
@@ -128,6 +128,14 @@ describe("Paytm, as laid out", () => {
       return result.rows[before + at.row - 1]!.cells[0]
     })
     expect(placed.sort()).toEqual(dates)
+  })
+
+  it("a \"Paid to\" alone with no name on the rows below either is listed, not read", async () => {
+    const name = PAYTM_ODD_BLOCKS.find((b) => b.payee === "Vishwakarmaenterprises")!.payee
+    const pages = paytmLayoutPages().map((pg) => pg.map((row) => row.filter((c) => c.text !== name)))
+    const parse = await read(pages)
+    expect(parse.count).toEqual({ read: 312, total: 313, printed: true })
+    expect(parse.issues.map((i) => i.reason)).toEqual(["no_description"])
   })
 
   it("a short read is said: the summary's counts against the payments read", async () => {

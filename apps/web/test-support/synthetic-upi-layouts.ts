@@ -53,11 +53,11 @@ export type PaytmLayoutPayment = {
   note: boolean
   /** The payee name wraps onto a row of its own below the UPI ID. */
   wrappedName: boolean
-  /** One of the five odd blocks (PAYTM_ODD_BLOCKS), laid out as it is; else null. */
+  /** One of the seven odd blocks (PAYTM_ODD_BLOCKS), laid out as it is; else null. */
   odd: number | null
 }
 
-/** The owner's counts: 300 paid (HDFC 146, PNB 71, SBI 61, Canara 22) and 13 received (Canara); 161 blocks raised; five odd blocks (2 PNB, 3 HDFC). */
+/** The owner's counts: 300 paid (HDFC 146, PNB 71, SBI 61, Canara 22) and 13 received (Canara); 161 blocks raised; seven odd blocks (3 PNB, 4 HDFC). */
 export function paytmLayoutPayments(): PaytmLayoutPayment[] {
   const banks: { bank: PaytmBank; received: boolean }[] = []
   const add = (bank: PaytmBank, n: number, received = false) => {
@@ -93,7 +93,7 @@ export function paytmLayoutPayments(): PaytmLayoutPayment[] {
   // The odd blocks replace plain "Paid to" blocks of their bank, spread through the file.
   PAYTM_ODD_BLOCKS.forEach((odd, k) => {
     const plain = payments.filter((p) => p.bank === odd.bank && p.kind === "Paid to" && !p.note && p.odd === null)
-    const p = plain[Math.floor(((k + 1) * plain.length) / 7)]!
+    const p = plain[Math.floor(((k + 1) * plain.length) / (PAYTM_ODD_BLOCKS.length + 2))]!
     Object.assign(p, { odd: k, name: odd.name, tag: odd.tag })
   })
   return payments
@@ -102,12 +102,15 @@ export function paytmLayoutPayments(): PaytmLayoutPayment[] {
 type OddRow = [top: number, words: [x: number, text: string][]]
 
 /**
- * The five blocks of the owner's file that differ from the rest, word by word at their masked x
- * and row offsets (pdftotext's top, from the block's first row); every word invented. Each has a
- * note that runs down the notes column (x 288) over several rows, and "Tag:" and "# <tag>" pushed
- * down to its last rows. 0, 2 and 4: the UPI ID wraps ("UPI ID: <first part>." then the rest
+ * The seven blocks of the owner's file that differ from the rest, word by word at their masked x
+ * and row offsets (pdftotext's top, from the block's first row); every word invented. 0 to 4 have
+ * a note that runs down the notes column (x 288) over several rows, and "Tag:" and "# <tag>" pushed
+ * down to its last rows. 0, 2, 4 and 6: the UPI ID wraps ("UPI ID: <first part>." then the rest
  * alone at x 91). 0: the payee name wraps ("... Services Private" then "Limited"). 3: a word alone
- * at x 91 below the UPI ID, as a wrapped name. DATE, TIME, AMOUNT and REF are the payment's own.
+ * at x 91 below the UPI ID, as a wrapped name. 5 and 6: the payee's name, one long word, wraps
+ * whole to the next row at x 91, leaving "Paid to" alone on its row (the masked rows end at the UPI
+ * ID; the UPI ID's rest and the UPI Ref No row are added as in 0). DATE, TIME, AMOUNT and REF are
+ * the payment's own.
  */
 export const PAYTM_ODD_BLOCKS: { bank: PaytmBank; name: string; payee: string; tag: string; rows: OddRow[] }[] = [
   {
@@ -180,6 +183,29 @@ export const PAYTM_ODD_BLOCKS: { bank: PaytmBank; name: string; payee: string; t
       [33, [[91, "pay@okicici"], [302, "Tag:"]]],
       [48, [[91, "UPI"], [108, "Ref"], [126, "No:"], [144, "REF"]]],
       [51, [[294, "#"], [302, "Taxi"]]],
+    ],
+  },
+  {
+    bank: "hdfc", name: "Vishwakarmaenterprises", payee: "Vishwakarmaenterprises", tag: "Food",
+    rows: [
+      [0, [[22, "DAY"], [36, "MON"], [491, "-"], [497, "AMOUNT"]]],
+      [3, [[91, "Paid"], [113, "to"], [302, "Tag:"], [413, "HDFC"], [441, "Bank"], [467, "-"]]],
+      [12, [[22, "TIME"], [45, "PM"]]],
+      [18, [[91, "Vishwakarmaenterprises"], [294, "#"], [302, "Food"], [413, "00"]]],
+      [33, [[91, "UPI"], [108, "ID:"], [124, "vishwakarma@okhdfc"]]],
+      [48, [[91, "UPI"], [108, "Ref"], [126, "No:"], [144, "REF"]]],
+    ],
+  },
+  {
+    bank: "pnb", name: "Sabharwalcinemas", payee: "Sabharwalcinemas", tag: "Entertainment",
+    rows: [
+      [0, [[22, "DAY"], [36, "MON"], [91, "Paid"], [113, "to"], [302, "Tag:"], [413, "Punjab"], [491, "-"], [497, "AMOUNT"]]],
+      [12, [[22, "TIME"], [45, "PM"]]],
+      [15, [[91, "Sabharwalcinemas"]]],
+      [18, [[294, "#"], [302, "Entertainment"], [413, "National"]]],
+      [33, [[91, "UPI"], [108, "ID:"], [124, "sabharwalcinemas2026."], [413, "Bank"], [439, "-"], [445, "66"]]],
+      [48, [[91, "pay@okaxis"]]],
+      [60, [[91, "UPI"], [108, "Ref"], [126, "No:"], [144, "REF"]]],
     ],
   },
 ]

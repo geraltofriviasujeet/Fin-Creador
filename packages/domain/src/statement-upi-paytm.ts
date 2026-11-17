@@ -9,7 +9,8 @@
 //   UPI Ref No: <reference>         (the key only)
 // A long UPI ID wraps after a "." ("UPI ID: <first part>." then the rest alone on the next row);
 // a long note runs down the notes column over several rows, pushing "Tag:" and "# <tag>" down to
-// the block's last rows; a long payee name wraps onto a row of its own, above or below the UPI ID.
+// the block's last rows; a long payee name wraps onto a row of its own, above or below the UPI ID,
+// or, one long word, wraps whole, leaving "Paid to" alone on its row.
 // The date and amount sit on the "Paid to" row or about 3 points above it, so a block runs from its
 // date to the next date. The account label wraps down its column over up to three rows, its digits
 // on a later row ("Punjab" / "National" / "Bank - 66"; "HDFC Bank -" / "00"): the whole column of
@@ -55,6 +56,8 @@ export const PAYTM_TAGS = [
 ] as const;
 
 const TYPE = /^(Paid to|Money sent to|Received from|Recharge of)\s+(.+)$/i;
+// The payment type alone on its row: the payee's name wrapped whole to the rows below.
+const TYPE_ALONE = /^(Paid to|Money sent to|Received from|Recharge of)$/i;
 const KINDS: Record<string, UpiRowKind> = { "paid to": "paid", "money sent to": "sent", "received from": "received", "recharge of": "recharge" };
 const AMOUNT = /^([-+])\s*(Rs\.?\s*[\d,]+(?:\.\d{1,2})?)$/i;
 // A follow-on line can be merged into the cell above it by the PDF reader, so these are found anywhere in a cell.
@@ -196,15 +199,17 @@ type BlockRead = { type: RegExpExecArray | null; payee: string; amount: RegExpEx
 function readByColumn(cells: readonly UpiCell[], starts: typeof DEFAULT_COLUMNS): BlockRead {
   const by = (col: Column) => cells.filter((c) => columnOf(c, starts) === col).map((c) => c.text);
   const details = by("details");
-  const typeAt = details.findIndex((c) => TYPE.test(c));
-  const type = typeAt === -1 ? null : TYPE.exec(details[typeAt]!);
+  const typeAt = details.findIndex((c) => TYPE.test(c) || TYPE_ALONE.test(c));
+  const found = typeAt === -1 ? null : (TYPE.exec(details[typeAt]!) ?? TYPE_ALONE.exec(details[typeAt]!));
   // The payee's name can run onto a row of its own (plain words in the details column), which the
-  // PDF reader may merge into the UPI ID's cell.
+  // PDF reader may merge into the UPI ID's cell; with the type alone on its row, it is all there.
   const more = typeAt === -1 ? [] : nameRunOn(details.slice(typeAt + 1));
+  const payee = found ? [found[2], ...more].filter((w) => w).join(" ") : "";
   const label = by("account").join(" ");
   return {
-    type,
-    payee: type ? [type[2]!, ...more].join(" ") : "",
+    // A type with no name after it nor below it is not read (listed, with its UPI reference).
+    type: payee === "" ? null : found,
+    payee,
     amount: by("amount").map((c) => AMOUNT.exec(c)).find((m) => m !== null) ?? null,
     tag: (TAG_IN_COLUMN.exec(by("notes").join(" ")) ?? cells.map((c) => TAG.exec(c.text)).find((m) => m !== null))?.[1]?.trim() ?? null,
     account: label ? parseUpiAccount(label, "dash") : null,
@@ -230,7 +235,7 @@ export function parsePaytmStatement(rows: readonly UpiTextRow[]): UpiStatementPa
 
   const { blocks } = upiBlocks(rows, (row) => isDateCell(row.cells[0]!));
   // The header: every row before the first payment (a date with a payment type).
-  const start = blocks.find((b) => upiCells(b).some((c) => TYPE.test(c.text)))?.[0]?.line ?? Infinity;
+  const start = blocks.find((b) => upiCells(b).some((c) => TYPE.test(c.text) || TYPE_ALONE.test(c.text)))?.[0]?.line ?? Infinity;
   const header = rows.filter((r) => r.line < start);
   let printed: { from: IsoDate; to: IsoDate } | null = null;
   for (const row of header) for (const cell of [row.text, ...row.cells]) printed ??= parseUpiPeriod(cell);
