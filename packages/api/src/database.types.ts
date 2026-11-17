@@ -2802,17 +2802,17 @@ export type Database = {
       move_account_opening: {
         Args: { p_account_id: string; p_entries: Json; p_request_key: string }
         Returns: {
-            account_id: string
-            created_at: string
-            entries_added: number
-            entries_counted: number
-            id: string
-            new_opening_date: string
-            new_opening_minor: number
-            old_opening_date: string
-            old_opening_minor: number
-            request_key: string
-            user_id: string
+          account_id: string
+          created_at: string
+          entries_added: number
+          entries_counted: number
+          id: string
+          new_opening_date: string
+          new_opening_minor: number
+          old_opening_date: string
+          old_opening_minor: number
+          request_key: string
+          user_id: string
         }
         SetofOptions: {
           from: "*"
