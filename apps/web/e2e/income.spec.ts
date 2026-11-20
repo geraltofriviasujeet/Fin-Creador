@@ -319,6 +319,9 @@ async function expectTotalsAgree(page: Page) {
   const counted = page.getByTestId("amount-total-available")
   await expect(counted).toHaveText("₹4,20,090") // after the count-up
   const available = Number(await counted.getAttribute("data-value"))
+  // Wait for the rows (reading text does not wait by itself): three accounts, three bars.
+  await expect(chartAmounts(accounts)).toHaveCount(3)
+  await expect(accounts.locator("tbody [data-balance]")).toHaveCount(3)
   expect(await sumOf(chartAmounts(accounts))).toBe(available)
   expect(minor((await tableTotal(accounts).textContent())!)).toBe(available)
   expect(await sumOf(accounts.locator("tbody [data-balance]"))).toBe(available)
@@ -330,6 +333,8 @@ async function expectTotalsAgree(page: Page) {
     await expect(period(page, name)).toHaveAttribute("aria-pressed", "true")
     const sources = incomeSources(page)
     await expect(periodTotal(page)).toContainText(`₹${new Intl.NumberFormat("en-IN").format(expected[key] / 100)}`)
+    // Four sources had income this year; last year's salary adds to Salary, not a new bar.
+    await expect(chartAmounts(sources)).toHaveCount(4)
     const total = minor((await periodTotal(page).locator("span").last().textContent())!)
     expect(total).toBe(expected[key])
     expect(await sumOf(chartAmounts(sources))).toBe(total)
@@ -358,7 +363,6 @@ test.describe("charts agree with the tables", () => {
     await page.setViewportSize({ width: 360, height: 780 })
     await signUpConfirmed(page, "Demo Person", uniqueEmail("income-360"))
     await demoMoney(page)
-    await page.goto("/income")
     await expectTotalsAgree(page)
     await period(page, /^This month/).click()
 
