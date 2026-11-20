@@ -56,3 +56,22 @@ test("reduced motion: a transfer shows both accounts at once, no counting", asyn
   await expect(cash.getByTestId("balance-change")).toHaveText("+₹1,000")
   await expect(announced(page, "Saved. HDFC Bank balance now ₹9,000. Cash in hand balance now ₹1,500.")).toHaveCount(1)
 })
+
+test.describe("at 360px", () => {
+  test.use({ viewport: { width: 360, height: 740 } })
+
+  test("the card after an expense fits the phone layout", async ({ page }) => {
+    await signUpConfirmed(page, "Ravi Kumar", uniqueEmail("balance-phone"))
+    await page.goto("/income")
+    await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "52,300" })
+    await addEntry(page, { amount: "500", category: "Groceries", from: "HDFC Bank ··4821" })
+    const hdfc = row(page, "HDFC Bank ··4821")
+    await expect(hdfc.getByTestId("balance-after")).toHaveText("₹51,800")
+    const box = (await card(page).boundingBox())!
+    const tabBar = (await page.getByRole("navigation", { name: "Main" }).last().boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(360)
+    expect(box.y + box.height).toBeLessThanOrEqual(tabBar.y)
+    await page.screenshot({ path: "e2e-screenshots/360-balance-card.png", animations: "disabled" })
+  })
+})

@@ -80,17 +80,31 @@ test.describe("at 360px", () => {
     await signUpConfirmed(page, "Ravi Kumar", uniqueEmail("tour-phone"), { tour: true })
     const tour = tourDialog(page)
     await expect(tour).toHaveAccessibleName("Tour, step 1 of 5: Add expense")
-    const box = await tour.boundingBox()
-    // Fully on screen, with the page's own side gutter (px-4).
-    expect(box!.x).toBeGreaterThanOrEqual(8)
-    expect(box!.x + box!.width).toBeLessThanOrEqual(352)
-    const tabBar = await page.getByRole("navigation", { name: "Main" }).last().boundingBox()
-    expect(box!.y + box!.height).toBeLessThanOrEqual(tabBar!.y)
+    const box = (await tour.boundingBox())!
+    // The page's own side gutter: px-4 is 1rem, and the root font size is 87.5% (14px).
+    const main = (await page.locator("main").boundingBox())!
+    const gutter = await page.locator("main").evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft))
+    expect(box.x).toBeCloseTo(main.x + gutter, 0)
+    expect(box.x + box.width).toBeCloseTo(main.x + main.width - gutter, 0)
+    // Covers neither the bottom nav nor the Add button it points at.
+    const tabBar = (await page.getByRole("navigation", { name: "Main" }).last().boundingBox())!
+    expect(box.y + box.height).toBeLessThanOrEqual(tabBar.y)
+    const add = (await page.getByRole("link", { name: "Add expense" }).first().boundingBox())!
+    expect(add.y + add.height).toBeLessThanOrEqual(box.y)
+    await page.screenshot({ path: "e2e-screenshots/360-tour-step-1.png", animations: "disabled" })
     for (let i = 1; i < 5; i++) await tour.getByRole("button", { name: "Next" }).click()
     await expect(tour.getByText("Ask Roma about your money. She's under More.")).toBeVisible()
-    await page.screenshot({ path: "e2e-screenshots/tour-phone.png", animations: "disabled" })
+    // Every step: the card stays above the tab bar.
+    expect((await tour.boundingBox())!.y + (await tour.boundingBox())!.height).toBeLessThanOrEqual(tabBar.y)
+    await page.screenshot({ path: "e2e-screenshots/360-tour-step-5.png", animations: "disabled" })
     await tour.getByRole("button", { name: "Done" }).click()
     await expect(tour).toBeHidden()
+
+    // The Get started card on Overview at this width.
+    const card = page.getByRole("region", { name: "Get started" })
+    await card.scrollIntoViewIfNeeded()
+    await expect(card).toBeVisible()
+    await page.screenshot({ path: "e2e-screenshots/360-get-started.png", animations: "disabled" })
   })
 })
 
