@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { signIn, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
+import { signIn, signInPastWelcome, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
 
 test("signed-out visitors are sent to sign-in and returned to the page they wanted", async ({ page }) => {
   const email = uniqueEmail("next")
@@ -14,7 +14,7 @@ test("signed-out visitors are sent to sign-in and returned to the page they want
   await expect(page.getByText("Email or password is incorrect.")).toBeVisible()
   await expect(page.getByLabel("Email")).toHaveValue(email)
 
-  await signIn(page, email)
+  await signInPastWelcome(page, email)
   await expect(page).toHaveURL(/\/settings$/)
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible()
 })
@@ -25,7 +25,7 @@ test("the next parameter cannot send users to another site", async ({ page, base
   await signOut(page)
 
   await page.goto("/sign-in?next=//evil.example/steal")
-  await signIn(page, email)
+  await signInPastWelcome(page, email)
   await expect(page).toHaveURL(`${baseURL}/`)
 })
 

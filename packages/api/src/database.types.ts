@@ -1445,8 +1445,8 @@ export type Database = {
           roma_descriptions_ok_at: string | null
           roma_enabled: boolean
           time_zone: string
-          tour_done_at: string | null
           updated_at: string
+          welcome_hidden_at: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -1461,8 +1461,8 @@ export type Database = {
           roma_descriptions_ok_at?: string | null
           roma_enabled?: boolean
           time_zone?: string
-          tour_done_at?: string | null
           updated_at?: string
+          welcome_hidden_at?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -1477,8 +1477,8 @@ export type Database = {
           roma_descriptions_ok_at?: string | null
           roma_enabled?: boolean
           time_zone?: string
-          tour_done_at?: string | null
           updated_at?: string
+          welcome_hidden_at?: string | null
         }
         Relationships: []
       }

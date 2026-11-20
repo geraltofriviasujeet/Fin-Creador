@@ -1,11 +1,11 @@
 import { type Locator, type Page, expect, test } from "@playwright/test"
 import { addBank, addEntry, overviewHeading, signIn, signOut, signUpConfirmed, tourDialog, uniqueEmail, welcomeDialog } from "./helpers"
 
-// First sign-in welcome carousel, the tour and the Get started card (before Sprint 12a). "Tour
-// done" and "checklist dismissed" are saved to the profile by the database, so they follow the person
-// across devices and reloads. Profiles that existed before the migration count the tour as done
-// (migration backfill; CI starts from an empty database, so here an "existing user" is one who
-// already skipped the welcome and signs in again on another device).
+// The welcome carousel, the tour and the Get started card (before Sprint 12a). The welcome shows
+// after each sign-in (a short-lived cookie set on sign-in, cleared when it closes), not on reloads
+// or navigation, unless the person ticked "Don't show this again" or turned off Settings → "Show
+// the welcome when I sign in" (profiles.welcome_hidden_at, saved by the database, so it follows
+// them across devices). "Checklist dismissed" is saved the same way.
 
 // Desktop: + Add, then every sidebar item in nav order. Phones: + Add, the four tabs and More.
 const DESKTOP_STEPS = ["Add", "Overview", "Income", "Recurring", "Transactions", "Goals", "Investments", "Loans & Liabilities", "Reports", "Ask Roma"]
@@ -17,6 +17,8 @@ const stepName = (n: number, steps: string[]) => `Tour, step ${n} of ${steps.len
 const SLIDES = ["Welcome to FinCreador", "Add your accounts", "Track every rupee", "See your investments", "Stay on top of loans", "Plan your goals", "Ask Roma"]
 
 const slideTitle = (welcome: Locator) => welcome.getByRole("heading", { level: 2 })
+const dontShow = (welcome: Locator) => welcome.getByRole("checkbox", { name: "Don't show this again" })
+const welcomeSwitch = (page: Page) => page.getByRole("switch", { name: "Show the welcome when I sign in" })
 
 async function expectSlide(welcome: Locator, n: number) {
   await expect(slideTitle(welcome)).toHaveText(SLIDES[n - 1]!)
@@ -49,10 +51,13 @@ test("welcome → Skip on slide 1: it closes, focus was trapped, and it doesn't 
   const next = welcome.getByRole("button", { name: "Next" })
   const skip = welcome.getByRole("button", { name: "Skip", exact: true })
   await expect(welcome.getByRole("button", { name: "Back" })).toBeDisabled()
+  await expect(dontShow(welcome)).not.toBeChecked()
   await expect(next).toBeFocused()
   // Keyboard: Tab stays inside the welcome (Back is off on slide 1).
   await page.keyboard.press("Tab")
   await expect(skip).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(dontShow(welcome)).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(next).toBeFocused()
 
@@ -62,24 +67,75 @@ test("welcome → Skip on slide 1: it closes, focus was trapped, and it doesn't 
   await expectNoTourAfterReload(page, overviewHeading(page))
 })
 
-test("Escape on the welcome skips it, and it stays done on another device", async ({ page, browser }) => {
+test("Escape closes the welcome without opting out: signing in on another device shows it again", async ({ page, browser }) => {
   const email = uniqueEmail("welcome-escape")
   await signUpConfirmed(page, "Kabir Shah", email, { tour: true })
   await expect(welcomeDialog(page)).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(welcomeDialog(page)).toBeHidden()
   await expect(overviewHeading(page)).toBeVisible()
-  await signOut(page)
 
-  // An existing user (tour already done) signing in elsewhere: no welcome.
   const other = await browser.newContext()
   const phone = await other.newPage()
   await phone.goto("/sign-in")
   await signIn(phone, email)
-  await expect(overviewHeading(phone)).toBeVisible()
-  await phone.waitForTimeout(500)
-  await expect(welcomeDialog(phone)).toHaveCount(0)
+  await expectSlide(welcomeDialog(phone), 1)
   await other.close()
+})
+
+test("the welcome shows after each sign-in, not on reload; Don't show this again; the Settings switch brings it back", async ({ page }) => {
+  const email = uniqueEmail("welcome-every")
+  await signUpConfirmed(page, "Tara Nair", email, { tour: true })
+  const welcome = welcomeDialog(page)
+  await expectSlide(welcome, 1)
+  await welcome.getByRole("button", { name: "Skip", exact: true }).click()
+  await expect(welcome).toBeHidden()
+  // Reloads and navigation: not again.
+  await expectNoTourAfterReload(page, overviewHeading(page))
+  await page.goto("/settings")
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible()
+  await expect(welcomeSwitch(page)).toHaveAttribute("aria-checked", "true")
+  await expect(welcomeDialog(page)).toHaveCount(0)
+
+  // Sign out and in: it shows again. Tick the box (it stays ticked across slides) and finish.
+  await signOut(page)
+  await signIn(page, email)
+  await expectSlide(welcome, 1)
+  await dontShow(welcome).check()
+  await toLastSlide(welcome)
+  await expect(dontShow(welcome)).toBeChecked()
+  await welcome.getByRole("button", { name: "Start using FinCreador" }).click()
+  await expect(welcome).toBeHidden()
+
+  // The next sign-in: no welcome.
+  await signOut(page)
+  await signIn(page, email)
+  await expect(overviewHeading(page)).toBeVisible()
+  await page.waitForTimeout(500)
+  await expect(welcomeDialog(page)).toHaveCount(0)
+
+  // Settings: the switch is off; turning it on is saved, and doesn't open the welcome now.
+  await page.goto("/settings")
+  await expect(welcomeSwitch(page)).toHaveAttribute("aria-checked", "false")
+  await welcomeSwitch(page).click()
+  await expect(welcomeSwitch(page)).toHaveAttribute("aria-checked", "true")
+  await page.reload()
+  await expect(welcomeSwitch(page)).toHaveAttribute("aria-checked", "true")
+  await expect(welcomeDialog(page)).toHaveCount(0)
+
+  // The next sign-in shows it again. Ticked + Show me around also saves the choice.
+  await signOut(page)
+  await signIn(page, email)
+  await expectSlide(welcome, 1)
+  await dontShow(welcome).check()
+  await toLastSlide(welcome)
+  await welcome.getByRole("button", { name: "Show me around" }).click()
+  const tour = tourDialog(page)
+  await expect(tour).toHaveAccessibleName(stepName(1, DESKTOP_STEPS))
+  await tour.getByRole("button", { name: "Skip tour" }).click()
+  await expect(tour).toBeHidden()
+  await page.goto("/settings")
+  await expect(welcomeSwitch(page)).toHaveAttribute("aria-checked", "false")
 })
 
 test("welcome → Next through all 7 slides, arrows and Back, pictures with alt text, Start using FinCreador", async ({ page }) => {
@@ -157,11 +213,13 @@ test("Show me around: every nav item in order, Back and Next, Done; no page chan
   await expectNoTourAfterReload(page, overviewHeading(page))
 })
 
-test("Replay the tour in Settings opens the welcome on slide 1, again after skipping it", async ({ page }) => {
+test("Replay the tour in Settings opens the welcome on slide 1, again after skipping it, even when it's off at sign-in", async ({ page }) => {
   await signUpConfirmed(page, "Ravi Menon", uniqueEmail("tour-replay"))
   await page.goto("/settings")
   await expect(page.getByText("A quick look at what FinCreador does and where things are.")).toBeVisible()
   await expect(welcomeDialog(page)).toHaveCount(0)
+  await welcomeSwitch(page).click()
+  await expect(welcomeSwitch(page)).toHaveAttribute("aria-checked", "false")
   await page.getByRole("button", { name: "Replay the tour" }).click()
 
   const welcome = welcomeDialog(page)
@@ -198,6 +256,17 @@ test.describe("at 1280px", () => {
     expect(w.y + w.height / 2).toBeCloseTo(400, -1)
     expect(w.y).toBeGreaterThanOrEqual(0)
     expect(w.y + w.height).toBeLessThanOrEqual(800)
+    // The title above the picture, big and bold, with the logo mark on slide 1.
+    const title = slideTitle(welcome)
+    expect(await title.evaluate((el) => getComputedStyle(el).fontSize)).toBe("32px")
+    expect(Number(await title.evaluate((el) => getComputedStyle(el).fontWeight))).toBeGreaterThanOrEqual(700)
+    await expect(title.locator("svg")).toHaveCount(1)
+    const picBox = (await welcome.getByTestId("welcome-slide").getByRole("img").boundingBox())!
+    expect((await title.boundingBox())!.y + (await title.boundingBox())!.height).toBeLessThanOrEqual(picBox.y)
+    // "Don't show this again" at the bottom left.
+    const box = (await dontShow(welcome).boundingBox())!
+    expect(box.x).toBeLessThan(w.x + 60)
+    expect(box.y).toBeGreaterThan(picBox.y + picBox.height)
     // The desktop picture (16:10), not the phone one.
     const picture = welcome.getByTestId("welcome-slide").getByRole("img")
     await expect(picture).toHaveJSProperty("complete", true)
@@ -254,6 +323,7 @@ test.describe("at 360px", () => {
     expect(w.y).toBeCloseTo(0, 0)
     expect(w.width).toBeCloseTo(360, 0)
     expect(w.height).toBeCloseTo(740, 0)
+    expect(await slideTitle(welcome).evaluate((el) => getComputedStyle(el).fontSize)).toBe("26px")
     // The phone picture (square), and the buttons fit on screen.
     const picture = welcome.getByTestId("welcome-slide").getByRole("img")
     await expect(picture).toHaveJSProperty("complete", true)
@@ -283,6 +353,8 @@ test.describe("at 360px", () => {
     const around = welcome.getByRole("button", { name: "Show me around" })
     const aroundBox = (await around.boundingBox())!
     expect(aroundBox.y + aroundBox.height).toBeLessThanOrEqual(740)
+    const startBox = (await welcome.getByRole("button", { name: "Start using FinCreador" }).boundingBox())!
+    expect(startBox.y + startBox.height).toBeLessThanOrEqual(740)
     await around.click()
 
     const tour = tourDialog(page)

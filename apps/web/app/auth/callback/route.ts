@@ -1,12 +1,15 @@
 import type { EmailOtpType } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 import { safeNextPath } from "@/lib/auth/redirect"
+import { markSignedIn } from "@/lib/auth/welcome-cookie"
 import { createClient } from "@/lib/supabase/server"
 
 // Landing point for every auth link:
 //   ?code=…                    Google OAuth and same-browser email links (PKCE)
 //   ?token_hash=…&type=…       email templates using {{ .TokenHash }} (works on any device)
 // `next` is untrusted and is reduced to a same-site path.
+// A sign-in here (Google, email confirmation, magic link) sets the welcome cookie
+// (lib/auth/welcome-cookie.ts); a password reset or an email change doesn't.
 
 const OTP_TYPES = new Set<EmailOtpType>(["signup", "email", "recovery", "invite", "magiclink", "email_change"])
 
@@ -29,10 +32,16 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) return to(next)
+    if (!error) {
+      if (next !== "/update-password") await markSignedIn()
+      return to(next)
+    }
   } else if (tokenHash && isOtpType(type)) {
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
-    if (!error) return to(type === "recovery" ? "/update-password" : next)
+    if (!error) {
+      if (type !== "recovery" && type !== "email_change") await markSignedIn()
+      return to(type === "recovery" ? "/update-password" : next)
+    }
   }
 
   return to("/sign-in?notice=link-invalid")

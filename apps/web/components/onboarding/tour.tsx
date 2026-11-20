@@ -2,23 +2,22 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { finishTourAction } from "@/app/(app)/onboarding/actions"
+import { closeWelcomeAction } from "@/app/(app)/onboarding/actions"
 import { NAV_ITEMS } from "@/components/shell/nav-items"
 import { Button } from "@/components/ui/button"
-import { WelcomeCarousel } from "@/components/onboarding/welcome-carousel"
+import { REPLAY_WELCOME_EVENT, WelcomeCarousel } from "@/components/onboarding/welcome-carousel"
 import { cn } from "cn"
 
-// First sign-in welcome and tour (before Sprint 12a). The welcome carousel comes first
-// (welcome-carousel.tsx: seven slides; Skip, or on the last slide "Show me around" or "Start
-// using FinCreador"); "Show me around" starts the tour, which walks the + Add button and every
-// main nav item, in nav order, without leaving the page. No library: each step points at an element marked
-// data-tour="…" in the shell (topbar, sidebar, tab bar), so every step exists on every page. When
-// several elements carry the same name (sidebar link and tab-bar link), the visible one is used;
-// a step whose element isn't on screen is skipped (the sidebar's items on phones, the tab bar's
-// "More" on desktop). On desktop the card sits beside the item with an arrow; on phones
-// (≤ 760px, the tab-bar layout) it is a card above the tab bar. Skipping or finishing the
-// carousel, skipping the tour or finishing it is saved to the profile before it closes, so a
-// reload never brings it back; Settings → Replay the tour opens the carousel on slide 1.
+// The welcome and the tour (before Sprint 12a). The welcome carousel (welcome-carousel.tsx)
+// shows after each sign-in unless the person opted out; closing it clears this sign-in's cookie,
+// so a reload never brings it back. Its last slide's "Show me around" starts the tour, which
+// walks the + Add button and every main nav item, in nav order, without leaving the page. No
+// library: each step points at an element marked data-tour="…" in the shell (topbar, sidebar,
+// tab bar), so every step exists on every page. When several elements carry the same name
+// (sidebar link and tab-bar link), the visible one is used; a step whose element isn't on screen
+// is skipped (the sidebar's items on phones, the tab bar's "More" on desktop). On desktop the
+// card sits beside the item with an arrow; on phones (≤ 760px, the tab-bar layout) it is a card
+// above the tab bar. Settings → Replay the tour opens the carousel on slide 1.
 
 type Step = { anchor: string; title: string; text: string; phoneTitle?: string; phoneText?: string }
 
@@ -81,14 +80,14 @@ type Stage = "welcome" | "tour" | "closed"
 
 export function Onboarding({ show }: { show: boolean }) {
   const [stage, setStage] = useState<Stage>(show ? "welcome" : "closed")
-  // Settings → Replay the tour: the layout re-renders with show = true.
-  const [lastShow, setLastShow] = useState(show)
-  if (show !== lastShow) {
-    setLastShow(show)
-    if (show) setStage("welcome")
-  }
+  // Settings → Replay the tour: opens the welcome on slide 1 (a fresh carousel each time).
+  useEffect(() => {
+    const open = () => setStage("welcome")
+    window.addEventListener(REPLAY_WELCOME_EVENT, open)
+    return () => window.removeEventListener(REPLAY_WELCOME_EVENT, open)
+  }, [])
   const close = useCallback(() => setStage("closed"), [])
-  if (stage === "welcome") return <WelcomeCarousel onTour={() => setStage("tour")} onClosed={close} onFinish={finishTourAction} />
+  if (stage === "welcome") return <WelcomeCarousel onTour={() => setStage("tour")} onClosed={close} onClose={closeWelcomeAction} />
   if (stage === "tour") return <TourSteps onClosed={close} />
   return null
 }
@@ -99,14 +98,12 @@ function TourSteps({ onClosed }: { onClosed: () => void }) {
   const [box, setBox] = useState<Box | null>(null)
   const [placement, setPlacement] = useState<Placement | null>(null)
   const [phone, setPhone] = useState(false)
-  const [saving, setSaving] = useState(false)
   const card = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const textId = useId()
 
-  const finish = useCallback(async () => {
-    setSaving(true)
-    await finishTourAction().catch(() => null)
+  // Nothing to save: the welcome saved "Don't show this again" (if ticked) when it closed.
+  const finish = useCallback(() => {
     document.getElementById("main")?.focus()
     onClosed()
   }, [onClosed])
@@ -116,7 +113,7 @@ function TourSteps({ onClosed }: { onClosed: () => void }) {
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       const available = TOUR_STEPS.filter((s) => visibleAnchor(s.anchor))
-      if (available.length === 0) void finish()
+      if (available.length === 0) finish()
       else setSteps(available)
     })
     return () => cancelAnimationFrame(id)
@@ -165,7 +162,7 @@ function TourSteps({ onClosed }: { onClosed: () => void }) {
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       e.preventDefault()
-      if (!saving) void finish()
+      finish()
       return
     }
     if (e.key !== "Tab") return
@@ -221,13 +218,13 @@ function TourSteps({ onClosed }: { onClosed: () => void }) {
           {phone && step.phoneText ? step.phoneText : step.text}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" size="md" disabled={index === 0 || saving} onClick={() => setIndex((i) => i - 1)}>
+          <Button type="button" variant="secondary" size="md" disabled={index === 0} onClick={() => setIndex((i) => i - 1)}>
             Back
           </Button>
-          <Button type="button" size="md" disabled={saving} onClick={() => (last ? void finish() : setIndex((i) => i + 1))}>
+          <Button type="button" size="md" onClick={() => (last ? finish() : setIndex((i) => i + 1))}>
             {last ? "Done" : "Next"}
           </Button>
-          <Button type="button" variant="ghost" size="md" className="ml-auto" disabled={saving} onClick={() => void finish()}>
+          <Button type="button" variant="ghost" size="md" className="ml-auto" onClick={finish}>
             Skip tour
           </Button>
         </div>

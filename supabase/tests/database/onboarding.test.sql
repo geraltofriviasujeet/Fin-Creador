@@ -1,5 +1,6 @@
--- pgTAP tests for the tour and Get started checklist (migration 20261120120000): the two profile
--- times (database time only, own row only, only these columns), the upi_imports log (owner-only,
+-- pgTAP tests for the welcome and Get started checklist (migrations 20261120120000 and
+-- 20261120200000, which renamed welcome_hidden_at to welcome_hidden_at): the two profile times
+-- (database time only, own row only, only these columns), the upi_imports log (owner-only,
 -- insert-only, saved_count > 0) and getting_started_status (own data, RLS, false when unknown).
 -- The backfill of existing profiles can't be tested here (CI starts from an empty database);
 -- new profiles starting with null is.
@@ -7,7 +8,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(33);
+select plan(36);
 
 -- Fictional users A (Asha) and B (Bala).
 insert into auth.users (id, email) values
@@ -16,18 +17,29 @@ insert into auth.users (id, email) values
 
 create function pg_temp.status() returns record language sql as
   $$ select (s.has_account, s.has_expense, s.has_import, s.has_asked_roma) from public.getting_started_status() as s $$;
-create function pg_temp.tour(p_id uuid) returns timestamptz language sql as
-  $$ select p.tour_done_at from public.profiles as p where p.id = p_id $$;
+create function pg_temp.hidden(p_id uuid) returns timestamptz language sql as
+  $$ select p.welcome_hidden_at from public.profiles as p where p.id = p_id $$;
 create function pg_temp.dismissed(p_id uuid) returns timestamptz language sql as
   $$ select p.getting_started_dismissed_at from public.profiles as p where p.id = p_id $$;
 
--- ------------------------------------------------------------ privileges (1-7)
+-- ------------------------------------------------------------ the rename (1-3)
+select hasnt_column('public', 'profiles', 'tour_done_at', 'the old column name tour_done_at no longer exists');
+select has_column('public', 'profiles', 'welcome_hidden_at', 'profiles.welcome_hidden_at exists');
+select is(
+  (select array_agg(a.attname::text order by a.attname)
+     from pg_trigger as t
+     join pg_attribute as a on a.attrelid = t.tgrelid and a.attnum = any (t.tgattr::int2[])
+    where t.tgrelid = 'public.profiles'::regclass and t.tgname = 'profiles_onboarding_times'),
+  array['getting_started_dismissed_at', 'welcome_hidden_at'],
+  'the trigger fires on updates of welcome_hidden_at and getting_started_dismissed_at');
+
+-- ------------------------------------------------------------ privileges (4-10)
 select ok(
-  has_column_privilege('authenticated', 'public.profiles', 'tour_done_at', 'UPDATE')
+  has_column_privilege('authenticated', 'public.profiles', 'welcome_hidden_at', 'UPDATE')
   and has_column_privilege('authenticated', 'public.profiles', 'getting_started_dismissed_at', 'UPDATE'),
   'signed-in users may update the two onboarding columns');
 select ok(
-  not has_column_privilege('anon', 'public.profiles', 'tour_done_at', 'UPDATE')
+  not has_column_privilege('anon', 'public.profiles', 'welcome_hidden_at', 'UPDATE')
   and not has_column_privilege('anon', 'public.profiles', 'getting_started_dismissed_at', 'UPDATE'),
   'anon may not update them');
 select ok(
@@ -54,26 +66,26 @@ select ok(
                where has_table_privilege('anon', 'public.upi_imports', p.priv)),
   'anon has no access to upi_imports');
 
--- ------------------------------------------------------------ profile times (8-16)
-select ok(pg_temp.tour('a2000000-0000-4000-8000-00000000000a') is null
+-- ------------------------------------------------------------ profile times (11-19)
+select ok(pg_temp.hidden('a2000000-0000-4000-8000-00000000000a') is null
           and pg_temp.dismissed('a2000000-0000-4000-8000-00000000000a') is null,
-  'a new profile starts with the tour not done and the checklist not dismissed');
+  'a new profile starts with the welcome shown and the checklist not dismissed');
 
 select set_config('request.jwt.claims', '{"sub": "a2000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
 set local role authenticated;
 
-update public.profiles set tour_done_at = '2001-02-03 04:05:06+00' where id = 'a2000000-0000-4000-8000-00000000000a';
-select is(pg_temp.tour('a2000000-0000-4000-8000-00000000000a'), now(), 'any tour time a client sends becomes the database''s now()');
+update public.profiles set welcome_hidden_at = '2001-02-03 04:05:06+00' where id = 'a2000000-0000-4000-8000-00000000000a';
+select is(pg_temp.hidden('a2000000-0000-4000-8000-00000000000a'), now(), 'any hide time a client sends becomes the database''s now()');
 
 update public.profiles set getting_started_dismissed_at = '2099-01-01 00:00:00+00' where id = 'a2000000-0000-4000-8000-00000000000a';
 select is(pg_temp.dismissed('a2000000-0000-4000-8000-00000000000a'), now(), 'any dismiss time a client sends becomes the database''s now()');
 
-update public.profiles set tour_done_at = null where id = 'a2000000-0000-4000-8000-00000000000a';
-select is(pg_temp.tour('a2000000-0000-4000-8000-00000000000a'), null, 'null clears the tour (Replay the tour)');
+update public.profiles set welcome_hidden_at = null where id = 'a2000000-0000-4000-8000-00000000000a';
+select is(pg_temp.hidden('a2000000-0000-4000-8000-00000000000a'), null, 'null shows the welcome again (Settings toggle)');
 
-update public.profiles set tour_done_at = now() where id = 'b2000000-0000-4000-8000-00000000000b';
+update public.profiles set welcome_hidden_at = now() where id = 'b2000000-0000-4000-8000-00000000000b';
 reset role;
-select is(pg_temp.tour('b2000000-0000-4000-8000-00000000000b'), null, 'A cannot set B''s tour time');
+select is(pg_temp.hidden('b2000000-0000-4000-8000-00000000000b'), null, 'A cannot set B''s hide time');
 
 select set_config('request.jwt.claims', '{"sub": "a2000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
 set local role authenticated;
@@ -84,19 +96,19 @@ select throws_ok(
 -- A fixed earlier time (set as the owner with the trigger off), to tell "kept" from "now()".
 reset role;
 alter table public.profiles disable trigger profiles_onboarding_times;
-update public.profiles set tour_done_at = '2020-05-05 10:00:00+00' where id = 'a2000000-0000-4000-8000-00000000000a';
+update public.profiles set welcome_hidden_at = '2020-05-05 10:00:00+00' where id = 'a2000000-0000-4000-8000-00000000000a';
 alter table public.profiles enable trigger profiles_onboarding_times;
 
 select set_config('request.jwt.claims', '{"sub": "a2000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
 set local role authenticated;
 update public.profiles set display_name = 'Asha R' where id = 'a2000000-0000-4000-8000-00000000000a';
-select is(pg_temp.tour('a2000000-0000-4000-8000-00000000000a'), '2020-05-05 10:00:00+00'::timestamptz, 'another column''s update leaves the tour time');
-update public.profiles set tour_done_at = '2020-05-05 10:00:00+00' where id = 'a2000000-0000-4000-8000-00000000000a';
-select is(pg_temp.tour('a2000000-0000-4000-8000-00000000000a'), '2020-05-05 10:00:00+00'::timestamptz, 'repeating the same value leaves the tour time');
-update public.profiles set tour_done_at = '2020-05-06 10:00:00+00' where id = 'a2000000-0000-4000-8000-00000000000a';
-select is(pg_temp.tour('a2000000-0000-4000-8000-00000000000a'), now(), 'a different value becomes now()');
+select is(pg_temp.hidden('a2000000-0000-4000-8000-00000000000a'), '2020-05-05 10:00:00+00'::timestamptz, 'another column''s update leaves the hide time');
+update public.profiles set welcome_hidden_at = '2020-05-05 10:00:00+00' where id = 'a2000000-0000-4000-8000-00000000000a';
+select is(pg_temp.hidden('a2000000-0000-4000-8000-00000000000a'), '2020-05-05 10:00:00+00'::timestamptz, 'repeating the same value leaves the hide time');
+update public.profiles set welcome_hidden_at = '2020-05-06 10:00:00+00' where id = 'a2000000-0000-4000-8000-00000000000a';
+select is(pg_temp.hidden('a2000000-0000-4000-8000-00000000000a'), now(), 'a different value becomes now()');
 
--- ------------------------------------------------------------ upi_imports (17-24)
+-- ------------------------------------------------------------ upi_imports (20-27)
 select lives_ok($$ insert into public.upi_imports (saved_count) values (3) $$, 'A logs an import of their own');
 select is((select u.user_id from public.upi_imports as u), 'a2000000-0000-4000-8000-00000000000a'::uuid, 'the row is A''s (user_id from auth.uid())');
 select throws_ok(
@@ -111,7 +123,7 @@ select throws_ok($$ delete from public.upi_imports $$, '42501', null, 'no delete
 select set_config('request.jwt.claims', '{"sub": "b2000000-0000-4000-8000-00000000000b", "role": "authenticated"}', true);
 select is((select count(*) from public.upi_imports), 0::bigint, 'B cannot see A''s imports');
 
--- ------------------------------------------------------------ getting_started_status (25-33)
+-- ------------------------------------------------------------ getting_started_status (28-36)
 select set_config('request.jwt.claims', '{"sub": "a2000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
 reset role;
 delete from public.upi_imports;   -- start A's checklist from nothing

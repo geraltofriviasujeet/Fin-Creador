@@ -1,12 +1,13 @@
 "use server"
 
+import { dismissGettingStarted, setWelcomeHidden } from "@fin-creador/api"
 import { revalidatePath } from "next/cache"
-import { dismissGettingStarted, setTourDone } from "@fin-creador/api"
+import { clearWelcome } from "@/lib/auth/welcome-cookie"
 import { createClient } from "@/lib/supabase/server"
 
-// The tour and Get started card (before Sprint 12a). Only the signed-in person's own row: RLS
-// and the column grants enforce it, and the database stores its own time (migration
-// 20261120120000). This folder has no page; it only holds these actions.
+// The welcome and the Get started card (before Sprint 12a). Only the signed-in person's own row:
+// RLS and the column grants enforce it, and the database stores its own time (migrations
+// 20261120120000 and 20261120200000). This folder has no page; it only holds these actions.
 
 async function signedIn() {
   const supabase = await createClient()
@@ -15,24 +16,24 @@ async function signedIn() {
 }
 
 /**
- * Finished or skipped the welcome or the tour: it doesn't come back on any device. The layout is
- * refreshed so it knows the tour is done, and a later Replay (same visit) opens it again.
+ * The welcome closed (Skip, Escape, Start using FinCreador or Show me around). Clears this
+ * sign-in's welcome cookie, so a reload doesn't bring it back; with "Don't show this again"
+ * ticked, also hides it at later sign-ins on every device. Unticked never un-hides it.
  */
-export async function finishTourAction(): Promise<{ ok: boolean }> {
+export async function closeWelcomeAction(hide: boolean): Promise<{ ok: boolean }> {
+  await clearWelcome()
+  if (hide !== true) return { ok: true }
   const s = await signedIn()
   if (!s) return { ok: false }
-  const result = await setTourDone(s.supabase, s.userId, true)
-  if (result.ok) revalidatePath("/", "layout")
-  return result
+  return setWelcomeHidden(s.supabase, s.userId, true)
 }
 
-/** Settings → Replay the tour: the layout shows it again at once. */
-export async function replayTourAction(): Promise<{ ok: boolean }> {
+/** Settings → "Show the welcome when I sign in". */
+export async function setWelcomeOnSignInAction(show: boolean): Promise<{ ok: boolean }> {
+  if (typeof show !== "boolean") return { ok: false }
   const s = await signedIn()
   if (!s) return { ok: false }
-  const result = await setTourDone(s.supabase, s.userId, false)
-  if (result.ok) revalidatePath("/", "layout")
-  return result
+  return setWelcomeHidden(s.supabase, s.userId, !show)
 }
 
 /** Hide on the Get started card: gone for good. */

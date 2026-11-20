@@ -1,8 +1,8 @@
 import type { UserClient } from "./income/client"
 
-// First sign-in tour and the Get started checklist (before Sprint 12a), shared by web and
-// mobile. Both "done" times live on the profile and are set by the database's own clock
-// (migration 20261120120000): a client sends any value for "now" and null to clear, nothing else.
+// The welcome and the Get started checklist (before Sprint 12a), shared by web and mobile. Both
+// times live on the profile and are set by the database's own clock (migrations 20261120120000
+// and 20261120200000): a client sends any value for "now" and null to clear, nothing else.
 
 export type GettingStartedItems = { account: boolean; expense: boolean; import: boolean; roma: boolean }
 
@@ -17,9 +17,12 @@ export async function loadChecklist(supabase: UserClient): Promise<GettingStarte
 // The value sent is ignored by the database (it stores its own now()); any non-null value works.
 const NOW = new Date(0).toISOString()
 
-/** Finished or skipped (true), or Replay the tour (false). */
-export async function setTourDone(supabase: UserClient, userId: string, done: boolean): Promise<{ ok: boolean }> {
-  const { data, error } = await supabase.from("profiles").update({ tour_done_at: done ? NOW : null }).eq("id", userId).select("id").maybeSingle()
+/**
+ * "Don't show this again" ticked when the welcome closed, or Settings → "Show the welcome when I
+ * sign in" turned off (true); that setting turned on (false).
+ */
+export async function setWelcomeHidden(supabase: UserClient, userId: string, hidden: boolean): Promise<{ ok: boolean }> {
+  const { data, error } = await supabase.from("profiles").update({ welcome_hidden_at: hidden ? NOW : null }).eq("id", userId).select("id").maybeSingle()
   return { ok: !error && data !== null }
 }
 

@@ -20,8 +20,8 @@ export async function submitSignUp(page: Page, { name, email, password = PASSWOR
 
 /**
  * Signs up and finishes email confirmation (or skips it if the project has confirmation
- * off and signs the user straight in). Ends signed in on the Overview page, with the first
- * sign-in welcome skipped (saved to the profile) unless `{ tour: true }` keeps it open. The
+ * off and signs the user straight in). Ends signed in on the Overview page, with the welcome
+ * (shown after each sign-in) skipped unless `{ tour: true }` keeps it open. The
  * welcome is a modal: while it is open the page behind it is hidden from screen readers, so
  * the greeting is checked only once it has closed.
  */
@@ -43,7 +43,7 @@ export async function signUpConfirmed(page: Page, name: string, email: string, {
 /** The first sign-in welcome carousel ("Welcome to FinCreador": seven slides, Skip on each). */
 export const welcomeDialog = (page: Page) => page.getByRole("dialog", { name: "Welcome to FinCreador" })
 
-/** Skips the welcome; it closes only once the profile has saved it. */
+/** Skips the welcome; it closes once this sign-in's welcome cookie is cleared. */
 export async function skipWelcome(page: Page) {
   const welcome = welcomeDialog(page)
   await expect(welcome).toBeVisible()
@@ -61,6 +61,12 @@ export async function signIn(page: Page, email: string, password = PASSWORD) {
   await page.getByLabel("Email").fill(email)
   await page.getByLabel("Password", { exact: true }).fill(password)
   await page.getByRole("button", { name: "Sign in", exact: true }).click()
+}
+
+/** Signs in and skips the welcome that follows every sign-in (for tests about something else). */
+export async function signInPastWelcome(page: Page, email: string, password = PASSWORD) {
+  await signIn(page, email, password)
+  await skipWelcome(page)
 }
 
 export async function signOut(page: Page) {

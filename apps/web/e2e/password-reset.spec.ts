@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { PASSWORD, RESET_SUBJECT, overviewHeading, signIn, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
+import { PASSWORD, RESET_SUBJECT, overviewHeading, signIn, signInPastWelcome, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
 import { waitForAuthLink } from "./mailpit"
 
 const NEW_PASSWORD = "brand-new-pass-77"
@@ -31,7 +31,7 @@ test("password reset by email, then sign in with the new password only", async (
   await signOut(page)
   await signIn(page, email, PASSWORD)
   await expect(page.getByText("Email or password is incorrect.")).toBeVisible()
-  await signIn(page, email, NEW_PASSWORD)
+  await signInPastWelcome(page, email, NEW_PASSWORD)
   await expect(overviewHeading(page)).toBeVisible()
 })
 

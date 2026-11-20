@@ -11,6 +11,7 @@ import { SIGN_UP_CHECK_EMAIL, authErrorMessage, isExistingAccountError } from "@
 import { authCallbackUrl, safeNextPath } from "@/lib/auth/redirect"
 import { getPublicEnv } from "@/lib/env"
 import { type FormState, pick, readFields, validate } from "@/lib/form-state"
+import { clearWelcome, markSignedIn } from "@/lib/auth/welcome-cookie"
 import { createClient } from "@/lib/supabase/server"
 
 // All auth runs server-side with the publishable key and the user's cookies.
@@ -40,6 +41,7 @@ export async function signInAction(_prev: FormState, formData: FormData): Promis
   const { error } = await supabase.auth.signInWithPassword(result.data)
   if (error) return errorState(error, pick(input, ["email"]))
 
+  await markSignedIn()
   redirect(safeNextPath(input.next))
 }
 
@@ -62,7 +64,10 @@ export async function signUpAction(_prev: FormState, formData: FormData): Promis
   if (error) return isExistingAccountError(error) ? checkEmail : errorState(error, pick(input, echo))
 
   // Email confirmation off: signed in immediately.
-  if (data.session) redirect("/")
+  if (data.session) {
+    await markSignedIn()
+    redirect("/")
+  }
 
   // Confirmation on (an unconfirmed existing email also lands here).
   return checkEmail
@@ -135,5 +140,6 @@ export async function signInWithGoogleAction(_prev: FormState, formData: FormDat
 export async function signOutAction() {
   const supabase = await createClient()
   await supabase.auth.signOut()
+  await clearWelcome()
   redirect("/sign-in?notice=signed-out")
 }

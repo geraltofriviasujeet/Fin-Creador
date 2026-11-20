@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { overviewHeading, signIn, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
+import { overviewHeading, signInPastWelcome, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
 
 test("profile changes are validated, saved and still there after signing in again", async ({ page }) => {
   const email = uniqueEmail("profile")
@@ -24,7 +24,7 @@ test("profile changes are validated, saved and still there after signing in agai
   await expect(page.getByText("Profile saved.")).toBeVisible()
 
   await signOut(page)
-  await signIn(page, email)
+  await signInPastWelcome(page, email)
   await expect(overviewHeading(page)).toBeVisible() // sign-in finished
   await page.goto("/settings")
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Renamed Person")

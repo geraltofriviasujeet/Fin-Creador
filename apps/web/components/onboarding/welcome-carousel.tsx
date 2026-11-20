@@ -2,14 +2,18 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
+import { LogoMark } from "@/components/brand/logo"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { cn } from "cn"
 
-// First sign-in welcome (owner feedback 2026-11-20: "the welcome is too thin"): seven slides,
-// each a picture, a title and a short paragraph. Desktop: a centred card ~720px wide. Phones
-// (below md): a full-screen sheet; swipe left or right between slides. Arrow keys move, Escape
-// and Skip (top right, every slide) skip; focus stays inside (Base UI dialog). The last slide
-// offers "Show me around" (the nav tour) and "Start using FinCreador" (finish).
+// The welcome (owner feedback 2026-11-20): seven slides, each a big title, a picture and a short
+// paragraph. It shows after each sign-in unless the person opted out (Onboarding in tour.tsx).
+// Desktop: a centred card ~720px wide. Phones (below md): a full-screen sheet; swipe left or
+// right between slides. Arrow keys move, Escape and Skip (top right, every slide) close; focus
+// stays inside (Base UI dialog). The last slide offers "Show me around" (the nav tour) and "Start
+// using FinCreador". "Don't show this again" (bottom left, unticked) is saved however it closes;
+// unticked, closing changes nothing on the profile.
 //
 // Pictures: 3D-style scenes of the app with a made-up demo person (scripts/onboarding/scenes.ts,
 // rendered by scripts/capture-onboarding.ts into public/onboarding/): a phone set (square) and a
@@ -69,6 +73,9 @@ export const WELCOME_SLIDES: readonly Slide[] = [
 
 const SWIPE = 50
 
+/** Settings → Replay the tour asks the (always mounted) Onboarding to open the welcome. */
+export const REPLAY_WELCOME_EVENT = "fincreador:replay-welcome"
+
 function SlidePicture({ slide, alt }: { slide: Slide; alt: string }) {
   return (
     <picture>
@@ -79,9 +86,19 @@ function SlidePicture({ slide, alt }: { slide: Slide; alt: string }) {
   )
 }
 
-export function WelcomeCarousel({ onTour, onClosed, onFinish }: { onTour: () => void; onClosed: () => void; onFinish: () => Promise<unknown> }) {
+export function WelcomeCarousel({
+  onTour,
+  onClosed,
+  onClose,
+}: {
+  onTour: () => void
+  onClosed: () => void
+  /** Clears this sign-in's welcome cookie; `hide` also saves "Don't show this again". */
+  onClose: (hide: boolean) => Promise<{ ok: boolean }>
+}) {
   const [index, setIndex] = useState(0)
   const [direction, setDirection] = useState<1 | -1>(1)
+  const [hide, setHide] = useState(false)
   const [saving, setSaving] = useState(false)
   const next = useRef<HTMLButtonElement>(null)
   const start = useRef<HTMLButtonElement>(null)
@@ -98,12 +115,15 @@ export function WelcomeCarousel({ onTour, onClosed, onFinish }: { onTour: () => 
     setIndex(to)
   }
 
-  // Skip and "Start using FinCreador": saved to the profile before it closes.
-  const finish = async () => {
+  // Every way out (Skip, Escape, Start using FinCreador, Show me around) goes through here, so
+  // the cookie is cleared and a ticked box is saved before it closes.
+  const close = async (then: "closed" | "tour") => {
     if (saving) return
     setSaving(true)
-    await onFinish().catch(() => null)
-    onClosed()
+    const result = await onClose(hide).catch(() => null)
+    if (hide && !result?.ok) toast.error("We couldn't save “Don't show this again”. You can turn the welcome off in Settings.")
+    if (then === "tour") onTour()
+    else onClosed()
   }
 
   // The button the person was on can disappear (Next on the last slide, Back on the first):
@@ -136,7 +156,7 @@ export function WelcomeCarousel({ onTour, onClosed, onFinish }: { onTour: () => 
   }
 
   return (
-    <DialogPrimitive.Root open disablePointerDismissal onOpenChange={(open) => !open && void finish()}>
+    <DialogPrimitive.Root open disablePointerDismissal onOpenChange={(open) => !open && void close("closed")}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Backdrop className="fixed inset-0 z-60 bg-ink/45" />
         <DialogPrimitive.Viewport className="fixed inset-0 z-60 grid md:place-items-center md:p-4">
@@ -151,30 +171,37 @@ export function WelcomeCarousel({ onTour, onClosed, onFinish }: { onTour: () => 
               touch.current = t ? { x: t.clientX, y: t.clientY } : null
             }}
             onTouchEnd={onTouchEnd}
-            className="relative flex h-dvh w-full flex-col gap-4 overflow-y-auto bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-ink outline-none md:h-auto md:max-h-[calc(100dvh-2rem)] md:w-[720px] md:max-w-full md:rounded-3xl md:p-6 md:shadow-(--shadow-raised)"
+            className="relative flex h-dvh w-full flex-col gap-3 overflow-y-auto bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-ink outline-none md:h-auto md:max-h-[calc(100dvh-2rem)] md:w-[720px] md:max-w-full md:gap-4 md:rounded-3xl md:p-6 md:shadow-(--shadow-raised)"
           >
-            <div className="flex justify-end">
-              <Button type="button" variant="ghost" size="md" disabled={saving} onClick={() => void finish()}>
-                Skip
-              </Button>
-            </div>
+            {/* Top right on every slide, beside the title. */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="md"
+              disabled={saving}
+              onClick={() => void close("closed")}
+              className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-2 md:top-6 md:right-5"
+            >
+              Skip
+            </Button>
 
             <div
               key={index}
               data-testid="welcome-slide"
               data-slide={slide.slug}
               className={cn(
-                "grid gap-4 duration-300 animate-in fade-in-0 motion-reduce:animate-none",
+                "grid gap-3 duration-300 animate-in fade-in-0 motion-reduce:animate-none md:gap-4",
                 direction === 1 ? "slide-in-from-right-8" : "slide-in-from-left-8"
               )}
             >
-              <div className="aspect-square overflow-hidden rounded-2xl bg-canvas shadow-(--shadow-raised) md:aspect-[16/10]">
+              <h2 className="flex min-h-9 items-center gap-3 pr-16 font-heading text-[26px] leading-tight font-bold tracking-(--fc-tracking-heading) md:text-[32px]">
+                {index === 0 && <LogoMark size={30} />}
+                <span>{slide.title}</span>
+              </h2>
+              <div className="mx-auto aspect-square w-full max-w-[min(100%,46dvh)] overflow-hidden rounded-2xl bg-canvas shadow-(--shadow-raised) md:aspect-[16/10] md:max-w-none">
                 <SlidePicture slide={slide} alt={slide.alt} />
               </div>
-              <div className="grid gap-2">
-                <h2 className="font-heading text-xl font-semibold tracking-(--fc-tracking-heading) md:text-2xl">{slide.title}</h2>
-                <p className="text-sm leading-relaxed md:text-base">{slide.text}</p>
-              </div>
+              <p className="text-sm leading-relaxed md:text-base">{slide.text}</p>
             </div>
 
             {/* The next slide's picture, so it's ready when Next is pressed. Nothing else is loaded. */}
@@ -188,31 +215,43 @@ export function WelcomeCarousel({ onTour, onClosed, onFinish }: { onTour: () => 
               Slide {index + 1} of {count}: {slide.title}
             </p>
 
-            <div className="mt-auto grid gap-4 md:mt-0">
+            <div className="mt-auto grid gap-3 md:mt-0 md:gap-4">
               <div aria-hidden="true" data-testid="welcome-dots" className="flex justify-center gap-1.5">
                 {WELCOME_SLIDES.map((s, i) => (
                   <span key={s.slug} className={cn("h-2 rounded-full transition-[width] motion-reduce:transition-none", i === index ? "w-5 bg-brand-deep" : "w-2 bg-line-strong")} />
                 ))}
               </div>
-              {/* Last slide on phones: Back and Show me around side by side, Start full width below. */}
-              <div className={cn("gap-2", last ? "grid grid-cols-2 md:flex md:justify-end" : "flex justify-between")}>
-                <Button type="button" variant="secondary" size="lg" disabled={index === 0 || saving} onClick={() => go(index - 1)} className={cn(last && "md:mr-auto")}>
-                  Back
-                </Button>
-                {last ? (
-                  <>
-                    <Button type="button" variant="secondary" size="lg" disabled={saving} onClick={onTour}>
-                      Show me around
-                    </Button>
-                    <Button ref={start} type="button" size="lg" disabled={saving} onClick={() => void finish()} className="col-span-2">
-                      Start using FinCreador
-                    </Button>
-                  </>
-                ) : (
-                  <Button ref={next} type="button" size="lg" disabled={saving} onClick={() => go(index + 1)}>
-                    Next
+              <div className="grid gap-3 md:flex md:items-center md:gap-2">
+                <label className="flex min-h-6 w-fit cursor-pointer items-center gap-2 text-sm md:mr-auto">
+                  <input
+                    type="checkbox"
+                    checked={hide}
+                    disabled={saving}
+                    onChange={(e) => setHide(e.target.checked)}
+                    className="size-4 accent-(--fc-color-accent-deep)"
+                  />
+                  Don&apos;t show this again
+                </label>
+                {/* Last slide on phones: Back and Show me around side by side, Start full width below. */}
+                <div className={cn("gap-2", last ? "grid grid-cols-2 md:flex" : "flex justify-between md:justify-end")}>
+                  <Button type="button" variant="secondary" size="lg" disabled={index === 0 || saving} onClick={() => go(index - 1)}>
+                    Back
                   </Button>
-                )}
+                  {last ? (
+                    <>
+                      <Button type="button" variant="secondary" size="lg" disabled={saving} onClick={() => void close("tour")}>
+                        Show me around
+                      </Button>
+                      <Button ref={start} type="button" size="lg" disabled={saving} onClick={() => void close("closed")} className="col-span-2">
+                        Start using FinCreador
+                      </Button>
+                    </>
+                  ) : (
+                    <Button ref={next} type="button" size="lg" disabled={saving} onClick={() => go(index + 1)}>
+                      Next
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </DialogPrimitive.Popup>
