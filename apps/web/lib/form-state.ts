@@ -12,6 +12,11 @@ export type FormState = {
   code?: "email_not_confirmed"
   /** After an entry is saved: the accounts it moved, before and after, from the server. */
   balances?: BalanceChange[]
+  /**
+   * After a sign-in (or a password reset that signs in): the same-site path to open with a full
+   * page load, so nothing the browser cached from an earlier session is shown.
+   */
+  redirectTo?: string
 }
 
 export const initialFormState: FormState = { status: "idle" }

@@ -1,6 +1,5 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import {
   forgotPasswordSchema,
@@ -12,11 +11,15 @@ import { SIGN_UP_CHECK_EMAIL, authErrorMessage, isExistingAccountError } from "@
 import { authCallbackUrl, safeNextPath } from "@/lib/auth/redirect"
 import { getPublicEnv } from "@/lib/env"
 import { type FormState, pick, readFields, validate } from "@/lib/form-state"
-import { clearWelcome, markSignedIn } from "@/lib/auth/welcome-cookie"
+import { markSignedIn } from "@/lib/auth/welcome-cookie"
 import { createClient } from "@/lib/supabase/server"
 
 // All auth runs server-side with the publishable key and the user's cookies.
 // Messages never reveal whether an email is registered.
+// A sign-in never ends in a client router navigation: the action returns `redirectTo` and the
+// form opens it with a full page load, so no page the browser cached from an earlier session
+// (possibly another person's) is reused. Sign-out is a plain form post to /auth/sign-out for the
+// same reason. Email links and Google land on /auth/callback, already a full page load.
 
 function callbackUrl(next: string) {
   return authCallbackUrl(getPublicEnv().siteUrl, next)
@@ -43,10 +46,7 @@ export async function signInAction(_prev: FormState, formData: FormData): Promis
   if (error) return errorState(error, pick(input, ["email"]))
 
   await markSignedIn()
-  // A new session: drop the browser's cached app pages (another person's, or the welcome gate
-  // from before signing out), so the app layout is rendered afresh and shows the welcome.
-  revalidatePath("/", "layout")
-  redirect(safeNextPath(input.next))
+  return { status: "success", redirectTo: safeNextPath(input.next) }
 }
 
 export async function signUpAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -70,8 +70,7 @@ export async function signUpAction(_prev: FormState, formData: FormData): Promis
   // Email confirmation off: signed in immediately.
   if (data.session) {
     await markSignedIn()
-    revalidatePath("/", "layout")
-    redirect("/")
+    return { status: "success", redirectTo: "/" }
   }
 
   // Confirmation on (an unconfirmed existing email also lands here).
@@ -127,7 +126,7 @@ export async function updatePasswordAction(_prev: FormState, formData: FormData)
   const { error } = await supabase.auth.updateUser({ password: result.data.password })
   if (error) return errorState(error, {})
 
-  redirect("/?notice=password-updated")
+  return { status: "success", redirectTo: "/?notice=password-updated" }
 }
 
 export async function signInWithGoogleAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -140,13 +139,4 @@ export async function signInWithGoogleAction(_prev: FormState, formData: FormDat
   if (error || !data.url) return { status: "error", message: "Couldn’t start Google sign-in. Please try again." }
 
   redirect(data.url)
-}
-
-export async function signOutAction() {
-  const supabase = await createClient()
-  await supabase.auth.signOut()
-  await clearWelcome()
-  // Nothing of the signed-out session stays in the browser's router cache.
-  revalidatePath("/", "layout")
-  redirect("/sign-in?notice=signed-out")
 }

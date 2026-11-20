@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test"
-import { overviewHeading, signInPastWelcome, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
+import { overviewHeading, signIn, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
 
 test("profile changes are validated, saved and still there after signing in again", async ({ page }) => {
   const email = uniqueEmail("profile")
-  await signUpConfirmed(page, "Profile Person", email)
+  await signUpConfirmed(page, "Profile Person", email, { hideWelcome: true })
   await page.goto("/settings")
 
   // India-first defaults from the sign-up trigger.
@@ -24,7 +24,7 @@ test("profile changes are validated, saved and still there after signing in agai
   await expect(page.getByText("Profile saved.")).toBeVisible()
 
   await signOut(page)
-  await signInPastWelcome(page, email)
+  await signIn(page, email)
   await expect(overviewHeading(page)).toBeVisible() // sign-in finished
   await page.goto("/settings")
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Renamed Person")

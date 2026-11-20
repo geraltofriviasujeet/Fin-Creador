@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { IDLE_REASON } from "@/lib/auth/idle"
 import { safeNextPath } from "@/lib/auth/redirect"
+import { clearWelcome } from "@/lib/auth/welcome-cookie"
 import { createClient } from "@/lib/supabase/server"
 
 // Sign-out after 2 hours of inactivity (Sprint 10a). The idle guard posts a form here from
@@ -19,6 +20,7 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   // "local": this browser's session only; the person's other devices stay signed in.
   await supabase.auth.signOut({ scope: "local" })
+  await clearWelcome()
 
   const to = new URL("/sign-in", request.url)
   to.searchParams.set("reason", IDLE_REASON)

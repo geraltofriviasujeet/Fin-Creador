@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Suspense, useActionState } from "react"
+import { Suspense, useActionState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { PASSWORD_MIN_LENGTH } from "@fin-creador/schemas"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,17 @@ import { FormMessage, TextField } from "@/components/ui/field"
 import { type FormState, initialFormState } from "@/lib/form-state"
 
 type Action = (state: FormState, formData: FormData) => Promise<FormState>
+
+/**
+ * A successful sign-in opens its page with a full page load (never the client router), so the
+ * browser can't show pages cached from an earlier session. Same-site paths only.
+ */
+function useFullPageRedirect(redirectTo: string | undefined) {
+  useEffect(() => {
+    if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) window.location.assign(redirectTo)
+  }, [redirectTo])
+  return redirectTo !== undefined
+}
 
 function StateMessage({ state }: { state: FormState }) {
   if (state.status === "idle" || !state.message) return null
@@ -39,6 +50,7 @@ function NextFieldInner() {
 
 export function SignInForm({ action, resendAction }: { action: Action; resendAction: Action }) {
   const [state, formAction, pending] = useActionState(action, initialFormState)
+  const leaving = useFullPageRedirect(state.redirectTo)
   const [resendState, resendFormAction, resending] = useActionState(resendAction, initialFormState)
   const email = state.values?.email ?? ""
 
@@ -69,7 +81,7 @@ export function SignInForm({ action, resendAction }: { action: Action; resendAct
             </Link>
           }
         />
-        <SubmitButton pending={pending} idle="Sign in" busy="Signing in…" />
+        <SubmitButton pending={pending || leaving} idle="Sign in" busy="Signing in…" />
       </form>
 
       {state.code === "email_not_confirmed" && (
@@ -87,6 +99,7 @@ export function SignInForm({ action, resendAction }: { action: Action; resendAct
 
 export function SignUpForm({ action }: { action: Action }) {
   const [state, formAction, pending] = useActionState(action, initialFormState)
+  const leaving = useFullPageRedirect(state.redirectTo)
   return (
     <form action={formAction} noValidate className="grid gap-4">
       <StateMessage state={state} />
@@ -116,7 +129,7 @@ export function SignUpForm({ action }: { action: Action }) {
         hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
         error={state.fieldErrors?.password}
       />
-      <SubmitButton pending={pending} idle="Create account" busy="Creating account…" />
+      <SubmitButton pending={pending || leaving} idle="Create account" busy="Creating account…" />
     </form>
   )
 }
@@ -142,6 +155,7 @@ export function ForgotPasswordForm({ action }: { action: Action }) {
 
 export function UpdatePasswordForm({ action }: { action: Action }) {
   const [state, formAction, pending] = useActionState(action, initialFormState)
+  const leaving = useFullPageRedirect(state.redirectTo)
   return (
     <form action={formAction} noValidate className="grid gap-4">
       <StateMessage state={state} />
@@ -162,7 +176,7 @@ export function UpdatePasswordForm({ action }: { action: Action }) {
         required
         error={state.fieldErrors?.confirmPassword}
       />
-      <SubmitButton pending={pending} idle="Update password" busy="Updating…" />
+      <SubmitButton pending={pending || leaving} idle="Update password" busy="Updating…" />
     </form>
   )
 }

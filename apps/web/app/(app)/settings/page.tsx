@@ -4,7 +4,6 @@ import { redirect } from "next/navigation"
 import { LogOut } from "lucide-react"
 import { PROFILE_FORM_COLUMNS, loadExpenseCategories, profileFormValues } from "@fin-creador/api"
 import { countryOptions, currencyOptions, timeZoneOptions } from "@fin-creador/schemas"
-import { signOutAction } from "@/app/(auth)/actions"
 import { setRomaDescriptionsAction, setRomaEnabledAction, updateProfileAction } from "@/app/(app)/settings/actions"
 import { PageHeader } from "@/components/shell/app-shell"
 import { ExpenseCategories } from "@/components/settings/expense-categories"
@@ -131,7 +130,7 @@ async function SettingsContent() {
       <Card>
         <CardTitle>Account</CardTitle>
         <CardDescription className="mt-1">Signed in as {auth.user.email}</CardDescription>
-        <form action={signOutAction} className="mt-5">
+        <form method="post" action="/auth/sign-out" className="mt-5">
           <Button type="submit" variant="secondary">
             <LogOut aria-hidden="true" />
             Sign out

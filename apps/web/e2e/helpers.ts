@@ -21,11 +21,18 @@ export async function submitSignUp(page: Page, { name, email, password = PASSWOR
 /**
  * Signs up and finishes email confirmation (or skips it if the project has confirmation
  * off and signs the user straight in). Ends signed in on the Overview page, with the welcome
- * (shown after each sign-in) skipped unless `{ tour: true }` keeps it open. The
+ * (shown after each sign-in) skipped unless `{ tour: true }` keeps it open. `{ hideWelcome: true }`
+ * ticks "Don't show this again" as it skips, so later sign-ins in the test go straight to the
+ * app (only onboarding.spec.ts tests the welcome). The
  * welcome is a modal: while it is open the page behind it is hidden from screen readers, so
  * the greeting is checked only once it has closed.
  */
-export async function signUpConfirmed(page: Page, name: string, email: string, { tour = false }: { tour?: boolean } = {}) {
+export async function signUpConfirmed(
+  page: Page,
+  name: string,
+  email: string,
+  { tour = false, hideWelcome = false }: { tour?: boolean; hideWelcome?: boolean } = {}
+) {
   const startedAt = Date.now() - 1000
   await submitSignUp(page, { name, email })
   const confirmationNeeded = page.getByText("Check your email for a link to confirm your account")
@@ -36,17 +43,18 @@ export async function signUpConfirmed(page: Page, name: string, email: string, {
   }
   await expect(page).toHaveURL(/\/$/)
   if (tour) return
-  await skipWelcome(page)
+  await skipWelcome(page, { hide: hideWelcome })
   await expect(overviewHeading(page)).toBeVisible()
 }
 
 /** The first sign-in welcome carousel ("Welcome to FinCreador": seven slides, Skip on each). */
 export const welcomeDialog = (page: Page) => page.getByRole("dialog", { name: "Welcome to FinCreador" })
 
-/** Skips the welcome; it closes once this sign-in's welcome cookie is cleared. */
-export async function skipWelcome(page: Page) {
+/** Skips the welcome (ticking "Don't show this again" with `hide`); it closes once that is saved. */
+export async function skipWelcome(page: Page, { hide = false }: { hide?: boolean } = {}) {
   const welcome = welcomeDialog(page)
   await expect(welcome).toBeVisible()
+  if (hide) await welcome.getByRole("checkbox", { name: "Don't show this again" }).check()
   await welcome.getByRole("button", { name: "Skip", exact: true }).click()
   await expect(welcome).toBeHidden()
 }
@@ -61,12 +69,6 @@ export async function signIn(page: Page, email: string, password = PASSWORD) {
   await page.getByLabel("Email").fill(email)
   await page.getByLabel("Password", { exact: true }).fill(password)
   await page.getByRole("button", { name: "Sign in", exact: true }).click()
-}
-
-/** Signs in and skips the welcome that follows every sign-in (for tests about something else). */
-export async function signInPastWelcome(page: Page, email: string, password = PASSWORD) {
-  await signIn(page, email, password)
-  await skipWelcome(page)
 }
 
 export async function signOut(page: Page) {
