@@ -14,11 +14,16 @@ async function signedIn() {
   return data.user ? { supabase, userId: data.user.id } : null
 }
 
-/** Finished or skipped the tour: it doesn't come back on any device. */
+/**
+ * Finished or skipped the welcome or the tour: it doesn't come back on any device. The layout is
+ * refreshed so it knows the tour is done, and a later Replay (same visit) opens it again.
+ */
 export async function finishTourAction(): Promise<{ ok: boolean }> {
   const s = await signedIn()
   if (!s) return { ok: false }
-  return setTourDone(s.supabase, s.userId, true)
+  const result = await setTourDone(s.supabase, s.userId, true)
+  if (result.ok) revalidatePath("/", "layout")
+  return result
 }
 
 /** Settings → Replay the tour: the layout shows it again at once. */

@@ -40,14 +40,14 @@ export async function signUpConfirmed(page: Page, name: string, email: string, {
   await expect(overviewHeading(page)).toBeVisible()
 }
 
-/** The first sign-in welcome ("Welcome to FinCreador": Take the tour or Skip for now). */
+/** The first sign-in welcome carousel ("Welcome to FinCreador": seven slides, Skip on each). */
 export const welcomeDialog = (page: Page) => page.getByRole("dialog", { name: "Welcome to FinCreador" })
 
 /** Skips the welcome; it closes only once the profile has saved it. */
 export async function skipWelcome(page: Page) {
   const welcome = welcomeDialog(page)
   await expect(welcome).toBeVisible()
-  await welcome.getByRole("button", { name: "Skip for now" }).click()
+  await welcome.getByRole("button", { name: "Skip", exact: true }).click()
   await expect(welcome).toBeHidden()
 }
 

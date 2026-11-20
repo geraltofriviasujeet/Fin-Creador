@@ -115,7 +115,7 @@ async function SettingsContent() {
 
       <Card>
         <CardTitle>Tour</CardTitle>
-        <CardDescription className="mt-1">A quick look at where things are: adding expenses, imports, Overview, Goals and Roma.</CardDescription>
+        <CardDescription className="mt-1">A quick look at what FinCreador does and where things are.</CardDescription>
         <ReplayTour />
       </Card>
 

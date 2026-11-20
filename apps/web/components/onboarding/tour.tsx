@@ -2,22 +2,23 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { finishTourAction } from "@/app/(app)/onboarding/actions"
 import { NAV_ITEMS } from "@/components/shell/nav-items"
 import { Button } from "@/components/ui/button"
+import { WelcomeCarousel } from "@/components/onboarding/welcome-carousel"
 import { cn } from "cn"
 
-// First sign-in welcome and tour (before Sprint 12a). The welcome dialog comes first ("Take the
-// tour" or "Skip for now"); the tour then walks the + Add button and every main nav item, in nav
-// order, without leaving the page. No library: each step points at an element marked
+// First sign-in welcome and tour (before Sprint 12a). The welcome carousel comes first
+// (welcome-carousel.tsx: seven slides; Skip, or on the last slide "Show me around" or "Start
+// using FinCreador"); "Show me around" starts the tour, which walks the + Add button and every
+// main nav item, in nav order, without leaving the page. No library: each step points at an element marked
 // data-tour="…" in the shell (topbar, sidebar, tab bar), so every step exists on every page. When
 // several elements carry the same name (sidebar link and tab-bar link), the visible one is used;
 // a step whose element isn't on screen is skipped (the sidebar's items on phones, the tab bar's
 // "More" on desktop). On desktop the card sits beside the item with an arrow; on phones
-// (≤ 760px, the tab-bar layout) it is a card above the tab bar. Skipping the welcome, skipping
-// the tour or finishing it is saved to the profile before it closes, so a reload never brings
-// it back; Settings → Replay the tour opens the welcome again.
+// (≤ 760px, the tab-bar layout) it is a card above the tab bar. Skipping or finishing the
+// carousel, skipping the tour or finishing it is saved to the profile before it closes, so a
+// reload never brings it back; Settings → Replay the tour opens the carousel on slide 1.
 
 type Step = { anchor: string; title: string; text: string; phoneTitle?: string; phoneText?: string }
 
@@ -87,52 +88,9 @@ export function Onboarding({ show }: { show: boolean }) {
     if (show) setStage("welcome")
   }
   const close = useCallback(() => setStage("closed"), [])
-  if (stage === "welcome") return <Welcome onTour={() => setStage("tour")} onClosed={close} />
+  if (stage === "welcome") return <WelcomeCarousel onTour={() => setStage("tour")} onClosed={close} onFinish={finishTourAction} />
   if (stage === "tour") return <TourSteps onClosed={close} />
   return null
-}
-
-/** Centred on desktop, a bottom sheet on phones. Escape (and Close) count as Skip. */
-function Welcome({ onTour, onClosed }: { onTour: () => void; onClosed: () => void }) {
-  const [saving, setSaving] = useState(false)
-  const primary = useRef<HTMLButtonElement>(null)
-  const skip = async () => {
-    if (saving) return
-    setSaving(true)
-    await finishTourAction().catch(() => null)
-    onClosed()
-  }
-  return (
-    <DialogPrimitive.Root open disablePointerDismissal onOpenChange={(open) => !open && void skip()}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="fixed inset-0 z-60 bg-ink/45" />
-        <DialogPrimitive.Viewport className="fixed inset-0 z-60 grid items-end justify-items-center md:items-center md:p-4">
-          <DialogPrimitive.Popup
-            initialFocus={primary}
-            data-testid="welcome"
-            className="grid w-full max-w-md gap-4 rounded-t-3xl bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink shadow-(--shadow-raised) outline-none md:rounded-3xl md:p-6"
-          >
-            <DialogPrimitive.Title className="font-heading text-xl font-semibold tracking-(--fc-tracking-heading) md:text-2xl">
-              Welcome to FinCreador
-            </DialogPrimitive.Title>
-            <DialogPrimitive.Description render={<div />} className="grid gap-2 text-sm">
-              <p>Track every rupee across your bank accounts, cash and UPI apps.</p>
-              <p>See what&apos;s left this month and plan for your goals.</p>
-              <p>Ask Roma anything about your money.</p>
-            </DialogPrimitive.Description>
-            <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
-              <Button type="button" variant="ghost" size="lg" disabled={saving} onClick={() => void skip()}>
-                Skip for now
-              </Button>
-              <Button ref={primary} type="button" size="lg" disabled={saving} onClick={onTour}>
-                Take the tour
-              </Button>
-            </div>
-          </DialogPrimitive.Popup>
-        </DialogPrimitive.Viewport>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
-  )
 }
 
 function TourSteps({ onClosed }: { onClosed: () => void }) {
