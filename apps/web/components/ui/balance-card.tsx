@@ -5,6 +5,9 @@ import { type BalanceChange, balanceDirection, formatBalance, formatBalanceChang
 import { cn } from "cn"
 import { useCountUp } from "@/components/ui/count-up"
 
+/** The count starts a moment after the card appears, so the eye catches it first. */
+export const COUNT_DELAY_MS = 300
+
 // The visible part of the balance card shown after a save (toast type "balance"). Screen readers
 // skip it: the toast's title is the one line they hear ("Saved. HDFC Bank balance now ₹51,800.").
 // Figures come from the server (WriteResult.balances); only the frames of the count are made here.
@@ -23,7 +26,7 @@ export function BalanceCardBody({ message, changes }: { message: string; changes
 }
 
 function BalanceRow({ change }: { change: BalanceChange }) {
-  const shown = useCountUp(change.beforeMinor, change.afterMinor)
+  const shown = useCountUp(change.beforeMinor, change.afterMinor, undefined, COUNT_DELAY_MS)
   const direction = balanceDirection(change)
   const Icon = direction === "down" ? ArrowDownRight : ArrowUpRight
   return (

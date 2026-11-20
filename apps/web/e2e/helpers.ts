@@ -21,32 +21,38 @@ export async function submitSignUp(page: Page, { name, email, password = PASSWOR
 /**
  * Signs up and finishes email confirmation (or skips it if the project has confirmation
  * off and signs the user straight in). Ends signed in on the Overview page, with the first
- * sign-in tour skipped (saved to the profile) unless `{ tour: true }` keeps it open.
+ * sign-in welcome skipped (saved to the profile) unless `{ tour: true }` keeps it open. The
+ * welcome is a modal: while it is open the page behind it is hidden from screen readers, so
+ * the greeting is checked only once it has closed.
  */
 export async function signUpConfirmed(page: Page, name: string, email: string, { tour = false }: { tour?: boolean } = {}) {
   const startedAt = Date.now() - 1000
   await submitSignUp(page, { name, email })
   const confirmationNeeded = page.getByText("Check your email for a link to confirm your account")
-  await expect(confirmationNeeded.or(overviewHeading(page))).toBeVisible()
+  await expect(confirmationNeeded.or(overviewHeading(page)).or(welcomeDialog(page))).toBeVisible()
   if (await confirmationNeeded.isVisible()) {
     const link = await waitForAuthLink(email, CONFIRM_SUBJECT, { after: startedAt })
     await page.goto(link)
   }
   await expect(page).toHaveURL(/\/$/)
+  if (tour) return
+  await skipWelcome(page)
   await expect(overviewHeading(page)).toBeVisible()
-  if (!tour) await skipTour(page)
 }
 
-/** The first sign-in tour's dialog ("Tour, step 1 of 5: Add expense"). */
+/** The first sign-in welcome ("Welcome to FinCreador": Take the tour or Skip for now). */
+export const welcomeDialog = (page: Page) => page.getByRole("dialog", { name: "Welcome to FinCreador" })
+
+/** Skips the welcome; it closes only once the profile has saved it. */
+export async function skipWelcome(page: Page) {
+  const welcome = welcomeDialog(page)
+  await expect(welcome).toBeVisible()
+  await welcome.getByRole("button", { name: "Skip for now" }).click()
+  await expect(welcome).toBeHidden()
+}
+
+/** The tour's step card ("Tour, step 1 of 10: Add"). */
 export const tourDialog = (page: Page) => page.getByRole("dialog", { name: /^Tour, step \d+ of \d+:/ })
-
-/** Skips the tour; it closes only once the profile has saved it. */
-export async function skipTour(page: Page) {
-  const tour = tourDialog(page)
-  await expect(tour).toBeVisible()
-  await tour.getByRole("button", { name: "Skip tour" }).click()
-  await expect(tour).toBeHidden()
-}
 
 /** The Overview page's greeting ("Good morning, Asha"). */
 export const overviewHeading = (page: Page) => page.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening)/ })

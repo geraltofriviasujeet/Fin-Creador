@@ -30,7 +30,7 @@ export async function replayTourAction(): Promise<{ ok: boolean }> {
   return result
 }
 
-/** Dismiss (or Close, once all four are done) on the Get started card: gone for good. */
+/** Hide on the Get started card: gone for good. */
 export async function dismissGettingStartedAction(): Promise<{ ok: boolean }> {
   const s = await signedIn()
   if (!s) return { ok: false }

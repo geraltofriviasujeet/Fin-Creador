@@ -5,7 +5,8 @@ import { Toast } from "@base-ui/react/toast"
 import { Check, CircleAlert, Info, X } from "lucide-react"
 import { cn } from "cn"
 import { type BalanceChange, balanceAnnouncement } from "@fin-creador/domain"
-import { BalanceCardBody } from "@/components/ui/balance-card"
+import { BalanceCardBody, COUNT_DELAY_MS } from "@/components/ui/balance-card"
+import { COUNT_MS } from "@/components/ui/count-up"
 
 type ToastType = "success" | "info" | "error" | "balance"
 type BalanceData = { message: string; changes: BalanceChange[] }
@@ -24,14 +25,18 @@ function add(type: ToastType, title: string, description?: string) {
 
 /**
  * The balance card after a save: each account's balance before → after, counting to the new
- * value, for about 3 seconds. The title (read by screen readers, hidden on screen) is one line.
+ * value (starting 0.3s after it appears, for 1.5s), then staying about 5 seconds. The toast
+ * viewport pauses the timer while it is hovered or has focus. The title (read by screen
+ * readers, hidden on screen) is one line.
  */
+const BALANCE_TIMEOUT_MS = COUNT_DELAY_MS + COUNT_MS + 5000
+
 function addBalance(message: string, changes: BalanceChange[]) {
   return toastManager.add<BalanceData>({
     type: "balance",
     title: balanceAnnouncement(changes),
     data: { message, changes },
-    timeout: 3000,
+    timeout: BALANCE_TIMEOUT_MS,
     priority: "low",
   })
 }

@@ -23,23 +23,22 @@ const MORE = [
 export function AddMenu() {
   const itemClass = "flex h-11 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
   return (
-    <div className="flex items-center">
+    // The tour's first step highlights the whole group (Add expense and the menu arrow).
+    <div className="flex items-center" data-tour="add">
       <Link
         href={href("expense")}
         aria-label="Add expense"
-        data-tour="add-expense"
         className={cn(buttonVariants({ size: "icon" }), "rounded-r-none md:hidden")}
       >
         <Plus aria-hidden="true" className="size-5" />
       </Link>
-      <Link href={href("expense")} data-tour="add-expense" className={cn(buttonVariants({ size: "lg" }), "hidden rounded-r-none md:inline-flex")}>
+      <Link href={href("expense")} className={cn(buttonVariants({ size: "lg" }), "hidden rounded-r-none md:inline-flex")}>
         <Plus aria-hidden="true" />
         Add expense
       </Link>
       <Menu.Root>
         <Menu.Trigger
           aria-label="More ways to add"
-          data-tour="import-upi"
           className={cn(
             buttonVariants({ size: "icon" }),
             "w-9 rounded-l-none border-l-primary-foreground/25 md:h-[40px]"

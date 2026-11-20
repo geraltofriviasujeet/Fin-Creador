@@ -7,17 +7,16 @@ import type { GettingStartedItems } from "@fin-creador/api"
 import { cn } from "cn"
 import { dismissGettingStartedAction } from "@/app/(app)/onboarding/actions"
 import { UPI_IMPORT_HREF } from "@/components/statements/upi-links"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { toast } from "@/components/ui/toast"
 
 // "Get started" on Overview (before Sprint 12a). Each item ticks itself from the person's own
-// data (getting_started_status). Nothing is written on render: the card goes only when the
-// person taps Dismiss, or Close once all four are done ("You're all set"). It is never hidden
-// automatically, so deleting an entry later can't bring it back.
+// data (getting_started_status) and is a link to where you do it; ticked items stay, ticked.
+// Nothing is written on render: the card goes only when the person taps Hide (top-right). It is
+// never hidden automatically, so deleting an entry later can't bring it back.
 
 const ITEMS = [
-  { key: "account", label: "Add an account", href: "/income" },
+  { key: "account", label: "Add an account", href: "/income?add=bank" },
   { key: "expense", label: "Add your first expense", href: "/transactions?add=expense" },
   { key: "import", label: "Import a statement", href: UPI_IMPORT_HREF },
   { key: "roma", label: "Ask Roma a question", href: "/roma" },
@@ -39,8 +38,17 @@ export function GettingStartedCard({ items }: { items: GettingStartedItems }) {
     })
 
   return (
-    <Card className="mb-4 grid gap-4" aria-labelledby="getting-started-heading" role="region">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <Card className="relative mb-4 grid gap-4" aria-labelledby="getting-started-heading" role="region">
+      <button
+        type="button"
+        aria-label="Hide Get started"
+        disabled={pending}
+        onClick={dismiss}
+        className="absolute top-3 right-3 rounded-md px-2 py-1 text-xs font-semibold text-muted-foreground underline-offset-4 outline-none hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+      >
+        Hide
+      </button>
+      <div className="pr-14">
         <div className="grid gap-1">
           <h2 id="getting-started-heading" className="text-lg font-semibold">
             {allDone ? "You're all set" : "Get started"}
@@ -49,9 +57,6 @@ export function GettingStartedCard({ items }: { items: GettingStartedItems }) {
             {allDone ? "You've tried the main parts of FinCreador." : `${done} of ${ITEMS.length} done. Each one ticks itself when you do it.`}
           </p>
         </div>
-        <Button type="button" variant={allDone ? "primary" : "secondary"} size="md" disabled={pending} onClick={dismiss}>
-          {allDone ? "Close" : "Dismiss"}
-        </Button>
       </div>
       <ul className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
         {ITEMS.map((item) => {

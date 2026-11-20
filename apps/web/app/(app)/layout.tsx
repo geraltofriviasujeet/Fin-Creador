@@ -3,7 +3,7 @@ import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { loadBellReminders } from "@fin-creador/api"
 import { AppShell } from "@/components/shell/app-shell"
-import { Tour } from "@/components/onboarding/tour"
+import { Onboarding } from "@/components/onboarding/tour"
 import { IdleGuard } from "@/components/shell/idle-guard"
 import { idleLimitFromEnv } from "@/lib/auth/idle"
 import { createClient } from "@/lib/supabase/server"
@@ -38,8 +38,8 @@ async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
       <AppShell user={{ name: profile?.display_name ?? null, email: data.user.email ?? "" }} reminders={reminders}>
         {children}
       </AppShell>
-      {/* First sign-in tour (and Settings → Replay the tour). Not when the profile couldn't load. */}
-      <Tour show={profile !== null && profile.tour_done_at === null} />
+      {/* First sign-in welcome and tour (and Settings → Replay the tour). Not when the profile couldn't load. */}
+      <Onboarding show={profile !== null && profile.tour_done_at === null} />
       {/* Signs out after 2 hours without activity (across tabs), with a warning first. */}
       <IdleGuard signedInAt={data.user.last_sign_in_at ?? null} limitMs={idleLimitFromEnv(process.env)} />
     </>

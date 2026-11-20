@@ -19,8 +19,11 @@ export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(subscribe, () => window.matchMedia(REDUCED).matches, () => true)
 }
 
-/** The figure to show while counting from `from` to `to` over `durationMs`. */
-export function useCountUp(from: number, to: number, durationMs = 900): number {
+/** How long a count takes (balance card and Total available), eased out. */
+export const COUNT_MS = 1500
+
+/** The figure to show while counting from `from` to `to` over `durationMs`, after `delayMs`. */
+export function useCountUp(from: number, to: number, durationMs = COUNT_MS, delayMs = 0): number {
   const reduced = usePrefersReducedMotion()
   const still = reduced || from === to
   const key = `${from}:${to}`
@@ -30,15 +33,15 @@ export function useCountUp(from: number, to: number, durationMs = 900): number {
   useEffect(() => {
     if (still) return
     let id = 0
-    const start = performance.now()
+    const start = performance.now() + delayMs
     const tick = (now: number) => {
-      const progress = (now - start) / durationMs
+      const progress = Math.max(0, now - start) / durationMs
       setFrame({ key, value: countUpValue(from, to, progress) })
       if (progress < 1) id = requestAnimationFrame(tick)
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [still, key, from, to, durationMs])
+  }, [still, key, from, to, durationMs, delayMs])
 
   if (still) return to
   return frame?.key === key ? frame.value : from

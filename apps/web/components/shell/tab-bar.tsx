@@ -101,8 +101,8 @@ function MoreMenu({ pathname }: { pathname: string }) {
         type="button"
         aria-expanded={open}
         aria-controls="tab-bar-more"
-        // The tour's "Ask Roma" step points here on phones (Roma is under More).
-        data-tour={MORE_ITEMS.some((item) => item.key === "roma") ? "roma" : undefined}
+        // The tour's last step on phones.
+        data-tour="more"
         onClick={() => {
           setOpenedOn(pathname)
           setOpen((o) => !o)
