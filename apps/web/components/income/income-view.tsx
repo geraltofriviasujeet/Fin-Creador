@@ -589,8 +589,9 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                 {r.linkedLabel && <span className="block truncate pl-5.5 text-xs text-muted-foreground">{r.linkedLabel}</span>}
                 {r.onlyVoided && <span className="block pl-5.5 text-xs text-muted-foreground">Voided entries only</span>}
                 {/* Phones: the details under the name. */}
-                <span className={cn(PHONE, "mt-1 block pl-5.5 text-xs text-muted-foreground")}>
-                  Last received {received} · {repeats}
+                <span className={cn(PHONE, "mt-1 flex flex-wrap gap-x-1 pl-5.5 text-xs text-muted-foreground")}>
+                  <span className="whitespace-nowrap">Last received {received} ·</span>
+                  <span className="whitespace-nowrap">{repeats}</span>
                 </span>
                 {r.note && (
                   <span className={cn(PHONE, "block pl-5.5")}>
