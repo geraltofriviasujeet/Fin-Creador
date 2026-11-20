@@ -172,7 +172,7 @@ export function WelcomeCarousel({
               touch.current = t ? { x: t.clientX, y: t.clientY } : null
             }}
             onTouchEnd={onTouchEnd}
-            className="relative flex h-dvh w-full flex-col gap-3 overflow-y-auto bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-ink outline-none md:h-auto md:max-h-[calc(100dvh-2rem)] md:w-[720px] md:max-w-full md:gap-4 md:rounded-3xl md:p-6 md:shadow-(--shadow-raised)"
+            className="relative flex h-dvh w-full flex-col gap-3 overflow-x-hidden overflow-y-auto bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-ink outline-none md:h-auto md:max-h-[calc(100dvh-2rem)] md:w-[720px] md:max-w-full md:gap-4 md:rounded-3xl md:p-6 md:shadow-(--shadow-raised)"
           >
             {/* Quiet, in the top-right corner on every slide; absolute, so the centred title stays
                 centred. 44px tap area. */}

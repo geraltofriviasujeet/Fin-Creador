@@ -22,6 +22,8 @@ const slideTitle = (welcome: Locator) => welcome.getByRole("heading", { level: 2
  * corner button (~14px, muted, 44px tap area) that never touches the title.
  */
 async function expectCentredWithQuietSkip(welcome: Locator) {
+  // Measure the slide at rest, not mid slide-in.
+  await welcome.getByTestId("welcome-slide").evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)))
   const card = (await welcome.boundingBox())!
   const centre = card.x + card.width / 2
   // What the title actually draws (logo and every line of text) is centred in the card.
