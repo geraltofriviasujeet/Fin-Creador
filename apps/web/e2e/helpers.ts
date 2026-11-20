@@ -128,3 +128,14 @@ export async function addEntry(page: Page, e: Entry) {
   await expect(toast(page, `${type} saved.`)).toBeVisible()
   await expect(d).toBeHidden()
 }
+
+// ---------------------------------------------------------------- Income page (two sections)
+
+/** The Income page's Accounts section (chart, table, Total available). */
+export const incomeAccounts = (page: Page) => page.getByRole("region", { name: "Accounts", exact: true })
+/** One account's table row (desktop) or card (phone), by its label ("HDFC Bank ··4821"). */
+export const incomeAccountRow = (page: Page, label: string) => incomeAccounts(page).locator(`tbody tr[data-account="${label}"]`)
+/** The Income page's Income by source section (period switch, chart, table). */
+export const incomeSources = (page: Page) => page.getByRole("region", { name: "Income by source", exact: true })
+/** One source's table row (desktop) or card (phone), by its name. */
+export const incomeSourceRow = (page: Page, name: string) => incomeSources(page).locator(`tbody tr[data-source="${name}"]`)

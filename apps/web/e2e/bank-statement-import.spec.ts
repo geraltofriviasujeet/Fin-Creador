@@ -1,6 +1,6 @@
 import { type Page, expect, test } from "@playwright/test"
 import { type SavingsRow, isoDaysBefore, pnbSavingsPages, savingsDefaultRows, separateColumnsDefaultRows, separateColumnsPages, syntheticPdf } from "../test-support/synthetic-pdf"
-import { addBank, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, dialog, incomeAccountRow, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Bank account statement import (Sprint 9b, web): a PNB savings statement PDF read in the browser,
 // each line labelled (expense, income, transfer, card payment, refund, skip), reviewed and saved.
@@ -19,8 +19,7 @@ const lines = (page: Page) => review(page).getByRole("list", { name: "Statement 
 // A line by the start of its text (its description): option labels such as "Credit card payment" would match anywhere.
 const startsWith = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`)
 const lineAt = (page: Page, text: string, nth = 0) => lines(page).filter({ hasText: startsWith(text) }).nth(nth)
-const holding = (page: Page, label: string) =>
-  page.locator("[data-slot=card]").filter({ has: page.getByText("Where your money is", { exact: true }) }).getByRole("listitem").filter({ hasText: label })
+const holding = (page: Page, label: string) => incomeAccountRow(page, label)
 
 async function setUp(page: Page, who: string) {
   const today = todayInIndia()

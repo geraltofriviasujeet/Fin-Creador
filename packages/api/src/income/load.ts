@@ -1,4 +1,5 @@
 import { type BankType, MONEY_ACCOUNT_KINDS, type SourceType, minDate, previousMonthRange, yearRange } from "@fin-creador/domain"
+import { allPages } from "../all-pages"
 import { type UserClient, userToday } from "./client"
 import type { IncomeAccount, IncomeEntryItem, IncomePageData, IncomeSourceItem } from "./types"
 
@@ -13,8 +14,10 @@ export type IncomeLoad =
 /**
  * Everything the Income screen needs, read as the signed-in user (RLS applies).
  * Creates the default income sources on first use if sign-up could not.
+ * `allTime`: every income entry, for the "All time" view (loaded only when asked for);
+ * otherwise entries since the earlier of 1 January and the start of last month.
  */
-export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> {
+export async function loadIncomeData(supabase: UserClient, { allTime = false }: { allTime?: boolean } = {}): Promise<IncomeLoad> {
   const day = await userToday(supabase)
   if (!day.ok) return day
   const { userId, today } = day
@@ -27,6 +30,19 @@ export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> 
   if (profileError || !profile) return { ok: false, reason: "unavailable" }
 
   const since = minDate(yearRange(today).start, previousMonthRange(today).start)
+  // Paged: All time (or a busy year) can pass PostgREST's 1,000-row limit.
+  const loadEntries = () =>
+    allPages((from, to) => {
+      const query = supabase
+        .from("transactions")
+        .select("id, amount_minor, currency, occurred_on, category_id, account_id, note, voided_at, void_reason, replaces_id")
+        .eq("type", "income")
+      return (allTime ? query : query.gte("occurred_on", since))
+        .order("occurred_on", { ascending: false })
+        .order("created_at", { ascending: false })
+        .order("id")
+        .range(from, to)
+    })
   const loadSources = () =>
     supabase
       .from("categories")
@@ -43,20 +59,16 @@ export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> 
       .order("created_at"),
     supabase.from("account_balances").select("account_id, inflow_minor, outflow_minor, last_activity_at"),
     loadSources(),
-    supabase
-      .from("transactions")
-      .select("id, amount_minor, currency, occurred_on, category_id, account_id, note, voided_at, void_reason, replaces_id")
-      .eq("type", "income")
-      .gte("occurred_on", since)
-      .order("occurred_on", { ascending: false })
-      .order("created_at", { ascending: false }),
+    loadEntries(),
     // Versions an edit replaced: shown only in History, never in the lists.
-    supabase.from("transactions").select("replaces_id").eq("type", "income").not("replaces_id", "is", null),
+    allPages((from, to) =>
+      supabase.from("transactions").select("replaces_id").eq("type", "income").not("replaces_id", "is", null).order("id").range(from, to),
+    ),
   ])
-  if (accountsRes.error || balancesRes.error || firstSources.error || entriesRes.error || replacedRes.error) {
+  if (accountsRes.error || balancesRes.error || firstSources.error || !entriesRes || !replacedRes) {
     return { ok: false, reason: "unavailable" }
   }
-  const replaced = new Set(replacedRes.data.map((r) => r.replaces_id))
+  const replaced = new Set(replacedRes.map((r) => r.replaces_id))
 
   let sourceRows = firstSources.data
   if (sourceRows.length === 0) {
@@ -97,7 +109,7 @@ export async function loadIncomeData(supabase: UserClient): Promise<IncomeLoad> 
     archived: c.archived_at !== null,
   }))
 
-  const entries: IncomeEntryItem[] = entriesRes.data.filter((t) => !replaced.has(t.id)).map((t) => ({
+  const entries: IncomeEntryItem[] = entriesRes.filter((t) => !replaced.has(t.id)).map((t) => ({
     id: t.id,
     amountMinor: t.amount_minor,
     currency: t.currency,

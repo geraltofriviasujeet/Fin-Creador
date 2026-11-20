@@ -43,6 +43,7 @@ function fakeClient(rows: Record<string, Record<string, unknown>[]>, rpcAnswer: 
       gte: () => builder,
       gt: (c: string, v: number) => ((result = result.filter((r) => (r[c] as number) > v)), builder),
       order: () => builder,
+      range: () => builder,
       limit: () => builder,
       maybeSingle: async () => ({ data: result[0] ?? null, error: null }),
       then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: table === "transactions" ? [] : result, error: null }).then(resolve),

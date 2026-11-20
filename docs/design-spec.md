@@ -93,6 +93,8 @@ Do not build later-sprint screens early. A dev-only `/dev/design` page showing t
 
 ## 9. Income page and account screens (Sprint 2)
 
+> **Redesigned 2026-11-21 (web).** The summary grid, the Income sources panel and the Where your money is panel below are replaced by two sections, each a horizontal bar chart above a table (cards at ≤640px): **Accounts** (Account, Type, Number "··last4" when stored, Balance, Total row; row menu Edit / Update amount, Import statement, Archive; Total available top-right; subtotals Money in banks and Cash in hand; Add cash / Update cash, Add other account, Show archived) and **Income by source** (period switch This month / This year / All time; Source with colour dot, Note, Last received, Repeats, Amount, Total row; Add source). Header actions: "+ Add bank account" and "+ Record income". Bar colours: accounts one colour (accent-deep), "Not in total" grey; sources the six chart series colours, then grey "Other". See `docs/sprint-plan.md` decisions (2026-11-21). The text below records the Sprint 2 layout.
+
 Reference: `docs/design/Incometop.png`, `Incomebottom.png`, `Incomemodal1.png`, `Incomemodal2.png`. Layout as in the Figma; changes below are deliberate. All figures come from `packages/domain`; sample names and amounts in the screenshots are never shown as real data.
 
 **Header.** Eyebrow "MONEY IN", H1 "Income", subtitle "See where your money comes from and where it is held." Actions: secondary "+ Add bank account", primary "+ Add income". The sidebar Income item becomes active. The topbar "+ Add transaction" opens Add income with the Expense segment shown as "Soon" until Sprint 3.

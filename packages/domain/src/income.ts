@@ -160,3 +160,103 @@ export function rentalIncome(
     hasRentSource: sources.some((s) => s.sourceType === "rent" && !s.archived),
   };
 }
+
+// ---------------------------------------------------------------- Income page: by period
+
+/** The Income page's period switch. "all": every income entry on record. */
+export type IncomePeriodKey = "month" | "year" | "all";
+
+export interface PeriodSourceRow<S extends IncomeSource = IncomeSource> {
+  source: S;
+  /** Non-voided income in the period, profile currency only. */
+  amountMinor: number;
+  /** Date of the newest non-voided entry in the period. */
+  lastReceivedOn: IsoDate | null;
+  /** Note of the newest non-voided entry in the period that has one. */
+  note: string | null;
+  /** Every entry in the period is voided: listed (history stays reachable), counts as 0. */
+  onlyVoided: boolean;
+}
+
+export interface PeriodIncome<S extends IncomeSource = IncomeSource> {
+  rows: PeriodSourceRow<S>[];
+  /** Sum of the rows: the figure the chart and the table's Total row both show. */
+  totalMinor: number;
+}
+
+/**
+ * Income by source for one period (`range` null: all time). Rows: sources with any entry in
+ * the period (voided too), plus sources the user added (not archived), as on the Sprint 2
+ * panel. Voided entries and entries in another currency never count. Sorted by amount,
+ * largest first, then name. Entries are expected newest first (as the loader returns them);
+ * ties on a date keep that order for the note.
+ */
+export function incomeForPeriod<S extends IncomeSource>(
+  entries: readonly (IncomeEntry & { note?: string | null })[],
+  sources: readonly S[],
+  range: DateRange | null,
+  currency: string,
+): PeriodIncome<S> {
+  const inPeriod = range ? entries.filter((e) => isInRange(e.occurredOn, range)) : entries;
+  const rows: PeriodSourceRow<S>[] = [];
+  for (const source of sources) {
+    const all = inPeriod.filter((e) => e.sourceId === source.id);
+    if (all.length === 0 && (source.isDefault || source.archived)) continue;
+    const live = all.filter((e) => !e.voided);
+    // Newest first by date; a stable sort keeps the loader's order within a day.
+    const newest = [...live].sort((a, b) => (a.occurredOn < b.occurredOn ? 1 : a.occurredOn > b.occurredOn ? -1 : 0));
+    rows.push({
+      source,
+      amountMinor: addMinor(...live.filter((e) => e.currency === currency).map((e) => e.amountMinor)),
+      lastReceivedOn: newest[0]?.occurredOn ?? null,
+      note: newest.find((e) => e.note && e.note.trim() !== "")?.note?.trim() ?? null,
+      onlyVoided: all.length > 0 && live.length === 0,
+    });
+  }
+  rows.sort((a, b) => b.amountMinor - a.amountMinor || a.source.name.localeCompare(b.source.name));
+  return { rows, totalMinor: addMinor(...rows.map((r) => r.amountMinor)) };
+}
+
+export interface ChartGroup {
+  /** A source id, or "other" for the grouped rest. */
+  key: string;
+  label: string;
+  amountMinor: number;
+  /** 0..top-1 for a named group (its colour); null for "Other". */
+  colorIndex: number | null;
+}
+
+/**
+ * Chart groups for income: the `top` largest amounts above zero each get their own colour;
+ * the rest are summed into one "Other" group. The groups always add up to the total.
+ */
+export function topGroupsWithOther<S extends IncomeSource>(rows: readonly PeriodSourceRow<S>[], top = 6): ChartGroup[] {
+  const positive = rows.filter((r) => r.amountMinor > 0);
+  const named: ChartGroup[] = positive
+    .slice(0, top)
+    .map((r, i) => ({ key: r.source.id, label: r.source.name, amountMinor: r.amountMinor, colorIndex: i }));
+  const rest = positive.slice(top);
+  if (rest.length > 0) {
+    named.push({ key: "other", label: "Other", amountMinor: addMinor(...rest.map((r) => r.amountMinor)), colorIndex: null });
+  }
+  return named;
+}
+
+/**
+ * Geometry for a horizontal bar chart, in basis points of the plot width (0..10000), so
+ * negative values draw left of a zero line. Display only: never used for money arithmetic.
+ */
+export function horizontalBarScale(values: readonly number[]): { zeroBp: number; bars: { startBp: number; lengthBp: number }[] } {
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values);
+  const span = max - min;
+  if (span === 0) return { zeroBp: 0, bars: values.map(() => ({ startBp: 0, lengthBp: 0 })) };
+  const zeroBp = Math.round((-min / span) * 10_000) || 0; // never -0
+  return {
+    zeroBp,
+    bars: values.map((v) => {
+      const lengthBp = Math.round((Math.abs(v) / span) * 10_000);
+      return { startBp: v >= 0 ? zeroBp : Math.max(0, zeroBp - lengthBp), lengthBp };
+    }),
+  };
+}

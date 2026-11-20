@@ -58,6 +58,7 @@ function fakeClient() {
       not: () => builder,
       gte: () => builder,
       order: () => builder,
+      range: () => builder,
       limit: () => builder,
       maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
       then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: table === "transactions" ? [] : rows, error: null }).then(resolve),

@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, addCash, addEntry, dialog, incomeAccountRow, incomeSources, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Transactions page end to end, against the throwaway local Supabase. One user per test.
 // Screenshots (final real-data pages only) go to e2e-screenshots/ for visual review.
@@ -11,8 +11,7 @@ const totals = (page: Page) => page.getByRole("region", { name: "Totals for thes
 // By the card's label ("Income · This month"), not text elsewhere in a card ("No income…").
 const stat = (page: Page, label: string) => totals(page).locator("[data-slot=card]").filter({ hasText: new RegExp(`^${label}`) })
 const row = (page: Page, text: string) => page.locator("main li").filter({ hasText: text })
-const holding = (page: Page, label: string) =>
-  page.locator("[data-slot=card]").filter({ has: page.getByText("Where your money is", { exact: true }) }).getByRole("listitem").filter({ hasText: label })
+const holding = (page: Page, label: string) => incomeAccountRow(page, label)
 
 async function newUserWithBank(page: Page, label: string, opening = "10,000") {
   await signUpConfirmed(page, "Test Person", uniqueEmail(label))
@@ -180,7 +179,7 @@ test("income is edited from the Income page, once, with its history", async ({ p
   await addEntry(page, { type: "Income", amount: "50,000", category: "Salary", from: "HDFC Bank ··4821" })
 
   await page.goto("/income")
-  const sources = page.locator("[data-slot=card]").filter({ has: page.getByText("Income by source", { exact: true }) })
+  const sources = incomeSources(page)
   await sources.getByRole("button", { name: /Salary/ }).click()
   await dialog(page, "Salary").getByRole("link", { name: "Edit" }).click()
   await expect(page).toHaveURL(/\/transactions\?edit=/)
