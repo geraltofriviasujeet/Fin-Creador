@@ -17,6 +17,38 @@ const stepName = (n: number, steps: string[]) => `Tour, step ${n} of ${steps.len
 const SLIDES = ["Welcome to FinCreador", "Add your accounts", "Track every rupee", "See your investments", "Stay on top of loans", "Plan your goals", "Ask Roma"]
 
 const slideTitle = (welcome: Locator) => welcome.getByRole("heading", { level: 2 })
+/**
+ * The slide is one centred column (title text, body under the picture), and Skip is a quiet
+ * corner button (~14px, muted, 44px tap area) that never touches the title.
+ */
+async function expectCentredWithQuietSkip(welcome: Locator) {
+  const card = (await welcome.boundingBox())!
+  const centre = card.x + card.width / 2
+  // What the title actually draws (logo and every line of text) is centred in the card.
+  const drawn = await slideTitle(welcome).evaluate((el) => {
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    const r = range.getBoundingClientRect()
+    return { x: r.left, y: r.top, width: r.width, height: r.height }
+  })
+  expect(Math.abs(drawn.x + drawn.width / 2 - centre)).toBeLessThanOrEqual(2)
+  const title = drawn
+  expect(await slideTitle(welcome).evaluate((el) => getComputedStyle(el).textAlign)).toBe("center")
+  expect(await welcome.getByTestId("welcome-slide").locator("p").evaluate((el) => getComputedStyle(el).textAlign)).toBe("center")
+
+  const skip = welcome.getByRole("button", { name: "Skip", exact: true })
+  const s = (await skip.boundingBox())!
+  expect(s.width).toBeGreaterThanOrEqual(44)
+  expect(s.height).toBeGreaterThanOrEqual(44)
+  expect(s.x + s.width).toBeGreaterThan(card.x + card.width - 24)
+  const style = await skip.evaluate((el) => ({ size: getComputedStyle(el).fontSize, color: getComputedStyle(el).color }))
+  expect(style.size).toBe("14px")
+  expect(style.color).toBe("rgb(95, 110, 102)") // --fc-color-muted
+  // Skip never overlaps the title text.
+  const apart = s.x >= title.x + title.width || s.y >= title.y + title.height || s.y + s.height <= title.y
+  expect(apart).toBe(true)
+}
+
 const dontShow = (welcome: Locator) => welcome.getByRole("checkbox", { name: "Don't show this again" })
 const welcomeSwitch = (page: Page) => page.getByRole("switch", { name: "Show the welcome when I sign in" })
 
@@ -263,6 +295,7 @@ test.describe("at 1280px", () => {
     await expect(title.locator("svg")).toHaveCount(1)
     const picBox = (await welcome.getByTestId("welcome-slide").getByRole("img").boundingBox())!
     expect((await title.boundingBox())!.y + (await title.boundingBox())!.height).toBeLessThanOrEqual(picBox.y)
+    await expectCentredWithQuietSkip(welcome)
     // "Don't show this again" at the bottom left.
     const box = (await dontShow(welcome).boundingBox())!
     expect(box.x).toBeLessThan(w.x + 60)
@@ -324,6 +357,10 @@ test.describe("at 360px", () => {
     expect(w.width).toBeCloseTo(360, 0)
     expect(w.height).toBeCloseTo(740, 0)
     expect(await slideTitle(welcome).evaluate((el) => getComputedStyle(el).fontSize)).toBe("26px")
+    // Centred, wrapping cleanly (two lines at most), clear of Skip.
+    await expectCentredWithQuietSkip(welcome)
+    const lines = await welcome.getByTestId("welcome-title-text").evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
+    expect(lines).toBeLessThanOrEqual(2)
     // The phone picture (square), and the buttons fit on screen.
     const picture = welcome.getByTestId("welcome-slide").getByRole("img")
     await expect(picture).toHaveJSProperty("complete", true)
@@ -348,6 +385,7 @@ test.describe("at 360px", () => {
       await swipe(300, 80)
       await expectSlide(welcome, n)
       await expect(welcome.getByTestId("welcome-slide").getByRole("img")).toHaveJSProperty("complete", true)
+      await expectCentredWithQuietSkip(welcome)
       if (n === 3 || n === 7) await page.screenshot({ path: `e2e-screenshots/360-welcome-slide-${n}.png`, animations: "disabled" })
     }
     const around = welcome.getByRole("button", { name: "Show me around" })

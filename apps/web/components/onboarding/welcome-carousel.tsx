@@ -10,7 +10,8 @@ import { cn } from "cn"
 // The welcome (owner feedback 2026-11-20): seven slides, each a big title, a picture and a short
 // paragraph. It shows after each sign-in unless the person opted out (Onboarding in tour.tsx).
 // Desktop: a centred card ~720px wide. Phones (below md): a full-screen sheet; swipe left or
-// right between slides. Arrow keys move, Escape and Skip (top right, every slide) close; focus
+// right between slides. The title, picture and text form one centred column. Arrow keys move,
+// Escape and Skip (a quiet link-sized button in the top-right corner, every slide) close; focus
 // stays inside (Base UI dialog). The last slide offers "Show me around" (the nav tour) and "Start
 // using FinCreador". "Don't show this again" (bottom left, unticked) is saved however it closes;
 // unticked, closing changes nothing on the profile.
@@ -173,17 +174,16 @@ export function WelcomeCarousel({
             onTouchEnd={onTouchEnd}
             className="relative flex h-dvh w-full flex-col gap-3 overflow-y-auto bg-surface px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] text-ink outline-none md:h-auto md:max-h-[calc(100dvh-2rem)] md:w-[720px] md:max-w-full md:gap-4 md:rounded-3xl md:p-6 md:shadow-(--shadow-raised)"
           >
-            {/* Top right on every slide, beside the title. */}
-            <Button
+            {/* Quiet, in the top-right corner on every slide; absolute, so the centred title stays
+                centred. 44px tap area. */}
+            <button
               type="button"
-              variant="ghost"
-              size="md"
               disabled={saving}
               onClick={() => void close("closed")}
-              className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-2 md:top-6 md:right-5"
+              className="absolute top-[max(0.25rem,env(safe-area-inset-top))] right-1 z-10 inline-flex h-[44px] min-w-[44px] items-center justify-center rounded-lg px-2 text-[14px] font-medium text-muted-foreground outline-none hover:bg-canvas hover:text-ink focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50 md:top-3 md:right-3"
             >
               Skip
-            </Button>
+            </button>
 
             <div
               key={index}
@@ -194,14 +194,16 @@ export function WelcomeCarousel({
                 direction === 1 ? "slide-in-from-right-8" : "slide-in-from-left-8"
               )}
             >
-              <h2 className="flex min-h-9 items-center gap-3 pr-16 font-heading text-[26px] leading-tight font-bold tracking-(--fc-tracking-heading) md:text-[32px]">
-                {index === 0 && <LogoMark size={30} />}
-                <span>{slide.title}</span>
+              {/* One centred column. 48px each side keeps the title clear of Skip and still centred. */}
+              {/* The logo is inline in the text, so a wrapped title stays one centred, balanced unit. */}
+              <h2 className="px-[48px] text-center font-heading text-[26px] leading-tight font-bold text-balance tracking-(--fc-tracking-heading) md:text-[32px]">
+                {index === 0 && <LogoMark size={30} className="mr-3 inline-block align-[-0.2em]" />}
+                <span data-testid="welcome-title-text">{slide.title}</span>
               </h2>
               <div className="mx-auto aspect-square w-full max-w-[min(100%,46dvh)] overflow-hidden rounded-2xl bg-canvas shadow-(--shadow-raised) md:aspect-[16/10] md:max-w-none">
                 <SlidePicture slide={slide} alt={slide.alt} />
               </div>
-              <p className="text-sm leading-relaxed md:text-base">{slide.text}</p>
+              <p className="text-center text-sm leading-relaxed md:text-base">{slide.text}</p>
             </div>
 
             {/* The next slide's picture, so it's ready when Next is pressed. Nothing else is loaded. */}
