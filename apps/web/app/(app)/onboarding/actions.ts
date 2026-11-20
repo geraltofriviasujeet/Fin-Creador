@@ -28,12 +28,18 @@ export async function closeWelcomeAction(hide: boolean): Promise<{ ok: boolean }
   return setWelcomeHidden(s.supabase, s.userId, true)
 }
 
-/** Settings → "Show the welcome when I sign in". */
+/**
+ * Settings → "Show the welcome when I sign in". Takes effect from the next sign-in: this
+ * sign-in's cookie (still there when the welcome was off at sign-in) is cleared, so turning it
+ * on doesn't open the welcome on the next page load.
+ */
 export async function setWelcomeOnSignInAction(show: boolean): Promise<{ ok: boolean }> {
   if (typeof show !== "boolean") return { ok: false }
   const s = await signedIn()
   if (!s) return { ok: false }
-  return setWelcomeHidden(s.supabase, s.userId, !show)
+  const result = await setWelcomeHidden(s.supabase, s.userId, !show)
+  if (result.ok) await clearWelcome()
+  return result
 }
 
 /** Hide on the Get started card: gone for good. */
