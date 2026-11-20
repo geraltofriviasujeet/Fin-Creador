@@ -4,6 +4,7 @@ import { ledgerErrorMessage } from "../ledger-errors"
 import { TODAY_UNAVAILABLE, type UserClient, userToday } from "../income/client"
 import type { WriteResult } from "../income/types"
 import type { FormInput } from "../income/writers"
+import { ENTRY_ROW_COLUMNS, type EntryRow, readBalanceChanges } from "../balance-feedback"
 
 // Writes for income, expense, transfer and refund entries, shared by web and mobile. Each one
 // validates with the shared schema, writes through a database function as the signed-in
@@ -68,7 +69,7 @@ export async function saveTransaction(supabase: UserClient, input: FormInput): P
   // "Repeat this?" (add income or expense only): the entry is the first occurrence of a new
   // recurring rule, created together in one call.
   const repeat = t.repeat && t.categoryId && (t.type === "income" || t.type === "expense") ? t.repeat : null
-  const { error } = t.transactionId
+  const { data: saved, error } = t.transactionId
     ? await supabase.rpc("edit_transaction", { p_transaction_id: t.transactionId, ...details })
     : repeat
       ? await supabase.rpc("record_entry_with_repeat", {
@@ -84,8 +85,20 @@ export async function saveTransaction(supabase: UserClient, input: FormInput): P
         })
       : await supabase.rpc("record_transaction", { p_type: t.type, ...details, p_refund_of_id: t.refundOfId ?? undefined })
   if (error) return dbError(error, account.currency)
-  if (t.transactionId) return { status: "success", message: "Changes saved." }
-  return { status: "success", message: repeat ? `${NOUN[t.type]} saved. It repeats ${REPEAT_WORDS[repeat]}.` : `${NOUN[t.type]} saved.` }
+  const balances = await savedBalances(supabase, saved, t.transactionId ?? null)
+  if (t.transactionId) return { status: "success", message: "Changes saved.", balances }
+  return { status: "success", message: repeat ? `${NOUN[t.type]} saved. It repeats ${REPEAT_WORDS[repeat]}.` : `${NOUN[t.type]} saved.`, balances }
+}
+
+/**
+ * Balance feedback for a confirmed save: the new version, less the version an edit replaced
+ * (read by id; versions never change). Undefined when anything can't be read.
+ */
+async function savedBalances(supabase: UserClient, saved: EntryRow | null, replacedId: string | null) {
+  if (!saved) return undefined
+  if (!replacedId) return readBalanceChanges(supabase, [saved])
+  const { data: old, error } = await supabase.from("transactions").select(ENTRY_ROW_COLUMNS).eq("id", replacedId).maybeSingle()
+  return error || !old ? undefined : readBalanceChanges(supabase, [saved], [old])
 }
 
 /** One-way void under the form's request key: the entry stays in history and stops counting. */

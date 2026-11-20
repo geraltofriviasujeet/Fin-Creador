@@ -1,3 +1,4 @@
+import type { BalanceChange } from "@fin-creador/domain"
 import type { AccountKind, AccountWithActivity, IncomeEntry, IncomeSource, IsoDate } from "@fin-creador/domain"
 
 // Data for the Income screen, shared by web and mobile. Calculations happen in
@@ -40,5 +41,6 @@ export type IncomePageData = {
  * `stale`: the entry was replaced by an edit, so the client should show the latest version.
  */
 export type WriteResult =
-  | { status: "success"; message: string }
+  /** `balances`: each money account the save moved, before and after (balance feedback); absent when they couldn't be read. */
+  | { status: "success"; message: string; balances?: BalanceChange[] }
   | { status: "error"; message: string; fieldErrors?: Record<string, string>; stale?: boolean }

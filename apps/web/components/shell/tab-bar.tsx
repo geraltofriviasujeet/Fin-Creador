@@ -46,6 +46,7 @@ function Tab({ item, pathname }: { item: NavItem; pathname: string }) {
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      data-tour={item.key}
       className={cn(tabClasses, active ? "font-bold text-ink" : "text-muted-foreground")}
     >
       <Icon aria-hidden="true" strokeWidth={active ? 2.25 : 1.75} />
@@ -100,6 +101,8 @@ function MoreMenu({ pathname }: { pathname: string }) {
         type="button"
         aria-expanded={open}
         aria-controls="tab-bar-more"
+        // The tour's "Ask Roma" step points here on phones (Roma is under More).
+        data-tour={MORE_ITEMS.some((item) => item.key === "roma") ? "roma" : undefined}
         onClick={() => {
           setOpenedOn(pathname)
           setOpen((o) => !o)

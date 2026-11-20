@@ -32,6 +32,7 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
+                    data-tour={item.key}
                     className={cn(
                       itemClasses,
                       active ? "bg-brand font-bold text-ink" : "text-nav-muted hover:bg-white/5 hover:text-nav-text"

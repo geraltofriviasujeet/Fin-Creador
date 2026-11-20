@@ -2,6 +2,7 @@ import { AMOUNT_ERROR_MESSAGES, parseAmount } from "@fin-creador/domain"
 import { accountFormSchema, firstFieldErrors, incomeFormSchema, sourceFormSchema } from "@fin-creador/schemas"
 import type { z } from "zod"
 import { ledgerErrorMessage } from "../ledger-errors"
+import { readBalanceChanges } from "../balance-feedback"
 import { TODAY_UNAVAILABLE, type UserClient, userToday } from "./client"
 import type { WriteResult } from "./types"
 
@@ -116,11 +117,12 @@ export async function recordIncome(supabase: UserClient, input: FormInput): Prom
     p_note: i.note ?? undefined,
   }
   // "Repeat this?": the entry is the first occurrence of a new recurring rule (one call).
-  const { error } = i.repeat
+  const { data: saved, error } = i.repeat
     ? await supabase.rpc("record_entry_with_repeat", { p_type: "income", p_frequency: i.repeat, ...details })
     : await supabase.rpc("record_income", details)
   if (error) return dbError(error, "occurredOn")
-  return { status: "success", message: i.repeat ? `Income saved. It repeats ${REPEAT_WORDS[i.repeat]}.` : "Income saved." }
+  const balances = saved ? await readBalanceChanges(supabase, [saved]) : undefined
+  return { status: "success", message: i.repeat ? `Income saved. It repeats ${REPEAT_WORDS[i.repeat]}.` : "Income saved.", balances }
 }
 
 /**

@@ -3,6 +3,7 @@ import { TODAY_UNAVAILABLE, type UserClient, userToday } from "../income/client"
 import type { WriteResult } from "../income/types"
 import type { FormInput } from "../income/writers"
 import { ledgerErrorMessage } from "../ledger-errors"
+import { readBalanceChanges } from "../balance-feedback"
 
 // Writes for recurring rules, shared by web and mobile. Each validates with the shared
 // schema and writes through a database function as the signed-in user (RLS, grants and
@@ -78,7 +79,7 @@ export async function confirmRecurringOccurrence(supabase: UserClient, input: Fo
   if (!account) return { status: "error", message: FIX_FIELDS, fieldErrors: { accountId: "Choose an account" } }
   const c = parsed.data
 
-  const { error } = await supabase.rpc("confirm_recurring_occurrence", {
+  const { data: saved, error } = await supabase.rpc("confirm_recurring_occurrence", {
     p_rule_id: c.ruleId,
     p_occurrence_date: c.occurrenceDate,
     p_idempotency_key: c.idempotencyKey,
@@ -90,7 +91,8 @@ export async function confirmRecurringOccurrence(supabase: UserClient, input: Fo
     p_payment_mode: c.paymentMode ?? undefined,
   })
   if (error) return dbError(error)
-  return { status: "success", message: `${NOUN[type]} saved.` }
+  const balances = saved ? await readBalanceChanges(supabase, [saved]) : undefined
+  return { status: "success", message: `${NOUN[type]} saved.`, balances }
 }
 
 /** Skips one occurrence (nothing is saved), once per request key. */

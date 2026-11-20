@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/shell/app-shell"
 import { ExpenseCategories } from "@/components/settings/expense-categories"
 import { ImportPayeesSetting } from "@/components/settings/import-payees-setting"
 import { ProfileForm } from "@/components/settings/profile-form"
+import { ReplayTour } from "@/components/settings/replay-tour"
 import { RomaConversationsSetting, RomaDescriptionsSetting, RomaSetting } from "@/components/settings/roma-setting"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
@@ -110,6 +111,12 @@ async function SettingsContent() {
             We couldn’t load this setting. Refresh the page to try again.
           </FormMessage>
         )}
+      </Card>
+
+      <Card>
+        <CardTitle>Tour</CardTitle>
+        <CardDescription className="mt-1">A quick look at where things are: adding expenses, imports, Overview, Goals and Roma.</CardDescription>
+        <ReplayTour />
       </Card>
 
       <Card>

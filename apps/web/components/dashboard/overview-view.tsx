@@ -4,6 +4,7 @@ import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRi
 import {
   type ChartChoices,
   type DashboardBreakdown,
+  type GettingStartedItems,
   type GoalsView,
   type InvestmentsView,
   type LoansView,
@@ -35,6 +36,8 @@ import {
 import { cn } from "cn"
 import { PageHeader } from "@/components/shell/app-shell"
 import { Badge } from "@/components/ui/badge"
+import { AnimatedAmount } from "@/components/ui/count-up"
+import { GettingStartedCard } from "@/components/onboarding/getting-started"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { TextField } from "@/components/ui/field"
@@ -77,6 +80,8 @@ export type OverviewViewProps = {
   investments: InvestmentsView | null
   /** Loans for the "Due soon" card (null when they couldn't load; the card is then left out). */
   loans: LoansView | null
+  /** The Get started checklist (null once dismissed, or when it couldn't load). */
+  gettingStarted?: GettingStartedItems | null
 }
 
 function longDate(date: string): string {
@@ -84,7 +89,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans, gettingStarted = null }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
@@ -106,6 +111,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         description="Here’s your money this month."
       />
 
+      {gettingStarted && <GettingStartedCard items={gettingStarted} />}
       {!context.hasEntries && <FirstRun hasAccounts={holdings.rows.length > 0} />}
 
       {/* Four cards only, always this month; one per row on phones. */}
@@ -114,7 +120,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           tone="deep"
           icon={<Wallet aria-hidden="true" className="size-5" />}
           label="Money left"
-          value={money(holdings.totalAvailableMinor, currency)}
+          value={<AnimatedAmount id="total-available" minor={holdings.totalAvailableMinor} currency={currency} />}
           footer={
             holdings.rows.length === 0 ? (
               <FooterLink href="/income" dark>
@@ -379,7 +385,7 @@ function SummaryCard({
   icon: React.ReactNode
   chip?: string
   label: string
-  value: string
+  value: React.ReactNode
   change?: React.ReactNode
   footer: React.ReactNode
 }) {

@@ -29,7 +29,7 @@ async function client() {
 function toState(result: WriteResult, values?: Record<string, string>): FormState {
   if (result.status === "success") {
     revalidatePath("/income")
-    return { status: "success", message: result.message }
+    return { status: "success", message: result.message, balances: result.balances }
   }
   return { status: "error", message: result.message, fieldErrors: result.fieldErrors, values }
 }

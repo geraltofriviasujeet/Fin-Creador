@@ -1,4 +1,5 @@
 import type { z } from "zod"
+import type { BalanceChange } from "@fin-creador/domain"
 import { firstFieldErrors } from "@fin-creador/schemas"
 
 export type FormState = {
@@ -9,6 +10,8 @@ export type FormState = {
   values?: Record<string, string>
   /** Machine-readable follow-up for the UI, e.g. offer to resend a confirmation email. */
   code?: "email_not_confirmed"
+  /** After an entry is saved: the accounts it moved, before and after, from the server. */
+  balances?: BalanceChange[]
 }
 
 export const initialFormState: FormState = { status: "idle" }

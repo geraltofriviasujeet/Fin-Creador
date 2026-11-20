@@ -20,9 +20,10 @@ export async function submitSignUp(page: Page, { name, email, password = PASSWOR
 
 /**
  * Signs up and finishes email confirmation (or skips it if the project has confirmation
- * off and signs the user straight in). Ends signed in on the Overview page.
+ * off and signs the user straight in). Ends signed in on the Overview page, with the first
+ * sign-in tour skipped (saved to the profile) unless `{ tour: true }` keeps it open.
  */
-export async function signUpConfirmed(page: Page, name: string, email: string) {
+export async function signUpConfirmed(page: Page, name: string, email: string, { tour = false }: { tour?: boolean } = {}) {
   const startedAt = Date.now() - 1000
   await submitSignUp(page, { name, email })
   const confirmationNeeded = page.getByText("Check your email for a link to confirm your account")
@@ -33,6 +34,18 @@ export async function signUpConfirmed(page: Page, name: string, email: string) {
   }
   await expect(page).toHaveURL(/\/$/)
   await expect(overviewHeading(page)).toBeVisible()
+  if (!tour) await skipTour(page)
+}
+
+/** The first sign-in tour's dialog ("Tour, step 1 of 5: Add expense"). */
+export const tourDialog = (page: Page) => page.getByRole("dialog", { name: /^Tour, step \d+ of \d+:/ })
+
+/** Skips the tour; it closes only once the profile has saved it. */
+export async function skipTour(page: Page) {
+  const tour = tourDialog(page)
+  await expect(tour).toBeVisible()
+  await tour.getByRole("button", { name: "Skip tour" }).click()
+  await expect(tour).toBeHidden()
 }
 
 /** The Overview page's greeting ("Good morning, Asha"). */

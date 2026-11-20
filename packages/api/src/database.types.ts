@@ -1438,12 +1438,14 @@ export type Database = {
           created_at: string
           currency: string
           display_name: string | null
+          getting_started_dismissed_at: string | null
           id: string
           import_payees_ok_at: string | null
           phone: string | null
           roma_descriptions_ok_at: string | null
           roma_enabled: boolean
           time_zone: string
+          tour_done_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1452,12 +1454,14 @@ export type Database = {
           created_at?: string
           currency?: string
           display_name?: string | null
+          getting_started_dismissed_at?: string | null
           id: string
           import_payees_ok_at?: string | null
           phone?: string | null
           roma_descriptions_ok_at?: string | null
           roma_enabled?: boolean
           time_zone?: string
+          tour_done_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1466,12 +1470,14 @@ export type Database = {
           created_at?: string
           currency?: string
           display_name?: string | null
+          getting_started_dismissed_at?: string | null
           id?: string
           import_payees_ok_at?: string | null
           phone?: string | null
           roma_descriptions_ok_at?: string | null
           roma_enabled?: boolean
           time_zone?: string
+          tour_done_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -2032,6 +2038,27 @@ export type Database = {
             referencedColumns: ["id", "user_id"]
           },
         ]
+      }
+      upi_imports: {
+        Row: {
+          created_at: string
+          id: string
+          saved_count: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          saved_count: number
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          saved_count?: number
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -2636,6 +2663,15 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      getting_started_status: {
+        Args: never
+        Returns: {
+          has_account: boolean
+          has_asked_roma: boolean
+          has_expense: boolean
+          has_import: boolean
+        }[]
       }
       has_digit: {
         Args: { p_min_run?: number; p_text: string }

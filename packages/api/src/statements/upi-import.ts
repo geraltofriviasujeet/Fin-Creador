@@ -6,6 +6,7 @@ import { ledgerErrorMessage } from "../ledger-errors"
 import { existingKeys } from "./matches"
 import type { ImportSaveResult, LineSaveResult } from "./save"
 import { type UpiAccountMatch, type UpiExistingEntry, type UpiImportOptions, type UpiMatches, payeeKey, upiLineErrors } from "./upi-review"
+import { logUpiImport } from "../onboarding"
 
 // UPI app statement import (Sprint 9e), as the signed-in user (RLS, grants and the ledger
 // triggers enforce ownership and the money rules). Each ticked payment is saved on its own under a
@@ -212,6 +213,8 @@ export async function saveUpiImportLines(supabase: UserClient, input: unknown): 
       results.push({ key, status: latest?.get(key) === "live" ? "already_saved" : "deleted" })
     }
   }
+  // The Get started checklist's "import a statement" (never fails the import).
+  await logUpiImport(supabase, results.filter((r) => r.status === "saved").length)
   return { ok: true, results }
 }
 
