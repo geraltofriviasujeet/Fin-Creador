@@ -1,5 +1,6 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import {
   forgotPasswordSchema,
@@ -42,6 +43,9 @@ export async function signInAction(_prev: FormState, formData: FormData): Promis
   if (error) return errorState(error, pick(input, ["email"]))
 
   await markSignedIn()
+  // A new session: drop the browser's cached app pages (another person's, or the welcome gate
+  // from before signing out), so the app layout is rendered afresh and shows the welcome.
+  revalidatePath("/", "layout")
   redirect(safeNextPath(input.next))
 }
 
@@ -66,6 +70,7 @@ export async function signUpAction(_prev: FormState, formData: FormData): Promis
   // Email confirmation off: signed in immediately.
   if (data.session) {
     await markSignedIn()
+    revalidatePath("/", "layout")
     redirect("/")
   }
 
@@ -141,5 +146,7 @@ export async function signOutAction() {
   const supabase = await createClient()
   await supabase.auth.signOut()
   await clearWelcome()
+  // Nothing of the signed-out session stays in the browser's router cache.
+  revalidatePath("/", "layout")
   redirect("/sign-in?notice=signed-out")
 }
