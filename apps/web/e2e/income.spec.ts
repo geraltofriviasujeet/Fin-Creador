@@ -347,10 +347,18 @@ async function expectTotalsAgree(page: Page) {
 /** A clean screenshot for docs/design/income: reloaded (no save toasts), whole page in a tall viewport (the sidebar stays put). */
 async function cleanShot(page: Page, width: number, name: string) {
   await page.reload()
-  await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090")
+  await page.waitForLoadState("networkidle")
+  // The page streams in after load: wait until both sections and their Total rows are on screen.
+  const ready = async () => {
+    await expect(incomeAccounts(page).locator("tfoot [data-total]")).toBeVisible()
+    await expect(incomeSources(page).locator("tfoot [data-total]")).toBeVisible()
+    await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090")
+  }
+  await ready()
   const height = await page.evaluate(() => document.documentElement.scrollHeight)
+  expect(height).toBeGreaterThan(900)
   await page.setViewportSize({ width, height })
-  await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090")
+  await ready()
   await page.screenshot({ path: `${SHOTS}/income/${name}.png` })
 }
 
