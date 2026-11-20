@@ -344,6 +344,16 @@ async function expectTotalsAgree(page: Page) {
   await expect(page).toHaveURL(/\?period=all$/) // All time is rendered by the server on request
 }
 
+/** A clean screenshot for docs/design/income: reloaded (no save toasts), whole page in a tall viewport (the sidebar stays put). */
+async function cleanShot(page: Page, width: number, name: string) {
+  await page.reload()
+  await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090")
+  const height = await page.evaluate(() => document.documentElement.scrollHeight)
+  await page.setViewportSize({ width, height })
+  await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090")
+  await page.screenshot({ path: `${SHOTS}/income/${name}.png` })
+}
+
 test.describe("charts agree with the tables", () => {
   test("at 1280px: totals, a negative balance, All time on request", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
@@ -353,10 +363,10 @@ test.describe("charts agree with the tables", () => {
     await expectTotalsAgree(page)
     await period(page, /^This month/).click()
     await expect(page).toHaveURL(/\/income$/)
-    await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090")
-    await page.screenshot({ path: `${SHOTS}/income/1280-income.png`, fullPage: true })
-    await period(page, /^All time/).click()
-    await page.screenshot({ path: `${SHOTS}/income/1280-income-all-time.png`, fullPage: true })
+    await cleanShot(page, 1280, "1280-income")
+    await page.goto("/income?period=all")
+    await expect(period(page, /^All time/)).toHaveAttribute("aria-pressed", "true")
+    await cleanShot(page, 1280, "1280-income-all-time")
   })
 
   test("at 360px: charts full width, tables become cards, no sideways scroll", async ({ page }) => {
@@ -387,7 +397,6 @@ test.describe("charts agree with the tables", () => {
       expect(a.x + a.width).toBeLessThanOrEqual(360)
     }
     await expect(incomeSourceRow(page, "Salary")).toContainText("Last received")
-    await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090")
-    await page.screenshot({ path: `${SHOTS}/income/360-income.png`, fullPage: true })
+    await cleanShot(page, 360, "360-income")
   })
 })
