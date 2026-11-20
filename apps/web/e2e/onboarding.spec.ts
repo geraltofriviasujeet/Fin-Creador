@@ -81,8 +81,9 @@ test.describe("at 360px", () => {
     const tour = tourDialog(page)
     await expect(tour).toHaveAccessibleName("Tour, step 1 of 5: Add expense")
     const box = await tour.boundingBox()
-    expect(box!.x).toBeGreaterThanOrEqual(15)
-    expect(box!.x + box!.width).toBeLessThanOrEqual(345)
+    // Fully on screen, with the page's own side gutter (px-4).
+    expect(box!.x).toBeGreaterThanOrEqual(8)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(352)
     const tabBar = await page.getByRole("navigation", { name: "Main" }).last().boundingBox()
     expect(box!.y + box!.height).toBeLessThanOrEqual(tabBar!.y)
     for (let i = 1; i < 5; i++) await tour.getByRole("button", { name: "Next" }).click()

@@ -132,7 +132,7 @@ select 'a2000000-0000-4000-8000-00000000000a', 'a2000000-0000-4000-8000-00000000
  where c.user_id = 'a2000000-0000-4000-8000-00000000000a' and c.kind = 'expense' and c.archived_at is null
  order by c.name limit 1;
 -- Inserts always start live; deleting (voiding) is an update.
-update public.transactions set voided_at = now(), void_reason = 'Test' where id = 'a2000000-0000-4000-8000-0000000000e1';
+update public.transactions set voided_at = now(), void_reason = 'Test', void_idempotency_key = gen_random_uuid() where id = 'a2000000-0000-4000-8000-0000000000e1';
 set local role authenticated;
 select is(pg_temp.status()::text, '(t,f,f,f)', 'a deleted expense doesn''t count');
 
