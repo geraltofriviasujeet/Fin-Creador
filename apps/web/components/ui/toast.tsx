@@ -4,8 +4,12 @@ import type * as React from "react"
 import { Toast } from "@base-ui/react/toast"
 import { Check, CircleAlert, Info, X } from "lucide-react"
 import { cn } from "cn"
+import { type BalanceChange, balanceAnnouncement } from "@fin-creador/domain"
+import { BalanceCardBody, COUNT_DELAY_MS } from "@/components/ui/balance-card"
+import { COUNT_MS } from "@/components/ui/count-up"
 
-type ToastType = "success" | "info" | "error"
+type ToastType = "success" | "info" | "error" | "balance"
+type BalanceData = { message: string; changes: BalanceChange[] }
 
 const toastManager = Toast.createToastManager()
 
@@ -19,21 +23,50 @@ function add(type: ToastType, title: string, description?: string) {
   })
 }
 
+/**
+ * The balance card after a save: each account's balance before → after, counting to the new
+ * value (starting 0.3s after it appears, for 1.5s), then staying about 5 seconds. The toast
+ * viewport pauses the timer while it is hovered or has focus. The title (read by screen
+ * readers, hidden on screen) is one line.
+ */
+const BALANCE_TIMEOUT_MS = COUNT_DELAY_MS + COUNT_MS + 5000
+
+function addBalance(message: string, changes: BalanceChange[]) {
+  return toastManager.add<BalanceData>({
+    type: "balance",
+    title: balanceAnnouncement(changes),
+    data: { message, changes },
+    timeout: BALANCE_TIMEOUT_MS,
+    priority: "low",
+  })
+}
+
 /** Show a toast from anywhere in client code. */
 export const toast = {
   success: (title: string, description?: string) => add("success", title, description),
   info: (title: string, description?: string) => add("info", title, description),
   error: (title: string, description?: string) => add("error", title, description),
+  /**
+   * After a confirmed save: the balance card when the server sent the new balances, else the
+   * plain "Saved" toast (`description` shows only then).
+   */
+  saved: (message: string, balances: BalanceChange[] | undefined, description?: string) =>
+    balances && balances.length > 0 ? addBalance(message, balances) : add("success", message, description),
 }
 
-const icons: Record<ToastType, React.ReactNode> = {
-  success: (
+function successIcon() {
+  return (
     <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand text-ink">
       <Check aria-hidden="true" className="size-4" strokeWidth={3} />
     </span>
-  ),
+  )
+}
+
+const icons: Record<ToastType, React.ReactNode> = {
+  success: successIcon(),
   info: <Info aria-hidden="true" className="size-5 shrink-0 text-nav-muted" />,
   error: <CircleAlert aria-hidden="true" className="size-5 shrink-0 text-danger-fill" />,
+  balance: successIcon(),
 }
 
 function ToastList() {
@@ -49,12 +82,19 @@ function ToastList() {
         "data-ending-style:translate-y-2 data-ending-style:opacity-0"
       )}
     >
-      <Toast.Content className="flex items-center gap-3 p-3.5 pr-2.5">
+      <Toast.Content className={cn("flex gap-3 p-3.5 pr-2.5", t.type === "balance" ? "items-start" : "items-center")}>
         {icons[(t.type as ToastType | undefined) ?? "info"]}
-        <div className="grid min-w-0 flex-1 gap-0.5">
-          <Toast.Title className="text-sm font-semibold" />
-          <Toast.Description className="text-xs text-nav-muted" />
-        </div>
+        {t.type === "balance" && t.data ? (
+          <>
+            <Toast.Title className="sr-only" />
+            <BalanceCardBody {...(t.data as BalanceData)} />
+          </>
+        ) : (
+          <div className="grid min-w-0 flex-1 gap-0.5">
+            <Toast.Title className="text-sm font-semibold" />
+            <Toast.Description className="text-xs text-nav-muted" />
+          </div>
+        )}
         <Toast.Close
           aria-label="Dismiss notification"
           className="flex size-9 shrink-0 items-center justify-center rounded-lg text-nav-muted hover:bg-white/10 hover:text-nav-text focus-visible:outline-2 focus-visible:outline-ring"

@@ -21,6 +21,7 @@ import { setAccountArchivedAction } from "@/app/(app)/income/actions"
 import { AccountForm } from "@/components/income/account-form"
 import { CashForm } from "@/components/income/cash-form"
 import { money, shortDateTime } from "@/components/income/format"
+import { AnimatedAmount } from "@/components/ui/count-up"
 import { IncomeForm } from "@/components/income/income-form"
 import { SourceEntries } from "@/components/income/source-entries"
 import { SourceForm } from "@/components/income/source-form"
@@ -297,7 +298,9 @@ export function IncomeView({ data, upcoming, rules = [] }: { data: IncomePageDat
                 Total available
                 <span className="text-xs">Banks, cash and other accounts</span>
               </span>
-              <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">{money(view.holdings.totalAvailableMinor, currency)}</span>
+              <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">
+                <AnimatedAmount id="total-available" minor={view.holdings.totalAvailableMinor} currency={currency} />
+              </span>
             </div>
           )}
 

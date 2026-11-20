@@ -7,6 +7,7 @@ export * from "./goal-projection";
 export * from "./goal-what-if";
 export * from "./trip-estimate";
 export * from "./holdings";
+export * from "./balance-change";
 export * from "./income";
 export * from "./investments";
 export * from "./market-files";

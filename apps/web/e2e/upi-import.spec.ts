@@ -115,6 +115,10 @@ test("Paytm: match accounts, allow suggestions, save; the same file adds nothing
   await review(page).getByRole("button", { name: "Save ticked payments" }).click()
   await dialog(page, "Save these payments?").getByRole("button", { name: "Save 1 line" }).click()
   await expect(review(page).getByText("1 line saved.")).toBeVisible()
+
+  // Get started on Overview ticks "Import a statement".
+  await page.goto("/")
+  await expect(page.getByTestId("get-started-import")).toHaveAttribute("data-done", "true")
 })
 
 test("payments before an account's opening date: move it back and import them, the balance today unchanged", async ({ page }) => {

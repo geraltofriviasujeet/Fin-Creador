@@ -82,7 +82,7 @@ export function RecurringDialogs({ open, onClose, titleOf, ...data }: Data & { o
               )
               if (result.status === "success") {
                 onClose()
-                toast.success(result.message, `For the ${fullDate(open.item.date!)} occurrence.`)
+                toast.saved(result.message, result.balances, `For the ${fullDate(open.item.date!)} occurrence.`)
                 return { ok: true }
               }
               return { ok: false, message: result.message, fieldErrors: result.fieldErrors }

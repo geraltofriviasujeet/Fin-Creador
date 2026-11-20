@@ -23,7 +23,8 @@ const MORE = [
 export function AddMenu() {
   const itemClass = "flex h-11 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
   return (
-    <div className="flex items-center">
+    // The tour's first step highlights the whole group (Add expense and the menu arrow).
+    <div className="flex items-center" data-tour="add">
       <Link
         href={href("expense")}
         aria-label="Add expense"

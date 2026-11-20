@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LogOut, Settings } from "lucide-react"
-import { signOutAction } from "@/app/(auth)/actions"
 import { cn } from "cn"
 import { Logo } from "@/components/brand/logo"
 import { toast } from "@/components/ui/toast"
@@ -32,6 +31,7 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
+                    data-tour={item.key}
                     className={cn(
                       itemClasses,
                       active ? "bg-brand font-bold text-ink" : "text-nav-muted hover:bg-white/5 hover:text-nav-text"
@@ -88,7 +88,8 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
                 <p className="truncate text-sm font-semibold">{user.name ?? user.email}</p>
                 {user.name && <p className="truncate text-xs text-nav-muted">{user.email}</p>}
               </div>
-              <form action={signOutAction} className="shrink-0">
+              {/* A plain post (full page load): see app/auth/sign-out/route.ts. */}
+              <form method="post" action="/auth/sign-out" className="shrink-0">
                 <button
                   type="submit"
                   aria-label="Sign out"

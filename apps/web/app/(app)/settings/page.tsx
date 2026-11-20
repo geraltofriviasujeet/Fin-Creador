@@ -4,12 +4,12 @@ import { redirect } from "next/navigation"
 import { LogOut } from "lucide-react"
 import { PROFILE_FORM_COLUMNS, loadExpenseCategories, profileFormValues } from "@fin-creador/api"
 import { countryOptions, currencyOptions, timeZoneOptions } from "@fin-creador/schemas"
-import { signOutAction } from "@/app/(auth)/actions"
 import { setRomaDescriptionsAction, setRomaEnabledAction, updateProfileAction } from "@/app/(app)/settings/actions"
 import { PageHeader } from "@/components/shell/app-shell"
 import { ExpenseCategories } from "@/components/settings/expense-categories"
 import { ImportPayeesSetting } from "@/components/settings/import-payees-setting"
 import { ProfileForm } from "@/components/settings/profile-form"
+import { ReplayTour, WelcomeOnSignIn } from "@/components/settings/replay-tour"
 import { RomaConversationsSetting, RomaDescriptionsSetting, RomaSetting } from "@/components/settings/roma-setting"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
@@ -36,7 +36,7 @@ async function SettingsContent() {
   if (!auth.user) redirect("/sign-in?next=%2Fsettings")
 
   const [{ data: profile, error }, categories, conversations] = await Promise.all([
-    supabase.from("profiles").select(`${PROFILE_FORM_COLUMNS}, roma_enabled, roma_descriptions_ok_at, import_payees_ok_at`).eq("id", auth.user.id).maybeSingle(),
+    supabase.from("profiles").select(`${PROFILE_FORM_COLUMNS}, roma_enabled, roma_descriptions_ok_at, import_payees_ok_at, welcome_hidden_at`).eq("id", auth.user.id).maybeSingle(),
     loadExpenseCategories(supabase),
     supabase.from("ai_conversations").select("id", { count: "exact", head: true }),
   ])
@@ -113,9 +113,24 @@ async function SettingsContent() {
       </Card>
 
       <Card>
+        <CardTitle>Tour</CardTitle>
+        <CardDescription className="mt-1">A quick look at what FinCreador does and where things are.</CardDescription>
+        <div className="mt-5 grid gap-4">
+          {profile ? (
+            <WelcomeOnSignIn hiddenAt={profile.welcome_hidden_at} />
+          ) : (
+            <FormMessage tone="error">We couldn’t load this setting. Refresh the page to try again.</FormMessage>
+          )}
+          <div>
+            <ReplayTour />
+          </div>
+        </div>
+      </Card>
+
+      <Card>
         <CardTitle>Account</CardTitle>
         <CardDescription className="mt-1">Signed in as {auth.user.email}</CardDescription>
-        <form action={signOutAction} className="mt-5">
+        <form method="post" action="/auth/sign-out" className="mt-5">
           <Button type="submit" variant="secondary">
             <LogOut aria-hidden="true" />
             Sign out

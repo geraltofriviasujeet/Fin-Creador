@@ -72,7 +72,7 @@ export function AddEntryDialog({
               const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key)))
               if (result.status === "success") {
                 onClose()
-                toast.success(result.message)
+                toast.saved(result.message, result.balances)
               }
               return toSaveResult(result)
             }}
@@ -104,7 +104,7 @@ export function RefundEntryDialog({ purchase, onClose, ...data }: FormProps & { 
               const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key)))
               if (result.status === "success") {
                 onClose()
-                toast.success(result.message)
+                toast.saved(result.message, result.balances)
               }
               return toSaveResult(result)
             }}
@@ -127,7 +127,7 @@ export function EditEntryDialog({ entry, onClose, ...data }: FormProps & { entry
               const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key, entry.id)))
               if (result.status === "success") {
                 onClose()
-                toast.success(result.message, "The earlier version is kept in History.")
+                toast.saved(result.message, result.balances, "The earlier version is kept in History.")
               }
               return toSaveResult(result)
             }}

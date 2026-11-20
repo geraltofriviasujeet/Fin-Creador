@@ -20,20 +20,47 @@ export async function submitSignUp(page: Page, { name, email, password = PASSWOR
 
 /**
  * Signs up and finishes email confirmation (or skips it if the project has confirmation
- * off and signs the user straight in). Ends signed in on the Overview page.
+ * off and signs the user straight in). Ends signed in on the Overview page, with the welcome
+ * (shown after each sign-in) skipped unless `{ tour: true }` keeps it open. `{ hideWelcome: true }`
+ * ticks "Don't show this again" as it skips, so later sign-ins in the test go straight to the
+ * app (only onboarding.spec.ts tests the welcome). The
+ * welcome is a modal: while it is open the page behind it is hidden from screen readers, so
+ * the greeting is checked only once it has closed.
  */
-export async function signUpConfirmed(page: Page, name: string, email: string) {
+export async function signUpConfirmed(
+  page: Page,
+  name: string,
+  email: string,
+  { tour = false, hideWelcome = false }: { tour?: boolean; hideWelcome?: boolean } = {}
+) {
   const startedAt = Date.now() - 1000
   await submitSignUp(page, { name, email })
   const confirmationNeeded = page.getByText("Check your email for a link to confirm your account")
-  await expect(confirmationNeeded.or(overviewHeading(page))).toBeVisible()
+  await expect(confirmationNeeded.or(overviewHeading(page)).or(welcomeDialog(page))).toBeVisible()
   if (await confirmationNeeded.isVisible()) {
     const link = await waitForAuthLink(email, CONFIRM_SUBJECT, { after: startedAt })
     await page.goto(link)
   }
   await expect(page).toHaveURL(/\/$/)
+  if (tour) return
+  await skipWelcome(page, { hide: hideWelcome })
   await expect(overviewHeading(page)).toBeVisible()
 }
+
+/** The first sign-in welcome carousel ("Welcome to FinCreador": seven slides, Skip on each). */
+export const welcomeDialog = (page: Page) => page.getByRole("dialog", { name: "Welcome to FinCreador" })
+
+/** Skips the welcome (ticking "Don't show this again" with `hide`); it closes once that is saved. */
+export async function skipWelcome(page: Page, { hide = false }: { hide?: boolean } = {}) {
+  const welcome = welcomeDialog(page)
+  await expect(welcome).toBeVisible()
+  if (hide) await welcome.getByRole("checkbox", { name: "Don't show this again" }).check()
+  await welcome.getByRole("button", { name: "Skip", exact: true }).click()
+  await expect(welcome).toBeHidden()
+}
+
+/** The tour's step card ("Tour, step 1 of 10: Add"). */
+export const tourDialog = (page: Page) => page.getByRole("dialog", { name: /^Tour, step \d+ of \d+:/ })
 
 /** The Overview page's greeting ("Good morning, Asha"). */
 export const overviewHeading = (page: Page) => page.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening)/ })

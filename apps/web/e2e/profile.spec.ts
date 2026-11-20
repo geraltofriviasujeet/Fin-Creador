@@ -3,7 +3,7 @@ import { overviewHeading, signIn, signOut, signUpConfirmed, uniqueEmail } from "
 
 test("profile changes are validated, saved and still there after signing in again", async ({ page }) => {
   const email = uniqueEmail("profile")
-  await signUpConfirmed(page, "Profile Person", email)
+  await signUpConfirmed(page, "Profile Person", email, { hideWelcome: true })
   await page.goto("/settings")
 
   // India-first defaults from the sign-up trigger.

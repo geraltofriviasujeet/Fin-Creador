@@ -8,6 +8,7 @@ import {
   buildLoansView,
   buildRecurringView,
   loadGoalsData,
+  loadChecklist,
   loadInvestmentsData,
   loadLoansData,
   loadNetWorthData,
@@ -61,7 +62,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   const monthComparison = comparisonFor("month", thisMonth, today)
   const chartsAreMonth = period === "month"
 
-  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans] = await Promise.all([
+  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans, checklist] = await Promise.all([
     loadTransactionTotals(supabase, { from: range.start, to: range.end }, currency),
     comparison ? loadTransactionTotals(supabase, { from: comparison.previous.start, to: comparison.previous.end }, currency) : null,
     chartsAreMonth ? null : loadTransactionTotals(supabase, { from: thisMonth.start, to: thisMonth.end }, currency),
@@ -71,10 +72,12 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
     loadDashboardBreakdown(supabase, range, currency),
     loadTransactionPage(supabase, { from: ALL_TIME_START, to: today }, { currency, limit: 5 }),
     loadRecurringData(supabase),
-    supabase.from("profiles").select("display_name").maybeSingle(),
+    supabase.from("profiles").select("display_name, getting_started_dismissed_at").maybeSingle(),
     loadGoalsData(supabase),
     loadInvestmentsData(supabase),
     loadLoansData(supabase),
+    // The Get started card (read only; dismissing is the person's tap, never a render).
+    loadChecklist(supabase),
   ])
   if (!totals.ok || (prevTotals && !prevTotals.ok) || (monthTotals && !monthTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
   const month = chartsAreMonth
@@ -118,6 +121,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
       goals={goals.ok ? buildGoalsView(goals.data) : null}
       investments={investments.ok ? buildInvestmentsView(investments.data) : null}
       loans={loans.ok ? buildLoansView(loans.data) : null}
+      gettingStarted={profile.data && profile.data.getting_started_dismissed_at === null ? checklist : null}
     />
   )
 }

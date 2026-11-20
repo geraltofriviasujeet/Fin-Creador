@@ -7,7 +7,7 @@ const GENERIC = "If an account exists for that email, we’ve sent a link to res
 
 test("password reset by email, then sign in with the new password only", async ({ page }) => {
   const email = uniqueEmail("reset")
-  await signUpConfirmed(page, "Forgetful User", email)
+  await signUpConfirmed(page, "Forgetful User", email, { hideWelcome: true })
   await signOut(page)
 
   const startedAt = Date.now() - 1000
