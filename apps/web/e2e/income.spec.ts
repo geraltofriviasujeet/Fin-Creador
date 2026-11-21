@@ -371,6 +371,12 @@ test.describe("charts agree with the tables", () => {
     await demoMoney(page)
     await expect(holding(page, "ICICI Bank ··0934")).toContainText("-₹12,500")
     await expectTotalsAgree(page)
+    // Both tables fit inside their half-width cards (no column runs past the edge).
+    for (const section of [incomeAccounts(page), incomeSources(page)]) {
+      const table = (await section.getByRole("table").boundingBox())!
+      const card = (await section.getByRole("table").locator("xpath=ancestor::*[@data-slot='card'][1]").boundingBox())!
+      expect(table.x + table.width).toBeLessThanOrEqual(card.x + card.width - 16)
+    }
     await period(page, /^This month/).click()
     await expect(page).toHaveURL(/\/income$/)
     await cleanShot(page, 1280, "1280-income")

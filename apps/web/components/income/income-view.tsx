@@ -612,8 +612,8 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
       <thead role="rowgroup" className={THEAD}>
         <tr role="row" className="border-b border-line">
           <th role="columnheader" scope="col" className={TH}>Source</th>
-          <th role="columnheader" scope="col" className={cn(TH, "whitespace-nowrap")}>Last received</th>
-          <th role="columnheader" scope="col" className={TH}>Repeats</th>
+          {/* Last received and Repeats share a column so the table fits the half-width card at 1280px. */}
+          <th role="columnheader" scope="col" className={TH}>Received</th>
           <th role="columnheader" scope="col" className={cn(TH, "text-right")}>Amount</th>
         </tr>
       </thead>
@@ -643,13 +643,15 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                 </span>
                 {/* The latest note, under the name on every screen (no Note column since 2026-11-21). */}
                 {r.note && (
-                  <span className="block pl-5.5 min-[641px]:max-w-64">
+                  <span className="block pl-5.5 min-[641px]:max-w-52">
                     <Note text={r.note} />
                   </span>
                 )}
               </td>
-              <td role="cell" className={cn(TD, WIDE, "whitespace-nowrap text-muted-foreground")}>{received}</td>
-              <td role="cell" className={cn(TD, WIDE, "whitespace-nowrap text-muted-foreground")}>{repeats}</td>
+              <td role="cell" className={cn(TD, WIDE, "whitespace-nowrap text-muted-foreground")}>
+                <span className="block">{received}</span>
+                <span className="block text-xs">{repeats}</span>
+              </td>
               <td role="cell" className={cn(TD, "text-right font-semibold whitespace-nowrap tabular-nums")} data-amount>
                 {whole(r.amountMinor, currency)}
               </td>
@@ -659,7 +661,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
       </tbody>
       <tfoot role="rowgroup" className="max-[640px]:block">
         <tr role="row" className={TFOOT_TR}>
-          <th role="rowheader" scope="row" colSpan={3} className={cn(TD, "pt-3 text-left font-semibold")}>
+          <th role="rowheader" scope="row" colSpan={2} className={cn(TD, "pt-3 text-left font-semibold")}>
             Total
           </th>
           <td role="cell" className={cn(TD, "pt-3 text-right font-heading text-base font-semibold tabular-nums")} data-total>
