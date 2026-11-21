@@ -44,6 +44,7 @@ async function IncomeContent({ searchParams }: { searchParams: Promise<{ period?
   const upcoming =
     context.ok && recurring.ok ? (
       <UpcomingSection
+        key="upcoming"
         view={buildRecurringView({ ...recurring.data, ...context.data })}
         accounts={context.data.accounts}
         categories={context.data.categories}

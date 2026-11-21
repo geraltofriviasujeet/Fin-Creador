@@ -48,20 +48,25 @@ const INLINE_LINK = "-mx-1 inline-flex min-h-11 items-center px-1 font-semibold 
 const TABLE = "w-full border-collapse text-sm max-[640px]:block"
 const THEAD = "text-left text-xs text-muted-foreground max-[640px]:hidden"
 const TBODY = "max-[640px]:grid max-[640px]:gap-2"
+// Rows alternate canvas and white, starting with canvas (owner review 2026-11-21).
 const TR =
-  "border-b border-line align-middle max-[640px]:grid max-[640px]:grid-cols-[minmax(0,1fr)_auto_auto] max-[640px]:items-start max-[640px]:gap-x-3 max-[640px]:rounded-xl max-[640px]:border max-[640px]:p-3"
-const TH = "px-2 py-2 font-medium first:pl-0 last:pr-0"
-const TD = "px-2 py-3 first:pl-0 last:pr-0 max-[640px]:p-0"
+  "border-b border-line align-middle odd:bg-canvas max-[640px]:grid max-[640px]:grid-cols-[minmax(0,1fr)_auto_auto] max-[640px]:items-start max-[640px]:gap-x-3 max-[640px]:rounded-xl max-[640px]:border max-[640px]:p-3"
+const TH = "px-2 py-2 font-medium first:pl-3 last:pr-3"
+const TD = "px-2 py-3 first:pl-3 last:pr-3 max-[640px]:p-0"
 const WIDE = "max-[640px]:hidden"
 const PHONE = "min-[641px]:hidden"
 const TFOOT_TR = "max-[640px]:mt-2 max-[640px]:flex max-[640px]:justify-between max-[640px]:px-3"
+
+const ACCOUNTS_SHOWN = 5
+// A column of two cards; from xl it spans both grid rows so the cards line up across columns.
+const REGION = "grid min-w-0 gap-4 min-[1280px]:row-span-2 min-[1280px]:grid-rows-subgrid"
 
 const PERIODS: IncomePeriodKey[] = ["month", "year", "all"]
 const PERIOD_WORDS: Record<IncomePeriodKey, string> = { month: "this month", year: "this year", all: "recorded" }
 
 const colorClass = (color: SourceRowView["color"]) => (color === null ? null : color === "other" ? OTHER : SERIES[color]!)
 
-/** The Income page (design-spec §9, redesigned 2026-11): Accounts, then Income, each a bar chart above a table. */
+/** The Income page (design-spec §9, redesigned 2026-11): four cards, account balances and income by source, each a bar chart above a table. */
 /** `view`: every figure, built on the server (lib/income/view.ts). `upcoming`: the compact Upcoming card. */
 export function IncomeView({
   data,
@@ -123,6 +128,22 @@ export function IncomeView({
   const addOrUpdateCash = () => show(activeCash ? { type: "cash" } : { type: "account", kind: "cash" })
   const a = view.accounts
 
+  // More than ACCOUNTS_SHOWN accounts: the chart and the table show the first few, and one
+  // toggle (in both cards) shows them all. Total available always counts every account.
+  const [allAccounts, setAllAccounts] = useState(false)
+  // Largest balance first (owner review 2026-11-21), in the chart and the table alike.
+  const byBalance = [...a.rows].sort((x, y) => y.balanceMinor - x.balanceMinor)
+  const accountRows = allAccounts ? byBalance : byBalance.slice(0, ACCOUNTS_SHOWN)
+  const showMoreToggle =
+    a.rows.length > ACCOUNTS_SHOWN ? (
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+        <span>{allAccounts ? `All ${a.rows.length} accounts` : `Showing ${ACCOUNTS_SHOWN} of ${a.rows.length} accounts`}</span>
+        <Button variant="ghost" size="sm" aria-expanded={allAccounts} onClick={() => setAllAccounts((v) => !v)}>
+          {allAccounts ? "Show fewer" : `Show all ${a.rows.length}`}
+        </Button>
+      </div>
+    ) : null
+
   return (
     <>
       <PageHeader
@@ -143,180 +164,211 @@ export function IncomeView({
         }
       />
 
-      <div className="grid gap-4">
+      {/* Four cards (owner review 2026-11-21): from 1280px, a 2×2 grid. Left: total balance chart,
+          then the accounts table. Right: income by source chart, then the sources table. Each
+          column is one region (subgrid keeps the two rows level across columns); phones stack. */}
+      <div className="grid gap-4 min-[1280px]:grid-cols-2 min-[1280px]:grid-rows-[auto_auto]">
         {/* ---------------------------------------------------------------- Accounts */}
-        <Card role="region" aria-labelledby="accounts-title" data-section="accounts">
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-            <div>
-              <CardTitle id="accounts-title">Accounts</CardTitle>
-              <CardDescription className="mt-1">Balances as of today</CardDescription>
-            </div>
-            <div className="grid justify-items-end text-right" data-testid="total-available">
-              <span className="text-sm text-muted-foreground">Total available</span>
-              <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">
-                <AnimatedAmount id="total-available" minor={a.totalAvailableMinor} currency={currency} />
-              </span>
-            </div>
-          </div>
-
-          {a.rows.length === 0 ? (
-            <div className="mt-4 grid gap-3 rounded-xl bg-canvas p-5">
-              <p className="font-semibold">Add your first account</p>
-              <p className="text-sm text-muted-foreground">Add the banks and cash where you keep money to see your total.</p>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => show({ type: "account", kind: "bank" })}>Add bank account</Button>
-                <Button variant="secondary" onClick={addOrUpdateCash}>
-                  Add cash
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="mt-5">
-                <BarChart
-                  label="Balance by account"
-                  zeroBp={a.zeroBp}
-                  items={a.rows.map((r) => ({
-                    key: r.account.id,
-                    label: r.account.label,
-                    amount: money(r.balanceMinor, r.account.currency),
-                    startBp: r.bar?.startBp ?? null,
-                    lengthBp: r.bar?.lengthBp ?? 0,
-                    colorClass: r.inTotal ? "bg-brand-deep" : OTHER,
-                    note: r.inTotal ? undefined : "Not in total",
-                  }))}
-                />
-              </div>
-              <AccountsTable
-                rows={a.rows}
-                totalMinor={a.totalAvailableMinor}
-                currency={currency}
-                onEdit={(account) => show(account.kind === "cash" ? { type: "cash" } : { type: "account", kind: account.kind, account })}
-                onImport={(account) => router.push(`/income/import?account=${encodeURIComponent(account.id)}`)}
-                onArchive={(account) => show({ type: "archive", account })}
-              />
-              {/* Subtotals (the former Money in banks and Cash in hand cards). */}
-              <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm text-muted-foreground min-[641px]:flex min-[641px]:flex-wrap">
-                <div className="flex flex-wrap items-center gap-x-1.5">
-                  <dt>Money in banks</dt>
-                  <dd className="font-semibold text-ink tabular-nums">{money(a.moneyInBanksMinor, currency)}</dd>
-                  {a.bankCount > 0 && (
-                    <dd>
-                      ·{" "}
-                      <button type="button" className={INLINE_LINK} aria-haspopup="dialog" onClick={() => show({ type: "banks" })}>
-                        {a.bankCount} account{a.bankCount === 1 ? "" : "s"}
-                      </button>
-                    </dd>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-x-1.5">
-                  <dt>Cash in hand</dt>
-                  <dd className="font-semibold text-ink tabular-nums">{money(a.cashInHandMinor, currency)}</dd>
-                  <dd>· {a.cashUpdatedAt ? `as of ${shortDateTime(a.cashUpdatedAt, timeZone)}` : "no cash added yet"}</dd>
-                </div>
-              </dl>
-            </>
-          )}
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={addOrUpdateCash}>
-              <Plus aria-hidden="true" />
-              {activeCash ? "Update cash" : "Add cash"}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => show({ type: "account", kind: "other" })}>
-              <Plus aria-hidden="true" />
-              Add other account
-            </Button>
-            {a.archived.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => show({ type: "archived" })}>
-                Show archived ({a.archived.length})
-              </Button>
-            )}
-          </div>
-        </Card>
-
-        {upcoming}
-
-        {/* ---------------------------------------------------------------- Income */}
-        <Card role="region" aria-labelledby="income-title" data-section="income">
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-            <div className="grid gap-3">
+        <div role="region" aria-label="Accounts" data-section="accounts" className={REGION}>
+          <Card className="min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
               <div>
-                <CardTitle id="income-title">Income by source</CardTitle>
-                <CardDescription className="mt-1">{shown?.rangeLabel ?? "All recorded income"}</CardDescription>
+                <CardTitle>Total balance</CardTitle>
+                <CardDescription className="mt-1">Balances as of today</CardDescription>
               </div>
-              <div role="group" aria-label="Period" className="inline-flex w-fit rounded-xl bg-canvas p-1">
-                {PERIODS.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-pressed={period === key}
-                    onClick={() => choosePeriod(key)}
-                    className={cn(
-                      "min-h-9 rounded-lg px-3 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring",
-                      period === key ? "bg-surface text-ink shadow-sm" : "text-muted-foreground hover:text-ink",
-                    )}
-                  >
-                    {key === "month" ? "This month" : key === "year" ? `This year (${year})` : "All time"}
-                  </button>
-                ))}
+              <div className="grid justify-items-end text-right" data-testid="total-available">
+                <span className="text-sm text-muted-foreground">Total available</span>
+                <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">
+                  <AnimatedAmount id="total-available" minor={a.totalAvailableMinor} currency={currency} />
+                </span>
               </div>
             </div>
-            <div className="grid justify-items-end text-right" data-testid="period-total">
-              <span className="text-sm text-muted-foreground">Income {PERIOD_WORDS[period]}</span>
-              <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">
-                {shown ? money(shown.totalMinor, currency) : "…"}
-              </span>
-            </div>
-          </div>
 
-          {!shown ? (
-            <div aria-busy={loadingAll} className="mt-5 grid gap-3" aria-label="Loading all income">
-              {[0, 1, 2].map((i) => (
-                <span key={i} className="h-6 w-full rounded bg-canvas" />
-              ))}
-            </div>
-          ) : (
-            <>
-              {shown.bars.length === 0 ? (
-                <div className="mt-5 grid justify-items-start gap-3 rounded-xl bg-canvas p-5">
-                  <p className="font-semibold">{period === "all" ? "No income recorded yet" : `No income ${PERIOD_WORDS[period]} yet`}</p>
-                  <p className="text-sm text-muted-foreground">Record income to see it by source here.</p>
-                  <Button onClick={() => show({ type: "income" })}>
-                    <Plus aria-hidden="true" />
-                    Record income
+            {a.rows.length === 0 ? (
+              <div className="mt-4 grid gap-3 rounded-xl bg-canvas p-5">
+                <p className="font-semibold">Add your first account</p>
+                <p className="text-sm text-muted-foreground">Add the banks and cash where you keep money to see your total.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => show({ type: "account", kind: "bank" })}>Add bank account</Button>
+                  <Button variant="secondary" onClick={addOrUpdateCash}>
+                    Add cash
                   </Button>
                 </div>
-              ) : (
+              </div>
+            ) : (
+              <>
                 <div className="mt-5">
                   <BarChart
-                    label="Income by source"
-                    zeroBp={shown.zeroBp}
-                    items={shown.bars.map((b) => ({
-                      key: b.key,
-                      label: b.label,
-                      amount: money(b.amountMinor, currency),
-                      startBp: b.startBp,
-                      lengthBp: b.lengthBp,
-                      colorClass: b.colorIndex === null ? OTHER : SERIES[b.colorIndex]!,
+                    label="Balance by account"
+                    zeroBp={a.zeroBp}
+                    items={accountRows.map((r) => ({
+                      key: r.account.id,
+                      label: r.account.label,
+                      amount: money(r.balanceMinor, r.account.currency),
+                      startBp: r.bar?.startBp ?? null,
+                      lengthBp: r.bar?.lengthBp ?? 0,
+                      colorClass: r.inTotal ? "bg-brand-deep" : OTHER,
+                      note: r.inTotal ? undefined : "Not in total",
+                      highlight: r === byBalance[0] && r.balanceMinor > 0,
                     }))}
                   />
                 </div>
-              )}
-              {shown.rows.length > 0 && (
-                <IncomeTable period={shown} currency={currency} onOpen={(sourceId) => show({ type: "entries", sourceId })} />
-              )}
-            </>
-          )}
+                {showMoreToggle}
+              </>
+            )}
+          </Card>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={() => show({ type: "source" })}>
-              <Plus aria-hidden="true" />
-              Add source
-            </Button>
-          </div>
-        </Card>
+          <Card className="min-w-0">
+            <CardTitle>Your accounts</CardTitle>
+            <CardDescription className="mt-1">Banks, cash and other places you keep money</CardDescription>
+            {a.rows.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">No accounts yet.</p>
+            ) : (
+              <>
+                <AccountsTable
+                  rows={accountRows}
+                  totalMinor={a.totalAvailableMinor}
+                  currency={currency}
+                  onEdit={(account) => show(account.kind === "cash" ? { type: "cash" } : { type: "account", kind: account.kind, account })}
+                  onImport={(account) => router.push(`/income/import?account=${encodeURIComponent(account.id)}`)}
+                  onArchive={(account) => show({ type: "archive", account })}
+                />
+                {showMoreToggle}
+                {/* Subtotals (the former Money in banks and Cash in hand cards). */}
+                <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm text-muted-foreground min-[641px]:flex min-[641px]:flex-wrap">
+                  <div className="flex flex-wrap items-center gap-x-1.5">
+                    <dt>Money in banks</dt>
+                    <dd className="font-semibold text-ink tabular-nums">{money(a.moneyInBanksMinor, currency)}</dd>
+                    {a.bankCount > 0 && (
+                      <dd>
+                        ·{" "}
+                        <button type="button" className={INLINE_LINK} aria-haspopup="dialog" onClick={() => show({ type: "banks" })}>
+                          {a.bankCount} account{a.bankCount === 1 ? "" : "s"}
+                        </button>
+                      </dd>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-1.5">
+                    <dt>Cash in hand</dt>
+                    <dd className="font-semibold text-ink tabular-nums">{money(a.cashInHandMinor, currency)}</dd>
+                    <dd>· {a.cashUpdatedAt ? `as of ${shortDateTime(a.cashUpdatedAt, timeZone)}` : "no cash added yet"}</dd>
+                  </div>
+                </dl>
+              </>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" onClick={addOrUpdateCash}>
+                <Plus aria-hidden="true" />
+                {activeCash ? "Update cash" : "Add cash"}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => show({ type: "account", kind: "other" })}>
+                <Plus aria-hidden="true" />
+                Add other account
+              </Button>
+              {a.archived.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => show({ type: "archived" })}>
+                  Show archived ({a.archived.length})
+                </Button>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* ---------------------------------------------------------------- Income */}
+        <div role="region" aria-label="Income by source" data-section="income" className={REGION}>
+          <Card className="min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+              <div className="grid gap-3">
+                <div>
+                  <CardTitle>Income by source</CardTitle>
+                  <CardDescription className="mt-1">{shown?.rangeLabel ?? "All recorded income"}</CardDescription>
+                </div>
+                <div role="group" aria-label="Period" className="inline-flex w-fit rounded-xl bg-canvas p-1">
+                  {PERIODS.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={period === key}
+                      onClick={() => choosePeriod(key)}
+                      className={cn(
+                        "min-h-9 rounded-lg px-3 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                        period === key ? "bg-surface text-ink shadow-sm" : "text-muted-foreground hover:text-ink",
+                      )}
+                    >
+                      {key === "month" ? "This month" : key === "year" ? `This year (${year})` : "All time"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid justify-items-end text-right" data-testid="period-total">
+                <span className="text-sm text-muted-foreground">Income {PERIOD_WORDS[period]}</span>
+                <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">
+                  {shown ? money(shown.totalMinor, currency) : "…"}
+                </span>
+              </div>
+            </div>
+
+            {!shown ? (
+              <div aria-busy={loadingAll} className="mt-5 grid gap-3" aria-label="Loading all income">
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="h-6 w-full rounded bg-canvas" />
+                ))}
+              </div>
+            ) : shown.bars.length === 0 ? (
+              <div className="mt-5 grid justify-items-start gap-3 rounded-xl bg-canvas p-5">
+                <p className="font-semibold">{period === "all" ? "No income recorded yet" : `No income ${PERIOD_WORDS[period]} yet`}</p>
+                <p className="text-sm text-muted-foreground">Record income to see it by source here.</p>
+                <Button onClick={() => show({ type: "income" })}>
+                  <Plus aria-hidden="true" />
+                  Record income
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-5">
+                <BarChart
+                  label="Income by source"
+                  zeroBp={shown.zeroBp}
+                  items={shown.bars.map((b) => ({
+                    key: b.key,
+                    label: b.label,
+                    amount: money(b.amountMinor, currency),
+                    startBp: b.startBp,
+                    lengthBp: b.lengthBp,
+                    colorClass: b.colorIndex === null ? OTHER : SERIES[b.colorIndex]!,
+                    highlight: b.amountMinor > 0 && b.amountMinor === Math.max(...shown.bars.map((x) => x.amountMinor)),
+                  }))}
+                />
+              </div>
+            )}
+          </Card>
+
+          <Card className="min-w-0">
+            <CardTitle>Income sources</CardTitle>
+            <CardDescription className="mt-1">{shown?.rangeLabel ?? "All recorded income"}</CardDescription>
+            {!shown ? (
+              <div aria-busy={loadingAll} className="mt-5 grid gap-3">
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="h-10 w-full rounded-xl bg-canvas" />
+                ))}
+              </div>
+            ) : shown.rows.length > 0 ? (
+              <IncomeTable period={shown} currency={currency} onOpen={(sourceId) => show({ type: "entries", sourceId })} />
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">No income in this period.</p>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" onClick={() => show({ type: "source" })}>
+                <Plus aria-hidden="true" />
+                Add source
+              </Button>
+            </div>
+          </Card>
+        </div>
       </div>
+
+      {upcoming && <div className="mt-4">{upcoming}</div>}
 
       <Dialog open={open !== null} onOpenChange={(next) => !next && close()}>
         {open?.type === "income" && (
@@ -516,7 +568,7 @@ function AccountsTable({
               <Menu.Root>
                 <Menu.Trigger
                   aria-label={`Actions for ${account.label}`}
-                  className="inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-ring"
+                  className="inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-line focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <MoreHorizontal aria-hidden="true" className="size-4" />
                 </Menu.Trigger>
@@ -563,8 +615,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
       <thead role="rowgroup" className={THEAD}>
         <tr role="row" className="border-b border-line">
           <th role="columnheader" scope="col" className={TH}>Source</th>
-          <th role="columnheader" scope="col" className={TH}>Note</th>
-          <th role="columnheader" scope="col" className={TH}>Last received</th>
+          <th role="columnheader" scope="col" className={cn(TH, "whitespace-nowrap")}>Last received</th>
           <th role="columnheader" scope="col" className={TH}>Repeats</th>
           <th role="columnheader" scope="col" className={cn(TH, "text-right")}>Amount</th>
         </tr>
@@ -580,7 +631,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                 <button
                   type="button"
                   onClick={() => onOpen(r.sourceId)}
-                  className="-mx-1 flex min-h-9 max-w-full items-center gap-2 rounded-lg px-1 text-left font-semibold outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-ring"
+                  className="-mx-1 flex min-h-9 max-w-full items-center gap-2 rounded-lg px-1 text-left font-semibold outline-none hover:bg-line focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <Dot className={colorClass(r.color)} />
                   <span className="truncate">{r.name}</span>
@@ -593,17 +644,15 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                   <span className="whitespace-nowrap">Last received {received} ·</span>
                   <span className="whitespace-nowrap">{repeats}</span>
                 </span>
+                {/* The latest note, under the name on every screen (no Note column since 2026-11-21). */}
                 {r.note && (
-                  <span className={cn(PHONE, "block pl-5.5")}>
+                  <span className="block pl-5.5 min-[641px]:max-w-64">
                     <Note text={r.note} />
                   </span>
                 )}
               </td>
-              <td role="cell" className={cn(TD, WIDE, "max-w-56")}>
-                {r.note ? <Note text={r.note} /> : <span className="text-muted-foreground">—</span>}
-              </td>
               <td role="cell" className={cn(TD, WIDE, "whitespace-nowrap text-muted-foreground")}>{received}</td>
-              <td role="cell" className={cn(TD, WIDE, "text-muted-foreground")}>{repeats}</td>
+              <td role="cell" className={cn(TD, WIDE, "min-w-36 text-muted-foreground")}>{repeats}</td>
               <td role="cell" className={cn(TD, "text-right font-semibold whitespace-nowrap tabular-nums")} data-amount>
                 {money(r.amountMinor, currency)}
               </td>
@@ -613,7 +662,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
       </tbody>
       <tfoot role="rowgroup" className="max-[640px]:block">
         <tr role="row" className={TFOOT_TR}>
-          <th role="rowheader" scope="row" colSpan={4} className={cn(TD, "pt-3 text-left font-semibold")}>
+          <th role="rowheader" scope="row" colSpan={3} className={cn(TD, "pt-3 text-left font-semibold")}>
             Total
           </th>
           <td role="cell" className={cn(TD, "pt-3 text-right font-heading text-base font-semibold tabular-nums")} data-total>
@@ -635,7 +684,7 @@ function Note({ text }: { text: string }) {
       aria-expanded={full}
       onClick={() => setFull((f) => !f)}
       className={cn(
-        "block max-w-full rounded text-left text-xs text-muted-foreground outline-none focus-visible:outline-2 focus-visible:outline-ring min-[641px]:text-sm",
+        "block max-w-full rounded text-left text-xs text-muted-foreground outline-none focus-visible:outline-2 focus-visible:outline-ring",
         full ? "whitespace-normal break-words" : "truncate",
       )}
     >
