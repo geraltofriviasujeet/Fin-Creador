@@ -57,6 +57,28 @@ export function formatMoney(amount: MinorUnits, options: MoneyFormatOptions): st
 }
 
 /**
+ * Whole units of the currency (₹1,33,390 for 1,33,389.50): rounded half away from zero, in
+ * integer maths, then formatted like formatMoney. For summary figures such as chart labels and
+ * income totals; balances keep their exact paise.
+ */
+export function roundMinorToWhole(amount: MinorUnits, currency: string, locale = DEFAULT_LOCALE): bigint {
+  if (typeof amount === "number" && !Number.isSafeInteger(amount)) {
+    throw new RangeError("Minor-unit amounts must be safe integers");
+  }
+  const scale = 10n ** BigInt(currencyDigits(currency, locale));
+  const value = BigInt(amount);
+  const abs = value < 0n ? -value : value;
+  let whole = abs / scale;
+  if ((abs % scale) * 2n >= scale) whole += 1n;
+  return (value < 0n ? -whole : whole) * scale;
+}
+
+export function formatMoneyWhole(amount: MinorUnits, options: MoneyFormatOptions): string {
+  const rounded = roundMinorToWhole(amount, options.currency, options.locale);
+  return formatMoney(rounded, { ...options, trimZeroFraction: true });
+}
+
+/**
  * Formats a ratio given in basis points (1% = 100 bp), e.g. 840 → "+8.4%".
  * Basis points keep percentages as integers in data; division here is display-only.
  */

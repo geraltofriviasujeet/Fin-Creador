@@ -1,11 +1,11 @@
 import { type Locator, type Page, expect, test } from "@playwright/test"
-import { addBank, addEntry, overviewHeading, signIn, signOut, signUpConfirmed, tourDialog, uniqueEmail, welcomeDialog } from "./helpers"
+import { overviewHeading, signIn, signOut, signUpConfirmed, tourDialog, uniqueEmail, welcomeDialog } from "./helpers"
 
-// The welcome carousel, the tour and the Get started card (before Sprint 12a). The welcome shows
+// The welcome carousel and the tour (before Sprint 12a; the Get started card was removed 2026-11-21). The welcome shows
 // after each sign-in (a short-lived cookie set on sign-in, cleared when it closes), not on reloads
 // or navigation, unless the person ticked "Don't show this again" or turned off Settings → "Show
 // the welcome when I sign in" (profiles.welcome_hidden_at, saved by the database, so it follows
-// them across devices). "Checklist dismissed" is saved the same way.
+// them across devices).
 
 // Desktop: + Add, then every sidebar item in nav order. Phones: + Add, the four tabs and More.
 const DESKTOP_STEPS = ["Add", "Overview", "Income", "Recurring", "Transactions", "Goals", "Investments", "Loans & Liabilities", "Reports", "Ask Roma"]
@@ -428,12 +428,6 @@ test.describe("at 360px", () => {
     await page.screenshot({ path: "e2e-screenshots/360-tour-step-6.png", animations: "disabled" })
     await tour.getByRole("button", { name: "Done" }).click()
     await expect(tour).toBeHidden()
-
-    // The Get started card on Overview at this width.
-    const card = page.getByRole("region", { name: "Get started" })
-    await card.scrollIntoViewIfNeeded()
-    await expect(card).toBeVisible()
-    await page.screenshot({ path: "e2e-screenshots/360-get-started.png", animations: "disabled" })
   })
 })
 
@@ -448,40 +442,4 @@ test.describe("with reduced motion", () => {
     const animation = await welcome.getByTestId("welcome-slide").evaluate((el) => getComputedStyle(el).animationName)
     expect(animation).toBe("none")
   })
-})
-
-test("Get started: each row links to where you do it, ticks from real data, and Hide removes it for good", async ({ page }) => {
-  await signUpConfirmed(page, "Asha Rao", uniqueEmail("get-started"))
-  const card = page.getByRole("region", { name: "Get started" })
-  await expect(card).toBeVisible()
-  await expect(card.getByText("0 of 4 done.", { exact: false })).toBeVisible()
-  await expect(card.getByRole("link", { name: "Add an account (not done yet)" })).toHaveAttribute("href", "/income?add=bank")
-  await expect(card.getByRole("link", { name: "Add your first expense (not done yet)" })).toHaveAttribute("href", "/transactions?add=expense")
-  await expect(card.getByRole("link", { name: "Import a statement (not done yet)" })).toHaveAttribute("href", "/transactions/import/upi")
-  await expect(card.getByRole("link", { name: "Ask Roma a question (not done yet)" })).toHaveAttribute("href", "/roma")
-
-  // The account row opens Add bank account on Income.
-  await card.getByRole("link", { name: "Add an account (not done yet)" }).click()
-  await expect(page).toHaveURL(/\/income$/)
-  await expect(page.getByRole("dialog")).toBeVisible()
-  await page.keyboard.press("Escape")
-  await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
-  await page.goto("/")
-  await expect(page.getByTestId("get-started-account")).toHaveAttribute("data-done", "true")
-  await expect(page.getByTestId("get-started-expense")).toHaveAttribute("data-done", "false")
-  await expect(card.getByText("1 of 4 done.", { exact: false })).toBeVisible()
-
-  await addEntry(page, { amount: "250", category: "Groceries", from: "HDFC Bank ··4821" })
-  await page.goto("/")
-  await expect(page.getByTestId("get-started-expense")).toHaveAttribute("data-done", "true")
-  await expect(card.getByText("2 of 4 done.", { exact: false })).toBeVisible()
-  // Ticked rows stay, ticked.
-  await expect(card.getByRole("link", { name: "Add an account (done)" })).toBeVisible()
-  await expect(card.getByRole("link", { name: "Add your first expense (done)" })).toBeVisible()
-
-  await card.getByRole("button", { name: "Hide Get started" }).click()
-  await expect(card).toBeHidden()
-  await page.reload()
-  await expect(overviewHeading(page)).toBeVisible()
-  await expect(page.getByRole("region", { name: "Get started" })).toHaveCount(0)
 })

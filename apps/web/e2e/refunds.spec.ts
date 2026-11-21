@@ -1,6 +1,6 @@
 import { type Page, expect, test } from "@playwright/test"
 import { pnbStatementPages, syntheticPdf } from "../test-support/synthetic-pdf"
-import { addBank, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, addEntry, dialog, incomeAccounts, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Refunds end to end (Sprint 9c, web), against the throwaway local Supabase: Refund this on an
 // expense (part refunds, the cap on linked refunds), an unlinked refund, a category whose refunds
@@ -118,7 +118,7 @@ test("Refund this: part refunds, the cap, an unlinked refund; a category below z
 
   // The account: 10,000 − 1,300 + 1,500 (refunds are inflows).
   await page.goto("/income")
-  await expect(page.locator("[data-slot=card]").filter({ has: page.getByText("Where your money is", { exact: true }) })).toContainText("₹10,200")
+  await expect(incomeAccounts(page)).toContainText("₹10,200")
 })
 
 // ------------------------------------------------------------ a card statement refund

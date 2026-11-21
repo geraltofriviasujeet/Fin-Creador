@@ -4,24 +4,14 @@ import { loadShortTermData } from "../cards/load"
 import { loadStatutoryData } from "../statutory/load"
 import { type LoansData, buildLoansView } from "./view"
 import { accountBalances } from "./writers"
+import { allPages } from "../all-pages"
 
 // Loads what the Loans & Liabilities page, the bell and the Overview "Due soon" card need, as
 // the signed-in user (RLS: only their own rows).
 
 export type LoansDataLoad = { ok: true; data: LoansData } | { ok: false; reason: "unauthenticated" | "unavailable" }
 
-/** PostgREST returns at most 1,000 rows a request (max_rows); a long loan has up to 480 instalments. */
-const PAGE = 1000
-
-async function allPages<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[] | null> {
-  const rows: T[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await page(from, from + PAGE - 1)
-    if (error || !data) return null
-    rows.push(...data)
-    if (data.length < PAGE) return rows
-  }
-}
+// A long loan has up to 480 instalments: due items and payments are read in pages.
 
 export async function loadLoansData(supabase: UserClient): Promise<LoansDataLoad> {
   const day = await userToday(supabase)

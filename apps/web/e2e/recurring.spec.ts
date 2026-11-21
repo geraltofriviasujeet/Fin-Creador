@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, addCash, dialog, incomeAccountRow, signUpConfirmed, toast, uniqueEmail } from "./helpers"
 
 // Recurring items end to end, against the throwaway local Supabase. One user per test.
 
@@ -142,7 +142,7 @@ test("skip and undo; archive and restore; a fixed rule posts again", async ({ pa
   // Archiving the account makes the rule need attention until it is fixed.
   await page.goto("/income")
   await addCash(page, "1,000")
-  const holding = page.locator("[data-slot=card]").filter({ has: page.getByText("Where your money is", { exact: true }) }).getByRole("listitem").filter({ hasText: "HDFC Bank ··4821" })
+  const holding = incomeAccountRow(page, "HDFC Bank ··4821")
   await holding.getByRole("button", { name: "Actions for HDFC Bank ··4821" }).click()
   await page.getByRole("menuitem", { name: "Archive" }).click()
   await dialog(page, "Archive HDFC Bank ··4821?").getByRole("button", { name: "Archive" }).click()

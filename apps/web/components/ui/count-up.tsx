@@ -56,7 +56,8 @@ const lastShown = new Map<string, { minor: number; currency: string }>()
  * Overview). `id` names the figure; the first time it is shown there is nothing to count from.
  * Screen readers get only the final value.
  */
-export function AnimatedAmount({ id, minor, currency }: { id: string; minor: number; currency: string }) {
+/** `twoDecimals`: always show the minor units (₹1,33,390.00), as on the Income page. */
+export function AnimatedAmount({ id, minor, currency, twoDecimals = false }: { id: string; minor: number; currency: string; twoDecimals?: boolean }) {
   const [range, setRange] = useState(() => {
     const last = lastShown.get(id)
     return { from: last && last.currency === currency ? last.minor : minor, to: minor }
@@ -72,9 +73,9 @@ export function AnimatedAmount({ id, minor, currency }: { id: string; minor: num
   return (
     <>
       <span aria-hidden="true" data-testid={`amount-${id}`} data-value={minor}>
-        {formatMoney(shown, { currency })}
+        {formatMoney(shown, { currency, trimZeroFraction: !twoDecimals })}
       </span>
-      <span className="sr-only">{formatMoney(minor, { currency })}</span>
+      <span className="sr-only">{formatMoney(minor, { currency, trimZeroFraction: !twoDecimals })}</span>
     </>
   )
 }

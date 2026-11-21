@@ -38,6 +38,10 @@ export const colors = {
   blue: "#ddecf8",
   /** Spending chart line, savings progress. */
   chart: "#5b59df",
+  /** Extra chart series (Income by source bars), with chart, accentDeep and dangerFill. */
+  chartBlue: "#2f6fb0",
+  chartAmber: "#a86a00",
+  chartTeal: "#0e7c86",
   /** Positive amounts (text). Darkened from Figma #20805a to pass AA on mint. */
   success: "#1a6b4b",
   /** Figma success, for fills/icons. */
@@ -78,6 +82,10 @@ export const contrastPairs: ReadonlyArray<{
   { fg: "ink", bg: "lavender", min: 4.5, use: "text on chip" },
   { fg: "ink", bg: "blue", min: 4.5, use: "text on chip" },
   { fg: "chart", bg: "surface", min: 3, use: "chart line / progress (non-text)" },
+  { fg: "chartBlue", bg: "surface", min: 3, use: "chart series (non-text)" },
+  { fg: "chartAmber", bg: "surface", min: 3, use: "chart series (non-text)" },
+  { fg: "chartTeal", bg: "surface", min: 3, use: "chart series (non-text)" },
+  { fg: "dangerFill", bg: "surface", min: 3, use: "chart series (non-text)" },
   { fg: "lineStrong", bg: "surface", min: 3, use: "input border (non-text)" },
   { fg: "mutedSubtle", bg: "surface", min: 3, use: "icons (non-text)" },
   { fg: "accentDeep", bg: "surface", min: 3, use: "focus ring on light" },

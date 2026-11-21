@@ -39,6 +39,9 @@
   --color-chip-lavender: var(--fc-color-lavender);
   --color-chip-blue: var(--fc-color-blue);
   --color-chart: var(--fc-color-chart);
+  --color-chart-blue: var(--fc-color-chart-blue);
+  --color-chart-amber: var(--fc-color-chart-amber);
+  --color-chart-teal: var(--fc-color-chart-teal);
   --color-success: var(--fc-color-success);
   --color-success-fill: var(--fc-color-success-fill);
   --color-danger: var(--fc-color-danger);

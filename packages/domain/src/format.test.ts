@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatMoneyWhole,
+  roundMinorToWhole,
   formatMoney,
   formatPercentFromBasisPoints,
   minorUnitsToDecimalString,
@@ -78,5 +80,24 @@ describe("ratioToBasisPoints", () => {
 
   it("returns null for a zero denominator", () => {
     expect(ratioToBasisPoints(5, 0)).toBeNull();
+  });
+});
+
+describe("formatMoneyWhole", () => {
+  it("rounds to whole rupees, half away from zero", () => {
+    expect(formatMoneyWhole(13_338_950, { currency: "INR" })).toBe("₹1,33,390");
+    expect(formatMoneyWhole(13_338_949, { currency: "INR" })).toBe("₹1,33,389");
+    expect(formatMoneyWhole(2_615_531, { currency: "INR" })).toBe("₹26,155");
+    expect(formatMoneyWhole(2_615_550, { currency: "INR" })).toBe("₹26,156");
+    expect(formatMoneyWhole(-1_250_050, { currency: "INR" })).toBe("-₹12,501");
+    expect(formatMoneyWhole(-1_250_049, { currency: "INR" })).toBe("-₹12,500");
+    expect(formatMoneyWhole(0, { currency: "INR" })).toBe("₹0");
+  });
+  it("leaves whole amounts and zero-digit currencies alone", () => {
+    expect(formatMoneyWhole(500_000, { currency: "INR" })).toBe("₹5,000");
+    expect(roundMinorToWhole(1234, "JPY")).toBe(1234n);
+  });
+  it("rejects unsafe numbers", () => {
+    expect(() => roundMinorToWhole(Number.MAX_SAFE_INTEGER + 2, "INR")).toThrow(RangeError);
   });
 });

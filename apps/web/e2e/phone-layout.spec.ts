@@ -1,7 +1,7 @@
 import { type Locator, type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, addEntry, dialog, signUpConfirmed, uniqueEmail } from "./helpers"
+import { addBank, addCash, addEntry, dialog, incomeSourceRow, signUpConfirmed, uniqueEmail } from "./helpers"
 
-// The Income page and the Overview at 375px (Sprint 10a): cards stack one per row, nothing
+// The Income page and the Overview at 375px (Sprint 10a): sections stack one per row, nothing
 // scrolls sideways, and the bank account list is big enough to use with a thumb.
 
 test.use({ viewport: { width: 375, height: 812 } })
@@ -39,11 +39,11 @@ test("Income and Overview read well at 375px", async ({ page }) => {
   await addEntry(page, { type: "Income", amount: "32,000", category: "Rental income", from: "HDFC Bank ··4821" })
   await addEntry(page, { amount: "450", category: "Food & dining", from: "Cash in hand" })
 
-  // Income: three main cards, then the smaller rental card.
+  // Income: the Accounts and Income by source sections, one per row (Upcoming may sit between).
   await page.goto("/income")
-  await expectStacked(page.getByRole("region", { name: "Summary" }).locator("[data-slot=card]"), 3)
-  // The rental card (the sources list also has a "Rental income" row).
-  await expect(page.getByText("Rental income", { exact: true }).first()).toBeVisible()
+  await expectStacked(page.getByRole("region", { name: /^(Accounts|Income by source)$/ }), 2)
+  // Rent is a row in the income table (no separate rental card since the 2026-11 redesign).
+  await expect(incomeSourceRow(page, "Rental income")).toContainText("₹32,000")
   await expectNoSideScroll(page)
   await page.screenshot({ path: `${SHOTS}/phone-375-income.png`, fullPage: true })
 
