@@ -54,6 +54,7 @@ function BellButton({ count, items }: { count: number; items: BellReminder[] | n
                   <li key={r.id} className="border-b border-line last:border-b-0">
                     {/* Opens its pay dialog on Loans & Liabilities. */}
                     <Popover.Close
+                      nativeButton={false}
                       render={
                         <Link href={payLink(r.id)} className="-mx-1 grid gap-0.5 rounded-md px-1 py-2 outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-ring" />
                       }
@@ -72,6 +73,7 @@ function BellButton({ count, items }: { count: number; items: BellReminder[] | n
               </ul>
             )}
             <Popover.Close
+              nativeButton={false}
               render={
                 <Link href="/loans-liabilities" className="mt-2 inline-flex text-sm font-semibold text-ink underline underline-offset-4 hover:no-underline">
                   Open Loans &amp; Liabilities
