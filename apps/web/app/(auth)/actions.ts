@@ -8,7 +8,7 @@ import {
   updatePasswordSchema,
 } from "@fin-creador/schemas"
 import { SIGN_UP_CHECK_EMAIL, authErrorMessage, isExistingAccountError } from "@fin-creador/api"
-import { authCallbackUrl, safeNextPath } from "@/lib/auth/redirect"
+import { authCallbackUrl, googleOAuthOptions, safeNextPath } from "@/lib/auth/redirect"
 import { getPublicEnv } from "@/lib/env"
 import { type FormState, pick, readFields, validate } from "@/lib/form-state"
 import { markSignedIn } from "@/lib/auth/welcome-cookie"
@@ -134,7 +134,7 @@ export async function signInWithGoogleAction(_prev: FormState, formData: FormDat
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: callbackUrl(next) },
+    options: googleOAuthOptions(getPublicEnv().siteUrl, next),
   })
   if (error || !data.url) return { status: "error", message: "Couldn’t start Google sign-in. Please try again." }
 

@@ -5,6 +5,13 @@ import { rootCodeHandoff } from "./redirect"
 /** Pages for signed-out users; signed-in users are sent into the app instead. */
 export const AUTH_PAGES = ["/sign-in", "/sign-up", "/forgot-password"] as const
 
+/**
+ * Auth pages that a signed-in visitor still reaches: they show a "Continue as" card (the page
+ * checks the session on the server) instead of the form, so a shared browser is never carried
+ * silently into someone else's account. The other auth pages still redirect.
+ */
+export const CONTINUE_PAGES: readonly string[] = ["/sign-in", "/sign-up"]
+
 /** Needs the session created by a password-reset link. */
 export const RECOVERY_PAGE = "/update-password"
 
@@ -57,7 +64,7 @@ export function decideRoute(
     const next = `${pathname}${search}`
     return { redirectTo: next === "/" ? "/sign-in" : `/sign-in?next=${encodeURIComponent(next)}` }
   }
-  if (kind === "auth" && signedIn) return { redirectTo: "/" }
+  if (kind === "auth" && signedIn && !CONTINUE_PAGES.includes(pathname)) return { redirectTo: "/" }
   if (kind === "recovery" && !signedIn) return { redirectTo: "/forgot-password?notice=link-expired" }
   return null
 }

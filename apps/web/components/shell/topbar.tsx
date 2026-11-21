@@ -7,12 +7,13 @@ import { cn } from "cn"
 import { buttonVariants } from "@/components/ui/button"
 import { AddMenu } from "@/components/shell/add-menu"
 import { Bell, type BellReminders } from "@/components/shell/bell"
+import { WebsiteLink } from "@/components/shell/website-link"
 
 /**
  * Sticky topbar (design-spec §4–5). "Add expense" (with a menu for income, transfer and
  * refund) opens the add dialog on Transactions, and search is a plain GET to it (?q=).
  * The bell lists in-app reminders (Sprint 8a: EMIs due soon); its dot shows only when
- * something is due.
+ * something is due. The globe links to the FinCreador website (in "More" on phones).
  */
 
 export function Topbar({ reminders }: { reminders?: BellReminders }) {
@@ -42,6 +43,7 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
       </form>
 
       <div className="ml-auto flex items-center gap-2 md:gap-3">
+        <WebsiteLink />
         <Bell reminders={reminders} />
         {/* Navigation is a real link styled as a button, so it is announced as a link. */}
         <Link href="/settings" aria-label="Settings" className={cn(buttonVariants({ variant: "secondary", size: "icon" }), "md:hidden")}>

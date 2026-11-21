@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { parsePublicEnv } from "../env"
-import { authCallbackUrl, rootCodeHandoff, safeNextPath } from "./redirect"
+import { authCallbackUrl, googleOAuthOptions, rootCodeHandoff, safeNextPath } from "./redirect"
 import { answersSignedOutAction, decideRoute, routeKind } from "./routes"
 
 describe("safeNextPath (open-redirect guard)", () => {
@@ -52,6 +52,21 @@ describe("auth callback URL", () => {
   })
 })
 
+describe("Google sign-in options", () => {
+  it("always asks Google for its account chooser", () => {
+    expect(googleOAuthOptions("https://app.example.test", "/").queryParams).toEqual({ prompt: "select_account" })
+  })
+
+  it("returns through the auth callback with a safe next path", () => {
+    expect(googleOAuthOptions("https://app.example.test/", "//evil.example").redirectTo).toBe(
+      "https://app.example.test/auth/callback?next=%2F"
+    )
+    expect(googleOAuthOptions("https://app.example.test", "/settings").redirectTo).toBe(
+      "https://app.example.test/auth/callback?next=%2Fsettings"
+    )
+  })
+})
+
 describe("root ?code handoff", () => {
   const code = "6f1c2b9e-3a4d-4c5e-9f00-1234567890ab"
 
@@ -94,8 +109,32 @@ describe("route rules", () => {
     expect(decideRoute("/", "", false)).toEqual({ redirectTo: "/sign-in" })
   })
 
-  it("sends signed-in users away from auth pages", () => {
-    expect(decideRoute("/sign-up", "", true)).toEqual({ redirectTo: "/" })
+  it("lets signed-in users reach sign-in and sign-up (they show the Continue card)", () => {
+    expect(decideRoute("/sign-in", "", true)).toBeNull()
+    expect(decideRoute("/sign-up", "", true)).toBeNull()
+    expect(decideRoute("/sign-in", "?next=%2Fsettings", true)).toBeNull()
+    // Signed out, they show the form as before.
+    expect(decideRoute("/sign-in", "", false)).toBeNull()
+    expect(decideRoute("/sign-up", "", false)).toBeNull()
+  })
+
+  it("still sends signed-in users away from the other auth pages", () => {
+    expect(decideRoute("/forgot-password", "", true)).toEqual({ redirectTo: "/" })
+    expect(decideRoute("/forgot-password", "", false)).toBeNull()
+  })
+
+  it("leaves password reset, email confirmation and the callback as before the Continue card", () => {
+    // Password reset: the link's session reaches the update page; without one, back to forgot.
+    expect(decideRoute("/update-password", "", true)).toBeNull()
+    expect(decideRoute("/update-password", "", false)).toEqual({ redirectTo: "/forgot-password?notice=link-expired" })
+    // Email confirmation and Google both land on the callback, with or without a session.
+    for (const signedIn of [false, true]) {
+      expect(decideRoute("/auth/callback", "?code=x&next=%2F", signedIn)).toBeNull()
+      expect(decideRoute("/auth/sign-out", "", signedIn)).toBeNull()
+    }
+    // The Site URL fallback (`/?code=`) still hands the code to the callback.
+    const code = "0f0e0d0c-0b0a-4908-8706-050403020100"
+    expect(decideRoute("/", `?code=${code}`, true)).toEqual({ redirectTo: `/auth/callback?code=${code}` })
   })
 
   it("requires a session for the password update page", () => {

@@ -24,10 +24,13 @@ export type NavItem = {
   inTabBar: boolean
 }
 
+/** The Overview page's route, for links that must land there (the sign-in "Continue" card). */
+export const OVERVIEW_HREF = "/"
+
 // Order follows design-spec §4 (Goals holds planned expenses and monthly budgets, Sprint 6; Loans & Liabilities after Investments, Sprint 8a; Reports after it, Sprint 8c). Flip `available` when a page ships.
 // A phone fits five tabs: four here and "More" (Income, Recurring, Liabilities, Reports, Ask Roma).
 export const NAV_ITEMS: readonly NavItem[] = [
-  { key: "overview", label: "Overview", href: "/", icon: LayoutGrid, available: true, inTabBar: true },
+  { key: "overview", label: "Overview", href: OVERVIEW_HREF, icon: LayoutGrid, available: true, inTabBar: true },
   { key: "income", label: "Income", href: "/income", icon: ArrowDownToLine, available: true, inTabBar: false },
   { key: "recurring", label: "Recurring", href: "/recurring", icon: Repeat, available: true, inTabBar: false },
   {
