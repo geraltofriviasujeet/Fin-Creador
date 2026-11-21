@@ -1,4 +1,5 @@
 import type * as React from "react"
+import { headers } from "next/headers"
 import { Card } from "@/components/ui/card"
 import { buttonVariants } from "@/components/ui/button"
 import { OVERVIEW_HREF } from "@/components/shell/nav-items"
@@ -12,6 +13,11 @@ import { cn } from "cn"
  * Signed out (or when the session can't be read), the page's form is rendered as before.
  */
 export async function SignedInGate({ page, children }: { page: "/sign-in" | "/sign-up"; children: React.ReactNode }) {
+  // The form's own sign-in (a server action) re-renders this page with the new session. Keep
+  // the form there, so it can finish with its full page load into the app (and the welcome)
+  // instead of being swapped for this card mid-sign-in. Presentation only: not authorisation.
+  if ((await headers()).has("next-action")) return children
+
   const supabase = await createClient()
   const { data } = await supabase.auth.getUser()
   if (!data.user) return children
