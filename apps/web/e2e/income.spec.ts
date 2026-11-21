@@ -112,6 +112,8 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   // Rent is a row (the old Rental income card showed only this total).
   await expect(incomeSourceRow(page, "Rental income")).toContainText("₹32,000")
   await expect(holding(page, "HDFC Bank ··4821")).toContainText("₹3,76,600")
+  // Balances always show paise, so the column aligns.
+  await expect(holding(page, "HDFC Bank ··4821").locator("[data-balance]")).toHaveText("₹3,76,600.00")
   await expect(totalAvailable(page)).toContainText("₹6,05,650")
 
   const salary = incomeSourceRow(page, "Salary")
@@ -120,7 +122,7 @@ test("accounts, income and totals follow the money rules", async ({ page }) => {
   // Actuals as actuals; no rate without a recurring rule.
   await expect(salary).toContainText("₹1,28,000")
   await expect(salary).toContainText("One-off")
-  await expect(incomeSources(page)).not.toContainText("every month")
+  await expect(incomeSources(page)).not.toContainText("/ month")
   // Defaults without income stay out of the list.
   await expect(incomeSourceRow(page, "Business")).toHaveCount(0)
   await shots(page, "03-income-filled")
@@ -234,7 +236,7 @@ test("'Every month' saves the income and a recurring rule; the rate comes from t
   // Counted once; the rate is the rule's, shown beside the actuals.
   await expect(periodTotal(page)).toContainText("₹50,000")
   const salary = incomeSourceRow(page, "Salary")
-  await expect(salary).toContainText("₹50,000 every month") // Repeats, from the rule
+  await expect(salary).toContainText("₹50,000 / month") // Repeats, from the rule
   await expect(salary).not.toContainText("One-off")
 
   // The rule is on Recurring, with this month already handled.
@@ -317,7 +319,7 @@ async function expectTotalsAgree(page: Page) {
   // HDFC 2,48,600 + 1,28,000 + 32,000 + 18,500; ICICI −12,500; cash 4,250 + 1,240 → ₹4,20,090.
   const accounts = incomeAccounts(page)
   const counted = page.getByTestId("amount-total-available")
-  await expect(counted).toHaveText("₹4,20,090") // after the count-up
+  await expect(counted).toHaveText("₹4,20,090.00") // after the count-up, always two decimals
   const available = Number(await counted.getAttribute("data-value"))
   // Wait for the rows (reading text does not wait by itself): three accounts, three bars.
   await expect(chartAmounts(accounts)).toHaveCount(3)
@@ -352,7 +354,7 @@ async function cleanShot(page: Page, width: number, name: string) {
   const ready = async () => {
     await expect(incomeAccounts(page).locator("tfoot [data-total]")).toBeVisible()
     await expect(incomeSources(page).locator("tfoot [data-total]")).toBeVisible()
-    await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090")
+    await expect(page.getByTestId("amount-total-available")).toHaveText("₹4,20,090.00")
   }
   await ready()
   const height = await page.evaluate(() => document.documentElement.scrollHeight)
@@ -407,4 +409,35 @@ test.describe("charts agree with the tables", () => {
     await expect(incomeSourceRow(page, "Salary")).toContainText("Last received")
     await cleanShot(page, 360, "360-income")
   })
+})
+
+test("more than five accounts: the chart shows the five largest with Show all, the table lists every one", async ({ page }) => {
+  await signUpConfirmed(page, "Demo Person", uniqueEmail("income-many"))
+  await page.goto("/income")
+  const banks = [
+    ["HDFC Bank", "1001", "10,000"],
+    ["ICICI Bank", "1002", "60,000"],
+    ["Axis Bank", "1003", "20,000"],
+    ["Canara Bank", "1004", "50,000"],
+    ["UCO Bank", "1005", "30,000"],
+    ["State Bank of India", "1006", "40,000"],
+  ] as const
+  for (const [bank, last4, opening] of banks) await addBank(page, { bank, last4, opening })
+
+  const accounts = incomeAccounts(page)
+  const bars = chart(accounts).getByRole("listitem")
+  // Largest first; the smallest (HDFC, ₹10,000) waits behind Show all.
+  await expect(bars).toHaveCount(5)
+  await expect(bars.first()).toContainText("ICICI Bank ··1002")
+  await expect(bars.first()).toContainText("₹60,000")
+  await expect(accounts.getByText("Showing 5 of 6 accounts")).toBeVisible()
+  await expect(accounts.locator("tbody tr")).toHaveCount(6)
+  await expect(accounts.locator("tbody tr").first()).toHaveAttribute("data-account", "ICICI Bank ··1002")
+  await expect(page.getByTestId("amount-total-available")).toHaveText("₹2,10,000.00")
+
+  await accounts.getByRole("button", { name: "Show all 6" }).click()
+  await expect(bars).toHaveCount(6)
+  await expect(bars.last()).toContainText("HDFC Bank ··1001")
+  await accounts.getByRole("button", { name: "Show fewer" }).click()
+  await expect(bars).toHaveCount(5)
 })

@@ -109,7 +109,7 @@ describe("buildIncomePageView: income by period", () => {
 
   it("Repeats comes from a linked recurring rule, else none (one-off)", () => {
     const month = buildIncomePageView(data, rules).periods.month
-    expect(month.rows.find((r) => r.sourceId === "s7")?.repeats).toEqual(["₹50,000 every month"])
+    expect(month.rows.find((r) => r.sourceId === "s7")?.repeats).toEqual(["₹50,000 / month"])
     expect(month.rows.find((r) => r.sourceId === "s0")?.repeats).toEqual([])
   })
 

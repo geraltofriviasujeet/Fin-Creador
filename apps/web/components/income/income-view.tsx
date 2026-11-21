@@ -10,7 +10,7 @@ import { setAccountArchivedAction } from "@/app/(app)/income/actions"
 import { AccountForm } from "@/components/income/account-form"
 import { BarChart, Dot, OTHER, SERIES } from "@/components/income/bar-chart"
 import { CashForm } from "@/components/income/cash-form"
-import { money, shortDate, shortDateTime } from "@/components/income/format"
+import { balance, shortDate, shortDateTime, whole } from "@/components/income/format"
 import { AnimatedAmount } from "@/components/ui/count-up"
 import { IncomeForm } from "@/components/income/income-form"
 import { SourceEntries } from "@/components/income/source-entries"
@@ -128,8 +128,8 @@ export function IncomeView({
   const addOrUpdateCash = () => show(activeCash ? { type: "cash" } : { type: "account", kind: "cash" })
   const a = view.accounts
 
-  // More than ACCOUNTS_SHOWN accounts: the chart and the table show the first few, and one
-  // toggle (in both cards) shows them all. Total available always counts every account.
+  // More than ACCOUNTS_SHOWN accounts: the chart shows the largest few and Show all opens the
+  // rest; the table always lists every account. Total available always counts every account.
   const [allAccounts, setAllAccounts] = useState(false)
   // Largest balance first (owner review 2026-11-21), in the chart and the table alike.
   const byBalance = [...a.rows].sort((x, y) => y.balanceMinor - x.balanceMinor)
@@ -179,7 +179,7 @@ export function IncomeView({
               <div className="grid justify-items-end text-right" data-testid="total-available">
                 <span className="text-sm text-muted-foreground">Total available</span>
                 <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">
-                  <AnimatedAmount id="total-available" minor={a.totalAvailableMinor} currency={currency} />
+                  <AnimatedAmount id="total-available" minor={a.totalAvailableMinor} currency={currency} twoDecimals />
                 </span>
               </div>
             </div>
@@ -204,12 +204,11 @@ export function IncomeView({
                     items={accountRows.map((r) => ({
                       key: r.account.id,
                       label: r.account.label,
-                      amount: money(r.balanceMinor, r.account.currency),
+                      amount: whole(r.balanceMinor, r.account.currency),
                       startBp: r.bar?.startBp ?? null,
                       lengthBp: r.bar?.lengthBp ?? 0,
                       colorClass: r.inTotal ? "bg-brand-deep" : OTHER,
                       note: r.inTotal ? undefined : "Not in total",
-                      highlight: r === byBalance[0] && r.balanceMinor > 0,
                     }))}
                   />
                 </div>
@@ -226,19 +225,18 @@ export function IncomeView({
             ) : (
               <>
                 <AccountsTable
-                  rows={accountRows}
+                  rows={byBalance}
                   totalMinor={a.totalAvailableMinor}
                   currency={currency}
                   onEdit={(account) => show(account.kind === "cash" ? { type: "cash" } : { type: "account", kind: account.kind, account })}
                   onImport={(account) => router.push(`/income/import?account=${encodeURIComponent(account.id)}`)}
                   onArchive={(account) => show({ type: "archive", account })}
                 />
-                {showMoreToggle}
                 {/* Subtotals (the former Money in banks and Cash in hand cards). */}
                 <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm text-muted-foreground min-[641px]:flex min-[641px]:flex-wrap">
                   <div className="flex flex-wrap items-center gap-x-1.5">
                     <dt>Money in banks</dt>
-                    <dd className="font-semibold text-ink tabular-nums">{money(a.moneyInBanksMinor, currency)}</dd>
+                    <dd className="font-semibold text-ink tabular-nums">{balance(a.moneyInBanksMinor, currency)}</dd>
                     {a.bankCount > 0 && (
                       <dd>
                         ·{" "}
@@ -250,7 +248,7 @@ export function IncomeView({
                   </div>
                   <div className="flex flex-wrap items-center gap-x-1.5">
                     <dt>Cash in hand</dt>
-                    <dd className="font-semibold text-ink tabular-nums">{money(a.cashInHandMinor, currency)}</dd>
+                    <dd className="font-semibold text-ink tabular-nums">{balance(a.cashInHandMinor, currency)}</dd>
                     <dd>· {a.cashUpdatedAt ? `as of ${shortDateTime(a.cashUpdatedAt, timeZone)}` : "no cash added yet"}</dd>
                   </div>
                 </dl>
@@ -304,7 +302,7 @@ export function IncomeView({
               <div className="grid justify-items-end text-right" data-testid="period-total">
                 <span className="text-sm text-muted-foreground">Income {PERIOD_WORDS[period]}</span>
                 <span className="font-heading text-2xl font-semibold tabular-nums md:text-3xl">
-                  {shown ? money(shown.totalMinor, currency) : "…"}
+                  {shown ? whole(shown.totalMinor, currency) : "…"}
                 </span>
               </div>
             </div>
@@ -332,11 +330,10 @@ export function IncomeView({
                   items={shown.bars.map((b) => ({
                     key: b.key,
                     label: b.label,
-                    amount: money(b.amountMinor, currency),
+                    amount: whole(b.amountMinor, currency),
                     startBp: b.startBp,
                     lengthBp: b.lengthBp,
                     colorClass: b.colorIndex === null ? OTHER : SERIES[b.colorIndex]!,
-                    highlight: b.amountMinor > 0 && b.amountMinor === Math.max(...shown.bars.map((x) => x.amountMinor)),
                   }))}
                 />
               </div>
@@ -436,7 +433,7 @@ export function IncomeView({
                   >
                     <span className="min-w-0 flex-1 truncate text-sm">{account.label}</span>
                     {!inTotal && <Badge tone="neutral">Not in total</Badge>}
-                    <span className="font-semibold tabular-nums">{money(balanceMinor, account.currency)}</span>
+                    <span className="font-semibold tabular-nums">{balance(balanceMinor, account.currency)}</span>
                     <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                   </button>
                 </li>
@@ -444,7 +441,7 @@ export function IncomeView({
             </ul>
             <div className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-4">
               <span className="text-sm text-muted-foreground">Money in banks</span>
-              <span className="font-heading text-xl font-semibold tabular-nums">{money(a.moneyInBanksMinor, currency)}</span>
+              <span className="font-heading text-xl font-semibold tabular-nums">{balance(a.moneyInBanksMinor, currency)}</span>
             </div>
           </DialogContent>
         )}
@@ -562,7 +559,7 @@ function AccountsTable({
             </td>
             <td role="cell" className={cn(TD, WIDE, "text-muted-foreground tabular-nums")}>{account.last4 ? `··${account.last4}` : ""}</td>
             <td role="cell" className={cn(TD, "text-right font-semibold whitespace-nowrap tabular-nums")} data-balance>
-              {money(balanceMinor, account.currency)}
+              {balance(balanceMinor, account.currency)}
             </td>
             <td role="cell" className={cn(TD, "w-10 text-right max-[640px]:-mt-1.5 max-[640px]:-mr-1.5")}>
               <Menu.Root>
@@ -600,7 +597,7 @@ function AccountsTable({
             Total
           </th>
           <td role="cell" className={cn(TD, "pt-3 text-right font-heading text-base font-semibold tabular-nums")} data-total>
-            {money(totalMinor, currency)}
+            {balance(totalMinor, currency)}
           </td>
           <td role="cell" className={cn(TD, WIDE)} />
         </tr>
@@ -652,9 +649,9 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                 )}
               </td>
               <td role="cell" className={cn(TD, WIDE, "whitespace-nowrap text-muted-foreground")}>{received}</td>
-              <td role="cell" className={cn(TD, WIDE, "min-w-36 text-muted-foreground")}>{repeats}</td>
+              <td role="cell" className={cn(TD, WIDE, "whitespace-nowrap text-muted-foreground")}>{repeats}</td>
               <td role="cell" className={cn(TD, "text-right font-semibold whitespace-nowrap tabular-nums")} data-amount>
-                {money(r.amountMinor, currency)}
+                {whole(r.amountMinor, currency)}
               </td>
             </tr>
           )
@@ -666,7 +663,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
             Total
           </th>
           <td role="cell" className={cn(TD, "pt-3 text-right font-heading text-base font-semibold tabular-nums")} data-total>
-            {money(period.totalMinor, currency)}
+            {whole(period.totalMinor, currency)}
           </td>
         </tr>
       </tfoot>

@@ -145,6 +145,14 @@ export const RATE_WORDS: Readonly<Record<Frequency, string>> = {
   yearly: "every year",
 };
 
+/** "/ month", "/ week", ...: a rate's period, short ("₹1,49,990 / month" on the Income table). */
+export const RATE_PER: Readonly<Record<Frequency, string>> = {
+  weekly: "/ week",
+  monthly: "/ month",
+  quarterly: "/ quarter",
+  yearly: "/ year",
+};
+
 /** The Rental income card: all rent-type sources together. */
 export function rentalIncome(
   entries: readonly IncomeEntry[],

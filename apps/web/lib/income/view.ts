@@ -1,9 +1,9 @@
 import {
   type ChartGroup,
   type IncomePeriodKey,
-  RATE_WORDS,
+  RATE_PER,
   type SourceRateRule,
-  formatMoney,
+  formatMoneyWhole,
   horizontalBarScale,
   incomeBySource,
   incomeForPeriod,
@@ -50,7 +50,7 @@ export type SourceRowView = {
   lastReceivedOn: string | null
   note: string | null
   onlyVoided: boolean
-  /** "₹50,000 every month" for each recurring rule linked to the source; empty: one-off. */
+  /** "₹50,000 / month" for each recurring rule linked to the source; empty: one-off. */
   repeats: string[]
   /** Where this year's income went: an account label, "Multiple accounts", or null. */
   linkedLabel: string | null
@@ -142,7 +142,7 @@ export function buildIncomePageView(
         lastReceivedOn: r.lastReceivedOn,
         note: r.note,
         onlyVoided: r.onlyVoided,
-        repeats: (rates.get(r.source.id) ?? []).map((rate) => `${formatMoney(rate.amountMinor, { currency: rate.currency })} ${RATE_WORDS[rate.frequency]}`),
+        repeats: (rates.get(r.source.id) ?? []).map((rate) => `${formatMoneyWhole(rate.amountMinor, { currency: rate.currency })} ${RATE_PER[rate.frequency]}`),
         linkedLabel:
           linked.get(r.source.id) ?? (r.source.defaultAccountId && accounts.some((a) => a.id === r.source.defaultAccountId) ? labelOf(r.source.defaultAccountId) : null),
         color: named.get(r.source.id) ?? (r.amountMinor > 0 ? "other" : null),
