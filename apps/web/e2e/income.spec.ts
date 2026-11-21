@@ -422,7 +422,10 @@ test("more than five accounts: the chart shows the five largest with Show all, t
     ["UCO Bank", "1005", "30,000"],
     ["State Bank of India", "1006", "40,000"],
   ] as const
-  for (const [bank, last4, opening] of banks) await addBank(page, { bank, last4, opening })
+  for (const [bank, last4, opening] of banks) {
+    await addBank(page, { bank, last4, opening })
+    await page.reload() // one "Account added." toast at a time (addBank waits for exactly one)
+  }
 
   const accounts = incomeAccounts(page)
   const bars = chart(accounts).getByRole("listitem")
