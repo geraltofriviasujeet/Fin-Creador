@@ -209,6 +209,7 @@ export function IncomeView({
                       lengthBp: r.bar?.lengthBp ?? 0,
                       colorClass: r.inTotal ? "bg-brand-deep" : OTHER,
                       note: r.inTotal ? undefined : "Not in total",
+                      highlight: r === byBalance[0] && r.balanceMinor > 0,
                     }))}
                   />
                 </div>
@@ -334,6 +335,7 @@ export function IncomeView({
                     startBp: b.startBp,
                     lengthBp: b.lengthBp,
                     colorClass: b.colorIndex === null ? OTHER : SERIES[b.colorIndex]!,
+                    highlight: b.amountMinor > 0 && b.amountMinor === Math.max(...shown.bars.map((x) => x.amountMinor)),
                   }))}
                 />
               </div>
