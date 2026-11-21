@@ -35,6 +35,15 @@ export function authCallbackUrl(siteUrl: string, next: string): string {
   return `${siteUrl.replace(/\/+$/, "")}${AUTH_CALLBACK_PATH}?next=${encodeURIComponent(safeNextPath(next))}`
 }
 
+/**
+ * Options for Supabase's Google sign-in. `prompt=select_account` makes Google show its account
+ * chooser every time, so a shared or multi-account browser never signs in to the wrong Google
+ * account silently.
+ */
+export function googleOAuthOptions(siteUrl: string, next: string) {
+  return { redirectTo: authCallbackUrl(siteUrl, next), queryParams: { prompt: "select_account" } }
+}
+
 // Supabase PKCE auth codes are UUIDs; allow a little slack but nothing URL-structural.
 const AUTH_CODE = /^[A-Za-z0-9._~-]{1,256}$/
 

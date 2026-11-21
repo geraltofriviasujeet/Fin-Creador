@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Ellipsis } from "lucide-react"
+import { Ellipsis, Globe } from "lucide-react"
 import { cn } from "cn"
 import { toast } from "@/components/ui/toast"
 import { NAV_ITEMS, type NavItem, comingSoonMessage, isActive } from "@/components/shell/nav-items"
+import { FINCREADOR_WEBSITE_LABEL, FINCREADOR_WEBSITE_URL } from "@/lib/site"
 
 const tabClasses =
   "flex h-full flex-1 flex-col items-center justify-center gap-1 rounded-lg text-xs [&_svg]:size-5"
@@ -137,6 +138,17 @@ function MoreMenu({ pathname }: { pathname: string }) {
             </li>
           )
         })}
+        {/* Phones only (≤ 640px): wider screens have it in the topbar (website-link.tsx). */}
+        <li className="min-[641px]:hidden">
+          <a
+            href={FINCREADOR_WEBSITE_URL}
+            onClick={() => setOpen(false)}
+            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-ink hover:bg-canvas [&_svg]:size-5"
+          >
+            <Globe aria-hidden="true" />
+            {FINCREADOR_WEBSITE_LABEL}
+          </a>
+        </li>
       </ul>
     </div>
   )

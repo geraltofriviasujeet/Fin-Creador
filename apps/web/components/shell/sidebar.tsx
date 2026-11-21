@@ -8,6 +8,7 @@ import { Logo } from "@/components/brand/logo"
 import { toast } from "@/components/ui/toast"
 import { NAV_ITEMS, comingSoonMessage, isActive } from "@/components/shell/nav-items"
 import type { ShellUser } from "@/components/shell/app-shell"
+import { avatarInitials } from "@/lib/auth/identity"
 
 const itemClasses =
   "flex h-[40px] w-full items-center gap-3 rounded-xl px-3.5 text-left text-base transition-colors [&_svg]:size-5 [&_svg]:shrink-0"
@@ -82,7 +83,7 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
                 aria-hidden="true"
                 className="flex size-10 shrink-0 items-center justify-center rounded-full bg-chip-peach text-sm font-bold text-ink"
               >
-                {user.name ? initials(user.name) : user.email.charAt(0).toUpperCase()}
+                {avatarInitials(user.name, user.email)}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{user.name ?? user.email}</p>
@@ -111,13 +112,4 @@ export function Sidebar({ user }: { user: ShellUser | null }) {
       </div>
     </aside>
   )
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("")
 }

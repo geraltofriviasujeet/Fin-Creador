@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { CONTINUE_PAGES } from "@/lib/auth/routes"
 import { clearWelcome } from "@/lib/auth/welcome-cookie"
 import { createClient } from "@/lib/supabase/server"
 
@@ -14,5 +15,9 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   await supabase.auth.signOut()
   await clearWelcome()
-  return NextResponse.redirect(new URL("/sign-in?notice=signed-out", request.url), 303)
+  // "Not you? Sign out" on the Continue card comes back to the page it was on (sign-in or
+  // sign-up, nothing else); every other sign-out lands on sign-in as before.
+  const to = (await request.formData().catch(() => null))?.get("to")
+  const page = typeof to === "string" && CONTINUE_PAGES.includes(to) ? to : "/sign-in"
+  return NextResponse.redirect(new URL(`${page}?notice=signed-out`, request.url), 303)
 }
