@@ -111,13 +111,6 @@ test("turn Roma on, ask what I spent this month, find entries, allow description
   await expect(page.getByRole("status").getByText("Roma is off.")).toBeVisible()
   await page.goto("/roma")
   await expect(page.getByText("Roma is off", { exact: true })).toBeVisible()
-
-  // Get started on Overview ticks "Ask Roma a question" from her history (and the account and
-  // expense above); the import isn't done.
-  await page.goto("/")
-  await expect(page.getByTestId("get-started-roma")).toHaveAttribute("data-done", "true")
-  await expect(page.getByTestId("get-started-import")).toHaveAttribute("data-done", "false")
-  await expect(page.getByText("3 of 4 done.", { exact: false })).toBeVisible()
 })
 
 test("conversations: follow up, reopen, start a new one, delete one, delete all (10.3)", async ({ page }) => {

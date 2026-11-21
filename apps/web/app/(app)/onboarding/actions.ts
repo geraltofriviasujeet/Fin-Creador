@@ -1,11 +1,10 @@
 "use server"
 
-import { dismissGettingStarted, setWelcomeHidden } from "@fin-creador/api"
-import { revalidatePath } from "next/cache"
+import { setWelcomeHidden } from "@fin-creador/api"
 import { clearWelcome } from "@/lib/auth/welcome-cookie"
 import { createClient } from "@/lib/supabase/server"
 
-// The welcome and the Get started card (before Sprint 12a). Only the signed-in person's own row:
+// The welcome (before Sprint 12a; the Get started card was removed 2026-11-21). Only the signed-in person's own row:
 // RLS and the column grants enforce it, and the database stores its own time (migrations
 // 20261120120000 and 20261120200000). This folder has no page; it only holds these actions.
 
@@ -39,14 +38,5 @@ export async function setWelcomeOnSignInAction(show: boolean): Promise<{ ok: boo
   if (!s) return { ok: false }
   const result = await setWelcomeHidden(s.supabase, s.userId, !show)
   if (result.ok) await clearWelcome()
-  return result
-}
-
-/** Hide on the Get started card: gone for good. */
-export async function dismissGettingStartedAction(): Promise<{ ok: boolean }> {
-  const s = await signedIn()
-  if (!s) return { ok: false }
-  const result = await dismissGettingStarted(s.supabase, s.userId)
-  if (result.ok) revalidatePath("/")
   return result
 }
