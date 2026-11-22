@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Search, Settings, X } from "lucide-react"
 import { Logo } from "@/components/brand/logo"
 import { cn } from "cn"
@@ -19,8 +19,26 @@ import { WebsiteLink } from "@/components/shell/website-link"
  * Below md the search field is behind a search icon; it opens over the topbar (12a-2).
  */
 
+/**
+ * Top-bar search (desktop field and phone sheet). Without JS it is a plain GET form to
+ * /transactions; with JS it is a client navigation, like the nav links, so the app isn't
+ * reloaded and the other pages (kept mounted but hidden) keep their state, e.g. a Roma draft.
+ */
+function useTransactionsSearch(after?: () => void) {
+  const router = useRouter()
+  return (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const raw = new FormData(event.currentTarget).get("q")
+    const q = typeof raw === "string" ? raw.trim().slice(0, 100) : ""
+    router.push(q ? `/transactions?${new URLSearchParams({ q })}` : "/transactions")
+    event.currentTarget.reset()
+    after?.()
+  }
+}
+
 export function Topbar({ reminders }: { reminders?: BellReminders }) {
   const [searching, setSearching] = useState(false)
+  const search = useTransactionsSearch()
   const pathname = usePathname()
   // A search (or any navigation) closes the phone search field.
   const [shownOn, setShownOn] = useState(pathname)
@@ -35,6 +53,7 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
       <form
         role="search"
         action="/transactions"
+        onSubmit={search}
         className="relative hidden w-(--fc-layout-search-width) max-w-full md:block"
       >
         <label htmlFor="global-search" className="sr-only">
@@ -82,11 +101,14 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
 function PhoneSearch({ onClose }: { onClose: () => void }) {
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => input.current?.focus(), [])
+  // Closes even when already on /transactions (the pathname doesn't change then).
+  const search = useTransactionsSearch(onClose)
   return (
     <form
       id="phone-search"
       role="search"
       action="/transactions"
+      onSubmit={search}
       onKeyDown={(e) => e.key === "Escape" && onClose()}
       className="absolute inset-0 z-10 flex items-center gap-2 bg-surface px-4 md:hidden"
     >

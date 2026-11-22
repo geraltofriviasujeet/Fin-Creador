@@ -104,8 +104,7 @@ test("Roma: while hidden, an address change on Transactions leaves the chat, its
   await box.evaluate((el) => ((window as unknown as { __roma: Element }).__roma = el))
 
   // Away to Transactions (client navigation), then a search there with the page's own box: the
-  // address changes in the app, with no ?c= (the top-bar search is a full page load, which
-  // would reset every page anyway).
+  // address changes in the app, with no ?c=.
   await nav(page, "Transactions").click()
   await expect(page).toHaveURL(/\/transactions$/)
   await page.getByRole("main").getByRole("searchbox", { name: "Search transactions" }).fill("groceries")
@@ -121,4 +120,44 @@ test("Roma: while hidden, an address change on Transactions leaves the chat, its
     return { connected: el.isConnected, value: el.value, answered: list?.textContent?.includes("Answered on") ?? null, items: list?.querySelectorAll(":scope > li").length ?? 0 }
   })
   expect(hidden).toEqual({ connected: true, value: "A draft I haven't sent", answered: false, items: 1 })
+})
+
+// 12a-4b: the top-bar search is a client navigation (it was a full-page form submit, which
+// reloaded the app and reset every hidden page).
+test("top-bar search doesn't reload the app: a Roma draft is still there after searching and coming back", async ({ page }) => {
+  await signUpConfirmed(page, "Test Person", uniqueEmail("hidden-topbar-search"))
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
+  await addEntry(page, { amount: "250", category: "Groceries", from: "HDFC Bank ··4821", note: "Weekly groceries" })
+  await page.goto("/settings")
+  await page.getByRole("button", { name: "Turn Roma on" }).click()
+  await expect(page.getByRole("status").getByText("Roma is on.")).toBeVisible()
+
+  await page.goto("/roma")
+  const box = page.getByLabel("Your question")
+  const answers = page.getByRole("list", { name: "Roma's answers" })
+  await box.fill("What did I spend this month?")
+  await box.press("Enter")
+  await expect(answers.getByText(/^You spent ₹250 from /)).toBeVisible()
+  await expect(page).toHaveURL(/\/roma\?c=[0-9a-f-]{36}$/)
+  const conversation = page.url()
+  await box.fill("A draft I haven't sent")
+  // A full page load would drop this marker.
+  await page.evaluate(() => ((window as unknown as { __noReload: boolean }).__noReload = true))
+
+  const topSearch = page.getByRole("banner").getByRole("searchbox", { name: "Search transactions" })
+  await topSearch.fill("groceries")
+  await topSearch.press("Enter")
+  await expect(page).toHaveURL(/\/transactions\?q=groceries$/)
+  await expect(page.getByTestId("search-summary")).toHaveText(/^1 result for “groceries”/)
+  await expect(page.locator("main li").filter({ hasText: "Weekly groceries" })).toBeVisible()
+  expect(await page.evaluate(() => (window as unknown as { __noReload?: boolean }).__noReload)).toBe(true)
+
+  // Back to the conversation: the same chat, with its draft and the live answer.
+  await page.goBack()
+  await expect(page).toHaveURL(conversation)
+  expect(await page.evaluate(() => (window as unknown as { __noReload?: boolean }).__noReload)).toBe(true)
+  await expect(box).toHaveValue("A draft I haven't sent")
+  await expect(answers.getByRole("listitem")).toHaveCount(1)
+  await expect(answers.getByText(/^Answered on /)).toHaveCount(0)
 })
