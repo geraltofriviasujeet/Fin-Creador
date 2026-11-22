@@ -77,11 +77,11 @@ export function RomaChat(props: Props) {
   // re-renders with the current address: on /transactions there is no ?c=, which started the
   // chat afresh (losing the draft and any answer on its way) and refreshed it on the way back.
   // Only Roma's own address counts (12a-4 hidden-page audit).
-  const onRoma = usePathname() === "/roma"
+  void usePathname() // THROWAWAY: guard removed to prove the E2E catches the bug
   const [seen, setSeen] = useState(inAddress)
   const [moved, setMoved] = useState<string | null | undefined>(undefined)
   const [generation, setGeneration] = useState(0)
-  if (onRoma && inAddress !== seen) {
+  if (inAddress !== seen) {
     setSeen(inAddress)
     setMoved(undefined)
     if (inAddress !== moved) setGeneration((g) => g + 1)
