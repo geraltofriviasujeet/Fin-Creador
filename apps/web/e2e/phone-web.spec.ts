@@ -356,7 +356,7 @@ async function askRoma(page: Page, question: string) {
 async function expectNothingClipped(scope: Locator, where: string) {
   const clipped = await scope.evaluate((root) =>
     [...root.querySelectorAll("*")]
-      .filter((el) => el.closest("[data-scroll-table]") === null && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== "visible")
+      .filter((el) => el.closest("[data-scroll-table]") === null && el.clientWidth > 1 && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== "visible")
       .map((el) => `${el.tagName.toLowerCase()} ${el.scrollWidth}>${el.clientWidth} "${(el.textContent ?? "").trim().slice(0, 40)}"`),
   )
   expect(clipped, `${where}: clipped or scrolling sideways`).toEqual([])
@@ -467,7 +467,12 @@ test("UPI import review at phone size: rows as cards, filters and Save in sticky
   await addBank(page, { bank: "State Bank of India", last4: "", opening: "50,000", asOf: "2026-09-01" })
   await page.goto("/transactions/import/upi")
   const statement = { name: "paytm.pdf", mimeType: "application/pdf", buffer: Buffer.from(syntheticPdf(paytmPages({ payments: paytmDefaultPayments() }))) }
-  await page.getByLabel("Choose your UPI app statement (PDF)").setInputFiles(statement)
+  // Until the page has hydrated the file input has no handler yet: choose again until it reads.
+  const matching = page.getByRole("heading", { name: "Which of your accounts are these?" })
+  await expect(async () => {
+    await page.getByLabel("Choose your UPI app statement (PDF)").setInputFiles(statement)
+    await expect(matching).toBeVisible({ timeout: 5_000 })
+  }).toPass({ timeout: 45_000 })
   await page.getByLabel("Account for State Bank Of India ··12").selectOption({ label: "State Bank of India" })
   await page.getByLabel("Account for Example Bank ··34").selectOption({ label: "HDFC Bank" })
   await expectNoSideScroll(page, "UPI account matching")

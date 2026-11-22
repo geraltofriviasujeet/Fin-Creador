@@ -320,16 +320,20 @@ test("search results view: from the top bar and the search box, all time, totals
   expect(old.error).toBeNull()
 
   await page.goto("/transactions")
-  const upcomingBefore = await page.getByRole("heading", { name: "Upcoming", exact: true }).count()
+  const upcoming = page.getByRole("heading", { name: "Upcoming", exact: true })
+  await expect(upcoming).toBeVisible()
+  await page.waitForLoadState("networkidle")
   const results = page.getByRole("region", { name: /results? for “groceries”$/ })
 
   // From the top bar.
-  await page.getByRole("banner").getByRole("searchbox").fill("groceries")
-  await page.getByRole("banner").getByRole("searchbox").press("Enter")
+  const topSearch = page.getByRole("banner").getByRole("searchbox")
+  await topSearch.fill("groceries")
+  await expect(topSearch).toHaveValue("groceries")
+  await topSearch.press("Enter")
   await expect(page).toHaveURL(/\/transactions\?q=groceries$/)
   await expect(results.getByRole("heading", { name: "2 results for “groceries”" })).toBeVisible()
   await expect(results).toContainText("All time")
-  await expect(page.getByRole("heading", { name: "Upcoming", exact: true })).toHaveCount(0)
+  await expect(upcoming).toHaveCount(0)
   await expect(row(page, "Old groceries")).toBeVisible()
   await expect(row(page, "Groceries run")).toBeVisible()
   await expect(row(page, "Tea")).toHaveCount(0)
@@ -353,7 +357,7 @@ test("search results view: from the top bar and the search box, all time, totals
   await results.getByRole("link", { name: "Clear search" }).click()
   await expect(page).toHaveURL(/\/transactions$/)
   await expect(page.getByRole("region", { name: /results? for/ })).toHaveCount(0)
-  await expect(page.getByRole("heading", { name: "Upcoming", exact: true })).toHaveCount(upcomingBefore)
+  await expect(upcoming).toBeVisible()
   await expect(page.getByLabel("Date", { exact: true })).toHaveValue("this-month")
   await expect(row(page, "Tea")).toBeVisible()
 
