@@ -3,6 +3,7 @@
 // ranges, fills the chart buckets and ranks categories, so web and mobile agree.
 import { type DateRange, type IsoDate, addDays, daysInMonth, minDate, monthRange, parseIsoDate, yearRange } from "./dates";
 import { ratioToBasisPoints } from "./format";
+import { type PeriodTotals, savingsRateBasisPoints } from "./ledger";
 import { addMinor } from "./money";
 
 export type DashboardPeriod = "week" | "month" | "year" | "custom";
@@ -121,6 +122,21 @@ export function changeBasisPoints(current: number, previous: number): number | n
 /** Difference of two rates in basis points (percentage points ×100); null if either is missing. */
 export function pointsChange(current: number | null, previous: number | null): number | null {
   return current === null || previous === null ? null : current - previous;
+}
+
+/**
+ * Savings-rate change in percentage points (basis points), or null for "nothing to compare":
+ * when either period has no income (no rate), or last period's rate was negative (spending
+ * above income makes a points change meaningless, e.g. −200% → 41.8% read as "+241.8 pts").
+ */
+export function savingsRatePointsChange(
+  current: Pick<PeriodTotals, "incomeMinor" | "netMinor">,
+  previous: Pick<PeriodTotals, "incomeMinor" | "netMinor">,
+): number | null {
+  const now = savingsRateBasisPoints(current);
+  const before = savingsRateBasisPoints(previous);
+  if (before !== null && before < 0) return null;
+  return pointsChange(now, before);
 }
 
 export type BucketSize = "day" | "month";

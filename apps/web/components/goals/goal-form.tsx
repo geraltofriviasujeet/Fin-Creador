@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { GOAL_ICON } from "./display"
 
 // Add or edit a planned expense: a short guided form per type. The figures shown while
@@ -132,7 +133,7 @@ export function GoalForm({ currency, today, item, onDone, initial, planMessageId
   const [values, setValues] = useState<Values>(() => (item ? valuesFrom(item) : (initial ?? { type: "trip", scope: "domestic", payment: "cash", vehicle: "car" })))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   const type = (values.type ?? "trip") as GoalType
   const set = (name: string) => (value: string) => setValues((v) => ({ ...v, [name]: value }))
 
@@ -147,26 +148,32 @@ export function GoalForm({ currency, today, item, onDone, initial, planMessageId
     return { targetMinor: parsed.data.targetMinor, figures: goalFigures({ type: parsed.data.type, details: parsed.data.details } as Parameters<typeof goalFigures>[0]) }
   }, [values, goalCurrency, today, item?.goal.targetDate])
 
-  async function submit(event: React.FormEvent) {
+  // The dialog closes (and the toast shows) only once the page shows the saved goal.
+  function submit(event: React.FormEvent) {
     event.preventDefault()
     if (pending) return
-    setPending(true)
     setFormError(null)
-    let result: GoalWriteResult
-    try {
-      result = await saveGoalAction({ ...values, goalId: item?.goal.id ?? "", idempotencyKey: editing ? "" : requestKey, ...(planMessageId && !editing ? { planMessageId } : {}) })
-    } catch {
-      result = { status: "error", message: NETWORK }
-    }
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onSaved?.({ id: result.goalId, name: (values.name ?? "").trim() })
-      onDone()
-      return
-    }
-    setFormError(result.message)
-    setErrors(result.fieldErrors ?? {})
+    save(async () => {
+      let result: GoalWriteResult
+      try {
+        result = await saveGoalAction({ ...values, goalId: item?.goal.id ?? "", idempotencyKey: editing ? "" : requestKey, ...(planMessageId && !editing ? { planMessageId } : {}) })
+      } catch {
+        result = { status: "error", message: NETWORK }
+      }
+      if (result.status === "success") {
+        const saved = result
+        return () => {
+          toast.success(saved.message)
+          onSaved?.({ id: saved.goalId, name: (values.name ?? "").trim() })
+          onDone()
+        }
+      }
+      const failed = result
+      return () => {
+        setFormError(failed.message)
+        setErrors(failed.fieldErrors ?? {})
+      }
+    })
   }
 
   const text = (name: string, label: string, props: Partial<React.ComponentProps<typeof TextField>> = {}) => (

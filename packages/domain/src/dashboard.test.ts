@@ -8,6 +8,7 @@ import {
   fillBuckets,
   partialBucket,
   pointsChange,
+  savingsRatePointsChange,
   rangeLength,
   topCategories,
   weekRange,
@@ -113,6 +114,35 @@ describe("changeBasisPoints and pointsChange", () => {
     expect(pointsChange(5_210, 4_830)).toBe(380);
     expect(pointsChange(null, 4_830)).toBeNull();
     expect(pointsChange(5_210, null)).toBeNull();
+  });
+});
+
+describe("savingsRatePointsChange", () => {
+  const t = (incomeMinor: number, expenseMinor: number) => ({ incomeMinor, netMinor: incomeMinor - expenseMinor });
+  it("subtracts this period's rate from last period's", () => {
+    // 52.1% now (₹1,00,000 in, ₹47,900 out), 48.3% before → +3.8 pts.
+    expect(savingsRatePointsChange(t(1_00_000_00, 47_900_00), t(1_00_000_00, 51_700_00))).toBe(380);
+    // Down from 60% to 25%.
+    expect(savingsRatePointsChange(t(40_000_00, 30_000_00), t(50_000_00, 20_000_00))).toBe(-3_500);
+  });
+  it("compares with a zero rate last period (spent exactly what came in)", () => {
+    expect(savingsRatePointsChange(t(10_000_00, 6_000_00), t(10_000_00, 10_000_00))).toBe(4_000);
+  });
+  it("allows a negative rate now (spent more than came in)", () => {
+    expect(savingsRatePointsChange(t(10_000_00, 15_000_00), t(10_000_00, 8_000_00))).toBe(-7_000);
+  });
+  it("is nothing to compare when last period had no income", () => {
+    expect(savingsRatePointsChange(t(2_38_284_01, 0), t(0, 12_000_00))).toBeNull();
+    expect(savingsRatePointsChange(t(10_000_00, 5_000_00), t(0, 0))).toBeNull();
+  });
+  it("is nothing to compare when last period's rate was negative (the +241.8 pts bug)", () => {
+    // Last month −200% (₹10,000 in, ₹30,000 out), this month 41.8%: not "+241.8 pts".
+    expect(savingsRatePointsChange(t(10_000_00, 5_820_00), t(10_000_00, 30_000_00))).toBeNull();
+    expect(savingsRatePointsChange(t(10_000_00, 5_000_00), t(10_000_00, 10_001_00))).toBeNull();
+  });
+  it("is nothing to compare when this period has no income yet", () => {
+    expect(savingsRatePointsChange(t(0, 3_000_00), t(50_000_00, 20_000_00))).toBeNull();
+    expect(savingsRatePointsChange(t(0, 0), t(50_000_00, 20_000_00))).toBeNull();
   });
 });
 

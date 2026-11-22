@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, use } from "react"
+import { Suspense, use, useState } from "react"
 import Link from "next/link"
 import { Popover } from "@base-ui/react/popover"
 import { Bell as BellIcon } from "lucide-react"
@@ -31,8 +31,12 @@ function LoadedBell({ reminders }: { reminders: BellReminders }) {
 }
 
 function BellButton({ count, items }: { count: number; items: BellReminder[] | null }) {
+  // Controlled so a reminder (a real link, role link) closes the popover when it is followed,
+  // by click or Enter; a Popover.Close rendered as a link would become role=button.
+  const [open, setOpen] = useState(false)
+  const close = () => setOpen(false)
   return (
-    <Popover.Root>
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
         aria-label={count > 0 ? `Notifications, ${count} due` : "Notifications"}
         className={cn(buttonVariants({ variant: "secondary", size: "icon" }), "relative")}
@@ -53,10 +57,10 @@ function BellButton({ count, items }: { count: number; items: BellReminder[] | n
                 {items.map((r) => (
                   <li key={r.id} className="border-b border-line last:border-b-0">
                     {/* Opens its pay dialog on Loans & Liabilities. */}
-                    <Popover.Close
-                      render={
-                        <Link href={payLink(r.id)} className="-mx-1 grid gap-0.5 rounded-md px-1 py-2 outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-ring" />
-                      }
+                    <Link
+                      href={payLink(r.id)}
+                      onClick={close}
+                      className="-mx-1 grid gap-0.5 rounded-md px-1 py-2 outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-ring"
                     >
                       <span className="flex items-baseline justify-between gap-3 text-sm">
                         <span className="truncate font-semibold">{r.name}</span>
@@ -66,18 +70,18 @@ function BellButton({ count, items }: { count: number; items: BellReminder[] | n
                         {r.label} · {reminderText(r)}
                         {r.dueDate && ` · ${fullDate(r.dueDate)}`}
                       </span>
-                    </Popover.Close>
+                    </Link>
                   </li>
                 ))}
               </ul>
             )}
-            <Popover.Close
-              render={
-                <Link href="/loans-liabilities" className="mt-2 inline-flex text-sm font-semibold text-ink underline underline-offset-4 hover:no-underline">
-                  Open Loans &amp; Liabilities
-                </Link>
-              }
-            />
+            <Link
+              href="/loans-liabilities"
+              onClick={close}
+              className="mt-2 inline-flex text-sm font-semibold text-ink underline underline-offset-4 hover:no-underline"
+            >
+              Open Loans &amp; Liabilities
+            </Link>
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

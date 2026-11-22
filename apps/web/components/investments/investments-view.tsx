@@ -25,6 +25,7 @@ import { Card } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import {
   CATEGORY_LABEL,
   GroupBadges,
@@ -661,16 +662,17 @@ function ConfirmAction({
   onDone: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-  async function go() {
-    if (pending) return
-    setPending(true)
-    const result = await run(action)
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-    } else setError(result.message)
+  // Closes (and toasts) only once the page shows the change.
+  const [pending, save] = useSaveTransition()
+  function go() {
+    save(async () => {
+      const result = await run(action)
+      if (result.status !== "success") return () => setError(result.message)
+      return () => {
+        toast.success(result.message)
+        onDone()
+      }
+    })
   }
   return (
     <div className="grid gap-4">

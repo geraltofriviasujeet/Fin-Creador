@@ -1,6 +1,6 @@
 import { type Locator, type Page, expect, test } from "@playwright/test"
 import { createClient } from "@supabase/supabase-js"
-import { PASSWORD, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { PASSWORD, dialog, signUpConfirmed, textWhenDialogCloses, toast, uniqueEmail } from "./helpers"
 
 // Investments page end to end (Sprint 7), against the throwaway local Supabase with the
 // fictional instruments of e2e/fixtures/instruments.sql (loaded by CI). Expected figures are
@@ -125,9 +125,15 @@ test("add (double submit adds once), edit, archive, restore and delete a holding
   await d.getByRole("button", { name: "Add holding" }).click()
   await expect(d).toContainText("The buy date can't be in the future")
   await d.getByLabel("Buy date").fill("2026-01-15")
-  // Double click: the request key adds the record once.
+  // Double click: one save (the button is disabled while saving; the request key also guards).
+  // The first holding and the totals are on the page when the dialog closes: no empty-state flash.
+  const shownOnClose = await textWhenDialogCloses(page, d)
   await d.getByRole("button", { name: "Add holding" }).dblclick()
-  await expect(toast(page, "Holding added.").first()).toBeVisible()
+  const onClose = await shownOnClose()
+  expect(onClose).toContain(LOTUS)
+  expect(onClose).toContain("₹12,505")
+  expect(onClose).not.toContain("Track your first investment")
+  await expect(toast(page, "Holding added.")).toHaveCount(1)
   await expect(d).toBeHidden()
   await page.reload()
   await expect(group(page, LOTUS)).toContainText("1 record")
@@ -140,7 +146,9 @@ test("add (double submit adds once), edit, archive, restore and delete a holding
   await expect(edit.getByLabel("Units")).toHaveValue("10")
   await expect(edit.getByRole("button", { name: "Change", exact: true })).toHaveCount(0) // the instrument stays
   await edit.getByLabel("Units").fill("12")
+  const editedOnClose = await textWhenDialogCloses(page, edit)
   await edit.getByRole("button", { name: "Save changes" }).click()
+  expect(await editedOnClose()).toContain("₹15,006") // the new total, never the old ₹12,505
   await expect(toast(page, "Holding saved.")).toBeVisible()
   await expect(group(page, LOTUS)).toContainText("₹15,006") // 12 × 1,250.50
   await expect(group(page, LOTUS)).toContainText("+₹3,006")

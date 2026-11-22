@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addEntry, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, addEntry, dialog, signUpConfirmed, textWhenDialogCloses, toast, uniqueEmail } from "./helpers"
 
 // Goals page end to end (Sprint 6): planned expenses and monthly budgets, against the
 // throwaway local Supabase. Expected figures are worked out by hand from the amounts
@@ -57,7 +57,13 @@ test("trip: cost lines add up; no target date assumes 12 months; Roma is disable
   expect(await body.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true)
   await page.setViewportSize({ width: 1440, height: 900 })
   await shot(page, "goals-add-trip")
+  // The first goal: when the dialog closes the goal is already there, no empty-state flash.
+  const shownOnClose = await textWhenDialogCloses(page, d)
   await d.getByRole("button", { name: "Add goal" }).click()
+  const onClose = await shownOnClose()
+  expect(onClose).toContain("Japan in spring")
+  expect(onClose).toContain("₹1,54,000")
+  expect(onClose).not.toContain("Plan your first expense")
   await expect(toast(page, "Goal added.")).toBeVisible()
 
   const card = goalCard(page, "Japan in spring")
@@ -69,7 +75,9 @@ test("trip: cost lines add up; no target date assumes 12 months; Roma is disable
   // Saved amount, archive and restore.
   await card.getByRole("button", { name: "Update saved amount for Japan in spring" }).click()
   await dialog(page, "Saved for Japan in spring").getByLabel("Saved so far").fill("34,000")
+  const savedOnClose = await textWhenDialogCloses(page, dialog(page, "Saved for Japan in spring"))
   await dialog(page, "Saved for Japan in spring").getByRole("button", { name: "Save" }).click()
+  expect(await savedOnClose()).toContain("₹10,000 a month") // the new figure, never the old ₹12,000
   await expect(toast(page, "Saved amount updated.")).toBeVisible()
   await expect(card).toContainText("₹10,000 a month") // (1,54,000 − 34,000) ÷ 12
   await card.getByRole("button", { name: "Archive Japan in spring" }).click()
