@@ -44,7 +44,8 @@ async function addRule(page: Page, r: Rule) {
   const shownOnClose = await textWhenDialogCloses(page, d)
   await d.getByRole("button", { name: "Add recurring" }).click()
   expect(await shownOnClose()).toContain(r.note)
-  await expect(toast(page, "Recurring item added.")).toBeVisible()
+  // Two rules in a row: the first one's toast may still be showing.
+  await expect(toast(page, "Recurring item added.").last()).toBeVisible()
   await expect(d).toBeHidden()
 }
 
