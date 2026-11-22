@@ -8,6 +8,7 @@ import { buildOfflineSnapshot, takenLabel } from "./build-snapshot"
 import { registersServiceWorker, serviceWorkerUrl } from "./config"
 import { countVisit, dismissInstall, installDismissed, isIosSafari, showInstallCard } from "./install"
 import { OFFLINE_FONTS, offlinePageHtml } from "./offline-page"
+import { SIGNED_OUT_OFFLINE_URL, authCookieNames, readAccessToken } from "./offline-sign-out"
 import { SNAPSHOT_IDB, SNAPSHOT_MAX_AGE_MS, isSnapshotFresh, parseSnapshot } from "./snapshot"
 
 // Sprint 12b: the manifest, the service worker's cache rules, the offline snapshot and the
@@ -207,5 +208,28 @@ describe("install card", () => {
     expect(isIosSafari("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15", 5)).toBe(true)
     expect(isIosSafari("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15", 0)).toBe(false)
     expect(isIosSafari("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36", 5)).toBe(false)
+  })
+})
+
+describe("offline sign-out", () => {
+  const session = JSON.stringify({ access_token: "header.payload.sig", refresh_token: "r", user: { id: "u" } })
+  const b64 = "base64-" + Buffer.from(session).toString("base64url")
+
+  it("finds the Supabase session cookies, chunks and verifier included, and nothing else", () => {
+    const jar = `fc_welcome=1; sb-127-auth-token.0=${b64.slice(0, 20)}; sb-127-auth-token.1=${b64.slice(20)}; sb-127-auth-token-code-verifier=x; fincreador-last=2`
+    expect(authCookieNames(jar)).toEqual(["sb-127-auth-token.0", "sb-127-auth-token.1", "sb-127-auth-token-code-verifier"])
+  })
+  it("reads the access token from one cookie or from chunks, base64 or plain", () => {
+    expect(readAccessToken(`sb-abc-auth-token=${b64}`)).toBe("header.payload.sig")
+    expect(readAccessToken(`a=1; sb-abc-auth-token.0=${b64.slice(0, 30)}; sb-abc-auth-token.1=${b64.slice(30)}`)).toBe("header.payload.sig")
+    expect(readAccessToken(`sb-abc-auth-token=${encodeURIComponent(session)}`)).toBe("header.payload.sig")
+    expect(readAccessToken("sb-abc-auth-token=base64-!!!")).toBeNull()
+    expect(readAccessToken("other=1")).toBeNull()
+  })
+  it("the offline page has a signed-out state that goes to sign-in once online", () => {
+    const html = offlinePageHtml()
+    expect(html).toContain("You’re signed out")
+    expect(html).toContain("/sign-in?notice=signed-out")
+    expect(SIGNED_OUT_OFFLINE_URL).toBe("/offline?signed-out=1")
   })
 })

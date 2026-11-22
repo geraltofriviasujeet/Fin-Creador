@@ -63,9 +63,23 @@ export function offlineMain(cfg: OfflineConfig, deps: OfflineDeps): void {
     return s
   }
 
+  // After an offline sign-out (lib/pwa/offline-sign-out.ts): no figures, and the sign-in page
+  // as soon as there is a connection.
+  const signedOut = new URLSearchParams(location.search).has("signed-out")
+
   function render(snapshot: Record<string, unknown> | null) {
     const content = $("content")
     content.replaceChildren()
+    if (signedOut) {
+      if (navigator.onLine) {
+        location.replace("/sign-in?notice=signed-out")
+        return
+      }
+      $("title").textContent = "You’re signed out"
+      $("lead").textContent = "You’ve signed out on this device. Sign in again once you’re back online."
+      $("retry").textContent = "Sign in"
+      return
+    }
     if (navigator.onLine) {
       $("title").textContent = "You’re back online"
       $("lead").textContent = "Tap Retry to open FinCreador."
@@ -108,6 +122,7 @@ export function offlineMain(cfg: OfflineConfig, deps: OfflineDeps): void {
 
   let current: Record<string, unknown> | null = null
   async function load() {
+    if (signedOut) return render(null)
     const value = (await deps.read(cfg.idb)) as Record<string, unknown> | null
     const ok = value && value.v === 1 && typeof value.takenAt === "string"
     if (ok && deps.fresh(value.takenAt as string, Date.now(), cfg.maxAgeMs)) current = value
@@ -121,7 +136,9 @@ export function offlineMain(cfg: OfflineConfig, deps: OfflineDeps): void {
   $("retry").addEventListener("click", () => {
     // A plain page outside the Next.js router: a full load is the point.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    if (location.pathname === "/offline") location.assign("/")
+    if (signedOut) location.assign("/sign-in")
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    else if (location.pathname === "/offline") location.assign("/")
     else location.reload()
   })
   window.addEventListener("online", () => render(current))

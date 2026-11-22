@@ -10,6 +10,8 @@ type IconSize = "icon" | "icon-sm"
 
 type BaseProps = Omit<ButtonPrimitive.Props, "className"> & {
   className?: string
+  /** Stays enabled offline (Sign out: it works without a connection). */
+  availableOffline?: boolean
   variant?: VariantProps<typeof buttonVariants>["variant"]
 }
 
@@ -19,13 +21,14 @@ export type ButtonProps =
   | (BaseProps & { size: IconSize; "aria-label": string })
 
 /**
- * While offline (Sprint 12b) every submit button (Save, Add, …) is disabled and says why, so
+ * While offline (Sprint 12b) every submit button (Save, Add, …) except Sign out
+ * (`availableOffline`) is disabled and says why, so
  * nothing unsaved ever looks saved: it stays focusable, names the reason to screen readers and
  * shows it on hover; the offline banner says the same.
  */
-function Button({ className, variant, size, children, ...props }: ButtonProps) {
+function Button({ className, variant, size, children, availableOffline = false, ...props }: ButtonProps) {
   const online = useOnline()
-  const blocked = !online && props.type === "submit"
+  const blocked = !online && props.type === "submit" && !availableOffline
   return (
     <ButtonPrimitive
       data-slot="button"

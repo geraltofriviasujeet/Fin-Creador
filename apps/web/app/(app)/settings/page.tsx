@@ -146,7 +146,8 @@ async function SettingsContent() {
         <CardTitle>Account</CardTitle>
         <CardDescription className="mt-1 [overflow-wrap:anywhere]">Signed in as {auth.user.email}</CardDescription>
         <form method="post" action="/auth/sign-out" className="mt-5">
-          <Button type="submit" variant="secondary">
+          {/* Works offline too (components/pwa/sign-out-guard.tsx). */}
+          <Button type="submit" variant="secondary" availableOffline>
             <LogOut aria-hidden="true" />
             Sign out
           </Button>

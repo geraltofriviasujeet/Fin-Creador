@@ -3,6 +3,7 @@ import { colors } from "@fin-creador/design-tokens";
 import { Suspense } from "react";
 import { NoticeToast } from "@/components/notice-toast";
 import { PwaProvider } from "@/components/pwa/pwa-provider";
+import { SignOutGuard } from "@/components/pwa/sign-out-guard";
 import { ToastProvider } from "@/components/ui/toast";
 // Fonts are bundled from npm (Fontsource, SIL OFL 1.1): nothing is fetched from Google at dev,
 // build or run time. Each subset loads only when the page uses it; latin-ext carries ₹ (U+20B9).
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Suspense fallback={null}>
               <NoticeToast />
             </Suspense>
+            <SignOutGuard />
           </ToastProvider>
         </PwaProvider>
       </body>

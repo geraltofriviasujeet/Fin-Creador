@@ -13,22 +13,12 @@ import { idbClear, idbRead, idbWrite } from "@/lib/pwa/snapshot-idb"
 // - While online: refreshed from /api/offline-snapshot after each page load and each confirmed
 //   save (SAVED_EVENT), at most every 15 s except after a save. Stored only if the server's
 //   answer is for this same user and has the expected shape.
-// - Sign-out (the Sign out forms post to /auth/sign-out): deleted before the form is sent.
-//   The idle sign-out deletes it itself (components/shell/idle-guard.tsx), and the sign-in
-//   pages delete any left over (components/pwa/snapshot-wipe.tsx).
+// - Sign-out, online or offline: deleted first (components/pwa/sign-out-guard.tsx, the idle
+//   guard, lib/pwa/offline-sign-out.ts); the sign-in pages delete any left over
+//   (components/pwa/snapshot-wipe.tsx).
 
 const SNAPSHOT_URL = "/api/offline-snapshot"
 const MIN_GAP_MS = 15_000
-const SIGN_OUT_PATHS = ["/auth/sign-out", "/auth/idle-sign-out"]
-
-/** Deletes the snapshot, then sends the sign-out form. */
-export async function clearSnapshotThen(send: () => void) {
-  try {
-    await idbClear(SNAPSHOT_IDB)
-  } finally {
-    send()
-  }
-}
 
 export function SnapshotKeeper({ userId }: { userId: string }) {
   const pathname = usePathname()
@@ -74,22 +64,12 @@ export function SnapshotKeeper({ userId }: { userId: string }) {
 
     const onSaved = () => refresh.current(true)
     const onOnline = () => refresh.current(false)
-    const onSubmit = (event: SubmitEvent) => {
-      const form = event.target
-      if (!(form instanceof HTMLFormElement)) return
-      const path = new URL(form.action, window.location.href).pathname
-      if (!SIGN_OUT_PATHS.includes(path) || event.defaultPrevented) return
-      event.preventDefault()
-      void clearSnapshotThen(() => form.submit())
-    }
     window.addEventListener(SAVED_EVENT, onSaved)
     window.addEventListener("online", onOnline)
-    document.addEventListener("submit", onSubmit)
     return () => {
       alive = false
       window.removeEventListener(SAVED_EVENT, onSaved)
       window.removeEventListener("online", onOnline)
-      document.removeEventListener("submit", onSubmit)
     }
   }, [userId])
 

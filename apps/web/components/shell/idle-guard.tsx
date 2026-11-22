@@ -14,7 +14,7 @@ import {
   lastActiveAt,
   lastActiveStore,
 } from "@/lib/auth/idle"
-import { clearSnapshotThen } from "@/components/pwa/snapshot-keeper"
+import { clearSnapshotThen, signOutOffline } from "@/lib/pwa/offline-sign-out"
 
 // Signs out after 2 hours (the server's limit) without activity in any tab of this browser (Sprint 10a), with a
 // warning one minute before. Activity (pointer, key, wheel, scroll, touch) is written to
@@ -44,6 +44,11 @@ export function IdleGuard({ signedInAt, limitMs }: { signedInAt: string | null; 
   const signOut = useCallback(() => {
     if (signingOut.current) return
     signingOut.current = true
+    // Offline (Sprint 12b): this device signs itself out; the server is told once online.
+    if (!navigator.onLine) {
+      void signOutOffline()
+      return
+    }
     // A real form post: the browser follows the redirect to the sign-in page.
     const form = document.createElement("form")
     form.method = "post"

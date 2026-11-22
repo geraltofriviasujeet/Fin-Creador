@@ -186,6 +186,43 @@ async function readSnapshotOrWait(page: Page) {
   return (await readSnapshot(page))!
 }
 
+test("offline sign-out: the signed-out page; snapshot, caches and session gone; the server is told once online", async ({ page, context }) => {
+  await signedUpWithData(page, "Dev Patel", "pwa-offline-sign-out")
+  await swReady(page)
+  await expect.poll(async () => (await readSnapshot(page))?.entries.map((e) => e.name) ?? []).toContain("Milk and bread")
+  await page.goto("/settings")
+  await expect.poll(async () => (await cacheEntries(page)).some((e) => e.cache.startsWith("fincreador-static-"))).toBe(true)
+  const authCookies = async () => (await context.cookies()).filter((c) => /^sb-.+-auth-token/.test(c.name))
+  expect((await authCookies()).length).toBeGreaterThan(0)
+
+  await goOffline(context, true)
+  const signOutButton = page.getByRole("main").getByRole("button", { name: "Sign out" })
+  await expect(signOutButton).toBeEnabled()
+  await expect(page.getByRole("main").getByRole("button", { name: /^Save/ }).first()).toBeDisabled()
+  await signOutButton.click()
+
+  await expect(page).toHaveURL(/\/offline\?signed-out=1$/)
+  await expect(page.getByRole("heading", { name: "You’re signed out" })).toBeVisible()
+  await expect(page.getByText("Milk and bread")).toHaveCount(0)
+  expect(await readSnapshot(page)).toBeNull()
+  expect((await cacheEntries(page)).filter((e) => !e.cache.startsWith("fincreador-precache-"))).toEqual([])
+  expect(await authCookies()).toEqual([])
+  expect(await page.evaluate(() => sessionStorage.getItem("fincreador-pending-sign-out"))).toBeTruthy()
+  await page.screenshot({ path: `${SHOTS}/pwa-signed-out-offline.png`, fullPage: true })
+
+  // Reopening the offline page: nothing saved on this device.
+  await page.goto("/offline")
+  await expect(page.getByText(/^Nothing saved on this device yet\./)).toBeVisible()
+
+  // Back online: the app asks to sign in, and the sign-in page revokes the session with Auth.
+  await goOffline(context, false)
+  const logout = page.waitForResponse((r) => r.url().includes("/auth/v1/logout") && r.request().method() === "POST")
+  await page.goto("/")
+  await expect(page).toHaveURL(/\/sign-in/)
+  expect((await logout).status()).toBeLessThan(300)
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("fincreador-pending-sign-out"))).toBeNull()
+})
+
 test("a snapshot older than 7 days is never shown, nor one while online", async ({ page, context }) => {
   await signUpConfirmed(page, "Imran Ali", uniqueEmail("pwa-stale"), { hideWelcome: true })
   await swReady(page)
