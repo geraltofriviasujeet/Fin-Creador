@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { History, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -73,10 +73,15 @@ type Props = {
 export function RomaChat(props: Props) {
   const router = useRouter()
   const inAddress = useSearchParams().get("c")
+  // With cacheComponents this page stays mounted but hidden after you leave it, and still
+  // re-renders with the current address: on /transactions there is no ?c=, which started the
+  // chat afresh (losing the draft and any answer on its way) and refreshed it on the way back.
+  // Only Roma's own address counts (12a-4 hidden-page audit).
+  const onRoma = usePathname() === "/roma"
   const [seen, setSeen] = useState(inAddress)
   const [moved, setMoved] = useState<string | null | undefined>(undefined)
   const [generation, setGeneration] = useState(0)
-  if (inAddress !== seen) {
+  if (onRoma && inAddress !== seen) {
     setSeen(inAddress)
     setMoved(undefined)
     if (inAddress !== moved) setGeneration((g) => g + 1)

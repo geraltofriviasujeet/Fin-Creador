@@ -147,7 +147,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
       }}
     >
       <label htmlFor="tx-search" className="sr-only">
-        Search
+        Search transactions
       </label>
       <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-subtle" />
       <input
@@ -157,7 +157,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         type="search"
         defaultValue={f.q}
         maxLength={100}
-        placeholder="Note, category, account or amount"
+        placeholder="Search transactions…"
         className="h-[44px] md:h-11 w-full rounded-lg border border-line-strong bg-surface pr-24 pl-10 text-[16px] text-ink md:text-sm outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
       />
       <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-1">
@@ -194,13 +194,15 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         <Card id="search-results" aria-labelledby="search-results-title" className="mb-4 grid gap-4 scroll-mt-24" role="region">
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <div className="min-w-0">
-              <h2 id="search-results-title" className="font-heading text-xl font-semibold break-words" aria-live="polite">
+              {/* One line: the count, then the matches' own totals (the database's, for the same filters). */}
+              <h2 id="search-results-title" data-testid="search-summary" className="font-heading text-lg font-semibold break-words" aria-live="polite">
                 {resultText}
+                <span className="font-sans text-sm font-normal text-muted-foreground">
+                  {` · ${money(totals.expenseMinor, currency)} spent · ${money(totals.incomeMinor, currency)} received · ${label}`}
+                  {loaded.type !== "all" && ` · ${tabLabel}`}
+                  {totals.otherCurrencyCount > 0 && ` · ${totals.otherCurrencyCount} in other currencies not totalled`}
+                </span>
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {label}
-                {loaded.type !== "all" && ` · ${tabLabel}`}
-              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="secondary" size="sm" aria-expanded={filtersOpen} aria-controls="search-filters" onClick={() => setFiltersOpen((o) => !o)}>
@@ -322,60 +324,65 @@ export function TransactionsView({ context, filters: loaded, range, first, total
       </div>
 
       <div aria-busy={navigating} className={cn("transition-opacity motion-reduce:transition-none", navigating && "opacity-60")}>
-        <section aria-label="Totals for these filters" className="mb-2 grid gap-4 md:grid-cols-2 lg:grid-cols-3 md:[&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
-          <StatCard
-            label={`Income · ${label}`}
-            value={money(totals.incomeMinor, currency)}
-            footer={
-              incomeTrend === null ? (
-                `${totals.incomeCount} ${totals.incomeCount === 1 ? "entry" : "entries"}`
-              ) : (
-                <span className={incomeTrend >= 0 ? "text-success" : "text-danger"}>
-                  {formatPercentFromBasisPoints(incomeTrend, { signed: true })} from the month before
-                </span>
-              )
-            }
-          />
-          <StatCard
-            label={`Expenses · ${label}`}
-            value={money(totals.expenseMinor, currency)}
-            footer={
-              totals.refundCount > 0
-                ? `${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"}, less ${money(totals.refundMinor, currency)} in ${totals.refundCount === 1 ? "1 refund" : `${totals.refundCount} refunds`}`
-                : `${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"}`
-            }
-          />
-          <StatCard
-            label="Net savings"
-            value={money(totals.netMinor, currency)}
-            footer={
-              savingsRate === null ? (
-                "No income in this period"
-              ) : totals.netMinor < 0 ? (
-                <span className="text-danger">Spent {money(-totals.netMinor, currency)} more than came in</span>
-              ) : (
-                <span className="text-success">{formatPercentFromBasisPoints(savingsRate)} savings rate</span>
-              )
-            }
-          />
-        </section>
-        <p className="mb-6 text-xs text-muted-foreground">
-          {rangeText(range)}. Transfers between your accounts ({totals.transferCount}) aren&apos;t income or expenses. Voided entries never count.
-          {totals.otherCurrencyCount > 0 && ` ${totals.otherCurrencyCount} entries in other currencies are listed but not totalled.`}
-          {searching && ` Totals cover only the entries matching “${loaded.q}”.`}
-        </p>
+        {/* A search shows its totals in the results header instead (12a-4). */}
+        {!searching && (
+          <>
+            <section aria-label="Totals for these filters" className="mb-2 grid gap-4 md:grid-cols-2 lg:grid-cols-3 md:[&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
+              <StatCard
+                label={`Income · ${label}`}
+                value={money(totals.incomeMinor, currency)}
+                footer={
+                  incomeTrend === null ? (
+                    `${totals.incomeCount} ${totals.incomeCount === 1 ? "entry" : "entries"}`
+                  ) : (
+                    <span className={incomeTrend >= 0 ? "text-success" : "text-danger"}>
+                      {formatPercentFromBasisPoints(incomeTrend, { signed: true })} from the month before
+                    </span>
+                  )
+                }
+              />
+              <StatCard
+                label={`Expenses · ${label}`}
+                value={money(totals.expenseMinor, currency)}
+                footer={
+                  totals.refundCount > 0
+                    ? `${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"}, less ${money(totals.refundMinor, currency)} in ${totals.refundCount === 1 ? "1 refund" : `${totals.refundCount} refunds`}`
+                    : `${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"}`
+                }
+              />
+              <StatCard
+                label="Net savings"
+                value={money(totals.netMinor, currency)}
+                footer={
+                  savingsRate === null ? (
+                    "No income in this period"
+                  ) : totals.netMinor < 0 ? (
+                    <span className="text-danger">Spent {money(-totals.netMinor, currency)} more than came in</span>
+                  ) : (
+                    <span className="text-success">{formatPercentFromBasisPoints(savingsRate)} savings rate</span>
+                  )
+                }
+              />
+            </section>
+            <p className="mb-6 text-xs text-muted-foreground">
+              {rangeText(range)}. Transfers between your accounts ({totals.transferCount}) aren&apos;t income or expenses. Voided entries never count.
+              {totals.otherCurrencyCount > 0 && ` ${totals.otherCurrencyCount} entries in other currencies are listed but not totalled.`}
+            </p>
+          </>
+        )}
 
         <Card className="px-0 md:px-0">
-          <div className="flex flex-wrap items-end justify-between gap-2 px-5 md:px-6">
-            <div>
-              <CardTitle>{loaded.type === "all" ? "Everything" : tabLabel}</CardTitle>
-              <CardDescription className="mt-1">
-                {label}
-                {exactCount !== null && ` · ${exactCount} ${exactCount === 1 ? "entry" : "entries"}`}
-                {loaded.q && ` matching “${loaded.q}”`}
-              </CardDescription>
+          {!searching && (
+            <div className="flex flex-wrap items-end justify-between gap-2 px-5 md:px-6">
+              <div>
+                <CardTitle>{loaded.type === "all" ? "Everything" : tabLabel}</CardTitle>
+                <CardDescription className="mt-1">
+                  {label}
+                  {exactCount !== null && ` · ${exactCount} ${exactCount === 1 ? "entry" : "entries"}`}
+                </CardDescription>
+              </div>
             </div>
-          </div>
+          )}
 
           {rows.length === 0 ? (
             <div className="grid justify-items-center gap-3 px-5 py-12 text-center md:px-6">
@@ -400,12 +407,18 @@ export function TransactionsView({ context, filters: loaded, range, first, total
                     )}
                   </div>
                 </>
+              ) : searching ? (
+                <>
+                  <p className="font-heading text-xl font-semibold break-words">No transactions match “{loaded.q}”</p>
+                  <p className="max-w-md text-sm text-muted-foreground">Search looks in notes, category and account names, and exact amounts.</p>
+                  <Link href={clearSearchHref} replace className={cn(buttonVariants({ variant: "secondary" }))}>
+                    Clear search
+                  </Link>
+                </>
               ) : (
                 <>
                   <p className="font-heading text-xl font-semibold">Nothing matches these filters</p>
-                  <p className="max-w-md text-sm text-muted-foreground">
-                    {loaded.q ? "Search looks in notes, category and account names, and exact amounts. " : ""}Try another period or clear the filters.
-                  </p>
+                  <p className="max-w-md text-sm text-muted-foreground">Try another period or clear the filters.</p>
                   <Link href={clearHref} replace scroll={false} className={cn(buttonVariants({ variant: "secondary" }))}>
                     Clear filters
                   </Link>
@@ -413,7 +426,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
               )}
             </div>
           ) : (
-            <div className="mt-4">
+            <div className={searching ? undefined : "mt-4"}>
               {groups.map((g) => (
                 <section key={g.date} aria-labelledby={`day-${g.date}`}>
                   <h3 id={`day-${g.date}`} className="border-y border-line bg-canvas px-5 py-2 text-xs font-semibold tracking-(--fc-tracking-eyebrow) text-muted-foreground uppercase md:px-6">
