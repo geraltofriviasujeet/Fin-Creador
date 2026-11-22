@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-11-22 (Sprint 12a done: PRs #81–#86 merged into `main`. 12b installable PWA and read-only offline view in progress on `sprint-12b-pwa`, no migration. Sprint 11 follows Sprint 12 in delivery order.)
+Last updated: 2026-11-22 (Sprint 12b merged into `main` (#87). Mobile app design approved; 12c scope set; native sprints 13a–13e planned; the security and release sprint is now Sprint 14.)
 
 ## Sprint status
 
@@ -53,9 +53,14 @@ Last updated: 2026-11-22 (Sprint 12a done: PRs #81–#86 merged into `main`. 12b
 | **12a-3** | Phone web: Roma, imports, tables; search results; edited rows | Done (web) | Built 2026-11-22 on `sprint-12a-3` from `main`, PR #84 merged into `main`, no migration. Roma below lg: History button opens the conversation list as a sheet; plan modal a full-height sheet with Save as PDF and Close in its sticky footer; what-if rows stack below md, figures never clipped. UPI, bank and card statement review: filters stick under the topbar and the totals with Save above the tab bar on phones (`PHONE_FILTER_BAR`, `PHONE_SAVE_BAR`). Loans schedule as stacked rows on phones; Reports and Investments tables in the shared `ScrollTable` (scrolls in its box, first column pinned below md). Transactions search results view (header with count and Clear search, no Upcoming, filters folded, All time by default; totals cover the matches). Edited-row fix: the actions are four fixed slots, so an edited purchase's Edit/Void/Refund/History no longer spill over the amount. CI: Playwright `maxFailures` 10; E2E steps skipped on PRs that change only `docs/**` or `*.md`. E2E in `phone-web.spec.ts` and `transactions.spec.ts`. |
 | **12a-4** | Search polish, hidden-page audit, CI on main | Done (web) | Built 2026-11-22 on `sprint-12a-4` from `main`, PR #85 merged into `main` (follow-up 12a-4b #86: top-bar search without a reload), no migration. A search shows one header line (count, the matches' spent and received, period) with the list straight after: no summary cards, totals note or "Everything" heading; no matches says "No transactions match “q”" with Clear search. Top-bar, phone and Transactions search say "Search transactions…". Hidden-page audit (table in the PR): Roma no longer restarts the chat when the address changes on another page; a finished count-up never replays when a page is shown again, and a value changed while hidden counts on from the last shown one (reduced motion: jumps). CI also runs every job on push to `main`; the docs-only E2E skip stays PR-only. E2E in `hidden-pages.spec.ts`, `transactions.spec.ts` (1280px) and `phone-web.spec.ts`. When this merges, Sprint 12a is done. |
 | **12** | Phone web, landing, PWA, mobile design system | In progress | Order: 12a phone web (done: #81–#86), the landing page (live separately at www.fincreador.com, with its terms and privacy sections), 12b installable PWA with a read-only offline view, 12c mobile design system, then native screens. Offline saving (queue and sync) is the next release, not Sprint 12. Web runs on Next.js 16.4.5. |
-| **12b** | Installable PWA, read-only offline view | In review (web) | Built 2026-11-22 on `sprint-12b-pwa` from `main`, draft PR into `main`, no migration. `app/manifest.ts`; icons, favicon and offline fonts from `scripts/generate-pwa-assets.ts` (`npm run pwa:assets -w @fin-creador/web`); hand-written `public/sw.js` (production builds only, precache + `/_next/static` cache-first, pages/RSC/API never cached) with `public/sw-kill-switch.js` (docs/deployment.md 4d); `/offline` (`lib/pwa/offline-page.ts`) shows the IndexedDB snapshot from `/api/offline-snapshot` (`lib/pwa/build-snapshot.ts`); offline banner and disabled submit buttons (`components/ui/button.tsx`), Sign out works offline (`lib/pwa/offline-sign-out.ts`); install entry in Settings and phone card; terms and privacy links (`lib/site.ts`). E2E in `e2e/pwa.spec.ts`. **Manual (owner):** install on Android and iPhone; Google sign-in inside the installed iPhone app (email sign-in must work there). |
-| **12c** | Mobile design system | Not started | Scope to be defined; see "Sprint 12c: mobile design system" below. |
-| **13** | Security & production release | Not started | |
+| **12b** | Installable PWA, read-only offline view | Done (web) | Built 2026-11-22 on `sprint-12b-pwa` from `main`, PR #87 merged into `main`, no migration. `app/manifest.ts`; icons, favicon and offline fonts from `scripts/generate-pwa-assets.ts` (`npm run pwa:assets -w @fin-creador/web`); hand-written `public/sw.js` (production builds only, precache + `/_next/static` cache-first, pages/RSC/API never cached) with `public/sw-kill-switch.js` (docs/deployment.md 4d); `/offline` (`lib/pwa/offline-page.ts`) shows the IndexedDB snapshot from `/api/offline-snapshot` (`lib/pwa/build-snapshot.ts`); offline banner and disabled submit buttons (`components/ui/button.tsx`), Sign out works offline (`lib/pwa/offline-sign-out.ts`); install entry in Settings and phone card; terms and privacy links (`lib/site.ts`). E2E in `e2e/pwa.spec.ts`. **Manual (owner):** install on Android and iPhone; Google sign-in inside the installed iPhone app (email sign-in must work there). |
+| **12c** | Mobile design system (Expo) | Not started | Approved design in `docs/design-spec.md` section 5. Tokens in `packages/design-tokens`, the component set and a preview screen with screenshots. See "Sprint 12c: mobile design system" below. |
+| **13a** | Native: navigation shell and Home | Not started | See "Sprint 13: native app" below. |
+| **13b** | Native: Add and Activity | Not started | |
+| **13c** | Native: Plan | Not started | |
+| **13d** | Native: Roma | Not started | |
+| **13e** | Native: test builds | Not started | EAS; iOS TestFlight through a friend's Apple developer team account; Android internal testing. No public store submission (Sprint 14). |
+| **14** | Security, production release and store submission | Not started | Was Sprint 13 (renumbered 2026-11-22). Adds in-app account deletion, Sign in with Apple and store listing prep; public store submission at the end. |
 
 ## Sprint 1 steps
 
@@ -191,7 +196,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-10-22** | Add income has a single "Received into" account (banks, cash, other); no separate payment-method field. | The account already records where the money landed. |
 | **2026-10-22** | A mistaken income entry is voided, never deleted or edited (editing is Sprint 3). Voiding is one-way and enforced in the database. Creating income is idempotent (client key, unique per user). | Auditable history and no double posting. |
 | **2026-10-22** | An account's currency and opening-balance date are locked once it has entries (error codes FC004, FC011); the opening amount can still be corrected. The as-of date is only re-checked against "today" when it is set or changed, so editing and archiving keep working after a time-zone change. | The as-of date decides which entries count toward the balance; moving it later would silently re-classify existing income. |
-| **2026-10-22** | Income entries cascade from their account and source (`ON DELETE CASCADE`), and a source's default account is cleared (`SET NULL`), only so that deleting a whole user works. Accounts and sources must never be deleted directly, only archived; account deletion (Sprint 13) goes through deleting the user. | Keeps the ledger intact: no client can delete an account or source, and deleting a user removes all of their data in any cascade order. |
+| **2026-10-22** | Income entries cascade from their account and source (`ON DELETE CASCADE`), and a source's default account is cleared (`SET NULL`), only so that deleting a whole user works. Accounts and sources must never be deleted directly, only archived; account deletion (Sprint 14) goes through deleting the user. | Keeps the ledger intact: no client can delete an account or source, and deleting a user removes all of their data in any cascade order. |
 | **2026-10-22** | Default income sources (Salary, Freelance, Rental income, Business, Interest & dividends, Other income) are created for every user by a separate function that can never block sign-up, with a backfill and a lazy fallback on first use. The Income sources panel lists only sources with income this year or added by the user. | Ready-to-use categories without showing rows of ₹0. |
 | **2026-10-22** | "This month" and "this year" use the calendar in the user's time zone. The Rental income card sums all rent-type sources. "Linked account" on a source is the account that actually received its income this year ("Multiple accounts" if several), else its default account. | Matches the Figma; financial year is a backlog setting. |
 | **2026-10-22** | ~~Wordmark is lowercase "fincreador" as in the Figma ("fin" white, "creador" lime on dark; both ink on light). Screen readers hear "Fin Creador"; titles, emails and body text keep "Fin Creador".~~ Superseded on 2026-10-26 below. | Owner's decision; reverses the earlier "FinCreador". Lime stays off light backgrounds (contrast). |
@@ -335,6 +340,9 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-11-22** | Offline sign-out (12b, owner): Sign out and the idle sign-out work offline. `components/pwa/sign-out-guard.tsx` (every sign-out form) and the idle guard call `signOutOffline` (`lib/pwa/offline-sign-out.ts`): delete the snapshot and every cache except the precache (the offline page, fonts, icons: no personal data, kept so that page can show), clear the `sb-…-auth-token` cookies (not httpOnly in @supabase/ssr), then show `/offline?signed-out=1`. The access token waits in that tab's sessionStorage; the sign-in page revokes it with Auth `logout?scope=local` once online. | A device must be able to sign out without a connection. Scope "local" so a new sign-in on the same device is never revoked by the late call; if the tab closes first or the token expires, the server session ends at its own expiry. |
 | **2026-11-22** | Hidden pages (12a-4): a visited page stays mounted but hidden, re-renders with the current URL and data, and runs its Effects again when shown. So nothing may react to the address unless the real path is its own (Roma checks `usePathname() === "/roma"`, like `useAddDeepLink`), and a one-off Effect must remember it ran (`useCountUp` never replays a finished count; a count cut short carries on from the figure shown). Shell components (topbar, tab bar, idle guard, welcome, tour, notice toast) live in layouts and are never hidden. | Roma lost its draft and live answer after a search on Transactions; Total available replayed its count on every return. |
 | **2026-11-22** | Search results (12a-4): while searching, the matches' totals are one line in the results header ("N results for “q” · ₹X spent · ₹Y received · period"); the summary cards and totals note show only without a search. Search is labelled "Search transactions…" everywhere, since it covers nothing else. CI runs on push to `main` with the same jobs as PRs. | The cards pushed the results below the fold on phones and repeated what the header can say in a line. |
+| **2026-11-22** | Mobile app design approved (owner, open to change): five tabs (Home · Activity · ＋ · Plan · Roma), the screens and the design system in `docs/design-spec.md` section 5, which replaces the earlier Expo note. Reference mockups: Claude design canvas "FinCreador Mobile App Design" (owner has the link). | One agreed target for the native app before any screen is built. |
+| **2026-11-22** | Native-app plan (owner): 12c builds the design system in the Expo app; 13a navigation shell and Home, 13b Add and Activity, 13c Plan, 13d Roma, 13e test builds only (EAS; iOS TestFlight through a friend's Apple developer team account; Android internal testing). The security and release sprint is renumbered Sprint 14; public store submission comes at its end and depends on it. Google Play's $25 account when the app is complete. | Test on real phones early; submit to the stores only once security and the App Store requirements are done. |
+| **2026-11-22** | iOS publisher (owner): iOS builds are published through a friend's Apple developer account; the Privacy Policy will name that publisher. | The owner has no Apple developer account of their own yet. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -342,7 +350,7 @@ Mutual funds: AMFI's free daily NAV text file (scheme code, ISINs, name, NAV, da
 
 ## Before production (open items)
 
-Development-only settings that must be removed or replaced before any production release (Sprint 13 at the latest):
+Development-only settings that must be removed or replaced before any production release (Sprint 14 at the latest):
 
 - **Supabase redirect allow list:** remove `exp://**` (Expo Go) and the `http://localhost:3000/...` entries; keep only the production web URL and the app's own scheme.
 - **Dev scripts:** drop `npm run dev:mobile:google` (`apps/mobile/scripts/start-lan-hostname.sh`); it exists only so Google sign-in can return to Expo Go during development.
@@ -362,6 +370,9 @@ Pending tests:
 
 ## Backlog
 
+- **Safe to spend today (web and native, owner 2026-11-22):** money left − bills due before the next income − planned goal saving, divided by the days until the next income. A pure function in `packages/domain`, exact integer maths in minor units, with tests (no income date, bills larger than money left, zero days, month and year boundaries in the user's time zone). Shown in the Home hero card on native (design-spec section 5) and on the web Overview.
+- **"Runs short" warning (web and native, owner 2026-11-22):** per account, the projected balance after each upcoming bill before the next income; warn when it falls below zero ("Rent on 1 Dec leaves you ₹1,980 short in SBI"). Same domain module and tests as Safe to spend; shown on Home "Coming up" (native) and the web Overview.
+- **Roma tagline on web (owner 2026-11-22):** rename Roma to "Your Intelligent Finance Agent" in the web app (the opening line in `apps/web/components/roma/roma-chat.tsx` says "Intelligent Finance Analyst"), matching the mobile design.
 - **Mobile Investments and Goals:** the Investments page (holdings, fixed deposits, tabs) and Goals (planned expenses, monthly budgets) in the mobile app, reusing `packages/api` and `packages/domain` (web only in Sprints 6 and 7).
 - **Splits and bonus issues:** adjust units and buy prices for share splits, bonus issues and fund mergers (Sprint 7 shows "Identifier changed, check your units" only).
 - **Interest-payout fixed deposits:** monthly or quarterly payout deposits, where interest is paid out instead of added (Sprint 7 supports cumulative deposits only).
@@ -465,7 +476,8 @@ Rows are in delivery order: Sprint 12 (phone web, PWA) runs before Sprint 11 (no
 | **10** | Weeks 19–20 | AI financial insights | Get explanations grounded in verified data. |
 | **12** | Weeks 21–22 | Phone web, landing, PWA, mobile design system | The web app works on phones; installable PWA; native screens follow a mobile design system. |
 | **11** | Weeks 23–24 | Notifications & reminders | Configure reminders and upcoming-payment alerts. |
-| **13** | Weeks 25–26 | Security & production release | Release candidate ready for deployment/store submission. |
+| **13** | To be set | Native app (13a–13e) | The Expo app on the approved design; test builds on TestFlight and Android internal testing. |
+| **14** | To be set | Security, release & store submission | Release candidate ready; App Store requirements met; submitted to the stores. |
 
 # 4. Sprint detail and acceptance criteria
 
@@ -1430,11 +1442,33 @@ depend on Sprint 11.
 
 ## Sprint 12c: mobile design system
 
-**Usable outcome:** native screens follow one mobile design system built
-on the shared tokens.
+**Usable outcome:** the Expo app has the approved mobile design system
+(`docs/design-spec.md` section 5) as tokens and components, shown on one
+preview screen.
 
-**Scope to be defined** (owner). Starting point: `docs/design-spec.md`
-section 5 (Mobile web and Expo app) and `packages/design-tokens`.
+### Scope
+
+- Tokens: the approved colours, category tints, type scale, radius,
+  spacing and tap-target size in `packages/design-tokens`, shared with
+  web; nothing hard-coded in components.
+- Components (React Native, no web imports): buttons; inputs, including
+  the amount input and number keypad; list row; card; bottom sheet; tab
+  bar (with the raised centre ＋); chips; progress bar and progress
+  ring; warning banner; balance card; empty state; offline banner.
+- A preview screen showing every component and its states, with
+  screenshots saved in `docs/design/mobile/`.
+
+### Acceptance criteria
+
+- Every component reads its values from `packages/design-tokens`.
+- Text meets WCAG AA, never below 12px; tap targets at least 44×44;
+  signed money never relies on colour alone.
+- Components work with screen readers (labels, roles) and respect
+  reduced motion.
+- Typecheck, lint and unit tests pass; the preview screen runs on
+  Android and iPhone in Expo Go.
+
+**Dependencies:** none (no migration, no new financial logic).
 
 ## Offline saving (next release)
 
@@ -1459,10 +1493,37 @@ offline view; saving while offline comes in the next release.
 
 **Dependencies:** Sprint 12b; Sprint 11 for push.
 
-## Sprint 13 — Security, release and production readiness
+## Sprint 13: native app
 
-**Weeks 25–26 \| Usable outcome:** A tested release candidate is ready
-for deployment and store submission.
+Built on the 12c components, screen by screen, following
+`docs/design-spec.md` section 5. Each step reuses `packages/api`,
+`packages/domain` and `packages/schemas`; no financial logic in the app.
+
+- **13a Navigation shell and Home:** the five tabs, the profile avatar
+  menu (accounts, investments detail, reports, settings), the bell, and
+  Home (hero card, quick actions, Coming up, Where it went, Your money,
+  Ask Roma card). Safe to spend and the runs-short warning come from the
+  backlog domain functions.
+- **13b Add and Activity:** the full-screen Add (expense, income,
+  transfer, keypad, balance before → after) and Activity (months,
+  filters, day groups, swipe to edit or void, search, Import UPI).
+- **13c Plan:** budgets, goals, loans and EMIs, bills that repeat,
+  investments summary.
+- **13d Roma:** chat with verdict-first answers, working tables, tags,
+  follow-up chips and History.
+- **13e Test builds only:** EAS builds; iOS through TestFlight on a
+  friend's Apple developer team account; Android internal testing. No
+  public store submission (end of Sprint 14).
+
+**Dependencies:** 12c. Safe to spend and the runs-short warning need
+their domain functions (backlog) before 13a's hero card is complete.
+
+## Sprint 14 — Security, release and production readiness
+
+Was Sprint 13 (renumbered 2026-11-22).
+
+**Usable outcome:** A tested release candidate is ready
+for deployment, then submitted to the stores.
 
 ### Scope and deliverables
 
@@ -1483,6 +1544,20 @@ for deployment and store submission.
   at the top of this document (redirect allow list, dev scripts, fixed
   `fincreador://` scheme, Site URL).
 
+- App Store requirements:
+  1. In-app account deletion: Settings → Delete account confirms,
+     deletes all the user's data and signs out (Apple requires it for
+     apps with sign-up). Update the Privacy Policy wording afterwards.
+  2. Sign in with Apple on iOS alongside Google sign-in (Apple's
+     login-services rule).
+  3. App Store and Play listing prep: privacy policy URL
+     https://www.fincreador.com/#privacy-policy; data-safety and
+     privacy nutrition labels matching the policy; a demo account for
+     reviewers; store screenshots.
+
+- Public store submission (App Store and Google Play) at the end of
+  the sprint, once the items above are done.
+
 ### Acceptance criteria
 
 - Critical financial flows pass end-to-end tests.
@@ -1500,7 +1575,7 @@ for deployment and store submission.
 
 - Hosting-plan decision for a commercial launch: upgrade Vercel Hobby to Pro or move hosting before any paid or commercial use.
 
-**Dependencies:** All launch-critical features and environments.
+**Dependencies:** All launch-critical features and environments; Sprint 13e test builds. Store submission depends on the rest of this sprint.
 
 # 5. Financial rules that must remain consistent
 
@@ -1562,7 +1637,7 @@ trusted server-side code, and cover them with tests.
 | **Notification limits** | Test each platform; communicate permissions and delivery limitations. |
 | **Offline conflicts** | Limit offline scope; use idempotency and explicit pending/synced states. |
 | **App-store delays** | Test mobile builds throughout; treat review approval as an external dependency. |
-| **Vercel Hobby is non-commercial only** | Treat Hobby as a testing tier; upgrade to Pro or move hosting before any paid or commercial launch (decision due in Sprint 13, or earlier if monetized). |
+| **Vercel Hobby is non-commercial only** | Treat Hobby as a testing tier; upgrade to Pro or move hosting before any paid or commercial launch (decision due in Sprint 14, or earlier if monetized). |
 | **Design drift between Figma, web and mobile** | Single token source in `packages/design-tokens`; `docs/design-spec.md` as the visual source of truth; dev-only design review page. |
 | **Local disk or tooling limits** | Run database, RLS and build checks in GitHub Actions; check free disk before large downloads; no local Docker/Supabase on the development Mac. |
 
@@ -1575,7 +1650,8 @@ trusted server-side code, and cover them with tests.
 | **End Sprint 5** | MVP / controlled web release | Auth, accounts, transactions, income, dashboard. |
 | **End Sprint 8** | Money management release | Goals, portfolio, liabilities, reports. |
 | **End Sprint 11** | Insights and reminders | AI and notifications behind appropriate controls. |
-| **End Sprint 13** | Production release candidate | Security, quality, deployment, and store-submission readiness. |
+| **End Sprint 13** | Native test builds | The Expo app on TestFlight and Android internal testing. |
+| **End Sprint 14** | Production release candidate | Security, quality, deployment, App Store requirements, store submission. |
 
 # 9. How to use Claude Code efficiently
 
