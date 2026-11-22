@@ -10,6 +10,7 @@ import { newRequestKey } from "@/components/income/format"
 import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { fullDate, money, signedAmount } from "./display"
 import { RepeatField, type RepeatValue } from "./repeat-field"
 
@@ -32,7 +33,11 @@ export type Draft = {
 
 export type Prefill = Pick<LedgerItem, "amountMinor" | "currency" | "occurredOn" | "accountId" | "counterAccountId" | "categoryId" | "paymentMode" | "note">
 
-export type SaveResult = { ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string> }
+/**
+ * What a save returned. `after` (close the dialog, toast) runs only once the refreshed page is
+ * on screen; a failed save without `after` keeps the dialog open with its error.
+ */
+export type SaveResult = ({ ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string> }) & { after?: () => void }
 
 const TYPES: { value: EntryType; label: string }[] = [
   { value: "expense", label: "Expense" },
@@ -76,7 +81,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
   const [type, setType] = useState<EntryType>(editing?.type ?? (mode.kind === "add" ? mode.type : "expense"))
   // One key per opened form; a retry after a failure reuses it, so the entry is saved once.
   const [requestKey] = useState(newRequestKey)
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   const [formError, setFormError] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -171,19 +176,22 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
     return draft
   }
 
-  async function submit(event: React.FormEvent) {
+  function submit(event: React.FormEvent) {
     event.preventDefault()
     if (pending) return // a second click while saving does nothing
     setFormError(null)
     const draft = validate()
     if (!draft) return
-    setPending(true)
-    const result = await onSave(draft, requestKey)
-    setPending(false)
-    if (!result.ok) {
-      setFormError(result.message)
-      setErrors(result.fieldErrors ?? {})
-    }
+    save(async () => {
+      const result = await onSave(draft, requestKey)
+      return () => {
+        if (!result.ok) {
+          setFormError(result.message)
+          setErrors(result.fieldErrors ?? {})
+        }
+        result.after?.()
+      }
+    })
   }
 
   return (

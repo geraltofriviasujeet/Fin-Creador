@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, Plus, Sparkles } from "lucide-react"
 import type { BudgetCategory, BudgetItem, GoalItem, GoalsView, WriteResult } from "@fin-creador/api"
@@ -48,17 +48,17 @@ const PAYMENT_LABEL = Object.fromEntries([...LOAN_PAYMENTS, ...ITEM_PAYMENTS].ma
 export function GoalsPageView({ view }: { view: GoalsView }) {
   const [open, setOpen] = useState<Open>(null)
   const [showArchived, setShowArchived] = useState(false)
-  const [busy, startBusy] = useTransition()
+  // Restore toasts only once the page shows the goal back in the list.
+  const [busy, save] = useSaveTransition()
   const close = () => setOpen(null)
   // Budgets for a later month: the ones that will apply then, nothing spent yet.
   const later = view.budgetMonth.start > view.month.start
   const shownMonth = monthLabel(view.budgetMonth.start)
 
   const restore = (item: GoalItem) =>
-    startBusy(async () => {
+    save(async () => {
       const result = await run(() => setGoalArchivedAction({ goalId: item.goal.id, archived: false }))
-      if (result.status === "success") toast.success(result.message)
-      else toast.error(result.message)
+      return () => (result.status === "success" ? toast.success(result.message) : toast.error(result.message))
     })
 
   return (
@@ -435,21 +435,18 @@ function BudgetForm({ view, item, onDone }: { view: GoalsView; item?: BudgetItem
   const [amount, setAmount] = useState(item?.status ? minorToInputString(item.budget.amountMinor, view.currency) : "")
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-  async function submit(event: React.FormEvent) {
+  const [pending, save] = useSaveTransition()
+  function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (pending) return
-    setPending(true)
     setFormError(null)
-    const result = await run(() => setCategoryBudgetAction({ categoryId, month, amount }))
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-      return
-    }
-    setFormError(result.message)
-    setErrors(result.fieldErrors ?? {})
+    save(async () => {
+      const result = await run(() => setCategoryBudgetAction({ categoryId, month, amount }))
+      if (result.status === "success") return done(result.message, onDone)
+      return () => {
+        setFormError(result.message)
+        setErrors(result.fieldErrors ?? {})
+      }
+    })
   }
   return (
     <form onSubmit={submit} noValidate className="grid gap-3.5">

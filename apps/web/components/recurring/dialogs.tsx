@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 
 // Dialogs for recurring items on real data, shared by the Recurring page and the Upcoming
 // cards on Income and Transactions. Saves go through the server actions (shared writers in
@@ -81,9 +82,15 @@ export function RecurringDialogs({ open, onClose, titleOf, ...data }: Data & { o
                 })
               )
               if (result.status === "success") {
-                onClose()
-                toast.saved(result.message, result.balances, `For the ${fullDate(open.item.date!)} occurrence.`)
-                return { ok: true }
+                const date = open.item.date!
+                // Closes (and toasts) once the page shows the entry.
+                return {
+                  ok: true,
+                  after: () => {
+                    onClose()
+                    toast.saved(result.message, result.balances, `For the ${fullDate(date)} occurrence.`)
+                  },
+                }
               }
               return { ok: false, message: result.message, fieldErrors: result.fieldErrors }
             }}
@@ -126,7 +133,7 @@ function RuleForm({ accounts, cardAccounts = [], categories, today, currency, it
   const [note, setNote] = useState(rule?.note ?? "")
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
 
   // New choices can't be archived; an edit may keep the archived one it has (it then still needs attention).
   const usable = (a: LedgerAccount) => !a.archived || a.id === rule?.accountId || a.id === rule?.counterAccountId
@@ -137,11 +144,11 @@ function RuleForm({ accounts, cardAccounts = [], categories, today, currency, it
   const account = [...accounts, ...cardAccounts].find((a) => a.id === accountId)
   const editing = Boolean(rule)
 
-  async function submit(event: React.FormEvent) {
+  function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (pending) return
-    setPending(true)
     setFormError(null)
+    // Closes (and toasts) only once the page shows the rule; an error keeps the dialog open.
+    save(async () => {
     const result = await run(() =>
       saveRecurringRuleAction({
         ruleId: rule?.id ?? "",
@@ -158,14 +165,17 @@ function RuleForm({ accounts, cardAccounts = [], categories, today, currency, it
         idempotencyKey: editing ? "" : requestKey,
       })
     )
-    setPending(false)
     if (result.status === "success") {
-      toast.success(result.message, editing ? undefined : "It shows under Upcoming when it's due.")
-      onDone()
-      return
+      return () => {
+        toast.success(result.message, editing ? undefined : "It shows under Upcoming when it's due.")
+        onDone()
+      }
     }
-    setFormError(result.message)
-    setErrors(result.fieldErrors ?? {})
+    return () => {
+      setFormError(result.message)
+      setErrors(result.fieldErrors ?? {})
+    }
+    })
   }
 
   const option = (a: { id: string; label: string; archived: boolean }) => (
@@ -273,21 +283,21 @@ function SkipForm({ item, onDone }: { item: RecurringItem; onDone: () => void })
   // One key per opened form; a retry after a failure reuses it, so the date is skipped once.
   const [requestKey] = useState(newRequestKey)
   const [reason, setReason] = useState("")
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   const [error, setError] = useState<string | null>(null)
   return (
     <form
       className="grid gap-5"
-      onSubmit={async (event) => {
+      onSubmit={(event) => {
         event.preventDefault()
-        if (pending) return
-        setPending(true)
-        const result = await run(() => skipOccurrenceAction({ ruleId: item.rule.id, occurrenceDate: item.date ?? "", reason, idempotencyKey: requestKey }))
-        setPending(false)
-        if (result.status === "success") {
-          toast.success(result.message)
-          onDone()
-        } else setError(result.fieldErrors?.reason ?? result.message)
+        save(async () => {
+          const result = await run(() => skipOccurrenceAction({ ruleId: item.rule.id, occurrenceDate: item.date ?? "", reason, idempotencyKey: requestKey }))
+          if (result.status !== "success") return () => setError(result.fieldErrors?.reason ?? result.message)
+          return () => {
+            toast.success(result.message)
+            onDone()
+          }
+        })
       }}
     >
       <ul className="grid list-disc gap-1.5 pl-5 text-sm text-muted-foreground">
@@ -308,7 +318,7 @@ function SkipForm({ item, onDone }: { item: RecurringItem; onDone: () => void })
 }
 
 function ArchiveForm({ item, onDone }: { item: RecurringItem; onDone: () => void }) {
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   const [error, setError] = useState<string | null>(null)
   return (
     <div className="grid gap-5">
@@ -324,15 +334,16 @@ function ArchiveForm({ item, onDone }: { item: RecurringItem; onDone: () => void
           size="lg"
           disabled={pending}
           aria-busy={pending}
-          onClick={async () => {
-            setPending(true)
-            const result = await run(() => setRecurringRuleArchivedAction({ ruleId: item.rule.id, archived: true }))
-            setPending(false)
-            if (result.status === "success") {
-              toast.success(result.message)
-              onDone()
-            } else setError(result.message)
-          }}
+          onClick={() =>
+            save(async () => {
+              const result = await run(() => setRecurringRuleArchivedAction({ ruleId: item.rule.id, archived: true }))
+              if (result.status !== "success") return () => setError(result.message)
+              return () => {
+                toast.success(result.message)
+                onDone()
+              }
+            })
+          }
         >
           {pending ? "Archiving…" : "Archive"}
         </Button>

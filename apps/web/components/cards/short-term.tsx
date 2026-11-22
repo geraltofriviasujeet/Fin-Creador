@@ -1,7 +1,7 @@
 "use client"
 
 import type * as React from "react"
-import { Fragment, useState, useTransition } from "react"
+import { Fragment, useState } from "react"
 import Link from "next/link"
 import { ChevronDown, Plus } from "lucide-react"
 import {
@@ -36,6 +36,7 @@ import { Card } from "@/components/ui/card"
 import { DialogContent } from "@/components/ui/dialog"
 import { TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import {
   BorrowingDetailsForm,
   BorrowingForm,
@@ -94,13 +95,13 @@ export function ShortTermBox({
   renderLoan: (loan: LoanItem) => React.ReactNode
 }) {
   const [showArchived, setShowArchived] = useState(false)
-  const [busy, startBusy] = useTransition()
+  // Quick actions toast only once the page shows the change.
+  const [busy, save] = useSaveTransition()
   const empty = view.cards.length === 0 && view.borrowings.length === 0 && view.cardEmis.length === 0
-  const restore = (save: () => Promise<{ status: "success" | "error"; message: string }>) =>
-    startBusy(async () => {
-      const result = await run(save)
-      if (result.status === "success") toast.success(result.message)
-      else toast.error(result.message)
+  const restore = (action: () => Promise<{ status: "success" | "error"; message: string }>) =>
+    save(async () => {
+      const result = await run(action)
+      return () => (result.status === "success" ? toast.success(result.message) : toast.error(result.message))
     })
   const archivedCount = view.archivedCards.length + view.archivedBorrowings.length
   return (

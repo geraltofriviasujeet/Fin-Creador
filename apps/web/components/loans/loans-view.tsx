@@ -1,7 +1,7 @@
 "use client"
 
 import type * as React from "react"
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronDown, Plus } from "lucide-react"
 import { type DueItem, type LoanItem, type LoansView, type PaymentRecord, type ReminderEntry, newRequestKey } from "@fin-creador/api"
@@ -16,6 +16,7 @@ import { Card, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { LOANS_HEADER, LOANS_PATH, LoanBadgeChip, NOT_IN_TOTAL, ratePercent } from "./display"
 import { ConfirmAction, run } from "./confirm"
 import { type ShortTermOpen, ShortTermBox, ShortTermDialogs } from "@/components/cards/short-term"
@@ -80,7 +81,8 @@ export function LoansPageView({ view, payId = null }: { view: LoansView; /** A r
   const shortTerm = view.shortTerm
   const onReminder = (r: ReminderEntry) => setOpened(dialogFor(r, view))
   const [showArchived, setShowArchived] = useState(false)
-  const [busy, startBusy] = useTransition()
+  // Quick actions toast only once the page shows the change.
+  const [busy, save] = useSaveTransition()
   const close = () => {
     setOpened(NOTHING_OPEN)
     // Clear ?pay= so the same reminder link opens it again later.
@@ -91,10 +93,9 @@ export function LoansPageView({ view, payId = null }: { view: LoansView; /** A r
   const currencyOf = (item: DueItem) => loanOf(item)?.loan.currency ?? view.currency
 
   const restore = (l: LoanItem) =>
-    startBusy(async () => {
+    save(async () => {
       const result = await run(() => setLoanArchivedAction({ loanId: l.loan.id, archived: false }))
-      if (result.status === "success") toast.success(result.message)
-      else toast.error(result.message)
+      return () => (result.status === "success" ? toast.success(result.message) : toast.error(result.message))
     })
 
   return (

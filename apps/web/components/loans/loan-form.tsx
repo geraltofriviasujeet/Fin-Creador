@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { Choice } from "./choice"
 import { bpsToInput, inWords } from "./display"
 
@@ -129,7 +130,7 @@ function LoanForm({ today, currency, item, onDone }: { today: string; currency: 
   const [emiTouched, setEmiTouched] = useState(item ? item.loan.emiMinor !== item.loan.emiEstimateMinor : false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   // Editing: what saving will do, shown once before it is saved.
   const [confirm, setConfirm] = useState<RevisionPreview | null>(null)
   // With payments recorded, the repayment start, EMI dates and moratorium stay (the database refuses them too).
@@ -167,41 +168,47 @@ function LoanForm({ today, currency, item, onDone }: { today: string; currency: 
     setStep(2)
   }
 
-  async function submit(event: React.FormEvent) {
+  function submit(event: React.FormEvent) {
     event.preventDefault()
     if (step === 1) return nextStep()
-    if (pending) return
-    setPending(true)
     setFormError(null)
     const input = { ...values, emi: emiTouched ? values.emi : "", idempotencyKey: requestKey }
-    if (item && !confirm) {
-      let checked: Awaited<ReturnType<typeof previewLoanRevisionAction>>
-      try {
-        checked = await previewLoanRevisionAction({ ...input, loanId: item.loan.id })
-      } catch {
-        checked = { status: "error", message: NETWORK }
+    // The preview writes nothing; the save closes (and toasts) only once the page shows the loan.
+    save(async () => {
+      if (item && !confirm) {
+        let checked: Awaited<ReturnType<typeof previewLoanRevisionAction>>
+        try {
+          checked = await previewLoanRevisionAction({ ...input, loanId: item.loan.id })
+        } catch {
+          checked = { status: "error", message: NETWORK }
+        }
+        if (checked.status === "success") {
+          const preview = checked.preview
+          return () => {
+            setErrors({})
+            setConfirm(preview)
+          }
+        }
+        return () => {
+          setFormError(checked.message)
+          setErrors(checked.fieldErrors ?? {})
+        }
       }
-      setPending(false)
-      if (checked.status === "success") {
-        setErrors({})
-        setConfirm(checked.preview)
-        return
+      const result = await call(() => (item ? reviseLoanAction({ ...input, loanId: item.loan.id }) : addLoanAction(input)))
+      if (result.status === "success") {
+        return () => {
+          setConfirm(null)
+          toast.success(result.message)
+          onDone()
+        }
       }
-      setFormError(checked.message)
-      setErrors(checked.fieldErrors ?? {})
-      return
-    }
-    const result = await call(() => (item ? reviseLoanAction({ ...input, loanId: item.loan.id }) : addLoanAction(input)))
-    setPending(false)
-    setConfirm(null)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-      return
-    }
-    setFormError(result.message)
-    setErrors(result.fieldErrors ?? {})
-    if (Object.keys(result.fieldErrors ?? {}).some((f) => STEP_ONE_FIELDS.has(f))) setStep(1)
+      return () => {
+        setConfirm(null)
+        setFormError(result.message)
+        setErrors(result.fieldErrors ?? {})
+        if (Object.keys(result.fieldErrors ?? {}).some((f) => STEP_ONE_FIELDS.has(f))) setStep(1)
+      }
+    })
   }
 
   const field = (name: keyof Values, label: string, props: Partial<React.ComponentProps<typeof TextField>> = {}) => (

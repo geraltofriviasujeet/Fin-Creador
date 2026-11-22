@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useState } from "react"
 import { Plus } from "lucide-react"
 import { type Lookup, type RecurringItem, type RecurringView, type TransactionsContext, UPCOMING_DAYS, showCostTile } from "@fin-creador/api"
 import type { CostTotal } from "@fin-creador/domain"
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { type RecurringDialog, RecurringDialogs } from "./dialogs"
 import { RecurringPanel, RecurringRow } from "./upcoming"
 
@@ -25,7 +26,8 @@ export const RECURRING_HEADER = {
 export function RecurringPageView({ context, view }: { context: TransactionsContext; view: RecurringView }) {
   const [open, setOpen] = useState<RecurringDialog>(null)
   const [showArchived, setShowArchived] = useState(false)
-  const [busy, startBusy] = useTransition()
+  // Quick actions toast only once the page shows the change.
+  const [busy, save] = useSaveTransition()
   const { today, currency } = context
   const lookup: Lookup = useMemo(
     () => ({ accounts: new Map([...context.accounts, ...context.cardAccounts].map((a) => [a.id, a])), categories: new Map(context.categories.map((c) => [c.id, c])) }),
@@ -36,13 +38,12 @@ export function RecurringPageView({ context, view }: { context: TransactionsCont
 
   // Quick actions (no dialog): restore and undo skip, with a toast either way.
   const quick = (run: () => Promise<{ status: "success" | "error"; message: string }>) =>
-    startBusy(async () => {
+    save(async () => {
       try {
         const result = await run()
-        if (result.status === "success") toast.success(result.message)
-        else toast.error(result.message)
+        return () => (result.status === "success" ? toast.success(result.message) : toast.error(result.message))
       } catch {
-        toast.error("We couldn't reach the server. Try again.")
+        return () => toast.error("We couldn't reach the server. Try again.")
       }
     })
 

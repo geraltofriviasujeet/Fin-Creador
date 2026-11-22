@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { Choice } from "./choice"
 import { inWords } from "./display"
 
@@ -69,7 +70,7 @@ export function PayForm({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [serverShort, setServerShort] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   const set = (name: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setServerShort(null)
     setValues((v) => ({ ...v, [name]: e.target.value }))
@@ -87,52 +88,52 @@ export function PayForm({
   const short = mode === "paid" && total !== null && available !== null ? shortfallMinor(available, total) : 0
   const warning = serverShort ?? (short > 0 && account ? shortfallMessage(short, account.name, currency) : null)
 
-  async function submit(allowShortfall: boolean) {
-    if (pending) return
-    setPending(true)
+  // Each save closes (and toasts) only once the page shows it; an error keeps the dialog open.
+  function submit(allowShortfall: boolean) {
     setFormError(null)
-    let result: WriteResult & { shortfallMinor?: number }
-    if (mode === "later") {
-      result = await call(() => planDueItemAction({ dueItemId: item.id, accountId: values.accountId, plannedOn: values.plannedOn }))
-    } else {
-      const input = {
-        dueItemId: item.id,
-        accountId: values.accountId,
-        paidOn: values.paidOn,
-        principal: values.principal,
-        interest: values.interest,
-        fees: values.fees,
-        allowShortfall: allowShortfall ? "true" : "",
-        idempotencyKey: requestKey,
+    save(async () => {
+      let result: WriteResult & { shortfallMinor?: number }
+      if (mode === "later") {
+        result = await call(() => planDueItemAction({ dueItemId: item.id, accountId: values.accountId, plannedOn: values.plannedOn }))
+      } else {
+        const input = {
+          dueItemId: item.id,
+          accountId: values.accountId,
+          paidOn: values.paidOn,
+          principal: values.principal,
+          interest: values.interest,
+          fees: values.fees,
+          allowShortfall: allowShortfall ? "true" : "",
+          idempotencyKey: requestKey,
+        }
+        result = await call(() => (payment ? editDuePaymentAction({ ...input, paymentId: payment.id }) : payDueItemAction(input)))
       }
-      result = await call(() => (payment ? editDuePaymentAction({ ...input, paymentId: payment.id }) : payDueItemAction(input)))
-    }
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-      return
-    }
-    const fieldErrors = result.fieldErrors ?? {}
-    if (result.shortfallMinor) {
-      // Shown once, in the warning with "Pay anyway", not also under the account.
-      setServerShort(fieldErrors.accountId ?? result.message)
-      setErrors({ ...fieldErrors, accountId: "" })
-      return
-    }
-    setFormError(result.message)
-    setErrors(fieldErrors)
+      if (result.status === "success") return done(result.message)
+      const fieldErrors = result.fieldErrors ?? {}
+      if (result.shortfallMinor) {
+        // Shown once, in the warning with "Pay anyway", not also under the account.
+        return () => {
+          setServerShort(fieldErrors.accountId ?? result.message)
+          setErrors({ ...fieldErrors, accountId: "" })
+        }
+      }
+      return () => {
+        setFormError(result.message)
+        setErrors(fieldErrors)
+      }
+    })
   }
 
-  async function clearPlan() {
-    if (pending) return
-    setPending(true)
-    const result = await call(() => clearDuePlanAction({ dueItemId: item.id }))
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-    } else setFormError(result.message)
+  function clearPlan() {
+    save(async () => {
+      const result = await call(() => clearDuePlanAction({ dueItemId: item.id }))
+      return result.status === "success" ? done(result.message) : () => setFormError(result.message)
+    })
+  }
+
+  const done = (message: string) => () => {
+    toast.success(message)
+    onDone()
   }
 
   const field = (name: keyof typeof values, label: string, props: Partial<React.ComponentProps<typeof TextField>> = {}) => (

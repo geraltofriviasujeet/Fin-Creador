@@ -51,6 +51,7 @@ import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 
 // Forms of the "Short-term & operational liabilities" box (Sprint 8b): add or edit a card,
 // enter a statement, pay a card or its bill, plan a bill, link a card EMI, add a borrowing,
@@ -64,27 +65,31 @@ export function useSubmit(onDone: () => void) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [serverShort, setServerShort] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-  async function submit(save: () => Promise<Result>) {
-    if (pending) return
-    setPending(true)
+  // Closes (and toasts) only once the page shows the save; an error keeps the dialog open.
+  const [pending, start] = useSaveTransition()
+  function submit(save: () => Promise<Result>) {
     setFormError(null)
-    const result = await run(save)
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-      return
-    }
-    const fieldErrors = ("fieldErrors" in result ? result.fieldErrors : undefined) ?? {}
-    if ("shortfallMinor" in result && result.shortfallMinor) {
-      // Shown once, in the warning with "Pay anyway", not also under the account.
-      setServerShort(fieldErrors.accountId ?? result.message)
-      setErrors({ ...fieldErrors, accountId: "" })
-      return
-    }
-    setFormError(result.message)
-    setErrors(fieldErrors)
+    start(async () => {
+      const result = await run(save)
+      if (result.status === "success") {
+        return () => {
+          toast.success(result.message)
+          onDone()
+        }
+      }
+      const fieldErrors = ("fieldErrors" in result ? result.fieldErrors : undefined) ?? {}
+      if ("shortfallMinor" in result && result.shortfallMinor) {
+        // Shown once, in the warning with "Pay anyway", not also under the account.
+        return () => {
+          setServerShort(fieldErrors.accountId ?? result.message)
+          setErrors({ ...fieldErrors, accountId: "" })
+        }
+      }
+      return () => {
+        setFormError(result.message)
+        setErrors(fieldErrors)
+      }
+    })
   }
   return { errors, formError, serverShort, setServerShort, pending, submit }
 }

@@ -19,8 +19,9 @@ import { type Draft, type EntryType, type SaveResult, TransactionForm } from "./
 // pages. Saves go through the server actions (shared writers in packages/api); the
 // actions refresh both pages on success.
 
-const toSaveResult = (r: WriteResult): SaveResult =>
-  r.status === "success" ? { ok: true } : { ok: false, message: r.message, fieldErrors: r.fieldErrors }
+/** The form shows `after` (close and toast) only once the refreshed page is on screen. */
+const toSaveResult = (r: WriteResult, after?: () => void): SaveResult =>
+  r.status === "success" ? { ok: true, after } : { ok: false, message: r.message, fieldErrors: r.fieldErrors, after }
 
 function draftInput(draft: Draft, accounts: LedgerAccount[], requestKey: string, transactionId?: string) {
   const currency = accounts.find((a) => a.id === draft.accountId)?.currency ?? "INR"
@@ -70,11 +71,15 @@ export function AddEntryDialog({
             onTypeChange={onTypeChange}
             onSave={async (draft, key) => {
               const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key)))
-              if (result.status === "success") {
-                onClose()
-                toast.saved(result.message, result.balances)
-              }
-              return toSaveResult(result)
+              return toSaveResult(
+                result,
+                result.status === "success"
+                  ? () => {
+                      onClose()
+                      toast.saved(result.message, result.balances)
+                    }
+                  : undefined
+              )
             }}
           />
         </DialogContent>
@@ -102,11 +107,15 @@ export function RefundEntryDialog({ purchase, onClose, ...data }: FormProps & { 
             {...data}
             onSave={async (draft, key) => {
               const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key)))
-              if (result.status === "success") {
-                onClose()
-                toast.saved(result.message, result.balances)
-              }
-              return toSaveResult(result)
+              return toSaveResult(
+                result,
+                result.status === "success"
+                  ? () => {
+                      onClose()
+                      toast.saved(result.message, result.balances)
+                    }
+                  : undefined
+              )
             }}
           />
         </DialogContent>
@@ -125,11 +134,15 @@ export function EditEntryDialog({ entry, onClose, ...data }: FormProps & { entry
             {...data}
             onSave={async (draft, key) => {
               const result = await run(() => saveTransactionAction(draftInput(draft, [...data.accounts, ...(data.cardAccounts ?? [])], key, entry.id)))
-              if (result.status === "success") {
-                onClose()
-                toast.saved(result.message, result.balances, "The earlier version is kept in History.")
-              }
-              return toSaveResult(result)
+              return toSaveResult(
+                result,
+                result.status === "success"
+                  ? () => {
+                      onClose()
+                      toast.saved(result.message, result.balances, "The earlier version is kept in History.")
+                    }
+                  : undefined
+              )
             }}
           />
         </DialogContent>
@@ -149,14 +162,21 @@ export function VoidEntryDialog({ entry, lookup, onClose }: { entry: LedgerItem 
             onVoid={async (reason, key) => {
               const result = await run(() => voidTransactionAction({ transactionId: entry.id, reason: reason ?? "", idempotencyKey: key }))
               if (result.status === "success") {
-                onClose()
-                toast.success(result.message, "It stays in your history and no longer counts.")
-              } else if (result.stale) {
-                // The action refreshed the list: close, so the latest version can be voided.
-                onClose()
-                toast.info(result.message)
+                return toSaveResult(result, () => {
+                  onClose()
+                  toast.success(result.message, "It stays in your history and no longer counts.")
+                })
               }
-              return toSaveResult(result)
+              // Stale: the action refreshed the list; close, so the latest version can be voided.
+              return toSaveResult(
+                result,
+                result.stale
+                  ? () => {
+                      onClose()
+                      toast.info(result.message)
+                    }
+                  : undefined
+              )
             }}
           />
         </DialogContent>

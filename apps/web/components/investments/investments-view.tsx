@@ -1,7 +1,7 @@
 "use client"
 
 import type * as React from "react"
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { ChevronDown, Plus } from "lucide-react"
 import {
@@ -98,7 +98,8 @@ const newest = (dates: string[]) => (dates.length > 0 ? dates.reduce((a, b) => (
 export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab: InvestmentTab }) {
   const [open, setOpen] = useState<Open>(null)
   const [showArchived, setShowArchived] = useState(false)
-  const [busy, startBusy] = useTransition()
+  // Restore toasts only once the page shows the record back in the list.
+  const [busy, save] = useSaveTransition()
   const close = () => setOpen(null)
   const add = () => setOpen({ kind: "add" })
   const addDeposit = () => setOpen({ kind: "addDeposit" })
@@ -109,10 +110,9 @@ export function InvestmentsPageView({ view, tab }: { view: InvestmentsView; tab:
   const labels = tab === "funds" ? NAV_LABELS : PRICE_LABELS
 
   const restoreWith = (action: () => Promise<WriteResult>) =>
-    startBusy(async () => {
+    save(async () => {
       const result = await run(action)
-      if (result.status === "success") toast.success(result.message)
-      else toast.error(result.message)
+      return () => (result.status === "success" ? toast.success(result.message) : toast.error(result.message))
     })
   const restore = (item: HoldingItem) => restoreWith(() => setHoldingArchivedAction({ holdingId: item.id, archived: false }))
   const restoreDeposit = (d: DepositItem) => restoreWith(() => setFixedDepositArchivedAction({ depositId: d.id, archived: false }))
