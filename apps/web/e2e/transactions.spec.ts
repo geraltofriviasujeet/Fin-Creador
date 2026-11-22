@@ -167,7 +167,8 @@ test("search treats symbols as text; filters narrow the list and the totals", as
   await expect(page).toHaveURL(/q=%25/)
   await expect(row(page, "Shoes 50% off")).toBeVisible()
   await expect(row(page, "Bus pass")).toHaveCount(0)
-  await expect(stat(page, "Expenses")).toContainText("₹1,200")
+  // While searching, the matches' totals are in the results header line (12a-4).
+  await expect(page.getByTestId("search-summary")).toContainText(/· ₹1,200(\.00)? spent ·/)
 
   await search.fill("400")
   await search.press("Enter")

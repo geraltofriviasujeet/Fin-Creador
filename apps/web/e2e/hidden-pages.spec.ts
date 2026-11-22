@@ -82,7 +82,7 @@ for (const reduced of [false, true]) {
   })
 }
 
-test("Roma: leaving the page and changing the address elsewhere keeps the conversation and its draft", async ({ page }) => {
+test("Roma: while hidden, an address change on Transactions leaves the chat, its draft and live answer alone", async ({ page }) => {
   await signUpConfirmed(page, "Test Person", uniqueEmail("hidden-roma"))
   await page.goto("/income")
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000" })
@@ -98,24 +98,27 @@ test("Roma: leaving the page and changing the address elsewhere keeps the conver
   await box.press("Enter")
   await expect(answers.getByText(/^You spent ₹250 from /)).toBeVisible()
   await expect(page).toHaveURL(/\/roma\?c=[0-9a-f-]{36}$/)
-  const conversation = page.url()
   await box.fill("A draft I haven't sent")
+  // The hidden page keeps its DOM (display: none). Hold on to this textarea: if the hidden chat
+  // started afresh, it would be replaced.
+  await box.evaluate((el) => ((window as unknown as { __roma: Element }).__roma = el))
 
-  // Away to Transactions, and a search there (no ?c= in either address).
+  // Away to Transactions (client navigation), then a search there with the page's own box: the
+  // address changes in the app, with no ?c= (the top-bar search is a full page load, which
+  // would reset every page anyway).
   await nav(page, "Transactions").click()
   await expect(page).toHaveURL(/\/transactions$/)
-  const search = page.getByRole("banner").getByRole("searchbox")
-  await search.fill("groceries")
-  await search.press("Enter")
+  await page.getByRole("main").getByRole("searchbox", { name: "Search transactions" }).fill("groceries")
+  await page.getByRole("main").getByRole("button", { name: "Search", exact: true }).click()
   await expect(page).toHaveURL(/\/transactions\?q=groceries$/)
+  await expect(page.getByTestId("search-summary")).toBeVisible()
+  await page.waitForTimeout(1000) // time for the hidden page to re-render with this address
 
-  // Back to the conversation: the same chat, the live answer and the draft as they were.
-  await page.goBack()
-  await page.goBack()
-  await expect(page).toHaveURL(conversation)
-  await expect(box).toHaveValue("A draft I haven't sent")
-  await expect(answers.getByRole("listitem")).toHaveCount(1)
-  await expect(answers.getByText(/^You spent ₹250 from /)).toBeVisible()
-  // A stored (reloaded) turn would say "Answered on …": this is still the live one.
-  await expect(answers.getByText(/^Answered on /)).toHaveCount(0)
+  // The hidden Roma chat is the same one, with its draft and live answer.
+  const hidden = await page.evaluate(() => {
+    const el = (window as unknown as { __roma: HTMLTextAreaElement }).__roma
+    const list = document.querySelector('[aria-label="Roma\'s answers"]')
+    return { connected: el.isConnected, value: el.value, answered: list?.textContent?.includes("Answered on") ?? null, items: list?.querySelectorAll(":scope > li").length ?? 0 }
+  })
+  expect(hidden).toEqual({ connected: true, value: "A draft I haven't sent", answered: false, items: 1 })
 })
