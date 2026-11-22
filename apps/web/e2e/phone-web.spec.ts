@@ -229,9 +229,10 @@ test("search icon in the topbar opens the search field", async ({ page }) => {
   await seed(page)
   const header = page.getByRole("banner")
   await expect(header.getByRole("searchbox")).toHaveCount(0)
-  await header.getByRole("button", { name: "Search" }).click()
-  const field = header.getByRole("searchbox", { name: "Search" })
+  await header.getByRole("button", { name: "Search transactions" }).click()
+  const field = header.getByRole("searchbox", { name: "Search transactions" })
   await expect(field).toBeFocused()
+  await expect(field).toHaveAttribute("placeholder", "Search transactions…")
   await expectPhoneFriendly(page, "phone search", "header")
   await shot(page, "search-open")
   await field.fill("Lunch")
@@ -239,6 +240,44 @@ test("search icon in the topbar opens the search field", async ({ page }) => {
   await expect(page).toHaveURL(/\/transactions\?q=Lunch/)
   await expect(page.getByRole("main")).toContainText("Lunch")
   await expect(header.getByRole("searchbox")).toHaveCount(0)
+})
+
+// 12a-4: a search shows one header line with the matches' totals, then the list; no cards.
+test("search results: one header line, no cards, the list first; no matches; Clear search", async ({ page }) => {
+  await demoUser(page, "search-results")
+  await seed(page)
+  const header = page.getByRole("banner")
+  const searchFor = async (q: string) => {
+    await header.getByRole("button", { name: "Search transactions" }).click()
+    const field = header.getByRole("searchbox", { name: "Search transactions" })
+    await field.fill(q)
+    await field.press("Enter")
+    await expect(page).toHaveURL(new RegExp(`/transactions\\?q=${q}$`))
+  }
+  const totals = page.getByRole("region", { name: "Totals for these filters" })
+
+  await searchFor("Lunch")
+  const results = page.getByRole("region", { name: /result for “Lunch”/ })
+  await expect(page.getByTestId("search-summary")).toHaveText(/^1 result for “Lunch” · ₹450(\.00)? spent · ₹0(\.00)? received · All time$/)
+  await expect(totals).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: "Everything", exact: true })).toHaveCount(0)
+  // The entry is on the first screen, right under the header.
+  const lunch = page.locator("main li").filter({ hasText: "Lunch" })
+  await expect(lunch).toBeInViewport()
+  const below = (await results.boundingBox())!
+  expect((await lunch.boundingBox())!.y).toBeGreaterThan(below.y + below.height)
+  await page.waitForLoadState("networkidle")
+  await expectPhoneFriendly(page, "search results", "main")
+  await shot(page, "search-results")
+
+  await searchFor("tata")
+  await expect(page.getByText("No transactions match “tata”", { exact: true })).toBeVisible()
+  await expect(totals).toHaveCount(0)
+  await expectPhoneFriendly(page, "search, no matches", "main")
+  await shot(page, "search-none")
+  await page.getByRole("main").locator("[data-slot=card]").filter({ hasText: "No transactions match" }).getByRole("link", { name: "Clear search" }).click()
+  await expect(page).toHaveURL(/\/transactions$/)
+  await expect(totals).toBeVisible()
 })
 
 test("welcome carousel, tour, balance card, Continue card and the website link at phone size", async ({ page }) => {

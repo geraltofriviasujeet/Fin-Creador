@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useSyncExternalStore } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { countUpValue, formatMoney } from "@fin-creador/domain"
 
 // Counting a money figure from one server value to the next (balance feedback). Display only:
@@ -29,15 +29,25 @@ export function useCountUp(from: number, to: number, durationMs = COUNT_MS, dela
   const key = `${from}:${to}`
   // The latest frame of the current count (a frame of an earlier count is ignored).
   const [frame, setFrame] = useState<{ key: string; value: number } | null>(null)
+  // With cacheComponents a visited page stays mounted but hidden (React Activity): its Effects
+  // are cleaned up when it is hidden and run again when it is shown. So a count that already
+  // finished never runs again (coming back shows the figure as it was), and one cut short by
+  // hiding the page carries on from the figure last shown (12a-4 hidden-page audit).
+  const finished = useRef<string | null>(null)
+  const latest = useRef<{ key: string; value: number } | null>(null)
 
   useEffect(() => {
-    if (still) return
+    if (still || finished.current === key) return
+    const begin = latest.current?.key === key ? latest.current.value : from
     let id = 0
     const start = performance.now() + delayMs
     const tick = (now: number) => {
       const progress = Math.max(0, now - start) / durationMs
-      setFrame({ key, value: countUpValue(from, to, progress) })
+      const next = { key, value: countUpValue(begin, to, progress) }
+      latest.current = next
+      setFrame(next)
       if (progress < 1) id = requestAnimationFrame(tick)
+      else finished.current = key
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)

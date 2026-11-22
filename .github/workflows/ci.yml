@@ -1,4 +1,4 @@
-# CI for pull requests: app checks, secret check, database (migration + pgTAP) tests and
+# CI for pull requests and for every push to main (after a merge, same jobs): app checks, secret check, database (migration + pgTAP) tests and
 # web end-to-end tests.
 # Runs only against throwaway services on the GitHub runner. It never connects to the
 # hosted Supabase project and uses no repository secrets.
@@ -6,13 +6,16 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # A PR's runs share a group (a new push cancels the old run); each push to main runs to the end.
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   app:
@@ -157,6 +160,11 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
         run: |
+          # Pushes to main always run everything.
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # A failing git diff fails the step (bash -e), never skips the tests.
           files="$(git diff --name-only HEAD^1 HEAD)"
           code="$(printf '%s\n' "$files" | grep -vE '^docs/|\.md$|^$' || true)"

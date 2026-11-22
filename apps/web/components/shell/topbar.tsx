@@ -38,7 +38,7 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
         className="relative hidden w-(--fc-layout-search-width) max-w-full md:block"
       >
         <label htmlFor="global-search" className="sr-only">
-          Search
+          Search transactions
         </label>
         <Search
           aria-hidden="true"
@@ -48,7 +48,7 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
           id="global-search"
           name="q"
           type="search"
-          placeholder="Search…"
+          placeholder="Search transactions…"
           className="h-[44px] w-full rounded-lg border border-line bg-canvas pr-3 pl-10 text-[16px] text-ink md:h-[36px] md:text-sm outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         />
       </form>
@@ -58,7 +58,7 @@ export function Topbar({ reminders }: { reminders?: BellReminders }) {
       <div className="ml-auto flex items-center gap-1 md:gap-3">
         <button
           type="button"
-          aria-label="Search"
+          aria-label="Search transactions"
           aria-expanded={searching}
           aria-controls="phone-search"
           onClick={() => setSearching(true)}
@@ -91,7 +91,7 @@ function PhoneSearch({ onClose }: { onClose: () => void }) {
       className="absolute inset-0 z-10 flex items-center gap-2 bg-surface px-4 md:hidden"
     >
       <label htmlFor="phone-search-q" className="sr-only">
-        Search
+        Search transactions
       </label>
       <div className="relative min-w-0 flex-1">
         <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-subtle" />
@@ -101,7 +101,7 @@ function PhoneSearch({ onClose }: { onClose: () => void }) {
           name="q"
           type="search"
           enterKeyHint="search"
-          placeholder="Search…"
+          placeholder="Search transactions…"
           className="h-[44px] w-full rounded-lg border border-line bg-canvas pr-3 pl-10 text-[16px] text-ink outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         />
       </div>

@@ -295,7 +295,9 @@ test("?add= deep links are consumed once: a type switch and a void never open Ad
 // 12a-3: a search opens the results view: a header with the count and Clear search, no Upcoming
 // card, the filters folded away, and All time unless another period is picked. Totals cover the
 // matching entries only. Clearing the search gives the normal page back.
-test("search results view: from the top bar and the search box, all time, totals of the matches only, Clear search", async ({ page }) => {
+test("search results view: from the top bar and the search box, all time, totals of the matches only in one line, no cards, Clear search", async ({ page }) => {
+  // 12a-4: the results view at 1280px (the phone view is in phone-web.spec.ts).
+  await page.setViewportSize({ width: 1280, height: 900 })
   const email = uniqueEmail("tx-search")
   await signUpConfirmed(page, "Test Person", email)
   await page.goto("/income")
@@ -323,23 +325,33 @@ test("search results view: from the top bar and the search box, all time, totals
   const upcoming = page.getByRole("heading", { name: "Upcoming", exact: true })
   await expect(upcoming).toBeVisible()
   await page.waitForLoadState("networkidle")
-  const results = page.getByRole("region", { name: /results? for “groceries”$/ })
+  const results = page.getByRole("region", { name: /results? for “groceries”/ })
+  const summary = page.getByTestId("search-summary")
+
+  // Search covers only transactions, and says so.
+  const topSearch = page.getByRole("banner").getByRole("searchbox", { name: "Search transactions" })
+  await expect(topSearch).toHaveAttribute("placeholder", "Search transactions…")
+  await expect(page.getByRole("main").getByRole("searchbox", { name: "Search transactions" })).toHaveAttribute("placeholder", "Search transactions…")
+  await expect(totals(page)).toBeVisible()
 
   // From the top bar.
-  const topSearch = page.getByRole("banner").getByRole("searchbox")
   await topSearch.fill("groceries")
   await expect(topSearch).toHaveValue("groceries")
   await topSearch.press("Enter")
   await expect(page).toHaveURL(/\/transactions\?q=groceries$/)
-  await expect(results.getByRole("heading", { name: "2 results for “groceries”" })).toBeVisible()
-  await expect(results).toContainText("All time")
+  // One line: the count and the matches' own totals (₹400 + ₹250, not the ₹90 tea), All time.
+  await expect(summary).toHaveText(/^2 results for “groceries” · ₹650(\.00)? spent · ₹0(\.00)? received · All time$/)
   await expect(upcoming).toHaveCount(0)
+  // No summary cards, no totals note, no second "Everything" heading: the list comes next.
+  await expect(totals(page)).toHaveCount(0)
+  await expect(page.getByText(/Transfers between your accounts/)).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: "Everything", exact: true })).toHaveCount(0)
+  const listTop = (await page.locator("main section[aria-labelledby^=day-]").first().boundingBox())!.y
+  const headerBottom = (await results.boundingBox())!
+  expect(listTop - (headerBottom.y + headerBottom.height), "the list follows the header").toBeLessThan(64)
   await expect(row(page, "Old groceries")).toBeVisible()
   await expect(row(page, "Groceries run")).toBeVisible()
   await expect(row(page, "Tea")).toHaveCount(0)
-  // Totals: the two matches only (₹400 + ₹250), not the ₹90 tea.
-  await expect(stat(page, "Expenses")).toContainText("₹650")
-  await expect(page.getByText("Totals cover only the entries matching “groceries”.", { exact: false })).toBeVisible()
   // The results header is at the top of the page content, in view.
   await expect(results).toBeInViewport()
   await shot(page, "tx-search-results")
@@ -350,8 +362,8 @@ test("search results view: from the top bar and the search box, all time, totals
   await expect(page.getByLabel("Date", { exact: true })).toHaveValue("all-time")
   await page.getByLabel("Date", { exact: true }).selectOption("this-month")
   await expect(page).toHaveURL(/period=this-month/)
-  await expect(results.getByRole("heading", { name: "1 result for “groceries”" })).toBeVisible()
-  await expect(stat(page, "Expenses")).toContainText("₹400")
+  await expect(summary).toHaveText(/^1 result for “groceries” · ₹400(\.00)? spent · ₹0(\.00)? received · This month$/)
+  await results.getByRole("button", { name: "Hide filters" }).click()
 
   // Clear search: the normal page again.
   await results.getByRole("link", { name: "Clear search" }).click()
@@ -360,6 +372,20 @@ test("search results view: from the top bar and the search box, all time, totals
   await expect(upcoming).toBeVisible()
   await expect(page.getByLabel("Date", { exact: true })).toHaveValue("this-month")
   await expect(row(page, "Tea")).toBeVisible()
+  await expect(stat(page, "Expenses")).toContainText("₹490")
+  await expect(page.getByRole("heading", { name: "Everything", exact: true })).toBeVisible()
+
+  // No matches: its own empty state, and Clear search there brings the cards back.
+  await topSearch.fill("tata")
+  await topSearch.press("Enter")
+  await expect(page).toHaveURL(/\/transactions\?q=tata$/)
+  await expect(page.getByText("No transactions match “tata”", { exact: true })).toBeVisible()
+  await expect(page.getByText("Nothing matches these filters")).toHaveCount(0)
+  await expect(totals(page)).toHaveCount(0)
+  await shot(page, "tx-search-none")
+  await page.getByRole("main").locator("[data-slot=card]").filter({ hasText: "No transactions match" }).getByRole("link", { name: "Clear search" }).click()
+  await expect(page).toHaveURL(/\/transactions$/)
+  await expect(totals(page)).toBeVisible()
 
   // From the Transactions search box: the same view, All time.
   await page.getByRole("main").getByRole("searchbox").fill("groceries")
