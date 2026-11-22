@@ -233,6 +233,27 @@ migration is on dev only and every Sprint 8 PR stays a stacked draft: PR #35 (8a
 If the push fails, the migrations are rolled back (each runs in one transaction) and prod is
 unchanged from the last one applied; restore from the backup only if prod data is damaged.
 
+## 4d. Service worker kill switch (Sprint 12b)
+
+The web app registers a service worker (`apps/web/public/sw.js`) in production builds only.
+It caches just the offline page, its fonts, the icons and the build's own `/_next/static/`
+files; pages, RSC payloads and `/api/` are never cached. If it ever misbehaves (pages not
+updating, a broken offline page), remove it from every browser:
+
+1. On a branch from `main`, copy `apps/web/public/sw-kill-switch.js` over
+   `apps/web/public/sw.js` (keep the file name `sw.js`).
+2. In `apps/web/lib/pwa/config.ts` set `SERVICE_WORKER_ENABLED = false`, so pages stop
+   registering it and unregister any they find.
+3. Open a PR, wait for CI, merge and let Vercel deploy `main`.
+4. Each browser fetches `/sw.js` when it next opens a page (and at least once a day), installs
+   the kill switch at once, which deletes every cache this site made, unregisters itself and
+   reloads the open tabs from the network. Check in Chrome DevTools → Application → Service
+   workers that none is registered for the site.
+5. To bring the worker back after the fix: restore `public/sw.js` from git and set
+   `SERVICE_WORKER_ENABLED = true` again.
+
+The kill switch is exercised in CI (`apps/web/e2e/pwa.spec.ts`, "kill switch").
+
 ## 5. Upgrade before any commercial launch
 
 Do all of these before payments, paying customers or a public launch, and only once the

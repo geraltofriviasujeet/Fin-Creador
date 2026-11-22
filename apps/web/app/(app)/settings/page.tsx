@@ -6,6 +6,8 @@ import { PROFILE_FORM_COLUMNS, loadExpenseCategories, profileFormValues } from "
 import { countryOptions, currencyOptions, timeZoneOptions } from "@fin-creador/schemas"
 import { setRomaDescriptionsAction, setRomaEnabledAction, updateProfileAction } from "@/app/(app)/settings/actions"
 import { PageHeader } from "@/components/shell/app-shell"
+import { LegalLinks } from "@/components/legal-links"
+import { InstallSetting } from "@/components/pwa/install"
 import { ExpenseCategories } from "@/components/settings/expense-categories"
 import { ImportPayeesSetting } from "@/components/settings/import-payees-setting"
 import { ProfileForm } from "@/components/settings/profile-form"
@@ -85,6 +87,7 @@ async function SettingsContent() {
         {profile ? (
           <>
             <RomaSetting action={setRomaEnabledAction} enabled={profile.roma_enabled} />
+            <LegalLinks className="mt-3" />
             {profile.roma_enabled && (
               <RomaDescriptionsSetting action={setRomaDescriptionsAction} allowedAt={profile.roma_descriptions_ok_at} timeZone={profile.time_zone} />
             )}
@@ -128,10 +131,23 @@ async function SettingsContent() {
       </Card>
 
       <Card>
+        <CardTitle>Install the app</CardTitle>
+        <CardDescription className="mt-1">Open FinCreador from your Home Screen or dock, like any other app.</CardDescription>
+        <InstallSetting />
+      </Card>
+
+      <Card>
+        <CardTitle>Terms and privacy</CardTitle>
+        <CardDescription className="mt-1">How FinCreador handles your account and your data. Opens the FinCreador website.</CardDescription>
+        <LegalLinks className="mt-4" />
+      </Card>
+
+      <Card>
         <CardTitle>Account</CardTitle>
         <CardDescription className="mt-1 [overflow-wrap:anywhere]">Signed in as {auth.user.email}</CardDescription>
         <form method="post" action="/auth/sign-out" className="mt-5">
-          <Button type="submit" variant="secondary">
+          {/* Works offline too (components/pwa/sign-out-guard.tsx). */}
+          <Button type="submit" variant="secondary" availableOffline>
             <LogOut aria-hidden="true" />
             Sign out
           </Button>

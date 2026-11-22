@@ -9,7 +9,8 @@ import { Sparkles } from "lucide-react"
 import { type OpenConversation, RomaChat } from "@/components/roma/roma-chat"
 import type { ConversationKind } from "@/components/roma/roma-history"
 import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
+import { LegalLinks } from "@/components/legal-links"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { FormMessage } from "@/components/ui/field"
 import { readKnowledgeConfig, readLlmConfig } from "@/lib/ai/config"
@@ -67,6 +68,7 @@ async function RomaContent({ searchParams }: { searchParams: SearchParams }) {
         <Card className="max-w-2xl">
           <CardTitle>Roma is off</CardTitle>
           <CardDescription className="mt-1">{ROMA_DATA_NOTICE}</CardDescription>
+          <LegalLinks className="mt-3" />
           <Link href="/settings" className={buttonVariants({ className: "mt-4" })}>
             Turn Roma on in Settings
           </Link>

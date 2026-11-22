@@ -5,6 +5,8 @@ import { loadBellReminders } from "@fin-creador/api"
 import { AppShell } from "@/components/shell/app-shell"
 import { Onboarding } from "@/components/onboarding/tour"
 import { IdleGuard } from "@/components/shell/idle-guard"
+import { ServiceWorker } from "@/components/pwa/service-worker"
+import { SnapshotKeeper } from "@/components/pwa/snapshot-keeper"
 import { idleLimitFromEnv } from "@/lib/auth/idle"
 import { welcomePending } from "@/lib/auth/welcome-cookie"
 import { createClient } from "@/lib/supabase/server"
@@ -46,6 +48,9 @@ async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
       </Suspense>
       {/* Signs out after 2 hours without activity (across tabs), with a warning first. */}
       <IdleGuard signedInAt={data.user.last_sign_in_at ?? null} limitMs={idleLimitFromEnv(process.env)} />
+      {/* Sprint 12b: the offline snapshot for this user, and the service worker (production only). */}
+      <SnapshotKeeper userId={data.user.id} />
+      <ServiceWorker />
     </>
   )
 }

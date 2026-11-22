@@ -1,7 +1,7 @@
 import type * as React from "react"
 import { headers } from "next/headers"
 import { Card } from "@/components/ui/card"
-import { buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { OVERVIEW_HREF } from "@/components/shell/nav-items"
 import { avatarInitials, maskEmail } from "@/lib/auth/identity"
 import { createClient } from "@/lib/supabase/server"

@@ -7,6 +7,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Skip static assets and image optimisation; run for every page and route handler.
-  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)"],
+  // Skip static assets, image optimisation and the PWA's public files (Sprint 12b: the offline
+  // page, service workers, manifest, fonts, icons); run for every other page and route handler.
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|offline$|sw\\.js$|sw-kill-switch\\.js$|manifest\\.webmanifest$|fonts/|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)"],
 }

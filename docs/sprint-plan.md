@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-11-22 (12a-4 search polish, hidden-page audit and CI on main on `sprint-12a-4`, no migration; 12a-3 (#84) merged; Sprint 12a is done when 12a-4 merges. Before that: 12a-3 phone web part 2 (Roma, imports, tables, search results view, edited-row fix, CI limits) on `sprint-12a-3`, no migration; 12a-2 (#83) merged. Before that: 12a-2 phone web sheets, keyboard and basics on `sprint-12a-2`, no migration; 12a-1 (#81) and 12a-1b (#82) merged; 9e on prod. Before that: 12a-1 bug fixes on a draft PR from `sprint-12a-1-bugfixes`, no migration. Before that: Website link, Continue card on sign-in and sign-up, Google account chooser on a draft PR from `signed-in-continue`, no migration. Before that, 2026-11-21: Income page redesign on a draft PR from `income-redesign`, no migration. Before that, 2026-11-20, before 12a: balance feedback after a save, the first sign-in tour and the Get started card, on a draft PR from `feat/balance-feedback-tour`; migration `20261120120000_onboarding.sql` (SQL approved; not on dev until the owner applies it after CI). Before that: 9e, UPI app statement import, built on draft PR from branch `sprint-9e`: migration `20261116120000_upi_import.sql` (SQL approved; not on dev until the owner applies it after CI). Before that: 10.7a, the goal "what if", done on draft PRs #68 and #69: `goalWhatIf` in packages/domain, the `goal_what_if` tool and its card; the goal check, trip check and what-if cards kept with their turn by migration `20261115120000_roma_turn_card.sql` (SQL approved; the owner applies it to dev). The rest of 10.7 is deferred until after soft-launch feedback. 10.6 a–e done and on prod; RBI home-page notice sent.)
+Last updated: 2026-11-22 (Sprint 12a done: PRs #81–#86 merged into `main`. 12b installable PWA and read-only offline view in progress on `sprint-12b-pwa`, no migration. Sprint 11 follows Sprint 12 in delivery order.)
 
 ## Sprint status
 
@@ -51,8 +51,10 @@ Last updated: 2026-11-22 (12a-4 search polish, hidden-page audit and CI on main 
 | **11** | Notifications & reminders | Not started | |
 | **12a-2** | Phone web: sheets, keyboard, basics | Done (web) | Built 2026-11-22 on `sprint-12a-2` from `main`, PR #83 merged into `main`, no migration. Below md every dialog is a bottom sheet sized to the visual viewport (`lib/use-visual-viewport.ts`, `--fc-vvh`/`--fc-vv-top`), body scrolls inside, action rows sticky (`SHEET_ACTIONS` in `components/ui/dialog.tsx`); inputs 16px and 44px, buttons and other tap targets 44px on phones; search icon in the phone topbar; logo shows only its mark below 440px; `vh` → `dvh`. E2E `e2e/phone-web.spec.ts` in Playwright projects `phone-360` and `phone-430` (keyboard simulated by a shorter viewport). Manual step for the owner: check the keyboard on a real Android and iPhone. Items 2–4 (12a-3) and 9 (12a-4) next. |
 | **12a-3** | Phone web: Roma, imports, tables; search results; edited rows | Done (web) | Built 2026-11-22 on `sprint-12a-3` from `main`, PR #84 merged into `main`, no migration. Roma below lg: History button opens the conversation list as a sheet; plan modal a full-height sheet with Save as PDF and Close in its sticky footer; what-if rows stack below md, figures never clipped. UPI, bank and card statement review: filters stick under the topbar and the totals with Save above the tab bar on phones (`PHONE_FILTER_BAR`, `PHONE_SAVE_BAR`). Loans schedule as stacked rows on phones; Reports and Investments tables in the shared `ScrollTable` (scrolls in its box, first column pinned below md). Transactions search results view (header with count and Clear search, no Upcoming, filters folded, All time by default; totals cover the matches). Edited-row fix: the actions are four fixed slots, so an edited purchase's Edit/Void/Refund/History no longer spill over the amount. CI: Playwright `maxFailures` 10; E2E steps skipped on PRs that change only `docs/**` or `*.md`. E2E in `phone-web.spec.ts` and `transactions.spec.ts`. |
-| **12a-4** | Search polish, hidden-page audit, CI on main | In review (web) | Built 2026-11-22 on `sprint-12a-4` from `main`, draft PR into `main`, no migration. A search shows one header line (count, the matches' spent and received, period) with the list straight after: no summary cards, totals note or "Everything" heading; no matches says "No transactions match “q”" with Clear search. Top-bar, phone and Transactions search say "Search transactions…". Hidden-page audit (table in the PR): Roma no longer restarts the chat when the address changes on another page; a finished count-up never replays when a page is shown again, and a value changed while hidden counts on from the last shown one (reduced motion: jumps). CI also runs every job on push to `main`; the docs-only E2E skip stays PR-only. E2E in `hidden-pages.spec.ts`, `transactions.spec.ts` (1280px) and `phone-web.spec.ts`. When this merges, Sprint 12a is done. |
-| **12** | Phone web, landing, PWA, mobile design system | In progress | Order: 12a phone web (done when 12a-4 merges: 12a-1 #81 and 12a-1b #82 bug fixes; 12a-2 #83 sheets, keyboard, basics; 12a-3 #84 Roma, import, tables; 12a-4 search polish, hidden-page audit, CI on main), the landing page (live separately at www.fincreador.com; privacy and terms pages still to do), 12b installable PWA, 12c mobile design system, then native screens. Web runs on Next.js 16.4.5. |
+| **12a-4** | Search polish, hidden-page audit, CI on main | Done (web) | Built 2026-11-22 on `sprint-12a-4` from `main`, PR #85 merged into `main` (follow-up 12a-4b #86: top-bar search without a reload), no migration. A search shows one header line (count, the matches' spent and received, period) with the list straight after: no summary cards, totals note or "Everything" heading; no matches says "No transactions match “q”" with Clear search. Top-bar, phone and Transactions search say "Search transactions…". Hidden-page audit (table in the PR): Roma no longer restarts the chat when the address changes on another page; a finished count-up never replays when a page is shown again, and a value changed while hidden counts on from the last shown one (reduced motion: jumps). CI also runs every job on push to `main`; the docs-only E2E skip stays PR-only. E2E in `hidden-pages.spec.ts`, `transactions.spec.ts` (1280px) and `phone-web.spec.ts`. When this merges, Sprint 12a is done. |
+| **12** | Phone web, landing, PWA, mobile design system | In progress | Order: 12a phone web (done: #81–#86), the landing page (live separately at www.fincreador.com, with its terms and privacy sections), 12b installable PWA with a read-only offline view, 12c mobile design system, then native screens. Offline saving (queue and sync) is the next release, not Sprint 12. Web runs on Next.js 16.4.5. |
+| **12b** | Installable PWA, read-only offline view | In review (web) | Built 2026-11-22 on `sprint-12b-pwa` from `main`, draft PR into `main`, no migration. `app/manifest.ts`; icons, favicon and offline fonts from `scripts/generate-pwa-assets.ts` (`npm run pwa:assets -w @fin-creador/web`); hand-written `public/sw.js` (production builds only, precache + `/_next/static` cache-first, pages/RSC/API never cached) with `public/sw-kill-switch.js` (docs/deployment.md 4d); `/offline` (`lib/pwa/offline-page.ts`) shows the IndexedDB snapshot from `/api/offline-snapshot` (`lib/pwa/build-snapshot.ts`); offline banner and disabled submit buttons (`components/ui/button.tsx`), Sign out works offline (`lib/pwa/offline-sign-out.ts`); install entry in Settings and phone card; terms and privacy links (`lib/site.ts`). E2E in `e2e/pwa.spec.ts`. **Manual (owner):** install on Android and iPhone; Google sign-in inside the installed iPhone app (email sign-in must work there). |
+| **12c** | Mobile design system | Not started | Scope to be defined; see "Sprint 12c: mobile design system" below. |
 | **13** | Security & production release | Not started | |
 
 ## Sprint 1 steps
@@ -326,6 +328,11 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-11-22** | Phone sheets (12a-2): below md the shared dialog is a bottom sheet inside the visual viewport (what the keyboard leaves), with a scrolling body and sticky action rows; every phone class is `max-md:` and the body wrapper is `md:contents`, so desktop dialogs render as before. Phone sizes use exact px (`h-[44px]`, `text-[16px]`) because the root font is 14px (Tailwind's `h-11` is 38.5px and `text-base` 14px here). | Save stays reachable above the keyboard without changing desktop; inputs at 16px stop iOS zooming on focus. |
 | **2026-11-22** | Transactions search (12a-3): a search (`?q=`) defaults to a new "All time" period (`ALL_TIME_RANGE`, 1900-01-01 to 9999-12-31) unless `?period=` says otherwise; the URL writes `period` only when it differs from that default (`defaultPeriod`). The page then shows a results header, hides Upcoming and folds the filters; totals are the database's for the same filters, so they cover the matches only. Clearing the search goes back to This month. Mobile Activity gets "All time" in its period list; its search still starts at This month. | A search that only looked at This month missed most matches, and the full page buried the results under Upcoming and the filters. |
 | **2026-11-22** | Phone tables (12a-3): wide tables (Reports, Investments) use one shared `ScrollTable` that scrolls inside its own labelled, focusable box with the first column pinned below md; the Loans schedule becomes stacked rows below md (the table stays from md up). Only `md` (761px) and `lg` (1100px) exist, so "below 1024px" for Roma is implemented as below lg. | One pattern for wide tables; the page never scrolls sideways. |
+| **2026-11-22** | Sprint 12b (owner): installable PWA with a read-only offline view only. Offline saving (queue, sync, conflicts) moves to the next release, keeping its acceptance criteria. Sprint 12 runs before Sprint 11; roadmap weeks relabelled. | Offline writes need idempotent sync and conflict handling across clients; a read-only view gives value now without any risk of unsynced data looking saved. |
+| **2026-11-22** | Service worker (12b): hand-written, no PWA library. Registered only in production builds, as `/sw.js?v=<build id>` (`NEXT_PUBLIC_APP_VERSION` from next.config: the Vercel commit SHA or the build time), so each deploy gets its own caches. It precaches only `/offline`, its fonts and the icons, and caches `/_next/static/*` on first use; navigations, RSC payloads, `/api/`, `/auth/` and other origins are never cached. A waiting version activates only from "Update available · Reload". Kill switch: `public/sw-kill-switch.js` plus `SERVICE_WORKER_ENABLED = false` (docs/deployment.md 4d). Playwright blocks service workers except in `e2e/pwa.spec.ts`. | A library would add a build plugin for four rules; hashed names are never hard-coded, and no authenticated page or data can be served from a cache. |
+| **2026-11-22** | Offline view (12b): one IndexedDB snapshot per device of figures the server already formats (`/api/offline-snapshot`, no-store, same user only), shown read-only on the static `/offline` page only while offline and only if under 7 days old. Wiped on sign-out (before the form posts), on the idle sign-out, on every auth page load, and when another user's app loads. Refreshed on each page load (at most every 15 s) and after each success toast (a confirmed save). | Read-only means no sync or conflicts; nothing is added up on the device; another person on a shared device never sees the previous user's figures. |
+| **2026-11-22** | Offline saving guard (12b): `<Button type="submit">` is disabled while `navigator.onLine` is false, stays focusable and names the reason ("You’re offline · Saving is paused"); the app shows the same banner. `Button` is now a client component; `buttonVariants` moved to `components/ui/button-variants.ts` for server components. | One place covers every Save and Add; nothing unsaved can look saved. |
+| **2026-11-22** | Offline sign-out (12b, owner): Sign out and the idle sign-out work offline. `components/pwa/sign-out-guard.tsx` (every sign-out form) and the idle guard call `signOutOffline` (`lib/pwa/offline-sign-out.ts`): delete the snapshot and every cache except the precache (the offline page, fonts, icons: no personal data, kept so that page can show), clear the `sb-…-auth-token` cookies (not httpOnly in @supabase/ssr), then show `/offline?signed-out=1`. The access token waits in that tab's sessionStorage; the sign-in page revokes it with Auth `logout?scope=local` once online. | A device must be able to sign out without a connection. Scope "local" so a new sign-in on the same device is never revoked by the late call; if the tab closes first or the token expires, the server session ends at its own expiry. |
 | **2026-11-22** | Hidden pages (12a-4): a visited page stays mounted but hidden, re-renders with the current URL and data, and runs its Effects again when shown. So nothing may react to the address unless the real path is its own (Roma checks `usePathname() === "/roma"`, like `useAddDeepLink`), and a one-off Effect must remember it ran (`useCountUp` never replays a finished count; a count cut short carries on from the figure shown). Shell components (topbar, tab bar, idle guard, welcome, tour, notice toast) live in layouts and are never hidden. | Roma lost its draft and live answer after a search on Transactions; Total available replayed its count on every return. |
 | **2026-11-22** | Search results (12a-4): while searching, the matches' totals are one line in the results header ("N results for “q” · ₹X spent · ₹Y received · period"); the summary cards and totals note show only without a search. Search is labelled "Search transactions…" everywhere, since it covers nothing else. CI runs on push to `main` with the same jobs as PRs. | The cards pushed the results below the fold on phones and repeated what the header can say in a line. |
 
@@ -442,6 +449,8 @@ restructuring; do not force a new architecture onto working code.
 
 # 3. Sprint roadmap at a glance
 
+Rows are in delivery order: Sprint 12 (phone web, PWA) runs before Sprint 11 (notifications), by the owner's choice.
+
 | **Sprint** | **Timeline** | **Focus** | **Usable outcome** |
 |----|----|----|----|
 | **1** | Weeks 1–2 | Foundation, authentication & profile | Register/sign in; manage profile. |
@@ -454,8 +463,8 @@ restructuring; do not force a new architecture onto working code.
 | **8** | Weeks 15–16 | Loans, liabilities & reports | View liabilities, net worth, and export records. |
 | **9** | Weeks 17–18 | Statement import | Import credit card and bank statements and save only the confirmed lines. |
 | **10** | Weeks 19–20 | AI financial insights | Get explanations grounded in verified data. |
-| **11** | Weeks 21–22 | Notifications & reminders | Configure reminders and upcoming-payment alerts. |
-| **12** | Weeks 23–24 | Phone web, landing, PWA, mobile design system | The web app works on phones; installable PWA; native screens follow a mobile design system. |
+| **12** | Weeks 21–22 | Phone web, landing, PWA, mobile design system | The web app works on phones; installable PWA; native screens follow a mobile design system. |
+| **11** | Weeks 23–24 | Notifications & reminders | Configure reminders and upcoming-payment alerts. |
 | **13** | Weeks 25–26 | Security & production release | Release candidate ready for deployment/store submission. |
 
 # 4. Sprint detail and acceptance criteria
@@ -1220,7 +1229,9 @@ deployments keep Roma off or on the mock.
 
 ## Sprint 11 — Notifications and reminders
 
-**Weeks 21–22 \| Usable outcome:** A user can receive and control
+*Runs after Sprint 12 (owner's order).*
+
+**Weeks 23–24 \| Usable outcome:** A user can receive and control
 reminders across supported platforms.
 
 ### Scope and deliverables
@@ -1343,39 +1354,110 @@ smaller visual viewport; **the owner checks the keyboard on a real phone
 (manual step).**
 
 
-## Sprint 12 — Mobile polish, offline support and PWA
+## Sprint 12b: installable PWA
 
-**Weeks 23–24 \| Usable outcome:** The app is dependable across
-supported web and mobile workflows.
+**Weeks 21–22 \| Usable outcome:** the web app installs to a phone or
+desktop home screen and, with no connection, shows a clearly read-only
+view of the person's money as of the last time it was online. Saving
+needs a connection; nothing unsaved ever looks saved. No migration.
 
-### Scope and deliverables
+### Scope
 
-- Polish mobile navigation, safe areas, keyboard behavior, loading
-  states, and accessibility.
+1. Web app manifest (`app/manifest.ts`): name and short name
+   "FinCreador", start URL and scope `/`, standalone, theme colour
+   `#f5f7f3`, background `#17251f`, icons 192, 512 and maskable 512,
+   shortcuts "Add expense" (`/transactions?add=expense`) and "Ask Roma"
+   (`/roma`).
+2. Icons generated by a script from one SVG of the logo mark (lime mark
+   on `#17251f`): 192, 512, maskable 512 with safe padding, Apple touch
+   icon 180, favicons.
+3. Apple: `appleWebApp` metadata (capable, title FinCreador, default
+   status bar) and the Apple touch icon.
+4. A hand-written service worker, registered in production builds only:
+   precaches only static files (icons, fonts, the offline page);
+   `/_next/static/*` (immutable, hashed) cache-first on first use, so no
+   hashed URL is hard-coded. Network-only for page navigations, RSC
+   payloads, API and auth routes and every Supabase or other-origin
+   request; authenticated HTML, RSC payloads and API responses are never
+   cached. An offline navigation shows `/offline`. Versioned caches,
+   old ones deleted. A waiting new version shows "Update available ·
+   Reload" (no automatic reload). A self-unregistering kill-switch
+   worker is documented in `docs/deployment.md`.
+5. Read-only offline view: while online, after a page load or a
+   confirmed save, a small snapshot of server-provided figures is kept
+   in IndexedDB (total available and account balances, this month's
+   income and spending, the next 5 dues, the last 20 entries, the time
+   taken, the user id). `/offline` shows "Your money as of <time,
+   date>" or "Nothing saved on this device yet", read-only, with Retry.
+   The snapshot is for the signed-in user only; wiped on sign-out
+   (including the idle sign-out), when another user signs in, and after
+   7 days; never shown while online; no Roma data; no account numbers
+   beyond the last digits the app already shows.
+6. Offline in the app: banner "You're offline · Saving is paused"; Save
+   and Add buttons disabled with that reason. Sign out (and the idle
+   sign-out) stays available offline: it deletes the snapshot and the
+   service worker's static cache, clears the local Supabase session
+   cookies and shows the signed-out offline page; the server-side
+   sign-out finishes from the sign-in page once back online.
+7. Install: Chrome and Android use `beforeinstallprompt` ("Install
+   FinCreador" in Settings, and a once-dismissible card on phones from
+   the second app visit after sign-in); iPhone Safari gets a short
+   "Share → Add to Home Screen" sheet. Hidden when already installed.
+8. Legal links to the website's terms and privacy sections (URLs in
+   `lib/site.ts`, new tab): on sign-up ("By creating an account you agree
+   to the Terms and Privacy Policy"), in Settings and where Roma is
+   turned on.
+9. Installed-app checks: sign-out works, external links open outside the
+   app, safe areas. Manual (owner): Google sign-in inside an installed
+   iPhone app; email sign-in must work there.
 
-- Add secure local caching and limited offline expense entry where
-  feasible.
+### Acceptance criteria
 
+- The manifest has the fields above; the service worker registers in a
+  production build and not in `npm run dev`.
+- Offline, a navigation shows `/offline` with the snapshot's figures and
+  time; no cache holds HTML, RSC or API responses.
+- Sign-out and a different user's sign-in wipe the snapshot; a snapshot
+  older than 7 days is not shown.
+- Offline banner shown and Save disabled; install entry in Settings;
+  legal links on sign-up.
+- Offline sign-out shows the signed-out page with the snapshot gone, and
+  reopening /offline shows nothing saved.
+- Desktop and phone layouts otherwise unchanged.
+
+**Dependencies:** 12a done. Push notifications are not part of 12b; they
+depend on Sprint 11.
+
+## Sprint 12c: mobile design system
+
+**Usable outcome:** native screens follow one mobile design system built
+on the shared tokens.
+
+**Scope to be defined** (owner). Starting point: `docs/design-spec.md`
+section 5 (Mobile web and Expo app) and `packages/design-tokens`.
+
+## Offline saving (next release)
+
+Moved out of Sprint 12 (owner, 2026-11-22). Sprint 12b ships a read-only
+offline view; saving while offline comes in the next release.
+
+### Scope
+
+- Secure local caching and limited offline expense entry where feasible.
 - Queue offline changes with synchronization, idempotency, and conflict
   handling.
-
-- Make web installable as a PWA where supported.
-
-- Test session expiry, app lifecycle, push permissions, and
-  cross-platform consistency.
+- Test session expiry, app lifecycle and cross-platform consistency.
+  Push permissions depend on Sprint 11 (notifications).
 
 ### Acceptance criteria
 
 - Offline state is clear; unsynced data is not falsely reported as
   remotely saved.
-
 - Synchronization avoids duplicate transactions and handles conflicts.
-
 - Critical flows work on supported devices/browsers.
-
 - Accessibility and responsive checks are completed.
 
-**Dependencies:** Stable core flows on web and mobile.
+**Dependencies:** Sprint 12b; Sprint 11 for push.
 
 ## Sprint 13 — Security, release and production readiness
 
