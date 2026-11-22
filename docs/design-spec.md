@@ -55,12 +55,91 @@ Put these in `packages/design-tokens` (single source) and map them into Tailwind
 - Bottom grid (1.35fr / .65fr): Recent transactions (icon tile, merchant, category - date, signed amount, more menu, "View all") and Your goals (icon, name, saved of target, progress bar, % and time left, + button).
 - Tablet <= 1100px: summary 2 columns, panels stack to 1 column.
 
-## 5. Mobile web and Expo app
+## 5. Mobile app design (approved 22 Nov 2026, open to change)
 
-- <= 760px web: sidebar hidden; topbar shows logo mark + wordmark, bell, icon-only "+" button; search hidden.
-- Bottom tab bar (66px): Overview, Activity (Transactions), Goals, Investments. Income is reached from an Income card on Overview (and Add income from the header +), Settings from the header.
-- Summary cards become a horizontal scroll-snap row (min-width 245px). Panels full width, 17px padding.
-- Expo app mirrors this with React Native components: bottom tabs, safe areas, same tokens, expo-font for Manrope and DM Sans. Do not import web components. Use native date picker and bottom sheet instead of a centered modal for Add transaction.
+Applies to the Expo app (Android and iOS). Built as a component set in
+Sprint 12c and screen by screen in Sprints 13a–13d. Reference mockups:
+Claude design canvas "FinCreador Mobile App Design" (the owner has the
+link).
+
+### Navigation
+
+- Five tabs: Home · Activity · ＋ (centre, raised forest square with a
+  lime plus, opens Add) · Plan · Roma.
+- Accounts, investments detail, reports and settings sit behind the
+  profile avatar (top-left of Home). Bell top-right of Home.
+
+### Home
+
+- Greeting and date.
+- Forest hero card: "Safe to spend today ₹X a day, until <next income
+  date>", a spent-today bar and three figures: Money left, Bills due,
+  For goals.
+- Quick actions: Expense / Income / Import UPI / Transfer.
+- "Coming up" list (date, name, account, amount), with a red warning
+  banner when a bill would leave an account short ("Rent on 1 Dec leaves
+  you ₹1,980 short in SBI").
+- "Where it went": top categories with budget bars.
+- "Your money": accounts with their total.
+- Ask Roma shortcut card.
+
+### Add
+
+- Full screen. Expense / Income / Transfer segmented control.
+- Large amount; 4×2 category tiles with icons.
+- "Paid from" row showing the balance before → after.
+- Today and Add a note; number keypad.
+- One primary button: "Save ₹<amount> expense".
+
+### Activity
+
+- Month chips and a date picker; Money in / Money out tiles.
+- Filters: All / Spent / Received / Transfers.
+- Entries grouped by day with day totals, category icon tiles and an
+  "Imported" tag; swipe to edit or void.
+- Search and Import UPI in the header.
+
+### Plan
+
+- Budgets: total left, even-spend marker, per-category bars, orange when
+  over 90%.
+- Goals as progress rings with "Save ₹X a month to make it" and an Ask
+  Roma what-if link.
+- Loans & EMIs: next EMI, Pay button, EMIs paid bar.
+- Bills that repeat as chips.
+- Investments summary row.
+
+### Roma
+
+- Header "Roma · Your Intelligent Finance Agent" with History.
+- Answers lead with a one-line verdict, then a short working table, tags
+  "From your records" and the period, and "Information, not financial
+  advice".
+- Follow-up suggestion chips; input with a send button.
+
+### Design system
+
+- Colours: Forest #17251F (hero, nav, primary button), Lime #B9F06B
+  (accent, primary button text), Canvas #F5F7F3, Ink #18251F, Money in
+  #20805A, Warning #C2412D, Muted text #5F6E66, Line #E3E9E5. Category
+  tints: Peach #FEE5D9, Mint #DFF6DC, Blue #DDECF8, Lavender #E8E6FF,
+  Grey #F0F3F1. Values go into `packages/design-tokens` (Sprint 12c).
+- Type: Manrope for amounts and titles (hero 44/800, screen title
+  28/800, card title 18/700); DM Sans body 16, captions 13, never under
+  12.
+- Rules: 44×44 tap targets; Indian digit grouping, whole rupees on
+  summaries; money out with a minus, money in with a plus and green,
+  never colour alone; one primary action per screen; cards white,
+  radius 22, padding 18, 16 apart, no shadows; plain words (Money left,
+  Bills due, Safe to spend); no ads.
+- React Native components only: do not import web components. Safe
+  areas, expo-font for Manrope and DM Sans, native date picker.
+
+### Phone web (≤ 760px)
+
+Unchanged by this section (Sprint 12a): sidebar hidden; topbar with logo
+mark and wordmark, bell and an icon-only "+" button; bottom tab bar;
+summary cards in a horizontal scroll-snap row; dialogs as bottom sheets.
 
 ## 6. Add transaction modal (web) / bottom sheet (mobile)
 

@@ -1,8 +1,8 @@
-# Next session: Sprint 12b (installable PWA)
+# Next session: Sprint 12c (mobile design system)
 
-**State (2026-11-22).** Sprints 1–9, 10a, Roma (10.1–10.6, 10.7a, 10.8–10.9), the pre-12a work (balance feedback and tour #76, Income redesign #77–#78, Continue card #79) and **Sprint 12a phone web (PRs #81–#86)** are merged into `main`. **12b (installable PWA and a read-only offline view)** is in progress on `sprint-12b-pwa`, draft PR into `main`, no migration. Scope and acceptance criteria: "Sprint 12b: installable PWA" in `docs/sprint-plan.md`.
+**State (2026-11-22).** Sprints 1–9, 10a, Roma (10.1–10.6, 10.7a, 10.8–10.9), the pre-12a work (balance feedback and tour #76, Income redesign #77–#78, Continue card #79), **Sprint 12a phone web (PRs #81–#86)** and **12b installable PWA with a read-only offline view (#87)** are merged into `main`. The mobile app design is approved (`docs/design-spec.md` section 5).
 
-**Next:** finish 12b (CI green, owner's manual checks: install on Android and iPhone, Google sign-in inside the installed iPhone app); then 12c mobile design system (scope to be defined by the owner); then Sprint 11 (notifications and reminders). Offline saving (queue, sync, conflicts) is the next release.
+**Next:** **12c mobile design system** in the Expo app: approved tokens in `packages/design-tokens`; components (buttons, inputs incl. amount and keypad, list row, card, bottom sheet, tab bar, chips, progress bar and ring, warning banner, balance card, empty state, offline banner); a preview screen with every component, screenshots in `docs/design/mobile/`. Scope and acceptance criteria: "Sprint 12c: mobile design system" in `docs/sprint-plan.md`. Then the native sprints 13a–13e (13e test builds only) and Sprint 11 (notifications); Sprint 14 is security, release and store submission. Offline saving (queue, sync, conflicts) is the next release.
 
 **Known gaps (kept).** Stay and food often have no estimate in plans; budget trips name fewer hotels; no live fares or room rates; mobile has no Roma or plans; a home city on the profile is still backlog; the rest of 10.7 (allocation between goals, prepay-or-invest, naming products) waits for soft-launch feedback and a regulatory check. Earlier sprints' limitations: `docs/sprint-plan.md` status rows.
 
