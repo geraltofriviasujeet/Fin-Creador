@@ -94,7 +94,7 @@ export function PlanModal({ plan, madeOn, reopened, open, onOpenChange, link, cu
             </Button>
           )
         }
-        className="max-w-4xl md:max-h-[90vh] md:overflow-y-auto md:pb-0"
+        className="max-w-4xl md:max-h-[90dvh] md:overflow-y-auto md:pb-0"
       >
         {view === "goal" && link ? (
           <div className="md:pb-6">

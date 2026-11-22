@@ -21,7 +21,7 @@ const MORE = [
 ] as const
 
 export function AddMenu() {
-  const itemClass = "flex h-11 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
+  const itemClass = "flex h-[44px] cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas md:h-11"
   return (
     // The tour's first step highlights the whole group (Add expense and the menu arrow).
     <div className="flex items-center" data-tour="add">
@@ -41,7 +41,7 @@ export function AddMenu() {
           aria-label="More ways to add"
           className={cn(
             buttonVariants({ size: "icon" }),
-            "w-9 rounded-l-none border-l-primary-foreground/25 md:h-[40px]"
+            "w-[44px] rounded-l-none border-l-primary-foreground/25 md:h-[40px] md:w-9"
           )}
         >
           <ChevronDown aria-hidden="true" className="size-4" />

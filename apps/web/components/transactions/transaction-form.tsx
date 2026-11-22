@@ -8,7 +8,7 @@ import { cn } from "cn"
 import { AmountField } from "@/components/income/amount-field"
 import { newRequestKey } from "@/components/income/format"
 import { Button } from "@/components/ui/button"
-import { DialogClose } from "@/components/ui/dialog"
+import { DialogClose, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { useSaveTransition } from "@/lib/use-save-transition"
 import { fullDate, money, signedAmount } from "./display"
@@ -214,7 +214,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
                 onTypeChange?.(t.value)
               }}
               className={cn(
-                "flex h-11 items-center justify-center rounded-lg text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:cursor-not-allowed",
+                "flex h-[44px] items-center justify-center rounded-lg text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:cursor-not-allowed md:h-11",
                 checked ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
               )}
             >
@@ -383,7 +383,7 @@ export function TransactionForm({ mode, accounts: moneyAccounts, cardAccounts = 
 
       {canRepeat && <RepeatField value={repeat} onChange={setRepeat} occurredOn={occurredOn} today={today} error={errors.repeat} />}
 
-      <div className="mt-2 flex justify-end gap-3">
+      <div className={`mt-2 flex justify-end gap-3 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Saving…" : editing ? "Save changes" : `Save ${noun}`}

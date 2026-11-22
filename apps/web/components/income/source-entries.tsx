@@ -7,6 +7,7 @@ import { money, newRequestKey, shortDate } from "@/components/income/format"
 import { useFormSuccess } from "@/components/income/use-form-success"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { initialFormState } from "@/lib/form-state"
 import type { IncomeAccount, IncomeEntryItem } from "@/lib/income/types"
@@ -29,7 +30,7 @@ export function SourceEntries({
   }
 
   return (
-    <ul className="grid max-h-[60vh] gap-2 overflow-y-auto">
+    <ul className="grid gap-2 md:max-h-[60dvh] md:overflow-y-auto">
       {entries.map((e) => (
         <li key={e.id} className="rounded-xl border border-line p-3">
           <div className="flex items-start justify-between gap-3">
@@ -85,7 +86,7 @@ function VoidForm({ id, onCancel, onDone }: { id: string; onCancel: () => void; 
       <p className="text-sm">Void this income? It stays in history but no longer counts. This can&apos;t be undone.</p>
       {state.status === "error" && state.message && <FormMessage tone="error">{state.message}</FormMessage>}
       <TextField name="reason" label="Reason" hint="Optional" maxLength={200} error={state.fieldErrors?.reason} />
-      <div className="flex justify-end gap-2">
+      <div className={`flex justify-end gap-2 ${SHEET_ACTIONS}`}>
         <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
           Keep it
         </Button>

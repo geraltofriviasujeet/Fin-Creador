@@ -3,7 +3,7 @@
 import { useState } from "react"
 import type { WriteResult } from "@fin-creador/api"
 import { Button } from "@/components/ui/button"
-import { DialogClose } from "@/components/ui/dialog"
+import { DialogClose, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { useSaveTransition } from "@/lib/use-save-transition"
@@ -49,7 +49,7 @@ export function ConfirmAction({
   return (
     <div className="grid gap-4">
       {error && <FormMessage tone="error">{error}</FormMessage>}
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="button" variant={destructive ? "destructive" : "primary"} size="lg" disabled={pending} aria-busy={pending} onClick={go}>
           {pending ? pendingLabel : label}

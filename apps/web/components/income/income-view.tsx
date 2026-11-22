@@ -20,7 +20,7 @@ import { PageHeader } from "@/components/shell/app-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { initialFormState } from "@/lib/form-state"
@@ -42,7 +42,7 @@ type Open =
 const ADD_TITLES: Record<AccountKind, string> = { bank: "Add bank account", cash: "Add cash", other: "Add other account" }
 
 const MENU_ITEM = "flex h-10 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
-const INLINE_LINK = "-mx-1 inline-flex min-h-11 items-center px-1 font-semibold text-ink underline underline-offset-4"
+const INLINE_LINK = "-mx-1 inline-flex min-h-[44px] items-center px-1 font-semibold text-ink underline underline-offset-4 md:min-h-11"
 
 // Phones (≤640px): each table row becomes a card (name and amount on one line, details
 // below). The table keeps its roles, so screen readers still hear a table.
@@ -466,7 +466,7 @@ function ArchiveForm({ account, onDone }: { account: IncomeAccount; onDone: () =
         {account.label} will leave your totals and the account lists. Its income history stays, and you can restore it later.
       </p>
       {state.status === "error" && state.message && <FormMessage tone="error">{state.message}</FormMessage>}
-      <div className="flex justify-end gap-3">
+      <div className={`flex justify-end gap-3 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Archiving…" : "Archive"}

@@ -44,7 +44,7 @@ export function AmountField({
             defaultValue={defaultValue}
             autoFocus={autoFocus}
             onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-            className={cn(controlClasses, "font-heading font-semibold tabular-nums", compact ? "pl-7 text-sm" : "h-[44px] pl-9 text-xl")}
+            className={cn(controlClasses, "font-heading font-semibold tabular-nums", compact ? "pl-7 text-[16px] md:text-sm" : "h-[44px] pl-9 text-xl md:h-[44px]")}
             {...aria}
           />
         </div>

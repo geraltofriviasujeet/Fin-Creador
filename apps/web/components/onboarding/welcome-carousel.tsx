@@ -224,7 +224,7 @@ export function WelcomeCarousel({
                 ))}
               </div>
               <div className="grid gap-3 md:flex md:items-center md:gap-2">
-                <label className="flex min-h-6 w-fit cursor-pointer items-center gap-2 text-sm md:mr-auto">
+                <label className="flex min-h-[44px] w-fit cursor-pointer items-center gap-2 text-sm md:mr-auto md:min-h-6">
                   <input
                     type="checkbox"
                     checked={hide}

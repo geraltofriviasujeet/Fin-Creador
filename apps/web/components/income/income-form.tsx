@@ -61,11 +61,11 @@ export function IncomeForm({ accounts, sources, today, presetAccountId, onDone, 
       <div role="group" aria-label="Type" className="grid grid-cols-2 gap-1 rounded-xl bg-canvas p-1">
         <span
           aria-disabled="true"
-          className="flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-semibold text-muted-foreground"
+          className="flex h-[44px] items-center justify-center gap-2 rounded-lg text-sm font-semibold text-muted-foreground md:h-11"
         >
           Expense <Badge tone="info">Soon</Badge>
         </span>
-        <span aria-current="true" className="flex h-11 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
+        <span aria-current="true" className="flex h-[44px] items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground md:h-11">
           Income
         </span>
       </div>

@@ -5,7 +5,7 @@ import { cn } from "cn"
 import { newRequestKey } from "@/components/income/format"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { DialogClose } from "@/components/ui/dialog"
+import { DialogClose, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { useSaveTransition } from "@/lib/use-save-transition"
 import { type LedgerItem, type Lookup } from "@fin-creador/api"
@@ -81,7 +81,7 @@ export function VoidForm({
         onChange={(e) => setReason(e.target.value)}
         hint="Shown in the history. To correct details instead, use Edit."
       />
-      <div className="flex justify-end gap-3">
+      <div className={`flex justify-end gap-3 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Keep it</DialogClose>
         <Button type="submit" variant="destructive" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Voiding…" : `Void ${noun}`}

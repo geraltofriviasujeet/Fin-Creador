@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/shell/app-shell"
 import { fullDate, money } from "@/components/transactions/display"
 import { Button } from "@/components/ui/button"
 import { Card, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage, SelectField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { useSaveTransition } from "@/lib/use-save-transition"
@@ -356,7 +356,7 @@ function SavedForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
   return (
     <form onSubmit={submit} noValidate className="grid gap-5">
       <AmountField name="saved" label="Saved so far" currency={item.goal.currency} defaultValue={saved} error={error} onChange={setSaved} autoFocus />
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Saving…" : "Save"}
@@ -378,7 +378,7 @@ function ArchiveForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
   return (
     <div className="grid gap-5">
       {error && <FormMessage tone="error">{error}</FormMessage>}
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="button" size="lg" disabled={pending} aria-busy={pending} onClick={archive}>
           {pending ? "Archiving…" : "Archive"}
@@ -412,7 +412,7 @@ function DeleteForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
   return (
     <div className="grid gap-4">
       {error && <FormMessage tone="error">{error}</FormMessage>}
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="button" variant="destructive" size="lg" disabled={pending} aria-busy={pending} onClick={remove}>
           {pending ? "Deleting…" : "Delete permanently"}
@@ -481,7 +481,7 @@ function BudgetForm({ view, item, onDone }: { view: GoalsView; item?: BudgetItem
           ))}
         </SelectField>
       </div>
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Saving…" : "Save budget"}

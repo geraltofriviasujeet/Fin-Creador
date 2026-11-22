@@ -34,7 +34,7 @@ import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { bankImportMatchesAction, saveBankImportLinesAction } from "@/app/(app)/income/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -325,7 +325,7 @@ function BankReviewSection({
             {transfers > 0 && <p>Transfers move money between your own accounts: they are neither income nor expenses.</p>}
             {cardPayments > 0 && <p>Card payments are recorded on the card and reduce what it owes; they aren&apos;t expenses.</p>}
             {refunds > 0 && <p>Refunds lower their category&apos;s spending and add the money back to this account; they aren&apos;t income.</p>}
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
               <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
               <Button type="button" onClick={() => void save()}>
                 Save {lineText(tickedLines.length)}

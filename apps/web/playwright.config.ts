@@ -30,8 +30,19 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: /phone-web\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 }, channel: "chrome" },
     },
+    // Sprint 12a phone web: e2e/phone-web.spec.ts at the two phone widths, touch and the mobile
+    // viewport meta on. Desktop specs stay on the project above, unchanged.
+    ...[
+      { width: 360, height: 780 },
+      { width: 430, height: 932 },
+    ].map((viewport) => ({
+      name: `phone-${viewport.width}`,
+      testMatch: /phone-web\.spec\.ts/,
+      use: { viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2, channel: "chrome" },
+    })),
   ],
   webServer: [
     {

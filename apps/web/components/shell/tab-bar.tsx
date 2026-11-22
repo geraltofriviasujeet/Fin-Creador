@@ -128,7 +128,7 @@ function MoreMenu({ pathname }: { pathname: string }) {
                 aria-current={active ? "page" : undefined}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm [&_svg]:size-5",
+                  "flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-sm [&_svg]:size-5 md:min-h-11",
                   active ? "bg-brand font-bold text-ink" : "text-ink hover:bg-canvas"
                 )}
               >
@@ -143,7 +143,7 @@ function MoreMenu({ pathname }: { pathname: string }) {
           <a
             href={FINCREADOR_WEBSITE_URL}
             onClick={() => setOpen(false)}
-            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-ink hover:bg-canvas [&_svg]:size-5"
+            className="flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-sm text-ink hover:bg-canvas [&_svg]:size-5 md:min-h-11"
           >
             <Globe aria-hidden="true" />
             {FINCREADOR_WEBSITE_LABEL}

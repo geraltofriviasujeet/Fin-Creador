@@ -13,7 +13,7 @@ import {
 import { moveUpiOpeningAction, upiOpeningPreviewAction } from "@/app/(app)/transactions/import/upi/actions"
 import { fullDate, money } from "@/components/transactions/display"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 
 // Payments before an account's opening date (Sprint 9e): per account, the offer to add them and
@@ -168,7 +168,7 @@ function MoveDialog({
             </>
           )}
           {message && <FormMessage tone="error">{message}</FormMessage>}
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
             <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
             <Button type="button" disabled={!preview?.ok || saving} aria-busy={saving} onClick={() => void save()}>
               {saving ? "Saving…" : `Move and import ${lineCount(move.keys.length)}`}
