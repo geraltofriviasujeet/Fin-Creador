@@ -15,7 +15,9 @@ export function ScrollTable({ label, className, children }: { label: string; cla
       aria-label={label}
       tabIndex={0}
       data-scroll-table=""
-      className={cn("overflow-x-auto outline-none focus-visible:outline-2 focus-visible:outline-ring", PIN_FIRST_COLUMN, className)}
+      // relative: absolutely positioned content (sr-only labels in cells) is clipped by this box
+      // too; otherwise it escapes the scroll box and widens the page.
+      className={cn("relative overflow-x-auto outline-none focus-visible:outline-2 focus-visible:outline-ring", PIN_FIRST_COLUMN, className)}
     >
       {children}
     </div>
