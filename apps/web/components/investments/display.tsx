@@ -36,7 +36,8 @@ export function ProfitText({ minor, bps, className, size = "sm" }: { minor: numb
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-0.5 font-semibold whitespace-nowrap tabular-nums",
+        // Phones: the percentage may wrap under the amount, so a narrow cell never widens the page (12a-3).
+        "inline-flex items-center gap-0.5 font-semibold whitespace-nowrap tabular-nums max-md:flex-wrap",
         minor > 0 && "text-success",
         minor < 0 && "text-danger",
         size === "lg" && "font-heading text-lg font-bold md:text-xl",

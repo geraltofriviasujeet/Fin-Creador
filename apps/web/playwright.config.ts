@@ -18,6 +18,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // A broadly broken push stops after 10 failures in CI (minutes, not the whole suite).
+  maxFailures: process.env.CI ? 10 : 0,
   workers: process.env.CI ? 2 : undefined,
   timeout: 60_000,
   expect: { timeout: 10_000 },

@@ -1,6 +1,6 @@
 import { type IsoDate, addDays, formatMoney } from "@fin-creador/domain"
 import { PAYMENT_MODES, type PaymentModeValue } from "@fin-creador/schemas"
-import type { Lookup } from "./filters"
+import { ALL_TIME_RANGE, type Lookup } from "./filters"
 import type { EntryType, LedgerItem } from "./types"
 
 // Text for entries, shared by web and mobile so both say exactly the same thing.
@@ -68,5 +68,6 @@ export function dayHeading(date: IsoDate, today: IsoDate): string {
 }
 
 export function rangeText(range: { start: IsoDate; end: IsoDate }): string {
+  if (range.start === ALL_TIME_RANGE.start && range.end === ALL_TIME_RANGE.end) return "All dates"
   return `${fullDate(range.start)} – ${fullDate(range.end)}`
 }

@@ -29,10 +29,12 @@ type Props = {
   currentId: string | null
   timeZone: string
   onNew: () => void
+  /** A conversation link was followed (the History sheet closes). */
+  onOpen?: (() => void) | undefined
   onDeleted: (id: string | "all") => void
 }
 
-export function RomaHistory({ conversations, currentId, timeZone, onNew, onDeleted }: Props) {
+export function RomaHistory({ conversations, currentId, timeZone, onNew, onOpen, onDeleted }: Props) {
   const [confirming, setConfirming] = useState<string | "all" | null>(null)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -88,6 +90,7 @@ export function RomaHistory({ conversations, currentId, timeZone, onNew, onDelet
                   <Link
                     href={`/roma?c=${c.id}`}
                     aria-current={current ? "page" : undefined}
+                    onClick={onOpen}
                     className="text-sm font-semibold break-words text-ink after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-ring"
                   >
                     {c.title}

@@ -302,6 +302,16 @@ const RESULT_BADGE: Record<Exclude<LineSaveResult["status"], "failed">, { text: 
   deleted: { text: "Already imported (deleted)", tone: "neutral" },
 }
 
+/**
+ * Phone review bars (12a-3): the filters stick under the top bar and the totals with Save stick
+ * above the tab bar, so both stay reachable in a long review. Every class is max-md:, so from md
+ * up nothing changes. The -mx-4/px-4 pair matches the review section's phone padding.
+ */
+export const PHONE_FILTER_BAR =
+  "max-md:sticky max-md:top-(--fc-layout-topbar-height) max-md:z-10 max-md:-mx-4 max-md:border-b max-md:border-line max-md:bg-surface max-md:px-4 max-md:py-2"
+export const PHONE_SAVE_BAR =
+  "max-md:sticky max-md:bottom-[calc(var(--fc-layout-tab-bar-height)+env(safe-area-inset-bottom))] max-md:z-10 max-md:-mx-4 max-md:border-t max-md:border-line max-md:bg-surface max-md:px-4 max-md:py-3"
+
 /** The head of a review line: its tick (when tickable), description, amount, date and notes, status badge and save result. */
 export function LineHead({
   name,

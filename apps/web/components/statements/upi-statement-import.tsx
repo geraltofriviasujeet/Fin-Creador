@@ -56,6 +56,7 @@ import {
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { cn } from "cn"
 import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -63,7 +64,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { RULES_ONLY_TEXT, type RulesOnlyReason } from "@/lib/ai/import-categories-text"
 import { PDF_READ_MESSAGES } from "@/lib/statements/pdf-reader"
 import { UpiOpeningMoves } from "./upi-opening-moves"
-import { CheckAlert, LineHead, type SaveOutcome, type StatementText, StatementFileSection, UnreadableNotice, lineText, saveInChunks, savedOutcome, useStatementReader } from "./statement-shared"
+import { CheckAlert, LineHead, PHONE_FILTER_BAR, PHONE_SAVE_BAR, type SaveOutcome, type StatementText, StatementFileSection, UnreadableNotice, lineText, saveInChunks, savedOutcome, useStatementReader } from "./statement-shared"
 
 // UPI app statement import (Sprint 9e). The PDF is read on this device (the existing reader, with
 // UPI caps: 25 MB, 250 pages); the layout is picked from its header. Then, in order: match each bank
@@ -560,7 +561,7 @@ function UpiReviewSection({
         </div>
       )}
 
-      <div role="radiogroup" aria-label="Show" className="flex flex-wrap gap-2">
+      <div role="radiogroup" aria-label="Show" className={cn("flex flex-wrap gap-2", PHONE_FILTER_BAR)} data-testid="review-filters">
         {FILTERS.map((f) => (
           <label key={f.value} className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm has-checked:border-ink has-checked:font-semibold">
             <input
@@ -603,18 +604,20 @@ function UpiReviewSection({
         </nav>
       )}
 
-      <p className="text-sm font-semibold tabular-nums" aria-live="polite">
-        Ticked: {lineText(totals.ticked)} · Money out {money(totals.outMinor, currency)} · Money in {money(totals.inMinor, currency)}
-      </p>
-      <div className="grid gap-2">
-        {!dupsAnswered && <p className="text-xs text-danger">Answer the possible duplicates first.</p>}
-        {errors && <p className="text-xs text-danger">Fix the highlighted payments.</p>}
-        {outcome && outcome.text && <FormMessage tone={outcome.tone}>{outcome.text}</FormMessage>}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button disabled={blocked || saving} aria-busy={saving} onClick={() => setConfirming(true)}>
-            {saving ? "Saving…" : "Save ticked payments"}
-          </Button>
-          <span className="text-xs text-muted-foreground">Nothing is saved until you confirm.</span>
+      <div className={cn("grid gap-4", PHONE_SAVE_BAR)} data-testid="review-save-bar">
+        <p className="text-sm font-semibold tabular-nums" aria-live="polite">
+          Ticked: {lineText(totals.ticked)} · Money out {money(totals.outMinor, currency)} · Money in {money(totals.inMinor, currency)}
+        </p>
+        <div className="grid gap-2">
+          {!dupsAnswered && <p className="text-xs text-danger">Answer the possible duplicates first.</p>}
+          {errors && <p className="text-xs text-danger">Fix the highlighted payments.</p>}
+          {outcome && outcome.text && <FormMessage tone={outcome.tone}>{outcome.text}</FormMessage>}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button disabled={blocked || saving} aria-busy={saving} onClick={() => setConfirming(true)}>
+              {saving ? "Saving…" : "Save ticked payments"}
+            </Button>
+            <span className="text-xs text-muted-foreground">Nothing is saved until you confirm.</span>
+          </div>
         </div>
       </div>
 

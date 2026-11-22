@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
 import { Ellipsis, Plus, Search, X } from "lucide-react"
 import { type LedgerItem, type PageCursor,
-  type RecurringView, type TransactionTotals, type TransactionsContext, type Filters, type Lookup, ledgerLookup, PERIODS, TYPE_TABS, filtersToQuery, groupByDay, hasActiveFilters, periodLabel, readFilters, toApiFilters } from "@fin-creador/api"
+  type RecurringView, type TransactionTotals, type TransactionsContext, type Filters, type Lookup, ledgerLookup, PERIODS, TYPE_TABS, filtersToQuery, groupByDay, hasActiveFilters, hasNarrowingFilters, periodLabel, readFilters, toApiFilters } from "@fin-creador/api"
 import {
   type DateRange,
   formatPercentFromBasisPoints,
@@ -74,10 +74,16 @@ export function TransactionsView({ context, filters: loaded, range, first, total
   const f: Filters = { ...loaded, ...chosen }
   const href = (next: Partial<Filters>, more: Record<string, string> = {}) => `${pathname}${filtersToQuery({ ...f, ...next }, more)}`
   // Filters reload the page from the server; the URL keeps links and the back button working.
-  const go = (next: Partial<Filters>) => {
+  const go = (next: Partial<Filters>, scroll = false) => {
     setChosen((c) => ({ ...c, ...next }))
-    startNavigation(() => router.replace(href(next), { scroll: false }))
+    startNavigation(() => router.replace(href(next), { scroll }))
   }
+  // Search results view: a search starts at All time (unless another period was picked) and
+  // opens at the top with the results; clearing it goes back to this month.
+  const searching = Boolean(loaded.q)
+  const [filtersOpen, setFiltersOpen] = useState(() => hasNarrowingFilters(loaded))
+  const search = (q: string) => go({ q, period: !loaded.q && f.period === "this-month" ? "all-time" : f.period }, true)
+  const clearSearchHref = href({ q: "", period: f.period === "all-time" ? "this-month" : f.period })
   const replaceUrl = (url: string) => window.history.replaceState(null, "", url)
   // The Add dialog: opened by the topbar's ?add= link (read once, then dropped from the URL)
   // or by a button here. Its type lives in state only; a type switch never touches the URL.
@@ -130,6 +136,46 @@ export function TransactionsView({ context, filters: loaded, range, first, total
     </Link>
   )
 
+  const searchForm = (
+    <form
+      role="search"
+      className="relative"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const q = new FormData(event.currentTarget).get("q")
+        search(typeof q === "string" ? q.trim().slice(0, 100) : "")
+      }}
+    >
+      <label htmlFor="tx-search" className="sr-only">
+        Search
+      </label>
+      <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-subtle" />
+      <input
+        key={f.q}
+        id="tx-search"
+        name="q"
+        type="search"
+        defaultValue={f.q}
+        maxLength={100}
+        placeholder="Note, category, account or amount"
+        className="h-[44px] md:h-11 w-full rounded-lg border border-line-strong bg-surface pr-24 pl-10 text-[16px] text-ink md:text-sm outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+      />
+      <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-1">
+        {f.q && (
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Clear search" onClick={() => go({ q: "", period: f.period === "all-time" ? "this-month" : f.period })}>
+            <X aria-hidden="true" />
+          </Button>
+        )}
+        <Button type="submit" variant="secondary" size="sm">
+          Search
+        </Button>
+      </div>
+    </form>
+  )
+
+  const resultCount = exactCount ?? rows.length
+  const resultText = `${resultCount}${exactCount === null && pages.nextCursor ? "+" : ""} ${resultCount === 1 && !pages.nextCursor ? "result" : "results"} for “${loaded.q}”`
+
   return (
     <>
       <PageHeader
@@ -144,7 +190,36 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         }
       />
 
-      {upcoming && (
+      {searching && (
+        <Card id="search-results" aria-labelledby="search-results-title" className="mb-4 grid gap-4 scroll-mt-24" role="region">
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0">
+              <h2 id="search-results-title" className="font-heading text-xl font-semibold break-words" aria-live="polite">
+                {resultText}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {label}
+                {loaded.type !== "all" && ` · ${tabLabel}`}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" size="sm" aria-expanded={filtersOpen} aria-controls="search-filters" onClick={() => setFiltersOpen((o) => !o)}>
+                {filtersOpen ? "Hide filters" : "Filters"}
+              </Button>
+              <Link
+                href={clearSearchHref}
+                replace
+                className="inline-flex min-h-[44px] items-center px-1 text-sm font-semibold underline underline-offset-4 md:min-h-0"
+              >
+                Clear search
+              </Link>
+            </div>
+          </div>
+          {searchForm}
+        </Card>
+      )}
+
+      {upcoming && !searching && (
         <div className="mb-6">
           <UpcomingSection
             view={upcoming}
@@ -158,124 +233,93 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         </div>
       )}
 
-      <nav aria-label="Type" className="mb-4">
-        <ul className="grid grid-cols-5 gap-1 rounded-xl border border-line bg-surface p-1 md:inline-flex">
-          {TYPE_TABS.map((t) => {
-            const active = t.value === f.type
-            return (
-              <li key={t.value}>
-                <Link
-                  href={href({ type: t.value })}
-                  replace
-                  scroll={false}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex h-[44px] items-center justify-center rounded-lg px-1 text-xs md:text-sm md:min-w-24 md:px-4 font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring md:h-11",
-                    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
-                  )}
-                >
-                  {t.label}
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      </nav>
+      <div id="search-filters" hidden={searching && !filtersOpen}>
+        <nav aria-label="Type" className="mb-4">
+          <ul className="grid grid-cols-5 gap-1 rounded-xl border border-line bg-surface p-1 md:inline-flex">
+            {TYPE_TABS.map((t) => {
+              const active = t.value === f.type
+              return (
+                <li key={t.value}>
+                  <Link
+                    href={href({ type: t.value })}
+                    replace
+                    scroll={false}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex h-[44px] items-center justify-center rounded-lg px-1 text-xs md:text-sm md:min-w-24 md:px-4 font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring md:h-11",
+                      active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
+                    )}
+                  >
+                    {t.label}
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
 
-      <Card className="mb-6 grid gap-4">
-        <form
-          role="search"
-          className="relative"
-          onSubmit={(event) => {
-            event.preventDefault()
-            const q = new FormData(event.currentTarget).get("q")
-            go({ q: typeof q === "string" ? q.trim().slice(0, 100) : "" })
-          }}
-        >
-          <label htmlFor="tx-search" className="sr-only">
-            Search
-          </label>
-          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-subtle" />
-          <input
-            key={f.q}
-            id="tx-search"
-            name="q"
-            type="search"
-            defaultValue={f.q}
-            maxLength={100}
-            placeholder="Note, category, account or amount"
-            className="h-[44px] md:h-11 w-full rounded-lg border border-line-strong bg-surface pr-24 pl-10 text-[16px] text-ink md:text-sm outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-          />
-          <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-1">
-            {f.q && (
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="Clear search" onClick={() => go({ q: "" })}>
-                <X aria-hidden="true" />
-              </Button>
-            )}
-            <Button type="submit" variant="secondary" size="sm">
-              Search
-            </Button>
+        <Card className="mb-6 grid gap-4">
+          {!searching && searchForm}
+
+          <div className="grid items-start gap-4 md:grid-cols-3">
+            <SelectField name="period" label="Date" value={f.period} onChange={(e) => go({ period: e.target.value as Filters["period"] })}>
+              {PERIODS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField name="category" label="Category" value={f.category} onChange={(e) => go({ category: e.target.value })}>
+              <option value="">All categories</option>
+              {(["expense", "income"] as const).map((kind) => (
+                <optgroup key={kind} label={kind === "expense" ? "Expense categories" : "Income sources"}>
+                  {context.categories
+                    .filter((c) => c.kind === kind)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                        {c.archived ? " (archived)" : ""}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </SelectField>
+            <SelectField name="account" label="Account" value={f.account} onChange={(e) => go({ account: e.target.value })}>
+              <option value="">All accounts</option>
+              {context.accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                  {a.archived ? " (archived)" : ""}
+                </option>
+              ))}
+            </SelectField>
           </div>
-        </form>
 
-        <div className="grid items-start gap-4 md:grid-cols-3">
-          <SelectField name="period" label="Date" value={f.period} onChange={(e) => go({ period: e.target.value as Filters["period"] })}>
-            {PERIODS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField name="category" label="Category" value={f.category} onChange={(e) => go({ category: e.target.value })}>
-            <option value="">All categories</option>
-            {(["expense", "income"] as const).map((kind) => (
-              <optgroup key={kind} label={kind === "expense" ? "Expense categories" : "Income sources"}>
-                {context.categories
-                  .filter((c) => c.kind === kind)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                      {c.archived ? " (archived)" : ""}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </SelectField>
-          <SelectField name="account" label="Account" value={f.account} onChange={(e) => go({ account: e.target.value })}>
-            <option value="">All accounts</option>
-            {context.accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.label}
-                {a.archived ? " (archived)" : ""}
-              </option>
-            ))}
-          </SelectField>
-        </div>
-
-        {f.period === "custom" && (
-          <div className="grid gap-4 md:grid-cols-3">
-            <TextField name="from" type="date" label="From" max={today} value={f.from} onChange={(e) => e.target.value && go({ from: e.target.value })} />
-            <TextField name="to" type="date" label="To" max={today} value={f.to} onChange={(e) => e.target.value && go({ to: e.target.value })} />
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex min-h-[44px] items-center gap-2.5 text-sm md:min-h-11">
-            <input
-              type="checkbox"
-              checked={f.showVoided}
-              onChange={(e) => go({ showVoided: e.target.checked })}
-              className="size-4.5 accent-(--color-primary)"
-            />
-            Show voided entries
-          </label>
-          {hasActiveFilters(f) && (
-            <Link href={clearHref} replace scroll={false} className="text-sm font-semibold underline underline-offset-4">
-              Clear filters
-            </Link>
+          {f.period === "custom" && (
+            <div className="grid gap-4 md:grid-cols-3">
+              <TextField name="from" type="date" label="From" max={today} value={f.from} onChange={(e) => e.target.value && go({ from: e.target.value })} />
+              <TextField name="to" type="date" label="To" max={today} value={f.to} onChange={(e) => e.target.value && go({ to: e.target.value })} />
+            </div>
           )}
-        </div>
-      </Card>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="flex min-h-[44px] items-center gap-2.5 text-sm md:min-h-11">
+              <input
+                type="checkbox"
+                checked={f.showVoided}
+                onChange={(e) => go({ showVoided: e.target.checked })}
+                className="size-4.5 accent-(--color-primary)"
+              />
+              Show voided entries
+            </label>
+            {hasActiveFilters(f) && (
+              <Link href={clearHref} replace scroll={false} className="text-sm font-semibold underline underline-offset-4">
+                Clear filters
+              </Link>
+            )}
+          </div>
+        </Card>
+      </div>
 
       <div aria-busy={navigating} className={cn("transition-opacity motion-reduce:transition-none", navigating && "opacity-60")}>
         <section aria-label="Totals for these filters" className="mb-2 grid gap-4 md:grid-cols-2 lg:grid-cols-3 md:[&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1">
@@ -318,6 +362,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         <p className="mb-6 text-xs text-muted-foreground">
           {rangeText(range)}. Transfers between your accounts ({totals.transferCount}) aren&apos;t income or expenses. Voided entries never count.
           {totals.otherCurrencyCount > 0 && ` ${totals.otherCurrencyCount} entries in other currencies are listed but not totalled.`}
+          {searching && ` Totals cover only the entries matching “${loaded.q}”.`}
         </p>
 
         <Card className="px-0 md:px-0">
@@ -480,34 +525,45 @@ function Row({
         {accountChipText(entry, lookup)}
       </Badge>
       <p
+        data-testid="entry-amount"
         className={cn(
-          "shrink-0 text-right text-sm font-semibold tabular-nums",
+          "shrink-0 text-right text-sm font-semibold whitespace-nowrap tabular-nums",
           entry.voided ? "text-muted-foreground line-through" : entry.type === "income" || entry.type === "refund" ? "text-success" : "text-ink"
         )}
       >
         {signedAmount(entry)}
         {entry.voided && <span className="sr-only"> (voided, not counted)</span>}
       </p>
-      <div className="hidden w-52 shrink-0 items-center justify-end gap-1 lg:flex">
-        {canChange && (
-          <>
-            <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Edit ${title}`}>
-              Edit
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onVoid} aria-label={`Void ${title}`}>
-              Void
-            </Button>
-          </>
+      {/* Four fixed slots (Edit, Void, Refund, History) so the actions line up across rows and an
+          edited purchase's four buttons never spill over the amount. */}
+      <div className="hidden w-[17rem] shrink-0 grid-cols-[3.25rem_3.5rem_4.5rem_4.75rem] items-center gap-1 lg:grid">
+        {canChange ? (
+          <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Edit ${title}`}>
+            Edit
+          </Button>
+        ) : (
+          <span />
         )}
-        {canRefund && (
+        {canChange ? (
+          <Button variant="ghost" size="sm" onClick={onVoid} aria-label={`Void ${title}`}>
+            Void
+          </Button>
+        ) : (
+          <span />
+        )}
+        {canRefund ? (
           <Button variant="ghost" size="sm" onClick={onRefund} aria-label={`Refund ${title}`}>
             Refund
           </Button>
+        ) : (
+          <span />
         )}
-        {edited && (
+        {edited ? (
           <Button variant="ghost" size="sm" onClick={onHistory} aria-label={`History of ${title}`}>
             History
           </Button>
+        ) : (
+          <span />
         )}
       </div>
       {(canChange || edited) && (

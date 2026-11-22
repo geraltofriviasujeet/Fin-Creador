@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/shell/app-shell"
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ScrollTable } from "@/components/ui/scroll-table"
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
@@ -518,7 +519,8 @@ function DepositList({ deposits, onOpen }: { deposits: DepositItem[]; onOpen: (k
 function CategoryTable({ view }: { view: InvestmentsView }) {
   const cell = "px-3 py-2 text-right tabular-nums first:pl-4 first:text-left last:pr-4 md:first:pl-5 md:last:pr-5"
   return (
-    <Card className="mt-3 overflow-x-auto px-0 py-1 md:px-0 md:py-1">
+    <Card className="mt-3 overflow-hidden px-0 py-1 md:px-0 md:py-1">
+      <ScrollTable label="Investments by category">
       <table className="w-full min-w-[520px] text-sm">
         <caption className="sr-only">By category</caption>
         <thead>
@@ -556,6 +558,7 @@ function CategoryTable({ view }: { view: InvestmentsView }) {
           </tr>
         </tfoot>
       </table>
+      </ScrollTable>
     </Card>
   )
 }
