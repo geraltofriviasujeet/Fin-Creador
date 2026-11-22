@@ -33,8 +33,22 @@ const PAGES = [
 ] as const
 
 async function expectNoSideScroll(page: Page, where: string) {
-  const { scroll, client } = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }))
-  expect(scroll, `${where}: page scrolls sideways`).toBeLessThanOrEqual(client)
+  const { scroll, client, wide } = await page.evaluate(() => {
+    const client = document.documentElement.clientWidth
+    // The deepest elements that stick out past the screen, to name the culprit in the failure.
+    const wide = [...document.querySelectorAll("body *")]
+      .filter((el) => el.getBoundingClientRect().right > client + 0.5 && ![...el.children].some((c) => c.getBoundingClientRect().right > client + 0.5))
+      .filter((el) => el.checkVisibility())
+      // Inside a box that scrolls or clips sideways is fine: only the page scrolling counts.
+      .filter((el) => {
+        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) if (getComputedStyle(p).overflowX !== "visible") return false
+        return true
+      })
+      .slice(0, 5)
+      .map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 80)} right=${Math.round(el.getBoundingClientRect().right)} "${(el.textContent ?? "").trim().slice(0, 30)}"`)
+    return { scroll: document.documentElement.scrollWidth, client, wide }
+  })
+  expect(scroll, `${where}: page scrolls sideways; wide: ${wide.join(" | ")}`).toBeLessThanOrEqual(client)
 }
 
 /**
@@ -477,9 +491,12 @@ test("UPI import review at phone size: rows as cards, filters and Save in sticky
   await page.getByLabel("Account for Example Bank ··34").selectOption({ label: "HDFC Bank" })
   await expectNoSideScroll(page, "UPI account matching")
   await page.getByRole("button", { name: "Continue" }).click()
-  await page.getByRole("button", { name: "Not now" }).click()
-
+  // Consent comes only when a payee needs a suggestion; this statement may go straight to review.
   const review = page.getByRole("region", { name: "Review the payments" })
+  const notNow = page.getByRole("button", { name: "Not now" })
+  await expect(review.or(notNow).first()).toBeVisible({ timeout: 30_000 })
+  if (await notNow.isVisible()) await notNow.click()
+
   const rows = review.getByRole("list", { name: "Payments" }).getByRole("listitem")
   await expect(rows.first()).toBeVisible()
   await review.getByRole("heading", { name: "Review the payments" }).scrollIntoViewIfNeeded()
