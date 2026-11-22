@@ -467,9 +467,61 @@ function Schedule({ item, today, onOpen }: { item: LoanItem; today: string; onOp
   const archived = item.loan.archivedAt !== null
   const isOpen = (d: DueItem) => d.status === "pending" && !d.notNeeded
   const payable = new Set(archived ? [] : item.items.filter((d) => isOpen(d) && (d.id === item.next?.id || d.dueDate < today)).map((d) => d.id))
+  const status = (d: DueItem) => (
+    <>
+      {d.notNeeded ? (
+        <span className="text-xs text-muted-foreground">Not needed</span>
+      ) : d.status === "paid" ? (
+        <Badge tone="positive">Paid {d.payment && fullDate(d.payment.paidOn)}</Badge>
+      ) : isOpen(d) && d.dueDate < today ? (
+        <Badge tone="negative">Overdue</Badge>
+      ) : (
+        <span className="text-xs text-muted-foreground">{STATUS_TEXT[d.status]}</span>
+      )}
+    </>
+  )
+  const actions = (d: DueItem) => (
+    <>
+      {d.payment && (
+        <>
+          <Button variant="ghost" size="sm" aria-label={`Edit payment for ${d.label}`} onClick={() => onOpen({ kind: "editPayment", item: d, payment: d.payment! })}>
+            Edit
+          </Button>
+          <Button variant="ghost" size="sm" aria-label={`Void payment for ${d.label}`} onClick={() => onOpen({ kind: "void", item: d, payment: d.payment! })}>
+            Void
+          </Button>
+        </>
+      )}
+      {payable.has(d.id) && (
+        <Button variant="ghost" size="sm" aria-label={`Pay ${d.label}`} onClick={() => onOpen({ kind: "pay", item: d })}>
+          Pay
+        </Button>
+      )}
+    </>
+  )
   return (
     <div className="grid gap-1">
-      <div className="max-h-[360px] overflow-auto rounded-lg border border-line bg-surface">
+      {/* Phones (12a-3): one stacked row per instalment instead of a seven-column table. */}
+      <ol aria-label={`Schedule of ${item.name}`} className="max-h-[420px] divide-y divide-line overflow-y-auto rounded-lg border border-line bg-surface md:hidden" data-testid="loan-schedule-stacked">
+        {item.items.map((d) => (
+          <li key={d.id} className="grid gap-1 px-3 py-2.5 text-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span className="font-semibold">{d.label}</span>
+              <span className="font-semibold tabular-nums">{d.notNeeded ? "—" : money(d.amountMinor, c)}</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Due {fullDate(d.dueDate)}
+              {d.principalMinor !== null && ` · Principal ${money(d.principalMinor, c)}`}
+              {d.interestMinor !== null && ` · Interest ${money(d.interestMinor, c)}`}
+            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>{status(d)}</span>
+              <span className="flex flex-wrap justify-end gap-1">{actions(d)}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <div className="max-h-[360px] overflow-auto rounded-lg border border-line bg-surface max-md:hidden">
         <table className="w-full min-w-[560px] text-sm">
           <caption className="sr-only">Schedule of {item.name}</caption>
           <thead className="sticky top-0 bg-surface">
@@ -507,34 +559,8 @@ function Schedule({ item, today, onOpen }: { item: LoanItem; today: string; onOp
                 <td className={td}>{d.notNeeded ? "—" : money(d.amountMinor, c)}</td>
                 <td className={td}>{d.principalMinor === null ? "—" : money(d.principalMinor, c)}</td>
                 <td className={td}>{d.interestMinor === null ? "—" : money(d.interestMinor, c)}</td>
-                <td className={td}>
-                  {d.notNeeded ? (
-                    <span className="text-xs text-muted-foreground">Not needed</span>
-                  ) : d.status === "paid" ? (
-                    <Badge tone="positive">Paid {d.payment && fullDate(d.payment.paidOn)}</Badge>
-                  ) : isOpen(d) && d.dueDate < today ? (
-                    <Badge tone="negative">Overdue</Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">{STATUS_TEXT[d.status]}</span>
-                  )}
-                </td>
-                <td className={cn(td, "whitespace-nowrap")}>
-                  {d.payment && (
-                    <>
-                      <Button variant="ghost" size="sm" aria-label={`Edit payment for ${d.label}`} onClick={() => onOpen({ kind: "editPayment", item: d, payment: d.payment! })}>
-                        Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" aria-label={`Void payment for ${d.label}`} onClick={() => onOpen({ kind: "void", item: d, payment: d.payment! })}>
-                        Void
-                      </Button>
-                    </>
-                  )}
-                  {payable.has(d.id) && (
-                    <Button variant="ghost" size="sm" aria-label={`Pay ${d.label}`} onClick={() => onOpen({ kind: "pay", item: d })}>
-                      Pay
-                    </Button>
-                  )}
-                </td>
+                <td className={td}>{status(d)}</td>
+                <td className={cn(td, "whitespace-nowrap")}>{actions(d)}</td>
               </tr>
             ))}
           </tbody>

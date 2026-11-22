@@ -1,5 +1,6 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, addEntry, dialog, incomeAccountRow, incomeSources, signUpConfirmed, textWhenDialogCloses, toast, uniqueEmail } from "./helpers"
+import { createClient } from "@supabase/supabase-js"
+import { PASSWORD, addBank, addCash, addEntry, dialog, incomeAccountRow, incomeSources, signUpConfirmed, textWhenDialogCloses, toast, uniqueEmail } from "./helpers"
 
 // Transactions page end to end, against the throwaway local Supabase. One user per test.
 // Screenshots (final real-data pages only) go to e2e-screenshots/ for visual review.
@@ -289,4 +290,106 @@ test("?add= deep links are consumed once: a type switch and a void never open Ad
   await page.goBack()
   await expect(page.getByRole("heading", { level: 1, name: "Transactions" })).toBeVisible()
   await expect(addDialogs(page)).toHaveCount(0)
+})
+
+// 12a-3: a search opens the results view: a header with the count and Clear search, no Upcoming
+// card, the filters folded away, and All time unless another period is picked. Totals cover the
+// matching entries only. Clearing the search gives the normal page back.
+test("search results view: from the top bar and the search box, all time, totals of the matches only, Clear search", async ({ page }) => {
+  const email = uniqueEmail("tx-search")
+  await signUpConfirmed(page, "Test Person", email)
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000", asOf: "2025-01-01" })
+  await addEntry(page, { amount: "400", category: "Groceries", from: "HDFC Bank ··4821", note: "Groceries run" })
+  await addEntry(page, { amount: "90", category: "Food & dining", from: "HDFC Bank ··4821", note: "Tea" })
+  // A matching entry from last year, outside This month.
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } })
+  expect((await supabase.auth.signInWithPassword({ email, password: PASSWORD })).error).toBeNull()
+  const account = await supabase.from("accounts").select("id").eq("kind", "bank").single()
+  const groceries = await supabase.from("categories").select("id").eq("kind", "expense").eq("name", "Groceries").single()
+  expect(account.error ?? groceries.error).toBeNull()
+  const old = await supabase.rpc("record_transaction", {
+    p_type: "expense",
+    p_idempotency_key: crypto.randomUUID(),
+    p_amount_minor: 250_00,
+    p_occurred_on: "2025-06-10",
+    p_account_id: account.data!.id,
+    p_category_id: groceries.data!.id,
+    p_note: "Old groceries",
+  })
+  expect(old.error).toBeNull()
+
+  await page.goto("/transactions")
+  const upcomingBefore = await page.getByRole("heading", { name: "Upcoming", exact: true }).count()
+  const results = page.getByRole("region", { name: /results? for “groceries”$/ })
+
+  // From the top bar.
+  await page.getByRole("banner").getByRole("searchbox").fill("groceries")
+  await page.getByRole("banner").getByRole("searchbox").press("Enter")
+  await expect(page).toHaveURL(/\/transactions\?q=groceries$/)
+  await expect(results.getByRole("heading", { name: "2 results for “groceries”" })).toBeVisible()
+  await expect(results).toContainText("All time")
+  await expect(page.getByRole("heading", { name: "Upcoming", exact: true })).toHaveCount(0)
+  await expect(row(page, "Old groceries")).toBeVisible()
+  await expect(row(page, "Groceries run")).toBeVisible()
+  await expect(row(page, "Tea")).toHaveCount(0)
+  // Totals: the two matches only (₹400 + ₹250), not the ₹90 tea.
+  await expect(stat(page, "Expenses")).toContainText("₹650")
+  await expect(page.getByText("Totals cover only the entries matching “groceries”.", { exact: false })).toBeVisible()
+  // The results header is at the top of the page content, in view.
+  await expect(results).toBeInViewport()
+  await shot(page, "tx-search-results")
+
+  // The filters open on request and still narrow it.
+  await expect(page.getByLabel("Date", { exact: true })).toBeHidden()
+  await results.getByRole("button", { name: "Filters" }).click()
+  await expect(page.getByLabel("Date", { exact: true })).toHaveValue("all-time")
+  await page.getByLabel("Date", { exact: true }).selectOption("this-month")
+  await expect(page).toHaveURL(/period=this-month/)
+  await expect(results.getByRole("heading", { name: "1 result for “groceries”" })).toBeVisible()
+  await expect(stat(page, "Expenses")).toContainText("₹400")
+
+  // Clear search: the normal page again.
+  await results.getByRole("link", { name: "Clear search" }).click()
+  await expect(page).toHaveURL(/\/transactions$/)
+  await expect(page.getByRole("region", { name: /results? for/ })).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: "Upcoming", exact: true })).toHaveCount(upcomingBefore)
+  await expect(page.getByLabel("Date", { exact: true })).toHaveValue("this-month")
+  await expect(row(page, "Tea")).toBeVisible()
+
+  // From the Transactions search box: the same view, All time.
+  await page.getByRole("main").getByRole("searchbox").fill("groceries")
+  await page.getByRole("main").getByRole("button", { name: "Search", exact: true }).click()
+  await expect(results.getByRole("heading", { name: "2 results for “groceries”" })).toBeVisible()
+  await expect(page).toHaveURL(/\/transactions\?q=groceries$/)
+})
+
+// 12a-3 bug: an edited purchase has four actions (Edit, Void, Refund, History); they spilled out
+// of their column over the amount, so the amount looked doubled and Edit seemed to vanish.
+test("an edited entry shows one amount and every action, none over the amount", async ({ page }) => {
+  await newUserWithBank(page, "tx-edited-row")
+  await addEntry(page, { amount: "250", category: "Groceries", from: "HDFC Bank ··4821", note: "Weekly veg" })
+  await page.getByRole("button", { name: "Edit Weekly veg" }).click()
+  const edit = dialog(page, "Edit expense")
+  await edit.getByLabel("Amount").fill("300")
+  await edit.getByRole("button", { name: "Save changes" }).click()
+  await expect(edit).toBeHidden()
+
+  const entry = row(page, "Weekly veg")
+  await expect(entry).toContainText("Edited")
+  const amount = entry.getByTestId("entry-amount")
+  await expect(amount).toHaveText(/^[−-]₹300(\.00)?$/)
+  await expect(entry).not.toContainText("₹250")
+  const amountBox = (await amount.boundingBox())!
+  for (const name of ["Edit Weekly veg", "Void Weekly veg", "Refund Weekly veg", "History of Weekly veg"]) {
+    const button = entry.getByRole("button", { name, exact: true })
+    await expect(button).toBeVisible()
+    const box = (await button.boundingBox())!
+    expect(box.x, `${name} starts after the amount`).toBeGreaterThanOrEqual(amountBox.x + amountBox.width)
+  }
+  // The actions line up with an unedited row's.
+  await addEntry(page, { amount: "80", category: "Groceries", from: "HDFC Bank ··4821", note: "Milk" })
+  const editX = async (note: string) => (await row(page, note).getByRole("button", { name: `Edit ${note}`, exact: true }).boundingBox())!.x
+  expect(await editX("Milk")).toBe(await editX("Weekly veg"))
+  await shot(page, "tx-edited-row")
 })

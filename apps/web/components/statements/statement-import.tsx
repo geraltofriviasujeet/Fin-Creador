@@ -31,6 +31,7 @@ import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { importMatchesAction, importStatementAction, saveImportLinesAction } from "@/app/(app)/loans-liabilities/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
 import { Button } from "@/components/ui/button"
+import { cn } from "cn"
 import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -46,6 +47,7 @@ import {
   saveInChunks,
   savedOutcome,
   useStatementReader,
+  PHONE_SAVE_BAR,
 } from "./statement-shared"
 
 // Card statement import (Sprint 9a.3 and 9a.4): read the PDF in the browser, then review it: a
@@ -357,7 +359,7 @@ function StatementReview({
         )}
       </fieldset>
 
-      <div className="grid gap-2">
+      <div className={cn("grid gap-2", PHONE_SAVE_BAR)} data-testid="review-save-bar">
         {blockers.includes("check_not_confirmed") && <p className="text-xs text-danger">Confirm you have compared the lines with your PDF.</p>}
         {blockers.includes("line_errors") && <p className="text-xs text-danger">Fix the highlighted lines.</p>}
         {blockers.includes("statement_date_missing") && <p className="text-xs text-danger">Enter the statement date.</p>}

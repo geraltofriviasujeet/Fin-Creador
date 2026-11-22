@@ -4,6 +4,7 @@ import { type CategorySpend, type DateRange, addMinor, formatMoney, formatPercen
 import { cn } from "cn"
 import { TimeChart } from "@/components/dashboard/time-chart"
 import { money, rangeText } from "@/components/transactions/display"
+import { ScrollTable } from "@/components/ui/scroll-table"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { monthLabel } from "./range-bar"
 
@@ -74,7 +75,7 @@ export function CashFlowSection({ data, categories, chartRange }: { data: CashFl
             summary={`Income and expenses per month, ${rangeText(chartRange)}: income ${money(totals.incomeMinor, currency)}, expenses ${money(totals.expenseMinor, currency)}.`}
           />
 
-          <div className="overflow-x-auto">
+          <ScrollTable label="Cash flow by month">
             <table className="w-full min-w-[40rem] text-left text-sm tabular-nums">
               <caption className="pb-2 text-left text-xs text-muted-foreground">Newest month first. Each month opens on Transactions.</caption>
               <thead>
@@ -115,7 +116,7 @@ export function CashFlowSection({ data, categories, chartRange }: { data: CashFl
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollTable>
 
           {report.topCategories.length > 0 && (
             <div className="grid gap-2">

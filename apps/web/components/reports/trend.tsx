@@ -3,6 +3,7 @@ import type { TrendData } from "@fin-creador/api"
 import { type SeriesPoint, formatMoney } from "@fin-creador/domain"
 import { cn } from "cn"
 import { fullDate, money } from "@/components/transactions/display"
+import { ScrollTable } from "@/components/ui/scroll-table"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { REPORTS_PATH, monthLabel } from "./range-bar"
 
@@ -195,7 +196,7 @@ export function TrendSection({ data }: { data: TrendData | null }) {
 
           <details className="text-sm">
             <summary className="cursor-pointer text-xs font-semibold text-muted-foreground underline-offset-4 hover:underline">Show as a table</summary>
-            <div className="overflow-x-auto">
+            <ScrollTable label="Net worth trend table">
               <table className="mt-2 w-full min-w-[28rem] text-left text-sm tabular-nums">
                 <caption className="pb-1 text-left text-xs text-muted-foreground">{TREND_EXCLUDES}.</caption>
                 <thead>
@@ -219,7 +220,7 @@ export function TrendSection({ data }: { data: TrendData | null }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollTable>
           </details>
         </>
       )}

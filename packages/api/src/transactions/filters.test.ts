@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { filtersToQuery, groupByDay, periodRange, readFilters, toApiFilters } from "./filters"
+import { ALL_TIME_RANGE, filtersToQuery, groupByDay, hasActiveFilters, hasNarrowingFilters, periodRange, readFilters, toApiFilters } from "./filters"
 
 const today = "2026-10-23"
 const read = (query: string) => readFilters(new URLSearchParams(query), today)
@@ -24,6 +24,18 @@ describe("URL filters", () => {
     expect(periodRange(read("period=custom&from=2026-09-15&to=2026-09-01"), today)).toEqual({ start: "2026-09-01", end: "2026-09-15" })
   })
 
+  it("a search defaults to all time; a chosen period still narrows it", () => {
+    expect(read("q=rent")).toMatchObject({ q: "rent", period: "all-time" })
+    expect(periodRange(read("q=rent"), today)).toEqual(ALL_TIME_RANGE)
+    expect(read("q=rent&period=this-month").period).toBe("this-month")
+    expect(filtersToQuery(read("q=rent"))).toBe("?q=rent")
+    expect(filtersToQuery({ ...read("q=rent"), period: "this-month" })).toBe("?period=this-month&q=rent")
+    expect(filtersToQuery({ ...read(""), period: "all-time" })).toBe("?period=all-time")
+    expect(hasNarrowingFilters(read("q=rent"))).toBe(false)
+    expect(hasNarrowingFilters(read("q=rent&period=this-month"))).toBe(true)
+    expect(hasActiveFilters(read("q=rent"))).toBe(true)
+  })
+
   it("last month crosses the year boundary in January", () => {
     expect(periodRange({ period: "last-month", from: "", to: "" }, "2027-01-05")).toEqual({ start: "2026-12-01", end: "2026-12-31" })
   })
@@ -31,7 +43,7 @@ describe("URL filters", () => {
 
 describe("database filters", () => {
   it("leaves the type out on the All tab and keeps the rest", () => {
-    const f = read("type=all&category=c0000000-0000-4000-8000-000000000001&q=rent&voided=1")
+    const f = read("type=all&period=this-month&category=c0000000-0000-4000-8000-000000000001&q=rent&voided=1")
     expect(toApiFilters(f, periodRange(f, today))).toEqual({
       from: "2026-10-01", to: "2026-10-31", type: null, categoryId: "c0000000-0000-4000-8000-000000000001",
       accountId: null, query: "rent", includeVoided: true,

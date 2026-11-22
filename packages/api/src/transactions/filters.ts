@@ -18,6 +18,7 @@ export const PERIODS = [
   { value: "this-month", label: "This month" },
   { value: "last-month", label: "Last month" },
   { value: "this-year", label: "This year" },
+  { value: "all-time", label: "All time" },
   { value: "custom", label: "Custom range" },
 ] as const
 export type Period = (typeof PERIODS)[number]["value"]
@@ -35,6 +36,14 @@ export type Filters = {
 
 type Params = { get(name: string): string | null }
 
+/** "All time" as a date range: every entry the database has, past or scheduled. */
+export const ALL_TIME_RANGE: DateRange = { start: "1900-01-01", end: "9999-12-31" }
+
+/** The period a URL without ?period= means: a search looks at all time, the list at this month. */
+export function defaultPeriod(f: Pick<Filters, "q">): Period {
+  return f.q ? "all-time" : "this-month"
+}
+
 const oneOf = <T extends string>(values: readonly { value: T }[], v: string | null, fallback: T): T =>
   values.some((x) => x.value === v) ? (v as T) : fallback
 
@@ -42,7 +51,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const uuidOrEmpty = (v: string | null) => (v && UUID.test(v) ? v : "")
 
 export function readFilters(params: Params, today: IsoDate): Filters {
-  const period = oneOf(PERIODS, params.get("period"), "this-month")
+  const q = (params.get("q") ?? "").trim().slice(0, 100)
+  const period = oneOf(PERIODS, params.get("period"), defaultPeriod({ q }))
   const month = monthRange(today)
   const from = params.get("from") ?? ""
   const to = params.get("to") ?? ""
@@ -53,7 +63,7 @@ export function readFilters(params: Params, today: IsoDate): Filters {
     to: isIsoDate(to) ? to : today,
     category: uuidOrEmpty(params.get("category")),
     account: uuidOrEmpty(params.get("account")),
-    q: (params.get("q") ?? "").trim().slice(0, 100),
+    q,
     showVoided: params.get("voided") === "1",
   }
 }
@@ -62,7 +72,7 @@ export function readFilters(params: Params, today: IsoDate): Filters {
 export function filtersToQuery(f: Filters, extra: Record<string, string> = {}): string {
   const p = new URLSearchParams()
   if (f.type !== "all") p.set("type", f.type)
-  if (f.period !== "this-month") p.set("period", f.period)
+  if (f.period !== defaultPeriod(f)) p.set("period", f.period)
   if (f.period === "custom") {
     p.set("from", f.from)
     p.set("to", f.to)
@@ -83,6 +93,8 @@ export function periodRange(f: Pick<Filters, "period" | "from" | "to">, today: I
       return previousMonthRange(today)
     case "this-year":
       return yearRange(today)
+    case "all-time":
+      return ALL_TIME_RANGE
     case "custom":
       return f.from <= f.to ? { start: f.from, end: f.to } : { start: f.to, end: f.from }
     default:
@@ -128,7 +140,12 @@ export function toApiFilters(f: Filters, range: DateRange): TransactionFilters {
 }
 
 export function hasActiveFilters(f: Filters): boolean {
-  return f.type !== "all" || f.period !== "this-month" || Boolean(f.category || f.account || f.q) || f.showVoided
+  return f.type !== "all" || f.period !== defaultPeriod(f) || Boolean(f.category || f.account || f.q) || f.showVoided
+}
+
+/** Filters other than the search itself (the search results view opens its filters when one is set). */
+export function hasNarrowingFilters(f: Filters): boolean {
+  return f.type !== "all" || f.period !== defaultPeriod(f) || Boolean(f.category || f.account) || f.showVoided
 }
 
 /** Group rows by date, keeping order. */

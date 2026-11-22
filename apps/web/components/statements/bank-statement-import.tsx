@@ -34,6 +34,7 @@ import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { bankImportMatchesAction, saveBankImportLinesAction } from "@/app/(app)/income/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
 import { Button } from "@/components/ui/button"
+import { cn } from "cn"
 import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -50,6 +51,8 @@ import {
   saveInChunks,
   savedOutcome,
   useStatementReader,
+  PHONE_FILTER_BAR,
+  PHONE_SAVE_BAR,
 } from "./statement-shared"
 
 // Bank account statement import (Sprint 9b): read the PDF or a CSV in the browser (PNB savings layout
@@ -247,7 +250,7 @@ function BankReviewSection({
         </Button>
       </div>
 
-      <div role="radiogroup" aria-label="Show" className="flex flex-wrap gap-2">
+      <div role="radiogroup" aria-label="Show" className={cn("flex flex-wrap gap-2", PHONE_FILTER_BAR)} data-testid="review-filters">
         {FILTERS.map((f) => (
           <label key={f.value} className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm has-checked:border-ink has-checked:font-semibold">
             <input
@@ -299,20 +302,22 @@ function BankReviewSection({
         </nav>
       )}
 
-      <p className="text-sm font-semibold tabular-nums" aria-live="polite">
-        Ticked: {lineText(totals.ticked)} · Money out {money(totals.outMinor, c)} · Money in {money(totals.inMinor, c)}
-      </p>
+      <div className={cn("grid gap-4", PHONE_SAVE_BAR)} data-testid="review-save-bar">
+        <p className="text-sm font-semibold tabular-nums" aria-live="polite">
+          Ticked: {lineText(totals.ticked)} · Money out {money(totals.outMinor, c)} · Money in {money(totals.inMinor, c)}
+        </p>
 
-      <div className="grid gap-2">
-        {blockers.includes("check_not_confirmed") && <p className="text-xs text-danger">Confirm you have compared the lines with your PDF.</p>}
-        {blockers.includes("line_errors") && <p className="text-xs text-danger">Fix the highlighted lines.</p>}
-        {blockers.includes("nothing_ticked") && Object.keys(results).length === 0 && <p className="text-xs text-muted-foreground">Tick at least one line.</p>}
-        {outcome && outcome.text && <FormMessage tone={outcome.tone}>{outcome.text}</FormMessage>}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button disabled={blockers.length > 0 || saving} aria-busy={saving} onClick={() => setConfirming(true)}>
-            {saving ? "Saving…" : "Save ticked lines"}
-          </Button>
-          <span className="text-xs text-muted-foreground">Nothing is saved until you confirm.</span>
+        <div className="grid gap-2">
+          {blockers.includes("check_not_confirmed") && <p className="text-xs text-danger">Confirm you have compared the lines with your PDF.</p>}
+          {blockers.includes("line_errors") && <p className="text-xs text-danger">Fix the highlighted lines.</p>}
+          {blockers.includes("nothing_ticked") && Object.keys(results).length === 0 && <p className="text-xs text-muted-foreground">Tick at least one line.</p>}
+          {outcome && outcome.text && <FormMessage tone={outcome.tone}>{outcome.text}</FormMessage>}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button disabled={blockers.length > 0 || saving} aria-busy={saving} onClick={() => setConfirming(true)}>
+              {saving ? "Saving…" : "Save ticked lines"}
+            </Button>
+            <span className="text-xs text-muted-foreground">Nothing is saved until you confirm.</span>
+          </div>
         </div>
       </div>
 

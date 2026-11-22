@@ -89,12 +89,13 @@ export function PlanModal({ plan, madeOn, reopened, open, onOpenChange, link, cu
         description={heading.subline}
         actions={
           view === "plan" && (
-            <Button type="button" variant="secondary" onClick={saveAsPdf}>
+            // On phones Save as PDF sits in the fixed footer instead (12a-3).
+            <Button type="button" variant="secondary" onClick={saveAsPdf} className="max-md:hidden">
               Save as PDF
             </Button>
           )
         }
-        className="max-w-4xl md:max-h-[90dvh] md:overflow-y-auto md:pb-0"
+        className="max-w-4xl md:max-h-[90dvh] md:overflow-y-auto md:pb-0 max-md:h-[calc(var(--fc-vvh,100dvh)-env(safe-area-inset-top))]"
       >
         {view === "goal" && link ? (
           <div className="md:pb-6">
@@ -125,12 +126,16 @@ export function PlanModal({ plan, madeOn, reopened, open, onOpenChange, link, cu
                   }
                 : {})}
             />
-            <div className="sticky bottom-0 z-10 -mx-5 mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface px-5 py-3 md:-mx-6 md:px-6 md:py-4">
+            {/* Phones: the footer stays at the bottom of the full-height sheet while the plan scrolls. */}
+            <div data-testid="plan-footer" className="sticky bottom-0 z-10 mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface py-3 max-md:-mx-1 max-md:mt-auto max-md:px-1 md:-mx-6 md:px-6 md:py-4">
               <button type="button" onClick={showSources} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-deep underline-offset-2 hover:underline">
                 View data sources <ChevronRight aria-hidden="true" className="size-4" />
               </button>
               <div className="flex flex-wrap items-center gap-2">
                 {!link && !plan.candidates && <span className="text-xs text-muted-foreground">Not saved, so it can’t be added to your goals. Ask again to make it once more.</span>}
+                <Button type="button" variant="secondary" onClick={saveAsPdf} className="md:hidden">
+                  Save as PDF
+                </Button>
                 <DialogClose render={<Button type="button" variant="secondary" />}>Close</DialogClose>
                 {link && !linked && !plan.candidates && (
                   <Button type="button" variant="primary" onClick={() => setView("goal")}>

@@ -144,30 +144,54 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
+      # Two commits of the PR's merge ref: HEAD^1 is the base branch, so the diff is the PR's own.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2
+
+      # A pull request that only changes docs/** or Markdown skips the E2E steps; the job still
+      # reports success, so the required check passes. Any other event runs the full suite.
+      - name: Docs-only change?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          # A failing git diff fails the step (bash -e), never skips the tests.
+          files="$(git diff --name-only HEAD^1 HEAD)"
+          code="$(printf '%s\n' "$files" | grep -vE '^docs/|\.md$|^$' || true)"
+          if [ "$EVENT" = "pull_request" ] && [ -z "$code" ]; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            echo "Only docs/** or *.md changed: E2E skipped."
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.scope.outputs.docs_only != 'true'
         with:
           node-version: 24
           cache: npm
 
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        if: steps.scope.outputs.docs_only != 'true'
         with:
           version: 2.111.0 # keep in step with the CLI used locally
 
       - name: Install dependencies
+        if: steps.scope.outputs.docs_only != 'true'
         run: npm ci
 
       # Throwaway Supabase on the runner: Postgres (with all migrations), Auth, the API
       # gateway, PostgREST and the Mailpit test inbox. Never the hosted project.
       - name: Start local Supabase
+        if: steps.scope.outputs.docs_only != 'true'
         run: supabase start -x realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       # Fictional instruments for the Investments E2E tests and one test knowledge base passage
       # for Roma's (the throwaway database only).
       - name: Seed E2E instruments
+        if: steps.scope.outputs.docs_only != 'true'
         run: |
           eval "$(supabase status -o env | grep -E '^DB_URL=')"
           psql "$DB_URL" -f apps/web/e2e/fixtures/instruments.sql
@@ -175,6 +199,7 @@ jobs:
 
       # Only the public URL and the public (publishable/anon) key are exported.
       - name: Point the web app at the local Supabase
+        if: steps.scope.outputs.docs_only != 'true'
         run: |
           eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|PUBLISHABLE_KEY)=')"
           {
@@ -184,24 +209,26 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Build web
+        if: steps.scope.outputs.docs_only != 'true'
         run: npm run build
 
       # Uses the Google Chrome preinstalled on the runner (Playwright channel "chrome").
       # E2E_DB_URL (the runner's local database, never a hosted one) is only for this step: the
       # CSV export measurement seeds 10,000 rows there (e2e/reports-export-scale.spec.ts).
       - name: Run E2E tests
+        if: steps.scope.outputs.docs_only != 'true'
         run: |
           eval "$(supabase status -o env | grep -E '^DB_URL=')"
           E2E_DB_URL="$DB_URL" npm run test:e2e
 
       # Diagnostics only: the local Auth server's log (throwaway test users, no real data).
       - name: Show local Auth log
-        if: failure()
+        if: failure() && steps.scope.outputs.docs_only != 'true'
         run: docker logs "$(docker ps --format '{{.Names}}' | grep -m1 supabase_auth)" 2>&1 | tail -n 200
 
       # Screenshots of the Income page at desktop, tablet and phone widths, for review.
       - name: Upload E2E screenshots
-        if: always()
+        if: always() && steps.scope.outputs.docs_only != 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-screenshots
@@ -210,7 +237,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Playwright report
-        if: failure()
+        if: failure() && steps.scope.outputs.docs_only != 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
@@ -220,5 +247,5 @@ jobs:
           retention-days: 7
 
       - name: Stop Supabase
-        if: always()
+        if: always() && steps.scope.outputs.docs_only != 'true'
         run: supabase stop --no-backup

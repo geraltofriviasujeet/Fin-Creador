@@ -2,9 +2,10 @@
 
 import { useEffect, useId, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Sparkles } from "lucide-react"
+import { History, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { controlClasses } from "@/components/ui/input"
 import type { ChatResponseBody } from "@/lib/ai/handle"
@@ -109,6 +110,7 @@ function Conversation({
   const [failure, setFailure] = useState<string | null>(null)
   const [consent, setConsent] = useState<Consent>("ask")
   const [intake, setIntake] = useState<{ question: string; draft: PlanRequest } | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
   // The props the server sent after the address moved (see RomaChat) replace what was shown.
   const [shown, setShown] = useState({ open, initialConversations })
   if (shown.open !== open || shown.initialConversations !== initialConversations) {
@@ -211,17 +213,36 @@ function Conversation({
     formRef.current?.requestSubmit()
   }
 
-  const history = (
-    <RomaHistory conversations={conversations} currentId={conversationId} timeZone={timeZone} onNew={startNew} onDeleted={deleted} />
+  // Below lg (12a-3) the list opens from a History button as a sheet, so the question box and
+  // the latest answer come first; opening a conversation or starting a new one closes it.
+  const history = (close?: () => void) => (
+    <RomaHistory
+      conversations={conversations}
+      currentId={conversationId}
+      timeZone={timeZone}
+      onNew={() => {
+        startNew()
+        close?.()
+      }}
+      onOpen={close}
+      onDeleted={deleted}
+    />
   )
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start">
       <div className="grid min-w-0 gap-4">
-        <details className="rounded-2xl border border-line bg-surface p-4 lg:hidden">
-          <summary className="cursor-pointer text-sm font-semibold text-ink">Past conversations ({conversations.length})</summary>
-          <div className="mt-3">{history}</div>
-        </details>
+        <div className="flex justify-end lg:hidden">
+          <Button type="button" variant="secondary" size="sm" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">
+            <History aria-hidden="true" />
+            History ({conversations.length})
+          </Button>
+        </div>
+        <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+          <DialogContent eyebrow="Roma" title="History">
+            {history(() => setHistoryOpen(false))}
+          </DialogContent>
+        </Dialog>
         {notice && <FormMessage tone="info">{notice}</FormMessage>}
         {turns.length === 0 && (
           <div className="grid gap-1">
@@ -331,7 +352,7 @@ function Conversation({
         )}
       </div>
       <aside className="hidden lg:sticky lg:top-4 lg:block">
-        <Card>{history}</Card>
+        <Card>{history()}</Card>
       </aside>
     </div>
   )
@@ -409,10 +430,10 @@ function Reply({
         <tbody className="divide-y divide-line">
           {reply.figures.map((f, i) => (
             <tr key={i}>
-              <th scope="row" className="px-3 py-2 text-left font-normal text-muted-foreground">
+              <th scope="row" className="px-3 py-2 text-left font-normal break-words text-muted-foreground">
                 {f.label}
               </th>
-              <td className="px-3 py-2 text-right font-semibold text-ink tabular-nums">{f.value}</td>
+              <td className="px-3 py-2 text-right font-semibold whitespace-nowrap text-ink tabular-nums">{f.value}</td>
             </tr>
           ))}
         </tbody>
@@ -433,14 +454,14 @@ function Reply({
       ),
   )
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       {reply.checks?.map((c, i) => (
-        <div key={i} className="rounded-xl border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
+        <div key={i} className="min-w-0 rounded-xl border border-line border-l-4 border-l-brand-deep bg-surface px-3 py-2">
           <p className="text-xs font-semibold text-muted-foreground">
             {c.kind === "trip" ? "Trip check" : c.kind === "what_if" ? "What if" : "Goal check"} · {c.goal}
             {c.web ? " · From your records" : ""}
           </p>
-          <p className="font-heading text-lg font-bold text-ink">{c.verdict}</p>
+          <p className="font-heading text-lg font-bold break-words text-ink">{c.verdict}</p>
           {c.caveat && <p className="text-sm text-muted-foreground">{c.caveat}</p>}
           {c.comparison && <WhatIfRows comparison={c.comparison} />}
           {c.lines && c.lines.length > 0 && (
@@ -460,7 +481,7 @@ function Reply({
           )}
         </div>
       ))}
-      <p className="text-sm whitespace-pre-line text-ink">{withBold(reply.answer)}</p>
+      <p className="text-sm break-words whitespace-pre-line text-ink">{withBold(reply.answer)}</p>
       {reply.tax && <TaxEstimate tax={reply.tax} />}
       {collapse ? (
         <details className="rounded-xl border border-line">
@@ -494,7 +515,26 @@ function Reply({
 /** A goal "what if" (10.7a): the goal as it is and with the change, every value formatted in code. */
 function WhatIfRows({ comparison }: { comparison: NonNullable<NonNullable<Extract<ChatResponseBody, { status: "answer" }>["checks"]>[number]["comparison"]> }) {
   return (
-    <div className="mt-2 overflow-x-auto">
+    <>
+      {/* Phones (below md): each row stacked, so three columns never squeeze or scroll (12a-3). */}
+      <dl className="mt-2 grid divide-y divide-line text-sm md:hidden" data-testid="what-if-stacked">
+        {comparison.rows.map((row) => (
+          <div key={row.label} className="grid gap-0.5 py-1.5">
+            <dt className="text-muted-foreground">{row.label}</dt>
+            <dd className="flex flex-wrap justify-between gap-x-3 text-ink tabular-nums">
+              <span>
+                <span className="text-xs text-muted-foreground">{comparison.before}: </span>
+                {row.before}
+              </span>
+              <span className="font-semibold">
+                <span className="text-xs font-normal text-muted-foreground">{comparison.after}: </span>
+                {row.after}
+              </span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    <div className="mt-2 overflow-x-auto max-md:hidden">
       <table className="w-full text-sm">
         <caption className="sr-only">The goal as it is and with the change</caption>
         <thead className="text-xs text-muted-foreground">
@@ -521,6 +561,7 @@ function WhatIfRows({ comparison }: { comparison: NonNullable<NonNullable<Extrac
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
@@ -536,7 +577,7 @@ function TaxEstimate({ tax }: { tax: NonNullable<Extract<ChatResponseBody, { sta
   return (
     <section className="rounded-xl border border-line border-l-4 border-l-brand-deep p-3" aria-label="Tax estimate">
       <p className="text-xs font-semibold text-muted-foreground">Tax estimate · Tax year {tax.taxYear}</p>
-      <p className="mt-1 font-heading text-base font-bold text-ink">{tax.comparison}</p>
+      <p className="mt-1 font-heading text-base font-bold break-words text-ink">{tax.comparison}</p>
       <div className="mt-2 grid gap-3 md:grid-cols-2">
         {tax.regimes.map((r) => (
           <div key={r.title} className="overflow-x-auto rounded-lg border border-line">
@@ -545,10 +586,10 @@ function TaxEstimate({ tax }: { tax: NonNullable<Extract<ChatResponseBody, { sta
               <tbody className="divide-y divide-line">
                 {r.rows.map((row, i) => (
                   <tr key={i}>
-                    <th scope="row" className={`px-3 py-1.5 text-left ${row.total ? "font-semibold text-ink" : "font-normal text-muted-foreground"}`}>
+                    <th scope="row" className={`px-3 py-1.5 text-left break-words ${row.total ? "font-semibold text-ink" : "font-normal text-muted-foreground"}`}>
                       {row.label}
                     </th>
-                    <td className={`px-3 py-1.5 text-right text-ink tabular-nums ${row.total ? "font-bold" : "font-semibold"}`}>{row.value}</td>
+                    <td className={`px-3 py-1.5 text-right whitespace-nowrap text-ink tabular-nums ${row.total ? "font-bold" : "font-semibold"}`}>{row.value}</td>
                   </tr>
                 ))}
               </tbody>

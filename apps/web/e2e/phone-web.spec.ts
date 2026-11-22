@@ -1,5 +1,8 @@
-import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, addEntry, dialog, signUpConfirmed, tourDialog, uniqueEmail, welcomeDialog } from "./helpers"
+import { type Locator, type Page, expect, test } from "@playwright/test"
+import { createClient } from "@supabase/supabase-js"
+import { syntheticPdf } from "../test-support/synthetic-pdf"
+import { paytmDefaultPayments, paytmPages } from "../test-support/synthetic-upi"
+import { PASSWORD, addBank, addCash, addEntry, dialog, signUpConfirmed, toast, tourDialog, uniqueEmail, welcomeDialog } from "./helpers"
 
 // Sprint 12a-2, phone web: runs in the phone-360 and phone-430 projects (playwright.config.ts)
 // with touch on. Every page: no sideways page scroll, tap targets at least 44×44px, no text
@@ -294,3 +297,273 @@ test("sign-up form on a phone: inputs 16px, no sideways scroll", async ({ page }
   await expectPhoneFriendly(page, "sign-up", "main")
   await shot(page, "sign-up")
 })
+
+// ---- Sprint 12a-3: Roma, the UPI import review, the loan schedule and wide tables ----
+
+const todayInIndia = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+/** The 15th of the month `offset` months from today's month in India. */
+function monthDay(offset: number) {
+  const [y, m] = todayInIndia().split("-").map(Number) as [number, number]
+  const index = y * 12 + (m - 1) + offset
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}-15`
+}
+const dayOf = (offset: number, day: number) => `${monthDay(offset).slice(0, 8)}${String(day).padStart(2, "0")}`
+
+/** A demo user with a bank, six months of ₹50,000 income, a past 3-day trip, a goal and Roma on. */
+async function romaUser(page: Page, label: string) {
+  const email = uniqueEmail(`phone-${label}`)
+  await signUpConfirmed(page, "Phone Demo", email)
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "10,000", asOf: monthDay(-8) })
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } })
+  expect((await supabase.auth.signInWithPassword({ email, password: PASSWORD })).error).toBeNull()
+  const account = await supabase.from("accounts").select("id").eq("kind", "bank").single()
+  const salary = await supabase.from("categories").select("id").eq("kind", "income").limit(1).single()
+  const travel = await supabase.from("categories").select("id").eq("kind", "expense").eq("icon", "travel").single()
+  expect(account.error ?? salary.error ?? travel.error).toBeNull()
+  const record = async (type: "income" | "expense", minor: number, on: string, categoryId: string) =>
+    expect(
+      (await supabase.rpc("record_transaction", { p_type: type, p_idempotency_key: crypto.randomUUID(), p_amount_minor: minor, p_occurred_on: on, p_account_id: account.data!.id, p_category_id: categoryId })).error,
+    ).toBeNull()
+  for (let offset = -6; offset <= -1; offset++) await record("income", 50_000_00, monthDay(offset), salary.data!.id)
+  await record("expense", 4_000_00, dayOf(-2, 10), travel.data!.id)
+  await record("expense", 5_000_00, dayOf(-2, 12), travel.data!.id)
+
+  await page.goto("/goals")
+  await page.getByRole("button", { name: "Plan an expense" }).first().click()
+  const plan = dialog(page, "Plan an expense")
+  await plan.getByRole("radio", { name: "Other" }).click()
+  await plan.getByLabel("Name", { exact: true }).fill("Car 2027")
+  await plan.getByLabel("What it's for").fill("Car 2027")
+  await plan.getByLabel("Amount", { exact: true }).fill("3,00,000")
+  await plan.getByLabel("Target date (optional)").fill(`${Number(todayInIndia().slice(0, 4)) + 1}-12-31`)
+  await plan.getByRole("button", { name: "Add goal" }).click()
+  await expect(toast(page, "Goal added.")).toBeVisible()
+
+  await page.goto("/settings")
+  await page.getByRole("button", { name: "Turn Roma on" }).click()
+  await expect(page.getByRole("status").getByText("Roma is on.")).toBeVisible()
+}
+
+async function askRoma(page: Page, question: string) {
+  await page.goto("/roma")
+  await page.getByLabel("Your question").fill(question)
+  await page.getByRole("button", { name: "Ask Roma" }).click()
+  return page.getByRole("list", { name: "Roma's answers" }).getByRole("listitem").first()
+}
+
+/** Nothing inside `scope` is wider than its box (a clipped or sideways-scrolling figure). */
+async function expectNothingClipped(scope: Locator, where: string) {
+  const clipped = await scope.evaluate((root) =>
+    [...root.querySelectorAll("*")]
+      .filter((el) => el.closest("[data-scroll-table]") === null && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== "visible")
+      .map((el) => `${el.tagName.toLowerCase()} ${el.scrollWidth}>${el.clientWidth} "${(el.textContent ?? "").trim().slice(0, 40)}"`),
+  )
+  expect(clipped, `${where}: clipped or scrolling sideways`).toEqual([])
+  const box = (await scope.boundingBox())!
+  expect(box.x + box.width, `${where}: wider than the screen`).toBeLessThanOrEqual(width(scope.page()) + 0.5)
+}
+
+test("Roma at phone size: goal, what-if, trip and tax cards fit; History opens as a sheet", async ({ page }) => {
+  test.setTimeout(180_000)
+  await romaUser(page, "roma-cards")
+
+  // The question box comes first; the conversation list is behind History.
+  await page.goto("/roma")
+  await expect(page.getByRole("navigation", { name: "Past conversations" })).toHaveCount(0)
+  await expectOnScreen(page, page.getByLabel("Your question"), "Roma question box")
+
+  const goal = await askRoma(page, "Can I reach Car 2027?")
+  await expect(goal.getByText("Goal check · Car 2027")).toBeVisible()
+  await goal.locator("details").getByText("How this was worked out").click()
+  await expect(goal.getByRole("table", { name: "Figures from your records" })).toBeVisible()
+  await expectNoSideScroll(page, "Roma goal check")
+  await expectNothingClipped(goal, "Roma goal check")
+  await shot(page, "roma-goal", true)
+
+  const whatIf = await askRoma(page, "What if I save 10k more a month for Car 2027?")
+  await expect(whatIf.getByText("What if · Car 2027")).toBeVisible()
+  // Below md the before/after rows stack instead of three squeezed columns.
+  const stacked = whatIf.getByTestId("what-if-stacked")
+  await expect(stacked).toBeVisible()
+  await expect(stacked).toContainText("For this goal a month")
+  await expect(whatIf.getByRole("table", { name: "The goal as it is and with the change" })).toBeHidden()
+  await whatIf.locator("details").getByText("How this was worked out").click()
+  await expectNoSideScroll(page, "Roma what if")
+  await expectNothingClipped(whatIf, "Roma what if")
+  await shot(page, "roma-what-if", true)
+
+  const month = monthDay(3).slice(0, 7)
+  const trip = await askRoma(page, `Trip to Kerala, domestic, ${month}, 3 nights, 2 travellers; ${dayOf(-2, 10)} to ${dayOf(-2, 12)} was domestic for 2, travel`)
+  await expect(trip.getByText("Trip check · Kerala")).toBeVisible()
+  await expectNoSideScroll(page, "Roma trip check")
+  await expectNothingClipped(trip, "Roma trip check")
+  await shot(page, "roma-trip", true)
+
+  const tax = await askRoma(page, "my in hand salary is 1415000 how much i have to pay tax calculate it in old and new tax regime")
+  const card = tax.getByRole("region", { name: "Tax estimate" })
+  await expect(card.getByRole("row", { name: /^Total tax/ })).toHaveText([/₹84,240/, /₹2,30,880/])
+  await expectNoSideScroll(page, "Roma tax estimate")
+  await expectNothingClipped(card, "Roma tax estimate")
+  await shot(page, "roma-tax", true)
+
+  // History: a sheet with the past conversations; opening one closes it.
+  await page.getByRole("button", { name: /^History \(\d+\)$/ }).click()
+  const sheet = dialog(page, "History")
+  const list = sheet.getByRole("navigation", { name: "Past conversations" })
+  await expect(list.getByRole("listitem")).toHaveCount(4)
+  await expectNoSideScroll(page, "History sheet")
+  await expectPhoneFriendly(page, "History sheet", "[role=dialog]")
+  await shot(page, "roma-history-sheet")
+  await list.getByRole("link", { name: "What if I save 10k more a month for Car 2027?" }).click()
+  await expect(sheet).toBeHidden()
+  await expect(page).toHaveURL(/\/roma\?c=/)
+  await expect(page.getByRole("list", { name: "Roma's answers" }).getByText("What if · Car 2027")).toBeVisible()
+})
+
+test("Roma plan at phone size: a full-height sheet, its own scroll, Save as PDF and Close in a fixed footer", async ({ page }) => {
+  test.setTimeout(120_000)
+  await demoUser(page, "roma-plan")
+  await page.goto("/settings")
+  await page.getByRole("button", { name: "Turn Roma on" }).click()
+  await expect(page.getByRole("status").getByText("Roma is on.")).toBeVisible()
+  await page.goto("/roma")
+  await page.getByLabel("Your question").fill("Plan my trip to Goa in January for 2 people, 4 nights")
+  await page.getByRole("button", { name: "Ask Roma" }).click()
+  const intake = page.getByRole("form", { name: "Plan questions" })
+  await intake.getByLabel("Travelling from which city?", { exact: true }).fill("Delhi")
+  await intake.getByRole("button", { name: "Skip: What kind of stay?" }).click()
+  await intake.getByRole("button", { name: "Make the plan" }).click()
+  const answers = page.getByRole("list", { name: "Roma's answers" })
+  await expectNothingClipped(answers.getByTestId("plan-summary"), "plan summary card")
+  await answers.getByRole("button", { name: "Open the plan" }).click()
+
+  const plan = page.getByRole("dialog")
+  await expect(plan.getByRole("heading", { name: /^Delhi to Goa/ })).toBeVisible()
+  // Full height: the sheet fills the screen.
+  const box = (await plan.boundingBox())!
+  expect(box.height).toBeGreaterThan(page.viewportSize()!.height * 0.9)
+  const footer = plan.getByTestId("plan-footer")
+  const pdf = footer.getByRole("button", { name: "Save as PDF" })
+  await expectOnScreen(page, pdf, "plan footer Save as PDF")
+  await expectOnScreen(page, footer.getByRole("button", { name: "Close" }), "plan footer Close")
+  const body = plan.locator("[data-sheet-body]")
+  expect(await body.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  await expectNoSideScroll(page, "plan sheet")
+  expect(await body.evaluate((el) => el.scrollWidth - el.clientWidth), "plan sheet scrolls sideways").toBeLessThanOrEqual(0)
+  await expectPageLocked(page, plan)
+  await shot(page, "roma-plan-sheet")
+  // Scrolled halfway down the plan, the footer is still there.
+  await plan.getByRole("region", { name: "Cost breakdown" }).scrollIntoViewIfNeeded()
+  await expectOnScreen(page, pdf, "plan footer, scrolled")
+  await shot(page, "roma-plan-sheet-scrolled")
+})
+
+test("UPI import review at phone size: rows as cards, filters and Save in sticky bars, no sideways scroll", async ({ page }) => {
+  test.setTimeout(120_000)
+  await demoUser(page, "upi")
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "", opening: "1,00,000", asOf: "2026-09-01" })
+  await addBank(page, { bank: "State Bank of India", last4: "", opening: "50,000", asOf: "2026-09-01" })
+  await page.goto("/transactions/import/upi")
+  const statement = { name: "paytm.pdf", mimeType: "application/pdf", buffer: Buffer.from(syntheticPdf(paytmPages({ payments: paytmDefaultPayments() }))) }
+  await page.getByLabel("Choose your UPI app statement (PDF)").setInputFiles(statement)
+  await page.getByLabel("Account for State Bank Of India ··12").selectOption({ label: "State Bank of India" })
+  await page.getByLabel("Account for Example Bank ··34").selectOption({ label: "HDFC Bank" })
+  await expectNoSideScroll(page, "UPI account matching")
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.getByRole("button", { name: "Not now" }).click()
+
+  const review = page.getByRole("region", { name: "Review the payments" })
+  const rows = review.getByRole("list", { name: "Payments" }).getByRole("listitem")
+  await expect(rows.first()).toBeVisible()
+  await review.getByRole("heading", { name: "Review the payments" }).scrollIntoViewIfNeeded()
+  await expectNoSideScroll(page, "UPI review")
+  // Each card: payee, amount, date, and the category to choose.
+  const cafe = rows.filter({ hasText: /^Green Leaf Cafe/ })
+  await expect(cafe.getByLabel(/^Category for/)).toBeVisible()
+  await expectNothingClipped(cafe, "UPI payment card")
+  // Save is reachable at once, above the tab bar, and stays there as the list scrolls.
+  const save = review.getByRole("button", { name: "Save ticked payments" })
+  await expectOnScreen(page, save, "UPI Save")
+  await shot(page, "upi-review")
+  await rows.nth(2).scrollIntoViewIfNeeded()
+  await page.mouse.wheel(0, 300)
+  await expectOnScreen(page, save, "UPI Save, scrolled")
+  await expectOnScreen(page, review.getByTestId("review-filters"), "UPI filters, scrolled")
+  await expectPhoneFriendly(page, "UPI review bars", "[data-testid=review-save-bar]")
+  await shot(page, "upi-review-scrolled")
+  await review.getByRole("radio", { name: "Need a choice" }).check()
+  await expectNoSideScroll(page, "UPI review, filtered")
+})
+
+test("loan schedule stacks on phones; Reports and Investments tables scroll inside their box with the first column pinned", async ({ page }) => {
+  test.setTimeout(180_000)
+  await demoUser(page, "tables")
+  await seed(page)
+
+  // Loans: one stacked row per instalment, no seven-column table.
+  await page.goto("/loans-liabilities")
+  await page.getByRole("button", { name: "Add loan" }).first().click()
+  const add = dialog(page, "Add loan")
+  await add.getByRole("radio", { name: "Education loan" }).check()
+  await add.getByRole("button", { name: "Next" }).click()
+  await add.getByLabel("Lender").fill("State Bank of India")
+  await add.getByLabel("Sanctioned amount (₹)").fill("10,00,000")
+  await add.getByLabel("Amount taken (₹)").fill("8,00,000")
+  await add.getByLabel("Interest rate (% a year)").fill("10")
+  await add.getByLabel("Tenure (months)").fill("12")
+  await add.getByRole("radio", { name: "Starts later" }).check()
+  const [y, m] = todayInIndia().split("-").map(Number) as [number, number]
+  await add.getByLabel("First EMI date").fill(new Date(Date.UTC(y, m + 1, 5)).toISOString().slice(0, 10))
+  await add.getByRole("button", { name: "Add loan" }).click()
+  await expect(add).toBeHidden()
+  const loan = page.getByRole("region", { name: "Long-term liabilities" }).getByRole("listitem").filter({ hasText: "State Bank of India" }).first()
+  await loan.getByRole("button", { name: /^State Bank of India/ }).click()
+  const show = loan.getByRole("button", { name: /^Show schedule \(\d+\)$/ })
+  const count = Number((await show.textContent())!.match(/\((\d+)\)/)![1])
+  await show.click()
+  const schedule = page.getByTestId("loan-schedule-stacked")
+  await expect(schedule.getByRole("listitem")).toHaveCount(count)
+  await expect(schedule.getByRole("listitem").first()).toContainText("EMI 1")
+  await expect(schedule.getByRole("listitem").first()).toContainText("Due")
+  await expect(page.getByRole("table", { name: "Schedule of State Bank of India" })).toBeHidden()
+  await expectNoSideScroll(page, "loan schedule")
+  await expectNothingClipped(schedule, "loan schedule")
+  await expectPhoneFriendly(page, "loan schedule", "[data-testid=loan-schedule-stacked]")
+  await shot(page, "loan-schedule")
+
+  // Reports: the cash flow table scrolls in its own box, the month column stays put.
+  await page.goto("/reports")
+  const cashFlow = page.getByRole("region", { name: "Cash flow by month" })
+  await expect(cashFlow.getByRole("table")).toBeVisible()
+  await expectPinnedTable(page, cashFlow, "cash flow table")
+  await shot(page, "reports-table")
+
+  // Investments: the By category table the same way.
+  await page.goto("/investments")
+  await page.getByRole("button", { name: "Add holding" }).first().click()
+  const holding = dialog(page, "Add holding")
+  await holding.getByLabel("Search a fund or share").fill("lotus")
+  await holding.getByRole("list", { name: "Search results" }).getByRole("button", { name: /^Lotus Test Industries Ltd/ }).click()
+  await holding.getByLabel("Units").fill("10")
+  await holding.getByLabel("Buy price per unit (₹)").fill("1,000")
+  await holding.getByRole("button", { name: "Add holding" }).click()
+  await expect(holding).toBeHidden()
+  const byCategory = page.getByRole("region", { name: "Investments by category" })
+  await expect(byCategory.getByRole("table")).toBeVisible()
+  await expectPinnedTable(page, byCategory, "investments table")
+  await shot(page, "investments-table")
+})
+
+/** The table scrolls sideways in its box (not the page) and its first column stays in place. */
+async function expectPinnedTable(page: Page, box: Locator, where: string) {
+  await expectNoSideScroll(page, where)
+  expect(await box.evaluate((el) => el.scrollWidth > el.clientWidth), `${where}: wider than its box`).toBe(true)
+  const first = box.locator("tbody tr").first().locator(":scope > *").first()
+  const before = (await first.boundingBox())!.x
+  await box.evaluate((el) => el.scrollBy({ left: 200 }))
+  await expect.poll(() => box.evaluate((el) => el.scrollLeft), { message: `${where}: scrolls` }).toBeGreaterThan(0)
+  expect(Math.round((await first.boundingBox())!.x), `${where}: first column pinned`).toBe(Math.round(before))
+  await box.evaluate((el) => el.scrollTo({ left: 0 }))
+}
