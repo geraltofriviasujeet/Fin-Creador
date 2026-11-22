@@ -13,7 +13,7 @@ const SHOTS = "e2e-screenshots"
 const KEYBOARD_LEFT = 420
 
 const width = (page: Page) => page.viewportSize()!.width
-const shot = (page: Page, name: string, fullPage = false) => page.screenshot({ path: `${SHOTS}/phone-${width(page)}-${name}.png`, fullPage })
+const shot = (page: Page, name: string, fullPage = false) => page.screenshot({ path: `${SHOTS}/phone-${width(page)}-${name}.png`, fullPage, animations: "disabled" })
 
 const PAGES = [
   ["overview", "/"],
@@ -267,6 +267,8 @@ test("welcome carousel, tour, balance card, Continue card and the website link a
   await expectOnScreen(page, balance, "balance card")
   await expectNoSideScroll(page, "balance card")
   await shot(page, "balance-card")
+  // It leaves on its own (about 5s after counting), uncovering the tab bar.
+  await expect(balance).toBeHidden({ timeout: 15_000 })
 
   // The FinCreador website link in More.
   await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "More" }).click()

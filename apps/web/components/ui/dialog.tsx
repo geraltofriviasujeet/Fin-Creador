@@ -44,7 +44,7 @@ function DialogContent({
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop className="fixed inset-0 z-40 bg-ink/40 transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
-      <DialogPrimitive.Viewport className="fixed inset-0 z-50 grid items-end justify-items-center overflow-y-auto p-0 max-md:bottom-auto max-md:top-[var(--fc-vv-top,0px)] max-md:h-[var(--fc-vvh,100dvh)] max-md:overscroll-contain md:items-center md:p-4">
+      <DialogPrimitive.Viewport className="fixed inset-0 z-50 grid items-end justify-items-center overflow-y-auto p-0 max-md:bottom-auto max-md:top-[var(--fc-vv-top,0px)] max-md:h-[var(--fc-vvh,100dvh)] max-md:overflow-hidden md:items-center md:p-4">
         <DialogPrimitive.Popup
           className={cn(
             "relative w-full max-w-xl rounded-t-3xl bg-surface p-5 text-ink shadow-(--shadow-raised) outline-none transition-[opacity,transform] duration-150 data-[ending-style]:translate-y-2 data-[ending-style]:opacity-0 data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0 md:rounded-3xl md:p-6",

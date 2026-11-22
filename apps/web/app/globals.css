@@ -193,6 +193,25 @@
   body {
     @apply min-h-dvh bg-background text-sm text-foreground;
   }
+  /* Phones (below md): every control and every link that isn't inline text is at least a
+     44×44px tap target (12a-2). min-height and min-width don't apply to inline links in a
+     sentence, so text links are untouched; :where() keeps it overridable by any utility.
+     Desktop is unchanged. */
+  @media (width < 761px) {
+    :where(
+        a[href],
+        button,
+        select,
+        textarea,
+        summary,
+        [role="button"],
+        [role="tab"],
+        input:not([type="radio"], [type="checkbox"], [type="file"], [type="hidden"], [type="range"])
+      ):not(.sr-only) {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
   h1,
   h2,
   h3 {

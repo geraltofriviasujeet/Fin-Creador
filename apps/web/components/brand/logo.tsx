@@ -57,7 +57,7 @@ export function Wordmark({ tone, className, visibleClassName }: { tone: Tone; cl
  */
 export function Logo({ tone, href = "/", className, markOnlyOnSmallPhones = false }: { tone: Tone; href?: string; className?: string; markOnlyOnSmallPhones?: boolean }) {
   return (
-    <Link href={href} className={cn("inline-flex min-h-[44px] items-center gap-2.5 rounded-lg md:min-h-0", className)}>
+    <Link href={href} className={cn("inline-flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-lg md:min-h-0 md:min-w-0", className)}>
       <LogoMark />
       <Wordmark tone={tone} visibleClassName={markOnlyOnSmallPhones ? "max-[439px]:hidden" : undefined} />
     </Link>
