@@ -31,7 +31,7 @@ import { IMPORT_SAVE_CHUNK } from "@fin-creador/schemas"
 import { importMatchesAction, importStatementAction, saveImportLinesAction } from "@/app/(app)/loans-liabilities/import/actions"
 import { fullDate, money } from "@/components/transactions/display"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -390,7 +390,7 @@ function StatementReview({
                 The statement of {statement.statementDate ? fullDate(statement.statementDate) : "this date"} is entered (bill {symbol}
                 {statement.total}). If the bill is more than the card owes, the difference is added in Bank charges &amp; interest.
               </p>
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
                 <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
                 <Button type="button" onClick={() => void save()}>
                   Enter statement
@@ -418,7 +418,7 @@ function StatementReview({
                   {statement.total}). If the bill is more than the card owes, the difference is added in Bank charges &amp; interest.
                 </p>
               ) : null}
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
                 <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
                 <Button type="button" onClick={() => void save()}>
                   Save {tickedLines.length === 1 ? "1 line" : `${tickedLines.length} lines`}

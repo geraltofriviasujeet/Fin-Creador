@@ -129,7 +129,7 @@ async function SettingsContent() {
 
       <Card>
         <CardTitle>Account</CardTitle>
-        <CardDescription className="mt-1">Signed in as {auth.user.email}</CardDescription>
+        <CardDescription className="mt-1 [overflow-wrap:anywhere]">Signed in as {auth.user.email}</CardDescription>
         <form method="post" action="/auth/sign-out" className="mt-5">
           <Button type="submit" variant="secondary">
             <LogOut aria-hidden="true" />

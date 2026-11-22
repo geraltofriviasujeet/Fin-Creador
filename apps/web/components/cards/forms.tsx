@@ -48,7 +48,7 @@ import { run } from "@/components/loans/confirm"
 import { inWords } from "@/components/loans/display"
 import { fullDate, money } from "@/components/transactions/display"
 import { Button } from "@/components/ui/button"
-import { DialogClose } from "@/components/ui/dialog"
+import { DialogClose, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { useSaveTransition } from "@/lib/use-save-transition"
@@ -96,7 +96,7 @@ export function useSubmit(onDone: () => void) {
 
 export function Footer({ pending, label, children }: { pending: boolean; label: string; children?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-3">
+    <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-3 ${SHEET_ACTIONS}`}>
       <div aria-live="polite" className="text-sm tabular-nums">
         {children}
       </div>

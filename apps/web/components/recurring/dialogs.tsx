@@ -15,7 +15,7 @@ import { AmountField } from "@/components/income/amount-field"
 import { TYPE_NOUN, fullDate } from "@/components/transactions/display"
 import { TransactionForm } from "@/components/transactions/transaction-form"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { useSaveTransition } from "@/lib/use-save-transition"
@@ -202,7 +202,7 @@ function RuleForm({ accounts, cardAccounts = [], categories, today, currency, it
               setCategoryId("")
             }}
             className={cn(
-              "flex h-11 items-center justify-center rounded-lg text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed",
+              "flex h-[44px] items-center justify-center rounded-lg text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed md:h-11",
               t.value === type ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
             )}
           >
@@ -269,7 +269,7 @@ function RuleForm({ accounts, cardAccounts = [], categories, today, currency, it
         {anchorDayMayMove({ frequency, startDate }) ? ", or the month's last day when it is shorter" : ""}. Nothing is saved by itself: each one shows under Upcoming for you to confirm.
       </p>
       <TextField name="note" label="Note" placeholder="e.g. Flat rent" maxLength={280} value={note} error={errors.note} onChange={(e) => setNote(e.target.value)} />
-      <div className="mt-2 flex justify-end gap-3">
+      <div className={`mt-2 flex justify-end gap-3 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Saving…" : editing ? "Save changes" : "Add recurring"}
@@ -307,7 +307,7 @@ function SkipForm({ item, onDone }: { item: RecurringItem; onDone: () => void })
       </ul>
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <TextField name="reason" label="Reason (optional)" placeholder="e.g. Added by hand" maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} />
-      <div className="flex justify-end gap-3">
+      <div className={`flex justify-end gap-3 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Keep it due</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Skipping…" : "Skip"}
@@ -328,7 +328,7 @@ function ArchiveForm({ item, onDone }: { item: RecurringItem; onDone: () => void
         <li>You can restore it later.</li>
       </ul>
       {error && <FormMessage tone="error">{error}</FormMessage>}
-      <div className="flex justify-end gap-3">
+      <div className={`flex justify-end gap-3 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
         <Button
           size="lg"

@@ -37,13 +37,13 @@ type Tone = "onDark" | "onLight"
  * On light: all ink, because lime text on white fails contrast. Screen readers hear the
  * visually hidden "FinCreador"; the styled wordmark is hidden from them.
  */
-export function Wordmark({ tone, className }: { tone: Tone; className?: string }) {
+export function Wordmark({ tone, className, visibleClassName }: { tone: Tone; className?: string; visibleClassName?: string }) {
   return (
     <span
       className={cn("font-heading text-xl leading-none font-bold tracking-(--fc-tracking-wordmark)", className)}
     >
       <span className="sr-only">FinCreador</span>
-      <span aria-hidden="true" className={tone === "onDark" ? "text-nav-text" : "text-ink"}>
+      <span aria-hidden="true" className={cn(tone === "onDark" ? "text-nav-text" : "text-ink", visibleClassName)}>
         Fin
         <span className={tone === "onDark" ? "text-brand" : "text-ink"}>Creador</span>
       </span>
@@ -51,12 +51,15 @@ export function Wordmark({ tone, className }: { tone: Tone; className?: string }
   )
 }
 
-/** Mark + wordmark, linking home. */
-export function Logo({ tone, href = "/", className }: { tone: Tone; href?: string; className?: string }) {
+/**
+ * Mark + wordmark, linking home. `markOnlyOnSmallPhones` hides the visible wordmark below
+ * 440px (the phone topbar's buttons need the room); screen readers still hear "FinCreador".
+ */
+export function Logo({ tone, href = "/", className, markOnlyOnSmallPhones = false }: { tone: Tone; href?: string; className?: string; markOnlyOnSmallPhones?: boolean }) {
   return (
-    <Link href={href} className={cn("inline-flex items-center gap-2.5 rounded-lg", className)}>
+    <Link href={href} className={cn("inline-flex min-h-[44px] min-w-[44px] items-center gap-2.5 rounded-lg md:min-h-0 md:min-w-0", className)}>
       <LogoMark />
-      <Wordmark tone={tone} />
+      <Wordmark tone={tone} visibleClassName={markOnlyOnSmallPhones ? "max-[439px]:hidden" : undefined} />
     </Link>
   )
 }

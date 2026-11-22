@@ -18,12 +18,12 @@ const buttonVariants = cva(
         link: "h-auto px-0 text-ink underline underline-offset-4 hover:no-underline",
       },
       size: {
-        sm: "h-[30px] px-2.5 text-sm",
-        md: "h-[36px] px-3.5 text-sm",
-        lg: "h-[40px] px-4 text-base",
+        sm: "h-[44px] px-2.5 text-sm md:h-[30px]",
+        md: "h-[44px] px-3.5 text-sm md:h-[36px]",
+        lg: "h-[44px] px-4 text-base md:h-[40px]",
         /** 44px touch target. */
-        icon: "size-[36px]",
-        "icon-sm": "size-[30px]",
+        icon: "size-[44px] md:size-[36px]",
+        "icon-sm": "size-[44px] md:size-[30px]",
       },
     },
     defaultVariants: {

@@ -34,7 +34,7 @@ export function RepeatField({
           <label
             key={o.value}
             className={cn(
-              "flex h-11 cursor-pointer items-center justify-center rounded-lg px-1 text-center text-sm font-semibold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ring",
+              "flex h-[44px] cursor-pointer items-center justify-center rounded-lg px-1 text-center text-sm font-semibold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ring md:h-11",
               value === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
             )}
           >

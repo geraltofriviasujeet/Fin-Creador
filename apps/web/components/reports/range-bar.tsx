@@ -26,7 +26,7 @@ export function monthLabel(month: IsoDate): string {
 
 const pill = (active: boolean) =>
   cn(
-    "flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none md:px-4",
+    "flex min-h-[44px] items-center rounded-lg px-3 text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none md:px-4 md:min-h-10",
     "hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-deep",
     active && "bg-surface text-ink shadow-sm"
   )

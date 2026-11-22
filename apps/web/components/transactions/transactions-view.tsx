@@ -170,7 +170,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
                   scroll={false}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex h-11 items-center justify-center rounded-lg px-1 text-xs md:text-sm md:min-w-24 md:px-4 font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                    "flex h-[44px] items-center justify-center rounded-lg px-1 text-xs md:text-sm md:min-w-24 md:px-4 font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring md:h-11",
                     active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-ink"
                   )}
                 >
@@ -204,7 +204,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
             defaultValue={f.q}
             maxLength={100}
             placeholder="Note, category, account or amount"
-            className="h-11 w-full rounded-lg border border-line-strong bg-surface pr-24 pl-10 text-sm text-ink outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            className="h-[44px] md:h-11 w-full rounded-lg border border-line-strong bg-surface pr-24 pl-10 text-[16px] text-ink md:text-sm outline-none placeholder:text-muted-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           />
           <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-1">
             {f.q && (
@@ -260,7 +260,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex min-h-11 items-center gap-2.5 text-sm">
+          <label className="flex min-h-[44px] items-center gap-2.5 text-sm md:min-h-11">
             <input
               type="checkbox"
               checked={f.showVoided}
@@ -514,7 +514,7 @@ function Row({
         <Menu.Root>
           <Menu.Trigger
             aria-label={`More actions for ${title}`}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-ring lg:hidden"
+            className="flex size-[44px] shrink-0 items-center justify-center rounded-lg text-ink outline-none hover:bg-canvas focus-visible:outline-2 focus-visible:outline-ring lg:hidden md:size-11"
           >
             <Ellipsis aria-hidden="true" className="size-5" />
           </Menu.Trigger>
@@ -534,7 +534,7 @@ function Row({
           </Menu.Portal>
         </Menu.Root>
       )}
-      {!(canChange || edited) && <span aria-hidden="true" className="size-11 shrink-0 lg:hidden" />}
+      {!(canChange || edited) && <span aria-hidden="true" className="size-[44px] shrink-0 lg:hidden md:size-11" />}
     </li>
   )
 }

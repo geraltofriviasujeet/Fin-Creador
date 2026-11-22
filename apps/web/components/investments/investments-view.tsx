@@ -22,7 +22,7 @@ import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { useSaveTransition } from "@/lib/use-save-transition"
@@ -677,7 +677,7 @@ function ConfirmAction({
   return (
     <div className="grid gap-4">
       {error && <FormMessage tone="error">{error}</FormMessage>}
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
         <Button type="button" variant={destructive ? "destructive" : "primary"} size="lg" disabled={pending} aria-busy={pending} onClick={go}>
           {pending ? pendingLabel : label}

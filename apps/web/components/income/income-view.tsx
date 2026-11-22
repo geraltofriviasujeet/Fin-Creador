@@ -20,7 +20,7 @@ import { PageHeader } from "@/components/shell/app-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { initialFormState } from "@/lib/form-state"
@@ -42,7 +42,7 @@ type Open =
 const ADD_TITLES: Record<AccountKind, string> = { bank: "Add bank account", cash: "Add cash", other: "Add other account" }
 
 const MENU_ITEM = "flex h-10 cursor-default items-center rounded-lg px-3 outline-none data-[highlighted]:bg-canvas"
-const INLINE_LINK = "-mx-1 inline-flex min-h-11 items-center px-1 font-semibold text-ink underline underline-offset-4"
+const INLINE_LINK = "-mx-1 inline-flex min-h-[44px] items-center px-1 font-semibold text-ink underline underline-offset-4 md:min-h-11"
 
 // Phones (≤640px): each table row becomes a card (name and amount on one line, details
 // below). The table keeps its roles, so screen readers still hear a table.
@@ -282,7 +282,7 @@ export function IncomeView({
                       aria-pressed={period === key}
                       onClick={() => choosePeriod(key)}
                       className={cn(
-                        "min-h-9 rounded-lg px-3 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                        "min-h-[44px] rounded-lg px-3 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring md:min-h-9",
                         period === key ? "bg-surface text-ink shadow-sm" : "text-muted-foreground hover:text-ink",
                       )}
                     >
@@ -466,7 +466,7 @@ function ArchiveForm({ account, onDone }: { account: IncomeAccount; onDone: () =
         {account.label} will leave your totals and the account lists. Its income history stays, and you can restore it later.
       </p>
       {state.status === "error" && state.message && <FormMessage tone="error">{state.message}</FormMessage>}
-      <div className="flex justify-end gap-3">
+      <div className={`flex justify-end gap-3 ${SHEET_ACTIONS}`}>
         <DialogClose render={<Button type="button" variant="secondary" size="lg" />}>Cancel</DialogClose>
         <Button type="submit" size="lg" disabled={pending} aria-busy={pending}>
           {pending ? "Archiving…" : "Archive"}
@@ -621,7 +621,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                 <button
                   type="button"
                   onClick={() => onOpen(r.sourceId)}
-                  className="-mx-1 flex min-h-9 max-w-full items-center gap-2 rounded-lg px-1 text-left font-semibold outline-none hover:bg-line focus-visible:outline-2 focus-visible:outline-ring"
+                  className="-mx-1 flex min-h-[44px] max-w-full items-center gap-2 rounded-lg px-1 text-left font-semibold outline-none hover:bg-line focus-visible:outline-2 focus-visible:outline-ring md:min-h-9"
                 >
                   <Dot className={colorClass(r.color)} />
                   <span className="truncate">{r.name}</span>
@@ -645,7 +645,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                 <span className="block">{received}</span>
                 <span className="block text-xs">{repeats}</span>
               </td>
-              <td role="cell" className={cn(TD, "text-right font-semibold whitespace-nowrap tabular-nums")} data-amount>
+              <td role="cell" className={cn(TD, "text-right font-semibold whitespace-nowrap tabular-nums max-[640px]:leading-[44px]")} data-amount>
                 {whole(r.amountMinor, currency)}
               </td>
             </tr>

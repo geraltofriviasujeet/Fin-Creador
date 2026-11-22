@@ -246,7 +246,7 @@ function Conversation({
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={sendOnEnter}
               placeholder={EXAMPLE}
-              className={cn(controlClasses, "h-auto rounded-xl py-2")}
+              className={cn(controlClasses, "h-auto rounded-xl py-2 md:h-auto")}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">{ROMA_INFORMATIONAL}</p>

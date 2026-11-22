@@ -91,7 +91,7 @@ export function CategoryPie({
               {c.categoryId ? (
                 <Link
                   href={transactionsHref(range, { type: "expense", categoryId: c.categoryId })}
-                  className="flex min-h-8 items-center gap-2.5 rounded-lg text-sm underline-offset-4 hover:underline"
+                  className="flex min-h-[44px] items-center gap-2.5 rounded-lg text-sm underline-offset-4 hover:underline md:min-h-8"
                 >
                   {body}
                 </Link>

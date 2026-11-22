@@ -56,7 +56,7 @@ import {
 import { fullDate, money } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, SHEET_ACTIONS } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -639,7 +639,7 @@ function UpiReviewSection({
             </p>
             {ticked.some((l) => l.type === "transfer") && <p>Transfers move money between your own accounts: they are neither income nor expenses.</p>}
             {ticked.some((l) => l.type === "refund") && <p>Refunds lower their category&apos;s spending; they aren&apos;t income.</p>}
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
               <DialogClose render={<Button type="button" variant="secondary" />}>Cancel</DialogClose>
               <Button type="button" onClick={() => void save()}>
                 Save {lineText(ticked.length)}
@@ -815,7 +815,7 @@ function DuplicatesDialog({
         className="max-w-2xl"
       >
         <div className="grid gap-3 text-sm">
-          <ul aria-label="Possible duplicates" className="grid max-h-[50vh] gap-2 overflow-y-auto">
+          <ul aria-label="Possible duplicates" className="grid gap-2 md:max-h-[50dvh] md:overflow-y-auto">
             {lines.map((l) => {
               const e = l.duplicateOf!
               const label = l.original.payee || (l.original.kind === "self_transfer" ? "Self transfer" : "UPI Lite top-up")
@@ -849,7 +849,7 @@ function DuplicatesDialog({
               )
             })}
           </ul>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className={`flex flex-wrap justify-end gap-2 ${SHEET_ACTIONS}`}>
             <Button type="button" variant="secondary" onClick={() => all("skip")}>
               Skip all
             </Button>

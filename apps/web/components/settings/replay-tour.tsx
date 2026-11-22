@@ -44,18 +44,23 @@ export function WelcomeOnSignIn({ hiddenAt }: { hiddenAt: string | null }) {
           aria-labelledby="welcome-on-sign-in"
           disabled={state === "busy"}
           onClick={() => void toggle()}
-          className={cn(
-            "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60 motion-reduce:transition-none",
-            on ? "border-brand-deep bg-brand-deep" : "border-line-strong bg-canvas"
-          )}
+          // The track is the visible switch; on phones the button around it is a 44px tap area.
+          className="inline-flex shrink-0 items-center justify-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60 max-md:size-[44px] max-md:min-w-[52px]"
         >
           <span
             aria-hidden="true"
             className={cn(
-              "inline-block size-4 rounded-full shadow-sm transition-transform motion-reduce:transition-none",
-              on ? "translate-x-6 bg-brand" : "translate-x-1 bg-surface ring-1 ring-line-strong"
+              "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors motion-reduce:transition-none",
+              on ? "border-brand-deep bg-brand-deep" : "border-line-strong bg-canvas"
             )}
-          />
+          >
+            <span
+              className={cn(
+                "inline-block size-4 rounded-full shadow-sm transition-transform motion-reduce:transition-none",
+                on ? "translate-x-6 bg-brand" : "translate-x-1 bg-surface ring-1 ring-line-strong"
+              )}
+            />
+          </span>
         </button>
       </div>
     </div>
