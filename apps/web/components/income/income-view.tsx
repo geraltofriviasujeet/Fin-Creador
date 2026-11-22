@@ -645,7 +645,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                 <span className="block">{received}</span>
                 <span className="block text-xs">{repeats}</span>
               </td>
-              <td role="cell" className={cn(TD, "text-right font-semibold whitespace-nowrap tabular-nums")} data-amount>
+              <td role="cell" className={cn(TD, "text-right font-semibold whitespace-nowrap tabular-nums max-[640px]:leading-[44px]")} data-amount>
                 {whole(r.amountMinor, currency)}
               </td>
             </tr>
