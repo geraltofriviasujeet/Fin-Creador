@@ -282,7 +282,7 @@ export function IncomeView({
                       aria-pressed={period === key}
                       onClick={() => choosePeriod(key)}
                       className={cn(
-                        "min-h-9 rounded-lg px-3 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                        "min-h-[44px] rounded-lg px-3 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring md:min-h-9",
                         period === key ? "bg-surface text-ink shadow-sm" : "text-muted-foreground hover:text-ink",
                       )}
                     >
@@ -621,7 +621,7 @@ function IncomeTable({ period, currency, onOpen }: { period: PeriodView; currenc
                 <button
                   type="button"
                   onClick={() => onOpen(r.sourceId)}
-                  className="-mx-1 flex min-h-9 max-w-full items-center gap-2 rounded-lg px-1 text-left font-semibold outline-none hover:bg-line focus-visible:outline-2 focus-visible:outline-ring"
+                  className="-mx-1 flex min-h-[44px] max-w-full items-center gap-2 rounded-lg px-1 text-left font-semibold outline-none hover:bg-line focus-visible:outline-2 focus-visible:outline-ring md:min-h-9"
                 >
                   <Dot className={colorClass(r.color)} />
                   <span className="truncate">{r.name}</span>

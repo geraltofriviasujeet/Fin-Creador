@@ -45,7 +45,7 @@ async function phoneAudit(page: Page, scope?: string) {
     if (!root) return [`no ${scopeSelector}`]
     const problems: string[] = []
     const name = (el: Element) =>
-      `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40)}"`
+      `${el.tagName.toLowerCase()}${el.getAttribute("type") ? `[${el.getAttribute("type")}]` : ""}${el.getAttribute("name") ? `#${el.getAttribute("name")}` : ""} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40)}"`
     const shown = (el: Element) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && !el.closest("[inert], [aria-hidden=true]")
     const targets = root.querySelectorAll("button, a[href], input, select, textarea, [role=button], [role=tab], [role=switch]")
     for (const el of targets) {

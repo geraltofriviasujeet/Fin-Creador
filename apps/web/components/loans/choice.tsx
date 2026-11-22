@@ -39,7 +39,7 @@ export function Choice<V extends string>({
             className={cn(
               "relative flex cursor-pointer items-center text-sm font-semibold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ring",
               grid
-                ? "min-h-[36px] rounded-lg border border-line px-3 py-1.5 has-[:checked]:border-ink has-[:checked]:bg-primary has-[:checked]:text-primary-foreground"
+                ? "min-h-[44px] rounded-lg border border-line px-3 py-1.5 has-[:checked]:border-ink has-[:checked]:bg-primary has-[:checked]:text-primary-foreground md:min-h-[36px]"
                 : "h-[32px] rounded-md px-3 text-muted-foreground has-[:checked]:bg-primary has-[:checked]:text-primary-foreground",
             )}
           >

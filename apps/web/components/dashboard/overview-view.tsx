@@ -294,7 +294,7 @@ function ChartSwitch<K extends keyof ChartChoices>({
               aria-current={charts[chart] === o.value ? "true" : undefined}
               scroll={false}
               className={cn(
-                "flex min-h-8 items-center rounded-md px-3 text-xs font-semibold text-muted-foreground transition-colors motion-reduce:transition-none",
+                "flex min-h-[44px] items-center rounded-md px-3 text-xs font-semibold text-muted-foreground transition-colors motion-reduce:transition-none md:min-h-8",
                 "hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-deep",
                 charts[chart] === o.value && "bg-surface text-ink shadow-sm"
               )}
@@ -319,7 +319,7 @@ function PeriodSwitcher({ period, charts }: { period: DashboardPeriod; charts: C
               aria-current={p.value === period ? "page" : undefined}
               scroll={false}
               className={cn(
-                "flex min-h-10 items-center rounded-lg px-4 text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none",
+                "flex min-h-[44px] items-center rounded-lg px-4 text-sm font-semibold text-muted-foreground transition-colors motion-reduce:transition-none md:min-h-10",
                 "hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-deep",
                 p.value === period && "bg-surface text-ink shadow-sm"
               )}
@@ -525,7 +525,7 @@ function RecentCard({ recent, lookup, today }: { recent: LedgerItem[]; lookup: L
           <CardTitle id="recent-title">Recent activity</CardTitle>
           <CardDescription className="mt-1">Your latest entries, any date</CardDescription>
         </div>
-        <Link href="/transactions" className="flex min-h-10 items-center gap-1 text-sm font-semibold text-success underline-offset-4 hover:underline">
+        <Link href="/transactions" className="flex min-h-[44px] items-center gap-1 text-sm font-semibold text-success underline-offset-4 hover:underline md:min-h-10">
           View all
           <ChevronRight aria-hidden="true" className="size-4" />
         </Link>

@@ -49,18 +49,21 @@ export function ExpenseCategories({ categories }: { categories: ExpenseCategoryI
       ) : (
         <ul aria-label="Active categories" className="mt-4 grid gap-2">
           {active.map((c) => (
-            <li key={c.id} className="flex items-center gap-3 rounded-xl border border-line px-3 py-2">
+            // Phones: the name and badge on one line, Rename and Archive below on the right.
+            <li key={c.id} className="flex items-center gap-3 rounded-xl border border-line px-3 py-2 max-md:flex-wrap">
               <CategoryIcon icon={c.icon} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</span>
               {c.isDefault && <Badge tone="neutral">Default</Badge>}
-              <Button variant="ghost" size="sm" aria-label={`Rename ${c.name}`} onClick={() => show({ type: "rename", category: c })}>
-                Rename
-              </Button>
-              {!c.system && (
-                <Button variant="ghost" size="sm" aria-label={`Archive ${c.name}`} onClick={() => show({ type: "archive", category: c })}>
-                  Archive
+              <div className="flex shrink-0 items-center gap-3 max-md:w-full max-md:justify-end max-md:gap-1">
+                <Button variant="ghost" size="sm" aria-label={`Rename ${c.name}`} onClick={() => show({ type: "rename", category: c })}>
+                  Rename
                 </Button>
-              )}
+                {!c.system && (
+                  <Button variant="ghost" size="sm" aria-label={`Archive ${c.name}`} onClick={() => show({ type: "archive", category: c })}>
+                    Archive
+                  </Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>

@@ -120,7 +120,7 @@ export function ExportForm({
             )}
           </SelectField>
         </div>
-        <label className="flex min-h-10 items-center gap-2.5 text-sm">
+        <label className="flex min-h-[44px] items-center gap-2.5 text-sm md:min-h-10">
           <input type="checkbox" name="voided" value="1" className="size-4 accent-(--color-ink)" />
           Include voided entries (marked “Yes” in the Voided column)
         </label>
