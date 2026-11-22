@@ -4,6 +4,7 @@ import { signInWithGoogleAction, signUpAction } from "@/app/(auth)/actions"
 import { AuthCard, AuthLink } from "@/components/auth/auth-card"
 import { AuthCardPending, SignedInGate } from "@/components/auth/signed-in-gate"
 import { GoogleButton, OrDivider, SignUpForm } from "@/components/auth/auth-forms"
+import { PrivacyLink, TermsLink } from "@/components/legal-links"
 
 export const metadata: Metadata = { title: "Create account" }
 
@@ -24,6 +25,10 @@ export default function SignUpPage() {
           <GoogleButton label="Sign up with Google" action={signInWithGoogleAction} />
           <OrDivider />
           <SignUpForm action={signUpAction} />
+          {/* Covers both ways in (Google and email). Opens the website in a new tab. */}
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            By creating an account you agree to the <TermsLink /> and <PrivacyLink />.
+          </p>
         </AuthCard>
       </SignedInGate>
     </Suspense>

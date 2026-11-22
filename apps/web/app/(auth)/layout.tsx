@@ -1,5 +1,6 @@
 import type * as React from "react"
 import { Logo } from "@/components/brand/logo"
+import { SnapshotWipe } from "@/components/pwa/snapshot-wipe"
 
 // Three-row grid: the card sits in the middle row, so it is centred on its own
 // (not as part of logo + card + footer); the logo hugs the card from the row above.
@@ -12,6 +13,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <Logo tone="onLight" />
       </div>
       <main className="w-full max-w-110">{children}</main>
+      {/* No offline snapshot outlives a sign-out (Sprint 12b). */}
+      <SnapshotWipe />
       <p className="max-w-110 pt-8 text-center text-xs text-muted-foreground">
         Your financial data stays private to your account.
       </p>

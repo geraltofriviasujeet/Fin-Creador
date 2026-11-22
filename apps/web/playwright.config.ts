@@ -28,6 +28,9 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // The service worker (Sprint 12b) stays out of every spec but e2e/pwa.spec.ts, which
+    // allows it: request mocking and timing in the other specs see the network directly.
+    serviceWorkers: "block",
   },
   projects: [
     {

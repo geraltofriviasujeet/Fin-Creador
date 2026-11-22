@@ -8,7 +8,7 @@ import { type BellReminder, reminderText } from "@fin-creador/api"
 import { cn } from "cn"
 import { fullDate, money } from "@/components/transactions/display"
 import { payLink } from "@/components/loans/due-soon"
-import { buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 
 // The bell (Sprint 8a, 8b): in-app reminders only, the same list as the "Due soon" card (EMIs,
 // card bills and borrowing due dates overdue, due today or tomorrow, or planned for today or

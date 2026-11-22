@@ -3,7 +3,7 @@
 import { Tooltip } from "@base-ui/react/tooltip"
 import { Globe } from "lucide-react"
 import { cn } from "cn"
-import { buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { FINCREADOR_WEBSITE_LABEL, FINCREADOR_WEBSITE_URL } from "@/lib/site"
 
 /**

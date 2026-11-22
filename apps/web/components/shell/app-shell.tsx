@@ -1,4 +1,6 @@
 import type * as React from "react"
+import { InstallCard } from "@/components/pwa/install"
+import { OfflineBanner } from "@/components/pwa/offline-banner"
 import { Sidebar } from "@/components/shell/sidebar"
 import { TabBar } from "@/components/shell/tab-bar"
 import type { BellReminders } from "@/components/shell/bell"
@@ -35,6 +37,8 @@ export function AppShell({
         tabIndex={-1}
         className="mx-auto w-full max-w-(--fc-layout-content-max-width) px-4 pt-6 pb-[calc(var(--fc-layout-tab-bar-height)+2rem+env(safe-area-inset-bottom))] outline-none md:px-7 md:pt-6 md:pb-8"
       >
+        <OfflineBanner />
+        <InstallCard />
         {children}
       </main>
       <TabBar />

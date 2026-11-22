@@ -14,6 +14,7 @@ import {
   lastActiveAt,
   lastActiveStore,
 } from "@/lib/auth/idle"
+import { clearSnapshotThen } from "@/components/pwa/snapshot-keeper"
 
 // Signs out after 2 hours (the server's limit) without activity in any tab of this browser (Sprint 10a), with a
 // warning one minute before. Activity (pointer, key, wheel, scroll, touch) is written to
@@ -53,7 +54,8 @@ export function IdleGuard({ signedInAt, limitMs }: { signedInAt: string | null; 
     next.value = `${window.location.pathname}${window.location.search}`
     form.append(next)
     document.body.append(form)
-    form.submit()
+    // The offline snapshot goes first (Sprint 12b), then the post.
+    void clearSnapshotThen(() => form.submit())
   }, [])
 
   const evaluate = useCallback(() => idlePhase(lastActiveAt(store.read(), signedInAt), Date.now(), limitMs), [signedInAt, limitMs])

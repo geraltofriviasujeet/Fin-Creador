@@ -1,37 +1,10 @@
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
+"use client"
 
-const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-transparent font-semibold whitespace-nowrap transition-colors select-none outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-  {
-    variants: {
-      variant: {
-        /** Dark ink — main action ("Add expense", "Save"). */
-        primary: "bg-primary text-primary-foreground hover:bg-ink/90",
-        /** White with border — secondary action ("Cancel"). */
-        secondary: "border-line bg-surface text-ink hover:bg-canvas",
-        ghost: "text-ink hover:bg-canvas",
-        /** Lime fill with ink text — highlight action. */
-        brand: "bg-brand text-ink hover:bg-brand/85",
-        destructive: "bg-danger text-white hover:bg-danger/90",
-        link: "h-auto px-0 text-ink underline underline-offset-4 hover:no-underline",
-      },
-      size: {
-        sm: "h-[44px] px-2.5 text-sm md:h-[30px]",
-        md: "h-[44px] px-3.5 text-sm md:h-[36px]",
-        lg: "h-[44px] px-4 text-base md:h-[40px]",
-        /** 44px touch target. */
-        icon: "size-[44px] md:size-[36px]",
-        "icon-sm": "size-[44px] md:size-[30px]",
-      },
-    },
-    defaultVariants: {
-      variant: "primary",
-      size: "md",
-    },
-  }
-)
+import { Button as ButtonPrimitive } from "@base-ui/react/button"
+import type { VariantProps } from "class-variance-authority"
+import { cn } from "cn"
+import { OFFLINE_REASON, useOnline } from "@/components/pwa/pwa-provider"
+import { buttonVariants } from "./button-variants"
 
 type IconSize = "icon" | "icon-sm"
 
@@ -45,13 +18,24 @@ export type ButtonProps =
   | (BaseProps & { size?: Exclude<VariantProps<typeof buttonVariants>["size"], IconSize> })
   | (BaseProps & { size: IconSize; "aria-label": string })
 
-function Button({ className, variant, size, ...props }: ButtonProps) {
+/**
+ * While offline (Sprint 12b) every submit button (Save, Add, …) is disabled and says why, so
+ * nothing unsaved ever looks saved: it stays focusable, names the reason to screen readers and
+ * shows it on hover; the offline banner says the same.
+ */
+function Button({ className, variant, size, children, ...props }: ButtonProps) {
+  const online = useOnline()
+  const blocked = !online && props.type === "submit"
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size }), className)}
       {...props}
-    />
+      {...(blocked ? { disabled: true, focusableWhenDisabled: true, title: OFFLINE_REASON, "data-offline": "" } : {})}
+    >
+      {children}
+      {blocked && <span className="sr-only"> ({OFFLINE_REASON})</span>}
+    </ButtonPrimitive>
   )
 }
 

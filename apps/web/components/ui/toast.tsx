@@ -7,6 +7,7 @@ import { cn } from "cn"
 import { type BalanceChange, balanceAnnouncement } from "@fin-creador/domain"
 import { BalanceCardBody, COUNT_DELAY_MS } from "@/components/ui/balance-card"
 import { COUNT_MS } from "@/components/ui/count-up"
+import { announceSaved } from "@/lib/pwa/events"
 
 type ToastType = "success" | "info" | "error" | "balance"
 type BalanceData = { message: string; changes: BalanceChange[] }
@@ -41,17 +42,22 @@ function addBalance(message: string, changes: BalanceChange[]) {
   })
 }
 
-/** Show a toast from anywhere in client code. */
+/** Show a toast from anywhere in client code. A success or saved toast follows a confirmed save, so it also refreshes the offline snapshot. */
 export const toast = {
-  success: (title: string, description?: string) => add("success", title, description),
+  success: (title: string, description?: string) => {
+    announceSaved()
+    return add("success", title, description)
+  },
   info: (title: string, description?: string) => add("info", title, description),
   error: (title: string, description?: string) => add("error", title, description),
   /**
    * After a confirmed save: the balance card when the server sent the new balances, else the
    * plain "Saved" toast (`description` shows only then).
    */
-  saved: (message: string, balances: BalanceChange[] | undefined, description?: string) =>
-    balances && balances.length > 0 ? addBalance(message, balances) : add("success", message, description),
+  saved: (message: string, balances: BalanceChange[] | undefined, description?: string) => {
+    announceSaved()
+    return balances && balances.length > 0 ? addBalance(message, balances) : add("success", message, description)
+  },
 }
 
 function successIcon() {

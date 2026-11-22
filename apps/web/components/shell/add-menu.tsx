@@ -5,7 +5,7 @@ import { Menu } from "@base-ui/react/menu"
 import { ChevronDown, Plus } from "lucide-react"
 import { cn } from "cn"
 import { UPI_IMPORT_HREF } from "@/components/statements/upi-links"
-import { buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 
 // Topbar add actions: "Add expense" is the primary action (fast daily entry); the menu
 // beside it holds the other three and the UPI statement import (9e; it returns to Income when
