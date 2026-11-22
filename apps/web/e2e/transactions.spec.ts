@@ -236,3 +236,45 @@ test("another user sees none of this user's entries", async ({ browser, baseURL 
   await expect(second.getByText("Private rent")).toHaveCount(0)
   await second.close()
 })
+
+// Sprint 12a-1 bug: switching the Add dialog's type wrote ?add=income to the URL; the Income
+// page (kept mounted in the background by the router) read it and, after a void refreshed the
+// page, showed an Add income dialog nobody opened. ?add= is consumed once and never re-triggers.
+test("?add= deep links are consumed once: a type switch and a void never open Add income elsewhere", async ({ page }) => {
+  await newUserWithBank(page, "tx-add-once")
+  await addEntry(page, { amount: "250", category: "Groceries", from: "HDFC Bank ··4821", note: "Weekly veg" })
+
+  // Open Add expense, switch the type to Income, close it.
+  await page.getByRole("link", { name: "Add expense" }).first().click()
+  await dialog(page, "Add expense").getByRole("radio", { name: "Income" }).click()
+  await expect(dialog(page, "Add income")).toBeVisible()
+  await expect(page).not.toHaveURL(/add=/)
+  await page.keyboard.press("Escape")
+  await expect(dialog(page, "Add income")).toBeHidden()
+
+  // Void an entry (a server refresh), then open Income from the menu.
+  await page.getByRole("button", { name: "Void Weekly veg" }).click()
+  await dialog(page, "Void this expense?").getByRole("button", { name: "Void expense" }).click()
+  await expect(toast(page, "Expense voided.")).toBeVisible()
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Income", exact: true }).first().click()
+  await expect(page.getByRole("heading", { level: 1, name: "Income" })).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  // Back to Transactions from the menu: the Add dialog doesn't come back from the router cache.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Transactions", exact: true }).first().click()
+  await expect(page.getByRole("heading", { level: 1, name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  // A deep link still opens once, then leaves the URL; going away and back doesn't reopen it.
+  await page.getByRole("button", { name: "More ways to add" }).click()
+  await page.getByRole("menuitem", { name: "Add income" }).click()
+  await expect(dialog(page, "Add income")).toBeVisible()
+  await expect(page).not.toHaveURL(/add=/)
+  await page.keyboard.press("Escape")
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Income", exact: true }).first().click()
+  await expect(page.getByRole("heading", { level: 1, name: "Income" })).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await page.goBack()
+  await expect(page.getByRole("heading", { level: 1, name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+})
