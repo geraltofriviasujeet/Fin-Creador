@@ -15,6 +15,7 @@ import { Card, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage, SelectField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { BudgetBadge, BudgetDonut, GOALS_HEADER, GoalSummary, IconChip, Meter, SET_BUDGET_AGAIN, budgetAmounts, goalIcon, monthLabel, pct, savingText } from "./display"
 import { GoalForm } from "./goal-form"
 
@@ -25,6 +26,12 @@ type Open =
   | null
 
 const NETWORK = "We couldn't reach the server. Your details are kept; try again."
+/** After a confirmed save, once the page shows it: the toast, then close the dialog. */
+const done = (message: string, onDone: () => void) => () => {
+  toast.success(message)
+  onDone()
+}
+
 async function run(save: () => Promise<WriteResult>): Promise<WriteResult> {
   try {
     return await save()
@@ -338,17 +345,13 @@ function GoalCard({ item, onOpen }: { item: GoalItem; onOpen: (kind: "edit" | "s
 function SavedForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
   const [saved, setSaved] = useState(item.goal.savedMinor ? minorToInputString(item.goal.savedMinor, item.goal.currency) : "")
   const [error, setError] = useState<string | undefined>()
-  const [pending, setPending] = useState(false)
-  async function submit(event: React.FormEvent) {
+  const [pending, save] = useSaveTransition()
+  function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (pending) return
-    setPending(true)
-    const result = await run(() => setGoalSavedAction({ goalId: item.goal.id, saved }))
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-    } else setError(result.fieldErrors?.saved ?? result.message)
+    save(async () => {
+      const result = await run(() => setGoalSavedAction({ goalId: item.goal.id, saved }))
+      return result.status === "success" ? done(result.message, onDone) : () => setError(result.fieldErrors?.saved ?? result.message)
+    })
   }
   return (
     <form onSubmit={submit} noValidate className="grid gap-5">
@@ -365,15 +368,12 @@ function SavedForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
 
 function ArchiveForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-  async function archive() {
-    setPending(true)
-    const result = await run(() => setGoalArchivedAction({ goalId: item.goal.id, archived: true }))
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-    } else setError(result.message)
+  const [pending, save] = useSaveTransition()
+  function archive() {
+    save(async () => {
+      const result = await run(() => setGoalArchivedAction({ goalId: item.goal.id, archived: true }))
+      return result.status === "success" ? done(result.message, onDone) : () => setError(result.message)
+    })
   }
   return (
     <div className="grid gap-5">
@@ -402,15 +402,12 @@ function monthOptions(today: string): { value: string; label: string }[] {
 
 function DeleteForm({ item, onDone }: { item: GoalItem; onDone: () => void }) {
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-  async function remove() {
-    setPending(true)
-    const result = await run(() => deleteGoalAction({ goalId: item.goal.id }))
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-    } else setError(result.message)
+  const [pending, save] = useSaveTransition()
+  function remove() {
+    save(async () => {
+      const result = await run(() => deleteGoalAction({ goalId: item.goal.id }))
+      return result.status === "success" ? done(result.message, onDone) : () => setError(result.message)
+    })
   }
   return (
     <div className="grid gap-4">

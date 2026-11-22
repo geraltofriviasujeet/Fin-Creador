@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { KindChip, ProfitText, priceLabel } from "./display"
 
 // Add a holding in two steps (search the instrument, then units, buy price and date) or edit
@@ -44,7 +45,7 @@ export function HoldingForm({ today, item, kind, onDone }: { today: string; item
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   const set = (name: keyof Values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [name]: e.target.value }))
 
   const preview = useMemo(() => {
@@ -54,30 +55,36 @@ export function HoldingForm({ today, item, kind, onDone }: { today: string; item
     return holdingFigures({ instrumentId: instrument.id, unitsScaled: parsed.data.unitsScaled, buyPriceScaled: parsed.data.buyPriceScaled }, instrument.lastPriceScaled)
   }, [instrument, values, today])
 
-  async function submit(event: React.FormEvent) {
+  // The dialog closes (and the toast shows) only once the page shows the saved record.
+  function submit(event: React.FormEvent) {
     event.preventDefault()
     if (pending || !instrument) return
-    setPending(true)
     setFormError(null)
-    let result: WriteResult
-    try {
-      result = await saveHoldingAction({
-        ...values,
-        holdingId: item?.id ?? "",
-        instrumentId: item ? "" : instrument.id,
-        idempotencyKey: item ? "" : requestKey,
-      })
-    } catch {
-      result = { status: "error", message: NETWORK }
-    }
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-      return
-    }
-    setFormError(result.message)
-    setErrors(result.fieldErrors ?? {})
+    save(async () => {
+      let result: WriteResult
+      try {
+        result = await saveHoldingAction({
+          ...values,
+          holdingId: item?.id ?? "",
+          instrumentId: item ? "" : instrument.id,
+          idempotencyKey: item ? "" : requestKey,
+        })
+      } catch {
+        result = { status: "error", message: NETWORK }
+      }
+      if (result.status === "success") {
+        const message = result.message
+        return () => {
+          toast.success(message)
+          onDone()
+        }
+      }
+      const failed = result
+      return () => {
+        setFormError(failed.message)
+        setErrors(failed.fieldErrors ?? {})
+      }
+    })
   }
 
   if (!instrument) return <InstrumentSearch kind={kind} onChoose={setInstrument} />

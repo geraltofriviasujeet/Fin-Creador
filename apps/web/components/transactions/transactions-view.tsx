@@ -26,6 +26,9 @@ import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, mon
 import { UPI_IMPORT_HREF } from "@/components/statements/upi-links"
 import { AddEntryDialog, EditEntryDialog, HistoryDialog, RefundEntryDialog, VoidEntryDialog } from "./entry-modals"
 import type { EntryType } from "./transaction-form"
+import { useAddDeepLink } from "@/lib/use-add-deep-link"
+
+const ADD_TYPES: readonly EntryType[] = ["expense", "income", "transfer", "refund"]
 
 export const TRANSACTIONS_HEADER = {
   eyebrow: "Money activity",
@@ -75,11 +78,12 @@ export function TransactionsView({ context, filters: loaded, range, first, total
     setChosen((c) => ({ ...c, ...next }))
     startNavigation(() => router.replace(href(next), { scroll: false }))
   }
-  // Opening and closing the Add dialog only changes the URL (no reload).
   const replaceUrl = (url: string) => window.history.replaceState(null, "", url)
-  const addParam = params.get("add")
-  const addType: EntryType | null = addParam === "expense" || addParam === "income" || addParam === "transfer" || addParam === "refund" ? addParam : null
-  const closeAdd = () => replaceUrl(href({}))
+  // The Add dialog: opened by the topbar's ?add= link (read once, then dropped from the URL)
+  // or by a button here. Its type lives in state only; a type switch never touches the URL.
+  const [addType, setAddType] = useState<EntryType | null>(null)
+  useAddDeepLink("/transactions", ADD_TYPES, setAddType)
+  const closeAdd = () => setAddType(null)
   // Deep links (?edit= / ?history=) are dropped from the URL once their dialog closes.
   const closeDeepLink = () => (params.get("edit") || params.get("history")) && replaceUrl(href({}))
 
@@ -406,12 +410,12 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         </Card>
       </div>
 
-      {/* Add (URL: ?add=expense|income|transfer, so the topbar button is a real link) */}
+      {/* Add (opened by the topbar's ?add= link, so the topbar button is a real link) */}
       <AddEntryDialog
         type={addType}
         {...formProps}
         lastExpenseAccountId={context.lastExpenseAccountId}
-        onTypeChange={(type) => replaceUrl(href({}, { add: type }))}
+        onTypeChange={setAddType}
         onClose={closeAdd}
       />
       <EditEntryDialog

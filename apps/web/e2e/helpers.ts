@@ -1,4 +1,4 @@
-import { type Page, expect } from "@playwright/test"
+import { type Locator, type Page, expect } from "@playwright/test"
 import { waitForAuthLink } from "./mailpit"
 
 export const PASSWORD = "correct-horse-42"
@@ -139,3 +139,30 @@ export const incomeAccountRow = (page: Page, label: string) => incomeAccounts(pa
 export const incomeSources = (page: Page) => page.getByRole("region", { name: "Income by source", exact: true })
 /** One source's table row (desktop) or card (phone), by its name. */
 export const incomeSourceRow = (page: Page, name: string) => incomeSources(page).locator(`tbody tr[data-source="${name}"]`)
+
+// ---------------------------------------------------------------- Save, then close
+
+/**
+ * Arms a watcher on an open dialog: the moment it leaves the page, the visible text of the page
+ * (main) is recorded. Await the returned function to read it. Saves must close their dialog
+ * only once the page shows the result (Sprint 12a-1), so the recorded text must already hold
+ * the new item and totals, never the empty state or an old total. The dialog element itself is
+ * watched (toasts are role=dialog too); hidden pages kept by the router (display: none) are
+ * left out by innerText.
+ */
+export async function textWhenDialogCloses(page: Page, modal: Locator): Promise<() => Promise<string>> {
+  await modal.evaluate((el) => {
+    const w = window as unknown as { __textOnClose?: string | null }
+    w.__textOnClose = null
+    const observer = new MutationObserver(() => {
+      if (el.isConnected) return
+      w.__textOnClose = document.querySelector("main")?.innerText ?? ""
+      observer.disconnect()
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+  })
+  return async () => {
+    await page.waitForFunction(() => typeof (window as unknown as { __textOnClose?: string | null }).__textOnClose === "string")
+    return page.evaluate(() => (window as unknown as { __textOnClose: string }).__textOnClose)
+  }
+}

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, SelectField, TextField } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
+import { useSaveTransition } from "@/lib/use-save-transition"
 
 // Add or edit a fixed deposit. The preview uses the same shared schema and domain maths the
 // server and the Investments page use; nothing is a bank quote.
@@ -47,7 +48,7 @@ export function DepositForm({ today, item, onDone }: { today: string; item?: Dep
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   const set = (name: keyof Values) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setValues((v) => ({ ...v, [name]: e.target.value }))
 
   const preview = useMemo(() => {
@@ -56,25 +57,31 @@ export function DepositForm({ today, item, onDone }: { today: string; item?: Dep
     return { ...fdFigures(parsed.data, today), started: parsed.data.startDate < today }
   }, [values, today])
 
-  async function submit(event: React.FormEvent) {
+  // The dialog closes (and the toast shows) only once the page shows the saved record.
+  function submit(event: React.FormEvent) {
     event.preventDefault()
     if (pending) return
-    setPending(true)
     setFormError(null)
-    let result: WriteResult
-    try {
-      result = await saveFixedDepositAction({ ...values, depositId: item?.id ?? "", idempotencyKey: item ? "" : requestKey })
-    } catch {
-      result = { status: "error", message: NETWORK }
-    }
-    setPending(false)
-    if (result.status === "success") {
-      toast.success(result.message)
-      onDone()
-      return
-    }
-    setFormError(result.message)
-    setErrors(result.fieldErrors ?? {})
+    save(async () => {
+      let result: WriteResult
+      try {
+        result = await saveFixedDepositAction({ ...values, depositId: item?.id ?? "", idempotencyKey: item ? "" : requestKey })
+      } catch {
+        result = { status: "error", message: NETWORK }
+      }
+      if (result.status === "success") {
+        const message = result.message
+        return () => {
+          toast.success(message)
+          onDone()
+        }
+      }
+      const failed = result
+      return () => {
+        setFormError(failed.message)
+        setErrors(failed.fieldErrors ?? {})
+      }
+    })
   }
 
   const field = (name: keyof Values, label: string, props: Partial<React.ComponentProps<typeof TextField>> = {}) => (

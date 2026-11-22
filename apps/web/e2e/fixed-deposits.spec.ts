@@ -1,6 +1,6 @@
 import { type Page, expect, test } from "@playwright/test"
 import { createClient } from "@supabase/supabase-js"
-import { PASSWORD, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { PASSWORD, dialog, signUpConfirmed, textWhenDialogCloses, toast, uniqueEmail } from "./helpers"
 
 // Fixed deposits end to end (Sprint 7), against the throwaway local Supabase in CI (and the
 // fictional instruments of e2e/fixtures/instruments.sql for the All tab). Expected values were
@@ -103,9 +103,13 @@ test("add (double submit adds once), edit, archive, restore and delete a fixed d
   await form.getByRole("button", { name: "Add fixed deposit" }).click()
   await expect(form).toContainText("The start date can't be in the future")
   await form.getByLabel("Start date").fill(start)
-  // Double click: the request key adds the deposit once.
+  // Double click: one save. The first deposit is on the page when the dialog closes.
+  const shownOnClose = await textWhenDialogCloses(page, form)
   await form.getByRole("button", { name: "Add fixed deposit" }).dblclick()
-  await expect(toast(page, "Fixed deposit added.").first()).toBeVisible()
+  const onClose = await shownOnClose()
+  expect(onClose).toContain("Emergency fund")
+  expect(onClose).not.toContain("No fixed deposits yet")
+  await expect(toast(page, "Fixed deposit added.")).toHaveCount(1)
   await expect(form).toBeHidden()
   await page.reload()
   await expect(deposits(page).getByRole("listitem")).toHaveCount(1)

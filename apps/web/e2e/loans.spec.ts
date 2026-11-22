@@ -130,6 +130,19 @@ test("add a loan (estimate, double submit once), pay an EMI, edit and void the p
   await page.getByRole("button", { name: /^Notifications, 1 due$/ }).click()
   await expect(page.getByRole("dialog", { name: "Due soon" })).toContainText("EMI 1")
   await expect(page.getByRole("dialog", { name: "Due soon" })).toContainText("₹26,654.64")
+  // Each reminder is a real link; Enter on it opens its pay dialog and closes the bell.
+  const reminder = page.getByRole("dialog", { name: "Due soon" }).getByRole("link", { name: /EMI 1/ })
+  await reminder.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("dialog", { name: /^EMI 1, due / })).toBeVisible()
+  await expect(page.getByRole("dialog", { name: "Due soon" })).toHaveCount(0)
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog", { name: /^EMI 1, due / })).toHaveCount(0)
+  // A click does the same.
+  await page.getByRole("button", { name: /^Notifications, 1 due$/ }).click()
+  await page.getByRole("dialog", { name: "Due soon" }).getByRole("link", { name: /EMI 1/ }).click()
+  await expect(page.getByRole("dialog", { name: /^EMI 1, due / })).toBeVisible()
+  await expect(page.getByRole("dialog", { name: "Due soon" })).toHaveCount(0)
   await page.keyboard.press("Escape")
 
   // Pay from Due soon: every account is offered with its balance, never any digits.

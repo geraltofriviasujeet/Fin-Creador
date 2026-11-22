@@ -1,7 +1,7 @@
 "use client"
 
-import { useActionState, useCallback, useEffect, useState, useTransition } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useActionState, useCallback, useState, useTransition } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
 import { ChevronRight, MoreHorizontal, Plus } from "lucide-react"
 import { type AccountKind, type IncomePeriodKey, isInRange, yearRange } from "@fin-creador/domain"
@@ -24,6 +24,7 @@ import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog"
 import { FormMessage } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { initialFormState } from "@/lib/form-state"
+import { useAddDeepLink } from "@/lib/use-add-deep-link"
 import type { IncomeAccount, IncomePageData } from "@/lib/income/types"
 import type { AccountRowView, IncomePageView, PeriodView, SourceRowView } from "@/lib/income/view"
 
@@ -58,6 +59,7 @@ const PHONE = "min-[641px]:hidden"
 const TFOOT_TR = "max-[640px]:mt-2 max-[640px]:flex max-[640px]:justify-between max-[640px]:px-3"
 
 const ACCOUNTS_SHOWN = 5
+const INCOME_ADD = ["income", "bank"] as const
 // A column of two cards; from xl it spans both grid rows so the cards line up across columns.
 const REGION = "grid min-w-0 gap-4 min-[1280px]:row-span-2 min-[1280px]:grid-rows-subgrid"
 
@@ -90,23 +92,12 @@ export function IncomeView({
   }, [])
   const close = useCallback(() => setOpen(null), [])
 
-  // Deep links: /income?add=income (topbar "Add income") and ?add=bank. Handled
-  // while rendering so it also works when the link is used on this page.
-  const params = useSearchParams()
+  // Deep links: /income?add=income and ?add=bank, read once and then dropped from the URL
+  // (lib/use-add-deep-link.ts: a hidden, cached page never opens them).
   const router = useRouter()
   const pathname = usePathname()
-  const add = params.get("add")
-  const [handledAdd, setHandledAdd] = useState<string | null>(null)
-  if (add !== handledAdd) {
-    setHandledAdd(add)
-    if (add === "income" || add === "bank") {
-      setOpenId((n) => n + 1)
-      setOpen(add === "income" ? { type: "income" } : { type: "account", kind: "bank" })
-    }
-  }
-  useEffect(() => {
-    if (add) router.replace(pathname, { scroll: false })
-  }, [add, pathname, router])
+  const openFromLink = useCallback((add: "income" | "bank") => show(add === "income" ? { type: "income" } : { type: "account", kind: "bank" }), [show])
+  useAddDeepLink("/income", INCOME_ADD, openFromLink)
 
   // Period switch: month and year are already here; All time is rendered by the server on
   // request (?period=all), so it is loaded only when someone asks for it.

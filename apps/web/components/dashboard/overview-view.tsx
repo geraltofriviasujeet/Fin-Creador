@@ -25,9 +25,9 @@ import {
   addMinor,
   bucketSizeFor,
   changeBasisPoints,
-  formatMoney,
+  formatMoneyWhole,
   formatPercentFromBasisPoints,
-  pointsChange,
+  savingsRatePointsChange,
   ratioToBasisPoints,
   savingsRateBasisPoints,
   summarizeHoldings,
@@ -46,6 +46,9 @@ import { DueSoonOverviewCard } from "@/components/loans/due-soon"
 import { greeting } from "@/lib/greeting"
 import { CategoryPie } from "./category-pie"
 import { TimeChart } from "./time-chart"
+
+// The summary cards are summary figures: whole rupees (Money left is a balance, exact paise).
+const whole = (minor: number, currency: string) => formatMoneyWhole(minor, { currency })
 
 export const OVERVIEW_HEADER = { title: "Overview", description: "Your money at a glance." }
 
@@ -93,7 +96,6 @@ export function OverviewView({ context, name, period, range, comparison, totals,
   // The four cards: this month only (Money left is today's Total available).
   const m = month.totals
   const savingsRate = savingsRateBasisPoints(m)
-  const prevSavingsRate = month.prevTotals ? savingsRateBasisPoints(month.prevTotals) : null
   const vs = month.comparison?.label ?? ""
   // Spending is net of refunds and may be below zero (a refunded day): still shown, drawn at zero.
   const hasSpending = breakdown.buckets.some((b) => b.expenseMinor !== 0)
@@ -132,7 +134,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           icon={<ArrowDownToLine aria-hidden="true" className="size-5" />}
           chip="bg-chip-mint"
           label="Income this month"
-          value={money(m.incomeMinor, currency)}
+          value={whole(m.incomeMinor, currency)}
           change={<Change bp={month.prevTotals ? changeBasisPoints(m.incomeMinor, month.prevTotals.incomeMinor) : null} upIsGood vs={vs} />}
           footer={
             <FooterLink href={transactionsHref(month.range, { type: "income" })}>
@@ -144,7 +146,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           icon={<ArrowUpFromLine aria-hidden="true" className="size-5" />}
           chip="bg-chip-peach"
           label="Spent this month"
-          value={money(m.expenseMinor, currency)}
+          value={whole(m.expenseMinor, currency)}
           change={<Change bp={month.prevTotals ? changeBasisPoints(m.expenseMinor, month.prevTotals.expenseMinor) : null} upIsGood={false} vs={vs} />}
           footer={
             <FooterLink href={transactionsHref(month.range, { type: "expense" })}>
@@ -158,13 +160,13 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           chip="bg-chip-lavender"
           label="Savings rate"
           value={savingsRate === null ? "—" : formatPercentFromBasisPoints(savingsRate)}
-          change={<Change bp={pointsChange(savingsRate, prevSavingsRate)} points upIsGood vs={vs} />}
+          change={<Change bp={month.prevTotals ? savingsRatePointsChange(m, month.prevTotals) : null} points upIsGood vs={vs} />}
           footer={
             <span>
               {savingsRate === null ? "No income this month · " : ""}
               Net cash flow{" "}
               <span className={cn("font-semibold tabular-nums", m.netMinor < 0 ? "text-danger" : "text-ink")}>
-                {formatMoney(m.netMinor, { currency, signed: true })}
+                {formatMoneyWhole(m.netMinor, { currency, signed: true })}
               </span>
             </span>
           }
