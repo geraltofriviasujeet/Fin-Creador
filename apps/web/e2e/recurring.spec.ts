@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, dialog, incomeAccountRow, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, addCash, dialog, incomeAccountRow, signUpConfirmed, textWhenDialogCloses, toast, uniqueEmail } from "./helpers"
 
 // Recurring items end to end, against the throwaway local Supabase. One user per test.
 
@@ -40,8 +40,12 @@ async function addRule(page: Page, r: Rule) {
   if (r.frequency) await d.getByLabel("Repeats").selectOption({ label: r.frequency })
   await d.getByLabel("Starts on").fill(r.start)
   await d.getByLabel("Note").fill(r.note)
+  // When the dialog closes the new item is already on the page.
+  const shownOnClose = await textWhenDialogCloses(page, d)
   await d.getByRole("button", { name: "Add recurring" }).click()
-  await expect(toast(page, "Recurring item added.")).toBeVisible()
+  expect(await shownOnClose()).toContain(r.note)
+  // Two rules in a row: the first one's toast may still be showing.
+  await expect(toast(page, "Recurring item added.").last()).toBeVisible()
   await expect(d).toBeHidden()
 }
 

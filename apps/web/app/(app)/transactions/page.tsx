@@ -26,6 +26,12 @@ async function TransactionsContent({ searchParams }: { searchParams: SearchParam
   const raw = await searchParams
   const params = new URLSearchParams(Object.entries(raw).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : [])))
   const query = params.toString()
+  // ?add= is dropped from the URL as soon as its dialog opens (useAddDeepLink), so it is not
+  // part of the view's key: the refresh after a save must not remount the view (and the open
+  // Add dialog) before the dialog has closed and shown its toast.
+  const keyParams = new URLSearchParams(params)
+  keyParams.delete("add")
+  const viewKey = keyParams.toString()
   const supabase = await createClient()
 
   const context = await loadTransactionsContext(supabase)
@@ -57,8 +63,8 @@ async function TransactionsContent({ searchParams }: { searchParams: SearchParam
 
   return (
     <TransactionsView
-      // A different filter set or deep link starts a fresh view (pages, open dialogs).
-      key={query}
+      // A different filter set or ?edit= / ?history= deep link starts a fresh view (pages, open dialogs).
+      key={viewKey}
       context={context.data}
       filters={filters}
       range={range}

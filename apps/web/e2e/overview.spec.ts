@@ -38,6 +38,23 @@ test("first run: empty states and no invented figures", async ({ page }) => {
   await shot(page, "overview-empty")
 })
 
+// Sprint 12a-1b: Income and Spent are shown in whole rupees; Net cash flow is their shown
+// difference, so the three add up on screen. ₹100.50 − ₹50.49 is ₹50.01 exact (₹50), but the
+// cards show ₹101 and ₹50, so the net shows +₹51. The exact figure stays in Reports.
+test("net cash flow is the shown income minus the shown spending", async ({ page }) => {
+  await signUpConfirmed(page, "Chitra Das", uniqueEmail("overview-net"))
+  await page.goto("/income")
+  await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "1,000" })
+  await addEntry(page, { type: "Income", amount: "100.50", category: "Salary", from: "HDFC Bank ··4821" })
+  await addEntry(page, { amount: "50.49", category: "Groceries", from: "HDFC Bank ··4821" })
+
+  await page.goto("/")
+  await expect(card(page, "Income this month")).toContainText("₹101")
+  await expect(card(page, "Spent this month")).toContainText("₹50")
+  await expect(card(page, "Savings rate")).toContainText("Net cash flow +₹51")
+  await expect(card(page, "Savings rate")).not.toContainText("+₹50")
+})
+
 test("figures reconcile with the Transactions page; periods, links and other users", async ({ page }) => {
   await signUpConfirmed(page, "Bala Iyer", uniqueEmail("overview-flow"))
   await page.goto("/income")

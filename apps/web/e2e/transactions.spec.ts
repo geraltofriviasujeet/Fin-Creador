@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, addEntry, dialog, incomeAccountRow, incomeSources, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, addCash, addEntry, dialog, incomeAccountRow, incomeSources, signUpConfirmed, textWhenDialogCloses, toast, uniqueEmail } from "./helpers"
 
 // Transactions page end to end, against the throwaway local Supabase. One user per test.
 // Screenshots (final real-data pages only) go to e2e-screenshots/ for visual review.
@@ -80,7 +80,12 @@ test("edit keeps the history; void stops counting and stays visible on request",
   await edit.getByRole("button", { name: "Save changes" }).click()
   await expect(edit.getByText("Nothing has changed yet.")).toBeVisible()
   await edit.getByLabel("Amount").fill("300")
+  // When the dialog closes the page already shows the edit.
+  const editedOnClose = await textWhenDialogCloses(page, edit)
   await edit.getByRole("button", { name: "Save changes" }).click()
+  const edited = await editedOnClose()
+  expect(edited).toContain("Edited")
+  expect(edited).toContain("₹300")
   await expect(toast(page, "Changes saved.")).toBeVisible()
   await expect(row(page, "Weekly veg")).toContainText("Edited")
   await expect(row(page, "Weekly veg")).toHaveCount(1)
@@ -99,7 +104,9 @@ test("edit keeps the history; void stops counting and stays visible on request",
   const voiding = dialog(page, "Void this expense?")
   await voiding.getByLabel("Reason (optional)").fill("Entered twice")
   await shot(page, "tx-void")
+  const voidedOnClose = await textWhenDialogCloses(page, voiding)
   await voiding.getByRole("button", { name: "Void expense" }).click()
+  expect(await voidedOnClose()).not.toContain("Weekly veg") // gone from the list as it closes
   await expect(toast(page, "Expense voided.")).toBeVisible()
   await expect(row(page, "Weekly veg")).toHaveCount(0)
   await expect(stat(page, "Expenses")).toContainText("₹0")

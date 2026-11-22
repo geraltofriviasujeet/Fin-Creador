@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, dialog, signUpConfirmed, toast, uniqueEmail } from "./helpers"
+import { addBank, addCash, dialog, signUpConfirmed, textWhenDialogCloses, toast, uniqueEmail } from "./helpers"
 
 // Loans & Liabilities end to end (Sprint 8a, web), against the throwaway local Supabase.
 // Expected figures come from packages/domain (loanEmiEstimate, defaultPaymentSplit,
@@ -156,7 +156,10 @@ test("add a loan (estimate, double submit once), pay an EMI, edit and void the p
   await expect(pay.getByLabel("Interest (₹)")).toHaveValue("3,000")
   await expect(pay).toContainText("Total ₹26,654.64")
   await shot(page, "loans-pay")
+  // When the dialog closes the outstanding already shows the payment.
+  const paidOnClose = await textWhenDialogCloses(page, pay)
   await pay.getByRole("button", { name: "Mark as paid" }).click()
+  expect(await paidOnClose()).toContain("₹2,76,345.36")
   await expect(toast(page, "EMI paid.")).toBeVisible()
   await expect(pay).toBeHidden()
   await expect(row).toContainText("₹2,76,345.36") // 3,00,000 − 23,654.64
@@ -178,7 +181,9 @@ test("add a loan (estimate, double submit once), pay an EMI, edit and void the p
   await expect(edit.getByLabel("Principal (₹)")).toHaveValue("23,654.64")
   await edit.getByLabel("Fees (₹)").fill("100")
   await expect(edit).toContainText("Total ₹26,754.64")
+  const editedOnClose = await textWhenDialogCloses(page, edit)
   await edit.getByRole("button", { name: "Save payment" }).click()
+  expect(await editedOnClose()).toContain("₹26,754.64")
   await expect(toast(page, "Payment saved.")).toBeVisible()
   await expect(schedule.getByRole("row", { name: /^EMI 1 / })).toContainText("₹26,754.64")
 

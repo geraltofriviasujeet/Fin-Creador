@@ -73,6 +73,15 @@ export function roundMinorToWhole(amount: MinorUnits, currency: string, locale =
   return (value < 0n ? -whole : whole) * scale;
 }
 
+/**
+ * Net cash flow as shown beside whole-unit Income and Spent figures: the rounded income minus
+ * the rounded spending (in minor units), so the three figures on screen always add up. Display
+ * only: the exact net (income − spending) stays the figure everywhere else (Reports, exports).
+ */
+export function displayedNetWhole(incomeMinor: MinorUnits, expenseMinor: MinorUnits, currency: string, locale = DEFAULT_LOCALE): bigint {
+  return roundMinorToWhole(incomeMinor, currency, locale) - roundMinorToWhole(expenseMinor, currency, locale);
+}
+
 export function formatMoneyWhole(amount: MinorUnits, options: MoneyFormatOptions): string {
   const rounded = roundMinorToWhole(amount, options.currency, options.locale);
   return formatMoney(rounded, { ...options, trimZeroFraction: true });

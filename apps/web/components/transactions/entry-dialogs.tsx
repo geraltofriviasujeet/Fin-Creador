@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DialogClose } from "@/components/ui/dialog"
 import { FormMessage, TextField } from "@/components/ui/field"
+import { useSaveTransition } from "@/lib/use-save-transition"
 import { type LedgerItem, type Lookup } from "@fin-creador/api"
 import { TYPE_NOUN, accountChipText, entryKindLabel, entryTitle, fullDate, paymentModeLabel, signedAmount } from "./display"
 import type { SaveResult } from "./transaction-form"
@@ -38,7 +39,7 @@ export function VoidForm({
   // One key per opened form; a retry after a failure reuses it, so the entry is voided once.
   const [requestKey] = useState(newRequestKey)
   const [reason, setReason] = useState("")
-  const [pending, setPending] = useState(false)
+  const [pending, save] = useSaveTransition()
   const [error, setError] = useState<string | null>(null)
   const noun = TYPE_NOUN[entry.type]
 
@@ -46,15 +47,18 @@ export function VoidForm({
     <form
       noValidate
       className="grid gap-5"
-      onSubmit={async (event) => {
+      onSubmit={(event) => {
         event.preventDefault()
         if (pending) return
         if (reason.trim().length > 200) return setError("Keep the reason under 200 characters.")
-        setPending(true)
         setError(null)
-        const result = await onVoid(reason.trim() || null, requestKey)
-        setPending(false)
-        if (!result.ok) setError(result.message)
+        save(async () => {
+          const result = await onVoid(reason.trim() || null, requestKey)
+          return () => {
+            if (!result.ok) setError(result.message)
+            result.after?.()
+          }
+        })
       }}
     >
       <EntrySummary entry={entry} lookup={lookup} />

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  displayedNetWhole,
   formatMoneyWhole,
   roundMinorToWhole,
   formatMoney,
@@ -80,6 +81,30 @@ describe("ratioToBasisPoints", () => {
 
   it("returns null for a zero denominator", () => {
     expect(ratioToBasisPoints(5, 0)).toBeNull();
+  });
+});
+
+describe("displayedNetWhole", () => {
+  const shown = (income: number, expense: number) => {
+    const net = displayedNetWhole(income, expense, "INR");
+    return [formatMoneyWhole(income, { currency: "INR" }), formatMoneyWhole(expense, { currency: "INR" }), formatMoneyWhole(net, { currency: "INR", signed: true })];
+  };
+  it("is the rounded income minus the rounded spending, where the exact net would round differently", () => {
+    // ₹100.50 − ₹50.49 = ₹50.01 exact (shows ₹50), but the cards show ₹101 and ₹50.
+    expect(displayedNetWhole(10_050, 5_049, "INR")).toBe(5_100n);
+    expect(shown(10_050, 5_049)).toEqual(["₹101", "₹50", "+₹51"]);
+    // ₹100.49 − ₹50.50 = ₹49.99 exact (shows ₹50), but the cards show ₹100 and ₹51.
+    expect(shown(10_049, 5_050)).toEqual(["₹100", "₹51", "+₹49"]);
+    // Negative: ₹100.49 − ₹200.50 = −₹100.01 exact (shows −₹100); the cards show ₹100 and ₹201.
+    expect(displayedNetWhole(10_049, 20_050, "INR")).toBe(-10_100n);
+    expect(shown(10_049, 20_050)).toEqual(["₹100", "₹201", "-₹101"]);
+  });
+  it("matches the exact net when both figures are whole, and handles zero", () => {
+    expect(displayedNetWhole(5_000_000, 3_250_000, "INR")).toBe(1_750_000n);
+    expect(displayedNetWhole(0, 0, "INR")).toBe(0n);
+    // ₹0.49 income, ₹0.50 spent: ₹0 − ₹1.
+    expect(displayedNetWhole(49, 50, "INR")).toBe(-100n);
+    expect(displayedNetWhole(1234, 34, "JPY")).toBe(1200n);
   });
 });
 

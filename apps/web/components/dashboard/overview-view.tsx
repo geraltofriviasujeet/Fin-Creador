@@ -25,6 +25,7 @@ import {
   addMinor,
   bucketSizeFor,
   changeBasisPoints,
+  displayedNetWhole,
   formatMoneyWhole,
   formatPercentFromBasisPoints,
   savingsRatePointsChange,
@@ -96,6 +97,8 @@ export function OverviewView({ context, name, period, range, comparison, totals,
   // The four cards: this month only (Money left is today's Total available).
   const m = month.totals
   const savingsRate = savingsRateBasisPoints(m)
+  // Shown beside whole-rupee Income and Spent: their difference, so the three figures add up.
+  const shownNet = displayedNetWhole(m.incomeMinor, m.expenseMinor, currency)
   const vs = month.comparison?.label ?? ""
   // Spending is net of refunds and may be below zero (a refunded day): still shown, drawn at zero.
   const hasSpending = breakdown.buckets.some((b) => b.expenseMinor !== 0)
@@ -165,8 +168,8 @@ export function OverviewView({ context, name, period, range, comparison, totals,
             <span>
               {savingsRate === null ? "No income this month · " : ""}
               Net cash flow{" "}
-              <span className={cn("font-semibold tabular-nums", m.netMinor < 0 ? "text-danger" : "text-ink")}>
-                {formatMoneyWhole(m.netMinor, { currency, signed: true })}
+              <span className={cn("font-semibold tabular-nums", shownNet < 0n ? "text-danger" : "text-ink")}>
+                {formatMoneyWhole(shownNet, { currency, signed: true })}
               </span>
             </span>
           }
