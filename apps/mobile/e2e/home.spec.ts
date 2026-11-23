@@ -88,10 +88,10 @@ test("Home shows the demo user's Safe to spend, Coming up, Where it went and You
 
   // Quick actions open the existing sheet on the right type; Import UPI is coming soon.
   await page.getByRole("button", { name: "Income", exact: true }).click();
-  await expect(page.getByText("Add income", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add income", exact: true })).toBeVisible();
   await page.goBack();
   await page.getByRole("button", { name: "Transfer", exact: true }).click();
-  await expect(page.getByText("Add transfer", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add transfer", exact: true })).toBeVisible();
   await page.goBack();
   await page.getByRole("button", { name: "Import UPI" }).click();
   await expect(page.getByText("Import UPI is coming in a later update.")).toBeVisible();
@@ -133,7 +133,7 @@ test("no income date: money left this month and 'Set your income date' opens the
   await shot(page, "13a-home-no-income-date");
 
   await page.getByRole("button", { name: "Set your income date" }).click();
-  await expect(page.getByText("Add recurring", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add recurring", exact: true })).toBeVisible();
   await expect(page.getByRole("tablist", { name: "Type" }).getByRole("tab", { name: "Income" })).toHaveAttribute("aria-selected", "true");
   expect(errors).toEqual([]);
 });
@@ -146,7 +146,7 @@ test("a new user sees the first-run state with Add an account and Add expense", 
   await expect(page.getByRole("button", { name: "Add expense" })).toBeVisible();
   await shot(page, "13a-home-empty");
   await page.getByRole("button", { name: "Add an account" }).click();
-  await expect(page.getByText("Add bank account", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add bank account", exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -221,7 +221,8 @@ test("avatar menu: Accounts, Recurring and Settings open, coming soon items say 
 
   await menu();
   await page.getByRole("button", { name: /^Settings/ }).click();
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // The Settings screen's own Sign out (the menu sheet is portalled outside #root while it slides away).
+  await expect(page.locator("#root").getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
   await page.goBack();
 
   // The bell: same reminders as the web (none for this user).

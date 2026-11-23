@@ -68,7 +68,7 @@ test("tab shell: four tabs and the raised ＋, each tab opens its screen", async
 
   // ＋ opens the existing add sheet on Expense; closing it returns to the same tab.
   await page.getByRole("button", { name: "Add an entry" }).click();
-  await expect(page.getByText("Add expense", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add expense", exact: true })).toBeVisible();
   await page.goBack();
   await expect(tab(page, "Home")).toHaveAttribute("aria-selected", "true");
 
