@@ -3,7 +3,9 @@ import { Suspense } from "react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import {
+  type HomeData,
   buildGoalsView,
+  buildHome,
   buildInvestmentsView,
   buildLoansView,
   buildRecurringView,
@@ -15,6 +17,7 @@ import {
   loadRecurringData,
   loadTransactionPage,
   loadTransactionTotals,
+  loadTodayEntries,
   loadTransactionsContext,
   readDashboardParams,
 } from "@fin-creador/api"
@@ -61,7 +64,8 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   const monthComparison = comparisonFor("month", thisMonth, today)
   const chartsAreMonth = period === "month"
 
-  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans] = await Promise.all([
+  const now = new Date()
+  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans, todayEntries] = await Promise.all([
     loadTransactionTotals(supabase, { from: range.start, to: range.end }, currency),
     comparison ? loadTransactionTotals(supabase, { from: comparison.previous.start, to: comparison.previous.end }, currency) : null,
     chartsAreMonth ? null : loadTransactionTotals(supabase, { from: thisMonth.start, to: thisMonth.end }, currency),
@@ -75,6 +79,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
     loadGoalsData(supabase),
     loadInvestmentsData(supabase),
     loadLoansData(supabase),
+    loadTodayEntries(supabase, today),
   ])
   if (!totals.ok || (prevTotals && !prevTotals.ok) || (monthTotals && !monthTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
   const month = chartsAreMonth
@@ -85,6 +90,24 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
         totals: monthTotals?.ok ? monthTotals.totals : totals.totals, // ok: checked above
         prevTotals: monthPrevTotals?.ok ? monthPrevTotals.totals : null,
       }
+
+  const loansView = loans.ok ? buildLoansView(loans.data) : null
+  const goalsView = goals.ok ? buildGoalsView(goals.data) : null
+  // Safe to spend (13a PR 5): the phone Home's buildHome on the same data, so both show the
+  // same figures. It needs every part; if one failed, the card says so (never a partial figure).
+  const home: HomeData | null =
+    recurring.ok && loansView && goals.ok && goalsView && !profile.error && todayEntries
+      ? buildHome({
+          now,
+          name: profile.data?.display_name ?? null,
+          context: context.data,
+          recurring: recurring.data,
+          loans: loansView,
+          goals: goalsView,
+          spending: goals.data.spending,
+          todayEntries,
+        })
+      : null
 
   // The Recurring card is optional: if it can't load, the rest of the Overview still shows.
   const upcoming = recurring.ok ? (
@@ -115,9 +138,10 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
           <NetWorthSection />
         </Suspense>
       }
-      goals={goals.ok ? buildGoalsView(goals.data) : null}
+      goals={goalsView}
       investments={investments.ok ? buildInvestmentsView(investments.data) : null}
-      loans={loans.ok ? buildLoansView(loans.data) : null}
+      loans={loansView}
+      home={home}
     />
   )
 }

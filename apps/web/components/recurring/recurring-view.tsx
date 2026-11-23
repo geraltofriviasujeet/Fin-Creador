@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { Plus } from "lucide-react"
-import { type Lookup, type RecurringItem, type RecurringView, type TransactionsContext, UPCOMING_DAYS, showCostTile } from "@fin-creador/api"
+import { type Lookup, type RecurringItem, type RecurringView, type TransactionsContext, UPCOMING_DAYS, pastDueLabel, showCostTile } from "@fin-creador/api"
 import type { CostTotal } from "@fin-creador/domain"
 import { setRecurringRuleArchivedAction, undoSkipAction } from "@/app/(app)/recurring/actions"
 import { StatCard } from "@/components/income/stat-card"
@@ -72,14 +72,16 @@ export function RecurringPageView({ context, view }: { context: TransactionsCont
     </>
   )
 
-  const status = (i: RecurringItem) =>
-    i.kind === "due" ? (
-      <Badge tone="info">{i.date && i.date < today ? `Missed ${fullDate(i.date)}` : "Due today"}</Badge>
+  const status = (i: RecurringItem) => {
+    const pastDue = pastDueLabel(i, today)
+    return i.kind === "due" ? (
+      <Badge tone={pastDue === "Overdue" ? "negative" : "info"}>{pastDue && i.date ? `${pastDue} ${fullDate(i.date)}` : "Due today"}</Badge>
     ) : i.kind === "needs_attention" ? (
       <Badge tone="negative">Needs attention</Badge>
     ) : i.date ? (
       <Badge tone="neutral">Next {fullDate(i.date)}</Badge>
     ) : null
+  }
 
   const group = (items: RecurringItem[], name: string, empty: string) => (
     <RecurringPanel title={name} count={items.length} empty={empty}>

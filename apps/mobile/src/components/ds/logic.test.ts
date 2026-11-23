@@ -14,6 +14,8 @@ import {
   progressA11y,
   progressOf,
   tapSize,
+  RAISED_ADD_OVERLAP,
+  TAB_SCREEN_BOTTOM_PADDING,
 } from "./logic";
 
 describe("formatAmount (AmountText)", () => {
@@ -83,6 +85,15 @@ describe("tap targets", () => {
 
   it("only the short axis gets slop", () => {
     expect(hitSlopFor(32, 120)).toEqual({ top: 6, bottom: 6, left: 0, right: 0 });
+  });
+});
+
+describe("tab screen bottom padding", () => {
+  it("clears the raised + by 24px", () => {
+    // The 56px + is lifted half its height plus 4px above its slot, which starts below the
+    // bar's 8px top padding and 1px border: it rises 23px above the bar's edge.
+    expect(RAISED_ADD_OVERLAP).toBe(56 / 2 + 4 - 8 - 1);
+    expect(TAB_SCREEN_BOTTOM_PADDING).toBe(23 + 24);
   });
 });
 

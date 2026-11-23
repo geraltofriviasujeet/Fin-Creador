@@ -113,6 +113,18 @@ export async function seedOverdue(demo: Demo) {
   await addRule(demo, { type: "expense", amount: "1000", categoryId: id.bills, accountId: id.account("HDFC Bank"), inDays: -3, note: "Internet" });
 }
 
+/**
+ * Paise: the normal month plus an Education EMI of ₹11,423.40 from HDFC Bank in 3 days. Coming
+ * up shows it as ₹11,424 (an amount to pay rounds up) and Bills due is the rows as shown:
+ * ₹2,400 + ₹600 + ₹11,424 = ₹14,424 (exact total ₹14,423.40).
+ * → (₹42,000 − ₹14,423.40 − ₹5,000) ÷ 8 = ₹2,822.07 → ₹2,822 a day; ₹1,622 left today.
+ */
+export async function seedPaise(demo: Demo) {
+  await seedNormal(demo);
+  const id = await ids(demo.client);
+  await addRule(demo, { type: "expense", amount: "11423.40", categoryId: id.bills, accountId: id.account("HDFC Bank"), inDays: 3, note: "Education EMI" });
+}
+
 /** Short: HDFC Bank ₹9,000, salary in 8 days, rent ₹12,000 from HDFC Bank in 5 days → ₹3,000 short. */
 export async function seedShort(demo: Demo) {
   await addBank(demo, "9000");

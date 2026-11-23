@@ -8,6 +8,7 @@ import {
   entryTitle,
   fullDate,
   money,
+  pastDueLabel,
   setRecurringRuleArchived,
   showCostTile,
   signedAmount,
@@ -224,6 +225,7 @@ function Panel({ title, description, count, empty, children }: { title: string; 
 
 function Row({ item, lookup, today, onPress, children }: { item: RecurringItem; lookup: Lookup; today: string; onPress?: () => void; children?: ReactNode }) {
   const title = entryTitle(item.entry, lookup);
+  const pastDue = pastDueLabel(item, today);
   const when =
     item.kind === "ended" ? (item.date ? `Ended ${fullDate(item.date)}` : "Ended") : item.kind === "archived" ? "Archived" : item.date ? dayHeading(item.date, today) : "";
   const body = (
@@ -236,7 +238,7 @@ function Row({ item, lookup, today, onPress, children }: { item: RecurringItem; 
               {title}
             </Text>
             {item.kind === "needs_attention" ? <Badge label="Needs attention" tone="negative" /> : null}
-            {item.kind === "due" && item.date && item.date < today ? <Badge label="Missed" tone="info" /> : null}
+            {pastDue ? <Badge label={pastDue} tone={pastDue === "Overdue" ? "negative" : "info"} /> : null}
           </View>
           <Text style={text.caption} numberOfLines={2}>
             {item.schedule} · {entryKindLabel(item.entry, lookup)} · {accountChipText(item.entry, lookup)}

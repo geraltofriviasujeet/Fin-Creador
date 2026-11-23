@@ -59,6 +59,7 @@ export default function ActivityScreen() {
   const [pulling, setPulling] = useState(false);
   return (
     <Screen
+      aboveTabBar
       refreshControl={
         <RefreshControl
           refreshing={pulling}

@@ -6,10 +6,10 @@ import { Screen } from "@/components/screen";
 import { comingSoonMessage } from "@/navigation";
 import { colors } from "@/theme";
 
-/** Placeholder for a section a later sprint builds. Shows no figures. */
+/** Placeholder for a tab a later sprint builds (Roma). Shows no figures. */
 export function ComingSoon({ label, icon, description }: { label: string; icon: LucideIcon; description: string }) {
   return (
-    <Screen>
+    <Screen aboveTabBar>
       <PageHeader title={label} description={description} />
       <EmptyState
         icon={icon}

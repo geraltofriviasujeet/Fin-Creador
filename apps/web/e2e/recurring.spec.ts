@@ -97,7 +97,9 @@ test("a recurring expense is due, confirmed through the Add dialog, and costed",
 
   await addRule(page, { amount: "649", category: "Subscription", from: "HDFC Bank ··4821", start: daysAgo(40), note: "Streaming" })
   await expect(panel(page, /^Due/)).toContainText("Streaming")
-  await expect(panel(page, /^Due/)).toContainText("Missed")
+  // An unpaid expense past its date is Overdue (Missed is only for income that didn't arrive).
+  await expect(panel(page, /^Due/)).toContainText("Overdue")
+  await expect(panel(page, /^Due/)).not.toContainText("Missed")
   await expect(panel(page, /^Subscriptions/)).toContainText("Streaming")
   await expect(tile(page, "Subscriptions")).toContainText("₹649 / month")
   await expect(tile(page, "Subscriptions")).toContainText("₹7,788 a year")
@@ -180,12 +182,21 @@ test("the Income page shows recurring income only", async ({ page }) => {
   await newUser(page, "rec-income")
   await addRule(page, { type: "Income", amount: "95,000", category: "Salary", from: "HDFC Bank ··4821", start: daysAgo(40), note: "Monthly salary" })
   await addRule(page, { amount: "649", category: "Subscription", from: "HDFC Bank ··4821", start: daysAgo(40), note: "Streaming" })
+  const row = (title: RegExp | string, text: string) => panel(page, title).locator("li").filter({ hasText: text })
+  await expect(row(/^Due/, "Monthly salary").getByText("Missed", { exact: true })).toBeVisible()
+  await expect(row(/^Due/, "Streaming").getByText("Overdue", { exact: true })).toBeVisible()
   await page.goto("/income")
   const card = panel(page, "Upcoming")
   await expect(card).toContainText("Monthly salary")
   await expect(card).not.toContainText("Streaming")
+  // Income that didn't arrive is Missed; an unpaid expense past its date is Overdue.
+  await expect(row("Upcoming", "Monthly salary").getByText("Missed", { exact: true })).toBeVisible()
+  await page.screenshot({ path: "e2e-screenshots/13a-income-upcoming-missed.png", fullPage: true })
   await page.goto("/transactions")
   await expect(panel(page, "Upcoming")).toContainText("Streaming")
+  await expect(row("Upcoming", "Streaming").getByText("Overdue", { exact: true })).toBeVisible()
+  await expect(row("Upcoming", "Monthly salary").getByText("Missed", { exact: true })).toBeVisible()
+  await page.screenshot({ path: "e2e-screenshots/13a-transactions-upcoming-overdue.png", fullPage: true })
 })
 
 test("another user sees none of these rules; the prototype is gone", async ({ browser, baseURL }) => {

@@ -79,7 +79,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.page}>
       {header}
-      <Screen refreshControl={<RefreshControl refreshing={ready?.refreshing ?? false} onRefresh={() => void refresh()} />}>{body}</Screen>
+      <Screen aboveTabBar refreshControl={<RefreshControl refreshing={ready?.refreshing ?? false} onRefresh={() => void refresh()} />}>{body}</Screen>
     </View>
   );
 }

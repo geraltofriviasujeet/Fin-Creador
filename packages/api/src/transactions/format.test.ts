@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Lookup } from "./filters"
-import { accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, signedAmount } from "./format"
+import { accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, signedAmount, signedAmountWhole } from "./format"
 import type { LedgerItem } from "./types"
 
 const lookup: Lookup = {
@@ -33,6 +33,13 @@ describe("entry text", () => {
     expect(signedAmount(entry({}))).toMatch(/^[−-]₹2,480$/)
     expect(signedAmount(entry({ type: "income" }))).toBe("+₹2,480")
     expect(signedAmount(entry({ type: "transfer" }))).toBe("₹2,480")
+  })
+
+  it("signedAmountWhole: money out rounds up (as Coming up), money in rounds down", () => {
+    expect(signedAmountWhole(entry({ amountMinor: 1_142_340 }))).toMatch(/^[−-]₹11,424$/)
+    expect(signedAmountWhole(entry({ type: "transfer", amountMinor: 1_142_340 }))).toBe("₹11,424")
+    expect(signedAmountWhole(entry({ type: "income", amountMinor: 1_142_390 }))).toBe("+₹11,423")
+    expect(signedAmountWhole(entry({ amountMinor: 248_000 }))).toMatch(/^[−-]₹2,480$/)
   })
 
   it("writes calendar dates without time zones", () => {

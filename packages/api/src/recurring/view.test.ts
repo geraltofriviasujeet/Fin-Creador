@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { LedgerAccount, LedgerCategory } from "../transactions/types"
-import { type RecurringRule, buildRecurringView, showCostTile } from "./view"
+import { type RecurringRule, buildRecurringView, pastDueLabel, showCostTile } from "./view"
 
 const today = "2026-10-24"
 const account = (id: string, archived = false, currency = "INR"): LedgerAccount => ({
@@ -92,5 +92,22 @@ describe("buildRecurringView", () => {
     const byId = new Map([...v.soon, ...v.due].map((i) => [i.rule.id, i]))
     expect(byId.get("a")?.undoableSkip).toBe("2026-10-01")
     expect(byId.get("b")?.undoableSkip).toBeNull()
+  })
+})
+
+describe("pastDueLabel", () => {
+  it("says Overdue for a bill past its date and Missed only for income that didn't arrive", () => {
+    const v = view([rule("bill"), rule("salary", { type: "income", categoryId: null }), rule("move", { type: "transfer", categoryId: null, counterAccountId: "usd" })])
+    const label = (id: string) => pastDueLabel(v.due.find((i) => i.rule.id === id)!, today)
+    expect(label("bill")).toBe("Overdue")
+    expect(label("salary")).toBe("Missed")
+    expect(label("move")).toBe("Overdue")
+  })
+
+  it("is null when the occurrence is due today or not due", () => {
+    const due = view([rule("today", { startDate: today })]).due[0]!
+    expect(due.date).toBe(today)
+    expect(pastDueLabel(due, today)).toBeNull()
+    expect(pastDueLabel({ ...due, kind: "upcoming", date: "2026-10-01" }, today)).toBeNull()
   })
 })

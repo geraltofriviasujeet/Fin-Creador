@@ -1,4 +1,4 @@
-import { type IsoDate, addDays, formatMoney } from "@fin-creador/domain"
+import { type IsoDate, addDays, ceilToWholeMinor, floorToWholeMinor, formatMoney } from "@fin-creador/domain"
 import { PAYMENT_MODES, type PaymentModeValue } from "@fin-creador/schemas"
 import { ALL_TIME_RANGE, type Lookup } from "./filters"
 import type { EntryType, LedgerItem } from "./types"
@@ -39,6 +39,18 @@ export function entryKindLabel(entry: LedgerItem, lookup: Lookup): string {
 export function signedAmount(entry: Pick<LedgerItem, "type" | "amountMinor" | "currency">): string {
   if (entry.type === "transfer") return formatMoney(entry.amountMinor, { currency: entry.currency })
   return formatMoney(entry.type === "expense" ? -entry.amountMinor : entry.amountMinor, { currency: entry.currency, signed: true })
+}
+
+/**
+ * signedAmount in whole units, for summary lists such as the Upcoming card. Money out
+ * (expenses, transfers) rounds up and money in rounds down, so an amount to pay is never
+ * understated and income never overstated; a bill shows the same figure as on Coming up
+ * (billDisplayMinor). Display only: what is saved stays exact.
+ */
+export function signedAmountWhole(entry: Pick<LedgerItem, "type" | "amountMinor" | "currency">): string {
+  const moneyIn = entry.type === "income" || entry.type === "refund"
+  const amountMinor = (moneyIn ? floorToWholeMinor : ceilToWholeMinor)(entry.amountMinor, entry.currency)
+  return signedAmount({ ...entry, amountMinor })
 }
 
 export const money = (minor: number, currency: string) => formatMoney(minor, { currency })

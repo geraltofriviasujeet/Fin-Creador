@@ -5,6 +5,7 @@ import {
   type ChartChoices,
   type DashboardBreakdown,
   type GoalsView,
+  type HomeData,
   type InvestmentsView,
   type LoansView,
   CHART_OPTIONS,
@@ -47,6 +48,7 @@ import { InvestmentsOverviewCard } from "@/components/investments/overview-card"
 import { DueSoonOverviewCard } from "@/components/loans/due-soon"
 import { greeting } from "@/lib/greeting"
 import { CategoryPie } from "./category-pie"
+import { ComingUpCard, SafeToSpendCard, SafeToSpendUnavailable } from "./safe-to-spend"
 import { TimeChart } from "./time-chart"
 
 // The summary cards are summary figures: whole rupees (Money left is a balance, exact paise).
@@ -83,6 +85,8 @@ export type OverviewViewProps = {
   investments: InvestmentsView | null
   /** Loans for the "Due soon" card (null when they couldn't load; the card is then left out). */
   loans: LoansView | null
+  /** Safe to spend and Coming up, from the phone Home's buildHome (null when a part couldn't load). */
+  home: HomeData | null
 }
 
 function longDate(date: string): string {
@@ -90,7 +94,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans, home }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
@@ -112,6 +116,9 @@ export function OverviewView({ context, name, period, range, comparison, totals,
         title={greeting(name, timeZone)}
         description="Here’s your money this month."
       />
+
+      {/* Safe to spend first, as on the phone; a brand-new account sees the first-run card instead. */}
+      {home ? !home.isNew && <SafeToSpendCard home={home} /> : <SafeToSpendUnavailable />}
 
       {!context.hasEntries && <FirstRun hasAccounts={holdings.rows.length > 0} />}
 
@@ -237,6 +244,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <RecentCard recent={recent} lookup={lookup} today={today} />
         <div className="grid content-start gap-4">
+          {home && !home.isNew && <ComingUpCard home={home} />}
           {netWorth}
           <DueSoonOverviewCard view={loans} />
           {upcoming}
@@ -562,6 +570,11 @@ export function OverviewSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading overview">
       <PageHeader title={OVERVIEW_HEADER.title} description={OVERVIEW_HEADER.description} />
+      <Card tone="deep" className="mb-4 grid gap-4">
+        <span className="h-4 w-36 rounded bg-white/10" />
+        <span className="h-12 w-64 max-w-full rounded bg-white/10" />
+        <span className="h-4 w-40 rounded bg-white/10" />
+      </Card>
       <div className="mb-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
           <Card key={i} className="grid gap-4">
