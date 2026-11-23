@@ -1,4 +1,4 @@
-import { type HomeBill, type HomeData, heroText, shortWarnings } from "@fin-creador/api";
+import { type HomeBill, type HomeData, billDisplayMinor, heroText, shortWarnings } from "@fin-creador/api";
 import { formatDayMonth } from "@fin-creador/domain";
 import { type Href, useRouter } from "expo-router";
 import {
@@ -120,7 +120,7 @@ export function ComingUp({ home }: { home: HomeData }) {
               title={b.name}
               subtitle={`${formatDayMonth(b.dueDate)} · ${b.accountName ?? "No account set"}`}
               tag={b.overdue ? "Overdue" : undefined}
-              amount={{ minor: b.amountMinor, direction: "out", currency: b.currency }}
+              amount={{ minor: billDisplayMinor(b), direction: "out", currency: b.currency }}
             />
           ))
         )}

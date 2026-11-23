@@ -10,7 +10,7 @@ import { colors } from "@/theme";
 // mobile, so it is linked here; budgets, goals, loans and investments come later.
 export default function PlanScreen() {
   return (
-    <Screen>
+    <Screen aboveTabBar>
       <PageHeader title="Plan" description="Budgets, goals, loans and bills that repeat." />
       <RecurringSummaryCard />
       <EmptyState

@@ -1,7 +1,7 @@
 import { type Page, expect, test } from "@playwright/test";
 import { heroText, shortWarnings } from "@fin-creador/api";
 import { formatAmount } from "../src/components/ds/logic";
-import { type Demo, demoClient, expectedHome, seedNormal, seedOverdue, seedShort } from "./demo-data";
+import { type Demo, demoClient, expectedHome, seedNormal, seedOverdue, seedPaise, seedShort } from "./demo-data";
 import { createConfirmedUser } from "./demo-user";
 
 // Sprint 13a PR 4: Home on Expo web at 390px against CI's throwaway local Supabase, with a fresh
@@ -73,7 +73,7 @@ test("Home shows the demo user's Safe to spend, Coming up, Where it went and You
   await expect(page.getByText(money(hero.amountMinor), { exact: true }).first()).toBeVisible();
   await expect(page.getByText(hero.suffix!, { exact: true })).toBeVisible();
   await expect(page.getByText("₹3,050 left today", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Money left: ₹42,000")).toBeVisible();
+  await expect(page.getByLabel("At start of today: ₹42,000")).toBeVisible();
   await expect(page.getByLabel("Bills due: ₹3,000")).toBeVisible();
   await expect(page.getByLabel("For goals: ₹5,000")).toBeVisible();
 
@@ -87,6 +87,16 @@ test("Home shows the demo user's Safe to spend, Coming up, Where it went and You
   await expect(page.getByLabel("Cash, ₹3,500")).toBeVisible();
   await expect(page.getByRole("button", { name: "Ask Roma" })).toBeVisible();
   await shot(page, "13a-home-normal");
+
+  // At 390×844, scrolled to the end, the last row is fully clear of the raised ＋.
+  await page.mouse.move(195, 400);
+  await page.mouse.wheel(0, 10_000);
+  await expect(async () => {
+    const last = await page.getByRole("button", { name: "Ask Roma" }).boundingBox();
+    const add = await page.getByRole("button", { name: "Add an entry" }).boundingBox();
+    expect(last && add && last.y + last.height <= add.y).toBe(true);
+  }).toPass();
+  await page.screenshot({ path: `${SHOTS}/13a-home-scrolled-end.png` });
 
   // Quick actions open the existing sheet on the right type; Import UPI is coming soon.
   await page.getByRole("button", { name: "Income", exact: true }).click();
@@ -102,6 +112,24 @@ test("Home shows the demo user's Safe to spend, Coming up, Where it went and You
   await page.getByRole("button", { name: "Ask Roma" }).click();
   await expect(tab(page, "Roma")).toHaveAttribute("aria-selected", "true");
 
+  expect(errors).toEqual([]);
+});
+
+test("paise: the EMI row and Bills due round the same way, so the rows add up", async ({ page }) => {
+  const errors = collectErrors(page);
+  const { email, password, demo } = await newUser("paise", seedPaise);
+  const home = await expectedHome(demo);
+  const hero = heroText(home);
+  expect(home.safe.billsMinor).toBe(14_423_40); // exact
+  expect(hero.figures.map((f) => f.minor)).toEqual([42_000_00, 14_424_00, 5_000_00]);
+  expect(hero.amountMinor).toBe(2_822_00);
+
+  await signIn(page, email, password);
+  await expect(page.getByLabel("Bills due: ₹14,424")).toBeVisible();
+  await expect(page.getByLabel(/^Education EMI, \d{1,2} [A-Z][a-z]{2} · HDFC Bank, Money out, ₹11,424$/)).toBeVisible();
+  await expect(page.getByLabel(/^Electricity, .*, Money out, ₹2,400$/)).toBeVisible();
+  await expect(page.getByLabel(/^Phone, .*, Money out, ₹600$/)).toBeVisible();
+  await shot(page, "13a-home-paise");
   expect(errors).toEqual([]);
 });
 

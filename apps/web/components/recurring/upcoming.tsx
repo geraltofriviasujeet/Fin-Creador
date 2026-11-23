@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, CircleAlert } from "lucide-react"
-import { type EntryType, type LedgerAccount, type LedgerCategory, type Lookup, type RecurringItem, type RecurringView, UPCOMING_DAYS } from "@fin-creador/api"
+import { type EntryType, type LedgerAccount, type LedgerCategory, type Lookup, type RecurringItem, type RecurringView, UPCOMING_DAYS, pastDueLabel } from "@fin-creador/api"
 import type { IsoDate } from "@fin-creador/domain"
 import { cn } from "cn"
 import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, signedAmount } from "@/components/transactions/display"
@@ -15,6 +15,7 @@ import { type RecurringDialog, RecurringDialogs } from "./dialogs"
 
 /** A rule's row: icon, title, schedule, account, amount and date, then the actions given. */
 export function RecurringRow({ item, lookup, today, children }: { item: RecurringItem; lookup: Lookup; today: IsoDate; children?: React.ReactNode }) {
+  const pastDue = pastDueLabel(item, today)
   return (
     <li className="grid gap-2 border-b border-line px-5 py-3 last:border-b-0 md:flex md:items-center md:gap-4 md:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -23,7 +24,7 @@ export function RecurringRow({ item, lookup, today, children }: { item: Recurrin
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold">
             <span className="truncate">{entryTitle(item.entry, lookup)}</span>
             {item.kind === "needs_attention" && <Badge tone="negative">Needs attention</Badge>}
-            {item.kind === "due" && item.date && item.date < today && <Badge tone="info">Missed</Badge>}
+            {pastDue && <Badge tone={pastDue === "Overdue" ? "negative" : "info"}>{pastDue}</Badge>}
           </p>
           <p className="truncate text-xs text-muted-foreground">
             {item.schedule} · {entryKindLabel(item.entry, lookup)} · {accountChipText(item.entry, lookup)}

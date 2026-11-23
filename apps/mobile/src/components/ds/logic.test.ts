@@ -14,6 +14,7 @@ import {
   progressA11y,
   progressOf,
   tapSize,
+  tabScreenBottomPadding,
 } from "./logic";
 
 describe("formatAmount (AmountText)", () => {
@@ -83,6 +84,16 @@ describe("tap targets", () => {
 
   it("only the short axis gets slop", () => {
     expect(hitSlopFor(32, 120)).toEqual({ top: 6, bottom: 6, left: 0, right: 0 });
+  });
+});
+
+describe("tab screen bottom padding", () => {
+  it("clears the tab bar, the raised + and the safe area", () => {
+    // 66 bar + 56 raised + (an iPhone's 34 home-indicator inset).
+    expect(tabScreenBottomPadding(34)).toBe(66 + 56 + 34);
+    expect(tabScreenBottomPadding(0)).toBe(66 + 56);
+    // Always more than the + rises above the bar (half its height plus 4).
+    expect(tabScreenBottomPadding(0)).toBeGreaterThan(56 / 2 + 4);
   });
 });
 

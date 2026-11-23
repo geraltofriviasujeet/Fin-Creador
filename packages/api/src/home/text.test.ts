@@ -1,6 +1,6 @@
 import { type SafeToSpendInput, safeToSpend } from "@fin-creador/domain"
 import { describe, expect, it } from "vitest"
-import { heroText, shortWarnings } from "./text"
+import { billDisplayMinor, heroText, shortWarnings } from "./text"
 
 // Safe to spend's wording (phone Home and web Overview) from the shared safeToSpend result (demo figures, sprint-plan examples).
 const R = (rupees: number) => rupees * 100
@@ -31,7 +31,7 @@ describe("heroText", () => {
     expect(h.suffix).toBe("a day, until 1 Dec")
     expect(h.lines).toEqual(["₹3,300 left today"])
     expect(h.figures).toEqual([
-      { label: "Money left", minor: R(42_000) },
+      { label: "At start of today", minor: R(42_000) },
       { label: "Bills due", minor: R(4_000) },
       { label: "For goals", minor: R(2_000) },
     ])
@@ -46,6 +46,24 @@ describe("heroText", () => {
     // ₹24,000.10 over 8 days = ₹3,000.01 a day → ₹3,000.
     const h = heroText(home({ accounts: [{ ...base.accounts[0]!, startOfTodayMinor: R(30_000) + 10 }], spentTodayMinor: 0 }))
     expect(h.amountMinor).toBe(R(3_000))
+  })
+
+  it("bills with paise: each row and Bills due round up the same way, so the rows add up", () => {
+    // An EMI of ₹11,423.40 and a phone bill of ₹600.30: exact total ₹12,023.70.
+    const bills = [
+      { id: "emi", name: "Education EMI", dueDate: "2026-11-25", amountMinor: R(11_423) + 40, currency: "INR", accountId: "hdfc" },
+      { id: "phone", name: "Phone", dueDate: "2026-11-27", amountMinor: R(600) + 30, currency: "INR", accountId: "hdfc" },
+    ]
+    const h = home({ bills })
+    expect(h.safe.billsMinor).toBe(R(12_023) + 70) // the maths stays exact
+    expect(bills.map(billDisplayMinor)).toEqual([R(11_424), R(601)])
+    // ₹11,424 + ₹601, not the exact total rounded up (₹12,024).
+    expect(heroText(h).figures[1]).toEqual({ label: "Bills due", minor: R(12_025) })
+    // A single bill: the row and the total are the same figure.
+    const one = heroText(home({ bills: [bills[0]!] }))
+    expect(one.figures[1]!.minor).toBe(billDisplayMinor(bills[0]!))
+    // Whole-rupee bills are unchanged.
+    expect(billDisplayMinor({ amountMinor: R(4_000), currency: "INR" })).toBe(R(4_000))
   })
 
   it("below zero: ₹0 a day and '₹3,000 short before 1 Dec in HDFC Savings', with the runs-short warning", () => {

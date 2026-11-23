@@ -1,10 +1,11 @@
-import { DEFAULT_LOCALE, addDays, ceilToWholeMinor, floorToWholeMinor, formatDayMonth, formatMoneyWhole, ratioToBasisPoints } from "@fin-creador/domain"
+import { DEFAULT_LOCALE, addDays, addMinor, ceilToWholeMinor, floorToWholeMinor, formatDayMonth, formatMoneyWhole, ratioToBasisPoints } from "@fin-creador/domain"
 import type { HomeData } from "./view"
 
 // What Safe to spend says, on the phone's Home and the web Overview alike, from the shared
 // safeToSpend result, so both clients show the same words and figures. No arithmetic on
 // money here: amounts are rounded with the domain's display helpers (down to spend, a
-// shortfall up) and formatted with formatMoneyWhole.
+// shortfall or a bill up) and formatted with formatMoneyWhole. A total made of listed rows is
+// the sum of the rows as rounded, so what is on screen adds up; the maths stays in paise.
 
 export type HeroText = {
   title: "Safe to spend today" | "Money left this month"
@@ -16,7 +17,7 @@ export type HeroText = {
   lines: string[]
   /** The shortfall is shown as a warning. */
   short: boolean
-  /** The hero's figures: Money left, Bills due, For goals (whole units). */
+  /** The hero's figures: At start of today, Bills due, For goals (whole units). */
   figures: { label: string; minor: number }[]
   /** Spent today against the daily figure (0..1), or null when there is no daily figure. */
   spentBar: { value: number; label: string } | null
@@ -30,6 +31,14 @@ const money = (minor: number, currency: string) => formatMoneyWhole(minor, { cur
 const down = (minor: number, currency: string) => floorToWholeMinor(Math.max(0, minor), currency)
 const up = (minor: number, currency: string) => ceilToWholeMinor(Math.max(0, minor), currency)
 
+/**
+ * A bill as Coming up shows it: rounded up to a whole unit, so an amount to pay is never
+ * understated. Bills due is the sum of these, so the rows and the total visibly add up.
+ */
+export function billDisplayMinor(bill: { amountMinor: number; currency: string }): number {
+  return up(bill.amountMinor, bill.currency)
+}
+
 /** "Rent on 28 Nov leaves you ₹3,000 short in HDFC Savings", one per account that runs short. */
 export function shortWarnings(home: Pick<HomeData, "safe" | "currency">): string[] {
   return home.safe.shortAccounts.map(
@@ -40,8 +49,9 @@ export function shortWarnings(home: Pick<HomeData, "safe" | "currency">): string
 export function heroText(home: Pick<HomeData, "safe" | "currency" | "spentTodayMinor">): HeroText {
   const { safe, currency } = home
   const figures = [
-    { label: "Money left", minor: down(safe.moneyLeftMinor, currency) },
-    { label: "Bills due", minor: up(safe.billsMinor, currency) },
+    { label: "At start of today", minor: down(safe.moneyLeftMinor, currency) },
+    // The counted bills as each row shows them (exact total: safe.billsMinor).
+    { label: "Bills due", minor: addMinor(...safe.bills.map(billDisplayMinor)) },
     { label: "For goals", minor: up(safe.goalSavingMinor, currency) },
   ]
   const accounts = [...new Set(safe.shortAccounts.map((s) => s.accountName))]

@@ -52,6 +52,16 @@ export type RecurringItem = {
   lastPostedOn: IsoDate | null
 }
 
+/**
+ * The badge for a due occurrence whose date has passed: recurring income that didn't arrive is
+ * "Missed"; a bill, EMI, card due or other payment is "Overdue" (owner, 2026-11-23). Null
+ * otherwise. Shared by the Upcoming card, the Recurring page and the phone.
+ */
+export function pastDueLabel(item: Pick<RecurringItem, "kind" | "date" | "rule">, today: IsoDate): "Missed" | "Overdue" | null {
+  if (item.kind !== "due" || !item.date || item.date >= today) return null
+  return item.rule.type === "income" ? "Missed" : "Overdue"
+}
+
 export type RecurringGroup = "subscription" | "membership" | "other"
 
 export type RecurringView = {

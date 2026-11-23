@@ -4,7 +4,7 @@ import { type Database, type HomeData, heroText, shortWarnings, userToday } from
 import { formatMoneyWhole } from "@fin-creador/domain"
 // The phone's Home E2E seeders (Sprint 13a PR 4), reused so the web is checked against exactly
 // the same demo user data and the same expected figures as the phone.
-import { type Demo, expectedHome, seedNormal, seedOverdue, seedShort } from "../../mobile/e2e/demo-data"
+import { type Demo, expectedHome, seedNormal, seedOverdue, seedPaise, seedShort } from "../../mobile/e2e/demo-data"
 import { PASSWORD, signUpConfirmed, uniqueEmail } from "./helpers"
 
 // Sprint 13a PR 5: Safe to spend on the web Overview, against the throwaway local Supabase with
@@ -56,6 +56,9 @@ test("normal month: the same Safe to spend as the phone, ₹4,250 a day and ₹3
   const figures = safe(page).getByRole("definition")
   await expect(figures).toHaveText(hero.figures.map((f) => money(f.minor)))
   await expect(figures).toHaveText(["₹42,000", "₹3,000", "₹5,000"])
+  // The breakdown's first figure is the balance at the start of today; the summary card below
+  // keeps "Money left" for the current balance.
+  await expect(safe(page).getByRole("term")).toHaveText(["At start of today", "Bills due", "For goals"])
 
   // Coming up: both bills, soonest first, with their account; nothing overdue.
   const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
@@ -89,7 +92,27 @@ test("overdue bill: counted as due now and labelled Overdue, ₹4,125 a day as o
   await expect(bills.first()).toContainText("₹1,000")
   await expect(bills.nth(1)).toContainText("Electricity")
   await expect(bills.nth(1).getByText("Overdue", { exact: true })).toHaveCount(0)
+  // The Upcoming card says Overdue for the same unpaid bill, never Missed.
+  const upcoming = card(page, "Upcoming")
+  await expect(upcoming.locator("li").filter({ hasText: "Internet" }).getByText("Overdue", { exact: true })).toBeVisible()
+  await expect(upcoming.getByText("Missed", { exact: true })).toHaveCount(0)
   await shots(page, "13a-overview-safe-overdue")
+})
+
+test("paise: the EMI row and Bills due round the same way, so the rows add up", async ({ page }) => {
+  const home = await demoUser(page, "paise", seedPaise)
+  const hero = heroText(home)
+  expect(home.safe.billsMinor).toBe(14_423_40) // exact
+  expect(hero.amountMinor).toBe(2_822_00)
+
+  await expect(headline(page, "₹2,822")).toBeVisible()
+  await expect(safe(page).getByRole("definition")).toHaveText(["₹42,000", "₹14,424", "₹5,000"])
+  const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
+  await expect(bills).toHaveCount(3)
+  await expect(bills.filter({ hasText: "Education EMI" })).toContainText("₹11,424")
+  await expect(bills.filter({ hasText: "Electricity" })).toContainText("₹2,400")
+  await expect(bills.filter({ hasText: "Phone" })).toContainText("₹600")
+  await shots(page, "13a-overview-safe-paise")
 })
 
 test("short: ₹0 a day, the shortfall before payday and the account named", async ({ page }) => {

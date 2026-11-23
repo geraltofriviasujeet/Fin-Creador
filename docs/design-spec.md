@@ -73,10 +73,13 @@ link).
 
 - Greeting and date.
 - Forest hero card: "Safe to spend today ₹X a day, until <next income
-  date>", a spent-today bar and three figures: Money left, Bills due,
-  For goals.
+  date>", a spent-today bar and three figures: At start of today, Bills
+  due, For goals. Bills due is the sum of the Coming up rows as shown
+  (each bill rounded up to a whole rupee), so they add up.
 - Quick actions: Expense / Income / Import UPI / Transfer.
-- "Coming up" list (date, name, account, amount), with a red warning
+- "Coming up" list (date, name, account, amount; "Overdue" for an
+  unpaid bill past its date, "Missed" only for income that didn't
+  arrive), with a red warning
   banner when a bill would leave an account short ("Rent on 1 Dec leaves
   you ₹1,980 short in SBI").
 - "Where it went": top categories with budget bars.
@@ -131,8 +134,10 @@ link).
 - Rules: 44×44 tap targets; Indian digit grouping, whole rupees on
   summaries; money out with a minus, money in with a plus and green,
   never colour alone; one primary action per screen; cards white,
-  radius 22, padding 18, 16 apart, no shadows; plain words (Money left,
-  Bills due, Safe to spend); no ads.
+  radius 22, padding 18, 16 apart, no shadows; plain words (At start of
+  today, Bills due, Safe to spend); no ads. Tab screens pad their
+  bottom by the tab bar, the raised ＋ and the safe-area inset, so the
+  last row scrolls clear of the ＋.
 - React Native components only: do not import web components. Safe
   areas, expo-font for Manrope and DM Sans, native date picker.
 

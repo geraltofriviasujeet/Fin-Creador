@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { CalendarClock, ChevronRight, CircleAlert, CreditCard, FileText, HandCoins, Landmark, type LucideIcon } from "lucide-react"
-import { type HomeBill, type HomeData, UPCOMING_DAYS, heroText, shortWarnings } from "@fin-creador/api"
+import { type HomeBill, type HomeData, UPCOMING_DAYS, billDisplayMinor, heroText, shortWarnings } from "@fin-creador/api"
 import { formatDayMonth, formatMoneyWhole } from "@fin-creador/domain"
 import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
@@ -150,7 +150,7 @@ export function ComingUpCard({ home }: { home: HomeData }) {
                 <p className="shrink-0 text-right text-sm font-semibold tabular-nums">
                   <span className="sr-only">Money out, </span>
                   <span aria-hidden="true">{MINUS}</span>
-                  {whole(b.amountMinor, b.currency)}
+                  {whole(billDisplayMinor(b), b.currency)}
                 </p>
               </li>
             )

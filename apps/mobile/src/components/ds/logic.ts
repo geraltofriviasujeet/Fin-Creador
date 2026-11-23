@@ -70,6 +70,15 @@ export function tapSize(size: number, slop: number | undefined): number {
   return size + 2 * (slop ?? 0);
 }
 
+/**
+ * Bottom padding for a scrolling tab screen (Home, Activity, Plan, Roma): the tab bar's height,
+ * the raised ＋ and the bottom safe-area inset, so the last row scrolls fully clear of the ＋,
+ * which rises above the bar into the content (owner, 2026-11-23).
+ */
+export function tabScreenBottomPadding(safeAreaBottom: number): number {
+  return mobile.tabBar.height + mobile.tabBar.raisedButton + Math.max(0, safeAreaBottom);
+}
+
 // ---- Number keypad -------------------------------------------------------------------
 
 export type KeypadKey = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "." | "back";
