@@ -136,8 +136,12 @@ link).
   never colour alone; one primary action per screen; cards white,
   radius 22, padding 18, 16 apart, no shadows; plain words (At start of
   today, Bills due, Safe to spend); no ads. Tab screens pad their
-  bottom by the tab bar, the raised ＋ and the safe-area inset, so the
-  last row scrolls clear of the ＋.
+  bottom just clear of the raised ＋ plus 24px (the tab bar sits below
+  the screen and pads itself for the safe area).
+- Warnings on the forest hero (the "₹X short before {date}" line) use
+  `warningOnDark` (#ffa894, AA on forest) with the warning icon, never
+  lime. The "Overdue" tag is red on peach, as on the web; "Missed"
+  (income only) stays blue.
 - React Native components only: do not import web components. Safe
   areas, expo-font for Manrope and DM Sans, native date picker.
 

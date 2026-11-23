@@ -82,12 +82,14 @@ export type ListRowProps = {
   amount?: { minor: number; direction?: Direction; whole?: boolean; currency?: string };
   /** Small tag such as "Imported". */
   tag?: string;
+  /** "warning" for a problem such as Overdue (red on peach, as the web's negative badge). */
+  tagTone?: TagTone;
   onPress?: () => void;
   forcePressed?: boolean;
 };
 
 /** Icon tile, title and subtitle, optional tag, amount on the right. At least 64px tall. */
-export function ListRow({ icon, tint, title, subtitle, amount, tag, onPress, forcePressed }: ListRowProps) {
+export function ListRow({ icon, tint, title, subtitle, amount, tag, tagTone, onPress, forcePressed }: ListRowProps) {
   const amountLabel = amount ? formatAmount(amount.minor, amount).label : undefined;
   const label = listRowLabel({ title, subtitle, tag, amountLabel });
   const body = (pressed: boolean) => (
@@ -104,7 +106,7 @@ export function ListRow({ icon, tint, title, subtitle, amount, tag, onPress, for
                 {subtitle}
               </Text>
             ) : null}
-            {tag ? <Tag label={tag} /> : null}
+            {tag ? <Tag label={tag} tone={tagTone} /> : null}
           </View>
         ) : null}
       </View>
@@ -126,10 +128,12 @@ export function ListRow({ icon, tint, title, subtitle, amount, tag, onPress, for
   );
 }
 
-export function Tag({ label }: { label: string }) {
+export type TagTone = "neutral" | "warning";
+
+export function Tag({ label, tone = "neutral" }: { label: string; tone?: TagTone }) {
   return (
-    <View style={styles.tag}>
-      <Text style={styles.tagText}>{label}</Text>
+    <View style={[styles.tag, tone === "warning" && styles.tagWarning]}>
+      <Text style={[styles.tagText, tone === "warning" && styles.tagWarningText]}>{label}</Text>
     </View>
   );
 }
@@ -269,6 +273,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   tagText: { fontFamily: fontFamily.bodySemibold, fontSize: mobile.type.min.size, color: mobile.colors.ink },
+  tagWarning: { backgroundColor: mobile.categoryTints.peach },
+  tagWarningText: { color: mobile.colors.danger },
   categoryTile: {
     flex: 1,
     minHeight: 84,

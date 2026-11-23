@@ -46,6 +46,7 @@
   --color-success-fill: var(--fc-color-success-fill);
   --color-danger: var(--fc-color-danger);
   --color-danger-fill: var(--fc-color-danger-fill);
+  --color-warning-on-dark: var(--fc-color-warning-on-dark);
 
   /* shadcn semantic colours */
   --color-background: var(--background);

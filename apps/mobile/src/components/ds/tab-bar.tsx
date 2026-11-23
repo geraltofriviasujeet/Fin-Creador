@@ -2,6 +2,7 @@ import { House, type LucideIcon, Plus, ReceiptText, Sparkles, Target } from "luc
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fontFamily, mobile, spacing } from "@/theme";
+import { RAISED_ADD_OVERLAP } from "./logic";
 
 export type TabKey = "home" | "activity" | "plan" | "roma";
 
@@ -85,7 +86,7 @@ const styles = StyleSheet.create({
   addSlot: { flex: 1, alignSelf: "stretch", alignItems: "center" },
   add: {
     position: "absolute",
-    top: -(ADD_SIZE / 2 + spacing[1]),
+    top: -RAISED_ADD_OVERLAP,
     width: ADD_SIZE,
     height: ADD_SIZE,
     borderRadius: mobile.radius.tileLg,

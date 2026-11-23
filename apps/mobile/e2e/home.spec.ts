@@ -88,13 +88,17 @@ test("Home shows the demo user's Safe to spend, Coming up, Where it went and You
   await expect(page.getByRole("button", { name: "Ask Roma" })).toBeVisible();
   await shot(page, "13a-home-normal");
 
-  // At 390×844, scrolled to the end, the last row is fully clear of the raised ＋.
+  // At 390×844, scrolled to the end, the last card is fully clear of the raised ＋, by about
+  // 24px (not a large empty gap).
   await page.mouse.move(195, 400);
   await page.mouse.wheel(0, 10_000);
   await expect(async () => {
     const last = await page.getByRole("button", { name: "Ask Roma" }).boundingBox();
     const add = await page.getByRole("button", { name: "Add an entry" }).boundingBox();
-    expect(last && add && last.y + last.height <= add.y).toBe(true);
+    expect(last && add).toBeTruthy();
+    const gap = add!.y - (last!.y + last!.height);
+    expect(gap).toBeGreaterThanOrEqual(20);
+    expect(gap).toBeLessThanOrEqual(28);
   }).toPass();
   await page.screenshot({ path: `${SHOTS}/13a-home-scrolled-end.png` });
 
@@ -145,6 +149,8 @@ test("short: ₹0 a day, the shortfall before payday and the account named", asy
 
   await signIn(page, email, password);
   await expect(page.getByText(hero.lines[0]!, { exact: true })).toBeVisible();
+  // The shortfall is in the warning colour for the forest card, not lime.
+  await expect(page.getByText(hero.lines[0]!, { exact: true })).toHaveCSS("color", "rgb(255, 168, 148)");
   await expect(page.getByRole("alert", { name: `Warning: ${warning}` })).toBeVisible();
   await shot(page, "13a-home-short");
   expect(errors).toEqual([]);
@@ -172,6 +178,8 @@ test("overdue: an unpaid bill past its date is subtracted and listed first in Co
   await expect(rows).toHaveCount(4);
   await expect(rows.first()).toHaveAttribute("aria-label", /^Internet, \d{1,2} [A-Z][a-z]{2} · HDFC Bank, Overdue, Money out, ₹1,000$/);
   await expect(page.getByText("Overdue", { exact: true })).toBeVisible();
+  // Red on peach, as the web's Overdue badge (not the lavender neutral tag).
+  await expect(page.getByText("Overdue", { exact: true })).toHaveCSS("color", "rgb(154, 70, 54)");
   await shot(page, "13a-home-overdue");
   expect(errors).toEqual([]);
 });

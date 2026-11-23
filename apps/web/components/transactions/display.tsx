@@ -97,4 +97,5 @@ export {
   paymentModeLabel,
   rangeText,
   signedAmount,
+  signedAmountWhole,
 } from "@fin-creador/api"

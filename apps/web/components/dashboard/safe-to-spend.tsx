@@ -2,7 +2,6 @@ import Link from "next/link"
 import { CalendarClock, ChevronRight, CircleAlert, CreditCard, FileText, HandCoins, Landmark, type LucideIcon } from "lucide-react"
 import { type HomeBill, type HomeData, UPCOMING_DAYS, billDisplayMinor, heroText, shortWarnings } from "@fin-creador/api"
 import { formatDayMonth, formatMoneyWhole } from "@fin-creador/domain"
-import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 
@@ -31,11 +30,22 @@ export function SafeToSpendCard({ home }: { home: HomeData }) {
           <span className="font-heading text-4xl font-semibold tracking-(--fc-tracking-heading) tabular-nums md:text-5xl">{whole(hero.amountMinor, currency)}</span>
           {hero.suffix && <span className="text-base text-nav-text">{hero.suffix}</span>}
         </p>
-        {hero.lines.map((line, i) => (
-          <p key={line} className={cn("text-sm font-semibold", hero.short && i === 0 ? "text-brand" : "text-nav-text")}>
-            {line}
-          </p>
-        ))}
+        {hero.lines.map((line, i) =>
+          hero.short && i === 0 ? (
+            // The shortfall reads as a problem: warning colour and icon (never lime, which reads as good).
+            <p key={line} className="flex items-start gap-2 text-sm font-semibold text-warning-on-dark">
+              <CircleAlert aria-hidden="true" className="mt-px size-4 shrink-0" />
+              <span>
+                <span className="sr-only">Warning: </span>
+                {line}
+              </span>
+            </p>
+          ) : (
+            <p key={line} className="text-sm font-semibold text-nav-text">
+              {line}
+            </p>
+          ),
+        )}
         {hero.spentBar && (
           <div className="mt-1 grid max-w-md gap-1.5">
             <div

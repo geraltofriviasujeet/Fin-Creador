@@ -14,7 +14,8 @@ import {
   progressA11y,
   progressOf,
   tapSize,
-  tabScreenBottomPadding,
+  RAISED_ADD_OVERLAP,
+  TAB_SCREEN_BOTTOM_PADDING,
 } from "./logic";
 
 describe("formatAmount (AmountText)", () => {
@@ -88,12 +89,10 @@ describe("tap targets", () => {
 });
 
 describe("tab screen bottom padding", () => {
-  it("clears the tab bar, the raised + and the safe area", () => {
-    // 66 bar + 56 raised + (an iPhone's 34 home-indicator inset).
-    expect(tabScreenBottomPadding(34)).toBe(66 + 56 + 34);
-    expect(tabScreenBottomPadding(0)).toBe(66 + 56);
-    // Always more than the + rises above the bar (half its height plus 4).
-    expect(tabScreenBottomPadding(0)).toBeGreaterThan(56 / 2 + 4);
+  it("clears the raised + by 24px", () => {
+    // The 56px + rises half its height plus 4px above the bar.
+    expect(RAISED_ADD_OVERLAP).toBe(56 / 2 + 4);
+    expect(TAB_SCREEN_BOTTOM_PADDING).toBe(32 + 24);
   });
 });
 

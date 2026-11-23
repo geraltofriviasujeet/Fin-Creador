@@ -52,6 +52,8 @@ export const colors = {
   dangerFill: "#b95d4a",
   /** Mobile warning (design-spec §5): over-budget bars, "leaves you short" banners. Text-safe on surface/canvas. */
   warning: "#c2412d",
+  /** Warning text on forest (hero card shortfall line), with the warning icon. AA on nav and accentDeep. */
+  warningOnDark: "#ffa894",
   /** Mobile neutral category tint (design-spec §5). */
   tintGrey: "#f0f3f1",
 } as const;
@@ -107,6 +109,8 @@ export const contrastPairs: ReadonlyArray<{
   { fg: "muted", bg: "tintGrey", min: 4.5, use: "secondary text on grey tint" },
   { fg: "accent", bg: "nav", min: 4.5, use: "lime on forest (primary button label, + icon)" },
   { fg: "navText", bg: "nav", min: 4.5, use: "text on forest hero card" },
+  { fg: "warningOnDark", bg: "nav", min: 4.5, use: "shortfall warning on the phone's forest hero" },
+  { fg: "warningOnDark", bg: "accentDeep", min: 4.5, use: "shortfall warning on the web's deep hero" },
 ];
 
 /** Radii in px. Cards 20, inner blocks 14, buttons/inputs 10. */
@@ -223,6 +227,10 @@ export const mobile = {
     /** Money in amounts (always with a + sign). */
     moneyIn: colors.successFill,
     warning: colors.warning,
+    /** Warning tag text (Overdue) on peach: the web's negative badge colours. */
+    danger: colors.danger,
+    /** Warning text and icon on the forest hero. */
+    warningOnForest: colors.warningOnDark,
     muted: colors.muted,
     /** Icons and placeholders only. */
     mutedSubtle: colors.mutedSubtle,

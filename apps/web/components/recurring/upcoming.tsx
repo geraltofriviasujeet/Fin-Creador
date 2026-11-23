@@ -6,15 +6,31 @@ import { ArrowRight, CircleAlert } from "lucide-react"
 import { type EntryType, type LedgerAccount, type LedgerCategory, type Lookup, type RecurringItem, type RecurringView, UPCOMING_DAYS, pastDueLabel } from "@fin-creador/api"
 import type { IsoDate } from "@fin-creador/domain"
 import { cn } from "cn"
-import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, signedAmount } from "@/components/transactions/display"
+import { EntryIcon, accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, signedAmount, signedAmountWhole } from "@/components/transactions/display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { type RecurringDialog, RecurringDialogs } from "./dialogs"
 
-/** A rule's row: icon, title, schedule, account, amount and date, then the actions given. */
-export function RecurringRow({ item, lookup, today, children }: { item: RecurringItem; lookup: Lookup; today: IsoDate; children?: React.ReactNode }) {
+/**
+ * A rule's row: icon, title, schedule, account, amount and date, then the actions given.
+ * `whole` shows whole units (the Upcoming card, matching Coming up); the Recurring page keeps
+ * the exact amount.
+ */
+export function RecurringRow({
+  item,
+  lookup,
+  today,
+  whole = false,
+  children,
+}: {
+  item: RecurringItem
+  lookup: Lookup
+  today: IsoDate
+  whole?: boolean
+  children?: React.ReactNode
+}) {
   const pastDue = pastDueLabel(item, today)
   return (
     <li className="grid gap-2 border-b border-line px-5 py-3 last:border-b-0 md:flex md:items-center md:gap-4 md:px-6">
@@ -39,7 +55,7 @@ export function RecurringRow({ item, lookup, today, children }: { item: Recurrin
       </div>
       <div className="flex items-center justify-between gap-3 pl-14 md:pl-0">
         <div className="text-right">
-          <p className="text-sm font-semibold tabular-nums">{signedAmount(item.entry)}</p>
+          <p className="text-sm font-semibold tabular-nums">{whole ? signedAmountWhole(item.entry) : signedAmount(item.entry)}</p>
           <p className="text-xs text-muted-foreground">
             {item.kind === "ended" ? (item.date ? `Ended ${fullDate(item.date)}` : "Ended") : item.kind === "archived" ? "Archived" : item.date ? dayHeading(item.date, today) : ""}
           </p>
@@ -126,7 +142,7 @@ export function UpcomingCard({
       ) : (
         <ul className="mt-4 border-t border-line">
           {shown.map((i) => (
-            <RecurringRow key={i.rule.id} item={i} lookup={lookup} today={today}>
+            <RecurringRow key={i.rule.id} item={i} lookup={lookup} today={today} whole>
               {i.kind === "due" && (
                 <Button size="sm" onClick={() => onConfirm(i)} aria-label={`Confirm ${entryTitle(i.entry, lookup)}`}>
                   Confirm

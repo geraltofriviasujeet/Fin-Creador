@@ -9,7 +9,7 @@ import {
   parseAmount,
   regroupAmountInput,
 } from "@fin-creador/domain";
-import { mobile } from "@fin-creador/design-tokens";
+import { mobile, spacing } from "@fin-creador/design-tokens";
 
 /** in = money received (+, green), out = money spent (−), neutral = a balance or total. */
 export type Direction = "in" | "out" | "neutral";
@@ -70,14 +70,18 @@ export function tapSize(size: number, slop: number | undefined): number {
   return size + 2 * (slop ?? 0);
 }
 
+/** How far the tab bar's raised ＋ rises above the bar's top edge into the screen above. */
+export const RAISED_ADD_OVERLAP = mobile.tabBar.raisedButton / 2 + spacing[1];
+
+/** Space left between a tab screen's last row and the top of the raised ＋. */
+export const TAB_SCREEN_CLEARANCE = 24;
+
 /**
- * Bottom padding for a scrolling tab screen (Home, Activity, Plan, Roma): the tab bar's height,
- * the raised ＋ and the bottom safe-area inset, so the last row scrolls fully clear of the ＋,
- * which rises above the bar into the content (owner, 2026-11-23).
+ * Bottom padding for a scrolling tab screen (Home, Activity, Plan, Roma): just clear of the
+ * raised ＋ plus 24px (owner, PR #94 review). The tab bar sits below the screen (not over it)
+ * and pads itself for the safe area, so only the ＋'s overlap needs clearing.
  */
-export function tabScreenBottomPadding(safeAreaBottom: number): number {
-  return mobile.tabBar.height + mobile.tabBar.raisedButton + Math.max(0, safeAreaBottom);
-}
+export const TAB_SCREEN_BOTTOM_PADDING = RAISED_ADD_OVERLAP + TAB_SCREEN_CLEARANCE;
 
 // ---- Number keypad -------------------------------------------------------------------
 

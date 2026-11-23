@@ -112,6 +112,10 @@ test("paise: the EMI row and Bills due round the same way, so the rows add up", 
   await expect(bills.filter({ hasText: "Education EMI" })).toContainText("₹11,424")
   await expect(bills.filter({ hasText: "Electricity" })).toContainText("₹2,400")
   await expect(bills.filter({ hasText: "Phone" })).toContainText("₹600")
+  // The Upcoming card shows the same bill the same way: whole rupees, rounded up.
+  const upcomingEmi = card(page, "Upcoming").locator("li").filter({ hasText: "Education EMI" })
+  await expect(upcomingEmi).toContainText("₹11,424")
+  await expect(upcomingEmi).not.toContainText("11,423")
   await shots(page, "13a-overview-safe-paise")
 })
 
@@ -125,7 +129,11 @@ test("short: ₹0 a day, the shortfall before payday and the account named", asy
 
   await expect(headline(page, "₹0")).toBeVisible()
   await expect(safe(page).getByText(hero.suffix!, { exact: true })).toBeVisible()
-  await expect(safe(page).getByText(hero.lines[0]!, { exact: true })).toBeVisible()
+  // The shortfall is a warning (screen readers hear "Warning:"), in the warning colour, not lime.
+  const shortLine = safe(page).getByText(hero.lines[0]!)
+  await expect(shortLine).toBeVisible()
+  await expect(shortLine).toHaveText(`Warning: ${hero.lines[0]}`)
+  await expect(shortLine).toHaveCSS("color", "rgb(255, 168, 148)")
   await expect(safe(page).getByRole("progressbar")).toHaveCount(0)
   await expect(safe(page).getByRole("definition")).toHaveText(hero.figures.map((f) => money(f.minor)))
   await expect(safe(page).getByRole("definition")).toHaveText(["₹9,000", "₹12,000", "₹0"])

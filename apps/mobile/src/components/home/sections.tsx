@@ -8,6 +8,7 @@ import {
   Banknote,
   CalendarClock,
   ChevronRight,
+  CircleAlert,
   CreditCard,
   FileText,
   HandCoins,
@@ -43,11 +44,19 @@ export function HeroCard({ home }: { home: HomeData }) {
           <AmountText minor={hero.amountMinor} currency={home.currency} size="hero" onDark />
           {hero.suffix ? <Text style={[dsText.body, styles.onForestMuted]}>{hero.suffix}</Text> : null}
         </View>
-        {hero.lines.map((line) => (
-          <Text key={line} style={[dsText.bodyStrong, hero.short && line === hero.lines[0] ? styles.lime : styles.onForest]}>
-            {line}
-          </Text>
-        ))}
+        {hero.lines.map((line) =>
+          hero.short && line === hero.lines[0] ? (
+            // The shortfall reads as a problem: warning colour and icon (never lime, which reads as good).
+            <View key={line} style={styles.shortLine}>
+              <CircleAlert size={18} color={mobile.colors.warningOnForest} style={styles.shortIcon} />
+              <Text style={[dsText.bodyStrong, styles.warningOnForest, styles.shrink]}>{line}</Text>
+            </View>
+          ) : (
+            <Text key={line} style={[dsText.bodyStrong, styles.onForest]}>
+              {line}
+            </Text>
+          ),
+        )}
       </View>
       {hero.spentBar ? (
         <View style={styles.bar}>
@@ -120,6 +129,7 @@ export function ComingUp({ home }: { home: HomeData }) {
               title={b.name}
               subtitle={`${formatDayMonth(b.dueDate)} · ${b.accountName ?? "No account set"}`}
               tag={b.overdue ? "Overdue" : undefined}
+              tagTone="warning"
               amount={{ minor: billDisplayMinor(b), direction: "out", currency: b.currency }}
             />
           ))
@@ -241,7 +251,10 @@ const styles = StyleSheet.create({
   heroLine: { flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", columnGap: spacing[2] },
   onForest: { color: mobile.colors.onForest },
   onForestMuted: { color: mobile.colors.onForestMuted },
-  lime: { color: mobile.colors.lime },
+  warningOnForest: { color: mobile.colors.warningOnForest },
+  shortLine: { flexDirection: "row", alignItems: "flex-start", gap: spacing[2] },
+  shortIcon: { marginTop: 2 },
+  shrink: { flexShrink: 1 },
   bar: { gap: spacing[1] },
   figures: { flexDirection: "row", gap: spacing[3] },
   figure: { flex: 1, gap: 2 },
