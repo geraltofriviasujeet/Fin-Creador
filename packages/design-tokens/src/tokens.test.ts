@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { toCssVariables } from "./css.ts";
-import { MIN_FONT_SIZE, colors, contrastPairs, fontSize, layout } from "./index.ts";
+import { MIN_FONT_SIZE, colors, contrastPairs, fontSize, layout, mobile } from "./index.ts";
 
 const pkgDir = fileURLToPath(new URL("..", import.meta.url));
 const repoRoot = join(pkgDir, "..", "..");
@@ -61,7 +61,7 @@ describe("minimum text size", () => {
     const files: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
-        if (["node_modules", ".next", ".expo"].includes(name)) continue;
+        if (["node_modules", ".next", ".expo", "dist", "dist-js", "dist-web", "test-results"].includes(name)) continue;
         const path = join(dir, name);
         if (statSync(path).isDirectory()) walk(path);
         else if (/\.(tsx?|css)$/.test(name)) files.push(path);
@@ -88,5 +88,40 @@ describe("minimum text size", () => {
     }
     expect(files.length).toBeGreaterThan(0);
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("mobile design system (design-spec §5)", () => {
+  it("type scale matches the approved sizes and never goes under 12px", () => {
+    expect(mobile.type.hero).toMatchObject({ size: 44, weight: 800 });
+    expect(mobile.type.screenTitle).toMatchObject({ size: 28, weight: 800 });
+    expect(mobile.type.cardTitle).toMatchObject({ size: 18, weight: 700 });
+    expect(mobile.type.body.size).toBe(16);
+    expect(mobile.type.caption.size).toBe(13);
+    for (const step of Object.values(mobile.type)) expect(step.size).toBeGreaterThanOrEqual(MIN_FONT_SIZE);
+  });
+
+  it("uses the approved colours, radii and tap target", () => {
+    expect(mobile.colors).toMatchObject({
+      forest: "#17251f",
+      lime: "#b9f06b",
+      canvas: "#f5f7f3",
+      ink: "#18251f",
+      moneyIn: "#20805a",
+      warning: "#c2412d",
+      muted: "#5f6e66",
+      line: "#e3e9e5",
+    });
+    expect(mobile.categoryTints).toEqual({
+      peach: "#fee5d9",
+      mint: "#dff6dc",
+      blue: "#ddecf8",
+      lavender: "#e8e6ff",
+      grey: "#f0f3f1",
+    });
+    expect(mobile.radius.card).toBe(22);
+    expect(mobile.radius.tileSm).toBeGreaterThanOrEqual(14);
+    expect(mobile.radius.tileLg).toBeLessThanOrEqual(18);
+    expect(mobile.tapTarget).toBeGreaterThanOrEqual(44);
   });
 });

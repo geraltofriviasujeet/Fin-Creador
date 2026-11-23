@@ -1,6 +1,7 @@
 import type { ProfileFormValues } from "@fin-creador/api";
 import { countryOptions, currencyOptions, timeZoneOptions } from "@fin-creador/schemas";
-import { LogOut, RotateCw } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { LogOut, Palette, RotateCw } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { Button } from "@/components/button";
@@ -61,6 +62,8 @@ export default function SettingsScreen() {
       </Card>
 
       <AccountCard email={load !== "loading" && load.ok ? load.email : undefined} />
+      {/* Development builds only (Sprint 12c); removed from production bundles with __DEV__. */}
+      {__DEV__ ? <DevToolsCard /> : null}
     </Screen>
   );
 }
@@ -161,6 +164,19 @@ function AccountCard({ email }: { email?: string }) {
           }
         }}
       />
+    </Card>
+  );
+}
+
+function DevToolsCard() {
+  const router = useRouter();
+  return (
+    <Card style={styles.card}>
+      <View>
+        <CardTitle>Developer</CardTitle>
+        <CardDescription>Development builds only. Not shown in the released app.</CardDescription>
+      </View>
+      <Button label="Design system" variant="secondary" icon={Palette} onPress={() => router.push("/dev/design-system")} />
     </Card>
   );
 }

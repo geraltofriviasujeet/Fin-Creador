@@ -123,7 +123,8 @@ link).
   (accent, primary button text), Canvas #F5F7F3, Ink #18251F, Money in
   #20805A, Warning #C2412D, Muted text #5F6E66, Line #E3E9E5. Category
   tints: Peach #FEE5D9, Mint #DFF6DC, Blue #DDECF8, Lavender #E8E6FF,
-  Grey #F0F3F1. Values go into `packages/design-tokens` (Sprint 12c).
+  Grey #F0F3F1. Values live in `packages/design-tokens` as the `mobile`
+  object (Sprint 12c); components in `apps/mobile/src/components/ds`.
 - Type: Manrope for amounts and titles (hero 44/800, screen title
   28/800, card title 18/700); DM Sans body 16, captions 13, never under
   12.

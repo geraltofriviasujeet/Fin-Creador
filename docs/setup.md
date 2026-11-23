@@ -144,6 +144,18 @@ resolves to that IP (`<ip-with-dashes>.sslip.io`), so Google can return to Expo 
 builds use `fincreador://auth/callback` and don't need it. This is a development-only
 workaround; see "Before production" in `docs/sprint-plan.md`.
 
+**Design-system preview (Sprint 12c)** shows every mobile component in its states with
+sample figures. It exists only in development builds (Expo Go and `expo start`); release
+builds leave its code out.
+
+- Signed in: Settings → Developer → **Design system**.
+- Signed out, or straight there: with `npm run dev:mobile` running, open
+  `exp://<your-computer's-LAN-IP>:8081/--/dev/design-system` on the phone (paste it into the
+  browser or send it to yourself; Expo Go opens it). The LAN address is the one printed
+  under the QR code.
+- On a computer: `npm run preview:web -w @fin-creador/mobile`, then
+  `node apps/mobile/e2e/serve.mjs` and open `http://127.0.0.1:8090/dev/design-system`.
+
 ## Tests and CI
 
 | What | Where | Command |
@@ -154,6 +166,7 @@ workaround; see "Before production" in `docs/sprint-plan.md`.
 | Secret check | local and CI | `npm run check:secrets` |
 | Migrations and pgTAP (RLS) | CI only | `supabase test db` |
 | End-to-end (Playwright, web) | CI only | `npm run test:e2e` |
+| Mobile design-system preview (Expo web, 390px) | local and CI | `npm run preview:web -w @fin-creador/mobile && npm run e2e -w @fin-creador/mobile` |
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and uses no
 repository secrets:
@@ -169,6 +182,11 @@ repository secrets:
   `apps/web/e2e`: sign-up with email confirmation, unconfirmed sign-in and resend, sign-in
   errors, protected routes and safe redirects, profile save, password reset and sign-out.
   On failure the Playwright report is uploaded as a build artifact.
+- **Mobile design-system preview:** exports the Expo app for web as a development build,
+  checks every component renders at 390px without errors and with its roles and labels, and
+  uploads the screenshots (`mobile-design-system-screenshots`). The build job checks that
+  the preview is not in the production iOS and Android bundles
+  (`scripts/check-mobile-preview-excluded.mjs`).
 
 The end-to-end tests refuse to run unless the app points at a local Supabase, so they can
 never create users in a hosted project.

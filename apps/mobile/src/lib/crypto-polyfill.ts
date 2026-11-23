@@ -34,4 +34,6 @@ if (!target.subtle?.digest) {
     },
   };
 }
-scope.crypto = target;
+// Assign only when missing: an existing crypto object (browsers, for Expo web) was patched
+// in place above, and window.crypto is read-only there.
+if (!scope.crypto) scope.crypto = target;

@@ -1,10 +1,11 @@
-// Per-weight imports so only these six font files are bundled.
+// Per-weight imports so only these seven font files are bundled.
 import { DMSans_400Regular } from "@expo-google-fonts/dm-sans/400Regular";
 import { DMSans_500Medium } from "@expo-google-fonts/dm-sans/500Medium";
 import { DMSans_600SemiBold } from "@expo-google-fonts/dm-sans/600SemiBold";
 import { DMSans_700Bold } from "@expo-google-fonts/dm-sans/700Bold";
 import { Manrope_600SemiBold } from "@expo-google-fonts/manrope/600SemiBold";
 import { Manrope_700Bold } from "@expo-google-fonts/manrope/700Bold";
+import { Manrope_800ExtraBold } from "@expo-google-fonts/manrope/800ExtraBold";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -23,6 +24,7 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Manrope_600SemiBold,
     Manrope_700Bold,
+    Manrope_800ExtraBold,
     DMSans_400Regular,
     DMSans_500Medium,
     DMSans_600SemiBold,
@@ -72,6 +74,11 @@ function RootNavigator() {
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
       <Stack.Screen name="auth/callback" />
+      {/* Design-system preview (Sprint 12c): development builds only. The screen's code is
+          also left out of production bundles; see app/dev/design-system.tsx. */}
+      <Stack.Protected guard={__DEV__}>
+        <Stack.Screen name="dev/design-system" />
+      </Stack.Protected>
     </Stack>
   );
 }

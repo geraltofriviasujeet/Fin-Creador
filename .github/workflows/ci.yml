@@ -1,5 +1,5 @@
-# CI for pull requests and for every push to main (after a merge, same jobs): app checks, secret check, database (migration + pgTAP) tests and
-# web end-to-end tests.
+# CI for pull requests and for every push to main (after a merge, same jobs): app checks, secret check, database (migration + pgTAP) tests,
+# web end-to-end tests and the mobile design-system preview (Expo web).
 # Runs only against throwaway services on the GitHub runner. It never connects to the
 # hosted Supabase project and uses no repository secrets.
 name: CI
@@ -72,6 +72,65 @@ jobs:
         run: node scripts/check-secrets.mjs --repo apps/web/.next/static apps/mobile/dist-js
         env:
           CHECK_SECRETS_CANARY: fc-canary-${{ github.run_id }}-not-a-secret
+
+      # Sprint 12c: the design-system preview is development-only and must not ship.
+      - name: Design-system preview left out of production bundles
+        run: node scripts/check-mobile-preview-excluded.mjs apps/mobile/dist apps/mobile/dist-js
+
+  # Sprint 12c: the mobile design-system preview on Expo web at 390px. A development export
+  # (the preview is not in production builds), served statically; Playwright checks every
+  # component renders without errors and saves screenshots as the
+  # mobile-design-system-screenshots artifact. Placeholder public env values only: the
+  # preview makes no network calls and the app never signs in here.
+  mobile-preview:
+    name: Mobile design-system preview (Expo web)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Export the app for web (development build)
+        run: npm run preview:web -w @fin-creador/mobile
+        env:
+          CI: "1"
+          EXPO_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_preview_placeholder
+          EXPO_PUBLIC_WEB_URL: http://localhost:3000
+
+      # Positive control for the production check in the app job: the marker is found here.
+      - name: Preview marker present in the development export
+        run: node scripts/check-mobile-preview-excluded.mjs --expect-present apps/mobile/dist-web
+
+      # Uses the Google Chrome preinstalled on the runner (Playwright channel "chrome").
+      - name: Run preview E2E at 390px
+        run: npm run e2e -w @fin-creador/mobile
+
+      - name: Upload preview screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mobile-design-system-screenshots
+          path: apps/mobile/e2e-screenshots
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mobile-preview-traces
+          path: apps/mobile/test-results
+          retention-days: 7
 
   database:
     name: Migrations and pgTAP tests
