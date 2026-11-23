@@ -74,17 +74,17 @@ test("old screens stay reachable: Income, Recurring, Settings and Sign out", asy
 
   // Home still carries the Income and Recurring cards until PR 4 of 13a replaces them.
   await page.getByRole("button", { name: /^Income and accounts\./ }).click();
-  await expect(page.getByRole("heading", { name: "Income", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Income", exact: true }).first()).toBeVisible();
   await page.goBack();
 
   await page.getByRole("button", { name: /^Recurring\./ }).first().click();
-  await expect(page.getByRole("heading", { name: "Recurring", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recurring", exact: true }).first()).toBeVisible();
   await page.goBack();
 
   // Plan links to Recurring too (bills that repeat) until 13c.
   await tab(page, "Plan").click();
   await page.getByRole("button", { name: /^Recurring\./ }).click();
-  await expect(page.getByRole("heading", { name: "Recurring", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recurring", exact: true }).first()).toBeVisible();
   await page.goBack();
 
   // Settings is one tap from every tab's header; Sign out is on it.
