@@ -16,7 +16,8 @@ own project's values, and never commit them.
 
 ## 1. Prerequisites
 
-- Node.js 22.12 or later (CI uses Node 24) and npm.
+- Node.js 24 and npm, the same as CI (`.nvmrc`; `engines` in `package.json`). With nvm:
+  `nvm install && nvm use`.
 - A Supabase project for development. Its URL looks like
   `https://<project-ref>.supabase.co`.
 - The Supabase CLI, only for linking the project, generating types and pushing migrations.
@@ -167,6 +168,10 @@ builds leave its code out.
 | Migrations and pgTAP (RLS) | CI only | `supabase test db` |
 | End-to-end (Playwright, web) | CI only | `npm run test:e2e` |
 | Mobile design-system preview (Expo web, 390px) | local and CI | `npm run preview:web -w @fin-creador/mobile && npm run e2e -w @fin-creador/mobile` |
+
+Run local tests on Node 24. The time-zone table test (`packages/domain/src/local-time.test.ts`)
+compares the bundled offsets with the running Node's time-zone data (tzdata), so a newer or
+older Node can report an offset difference that CI, on Node 24, does not.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and uses no
 repository secrets:
