@@ -1,6 +1,6 @@
 import { type Page, expect, test } from "@playwright/test";
+import { heroText, shortWarnings } from "@fin-creador/api";
 import { formatAmount } from "../src/components/ds/logic";
-import { heroText, shortWarnings } from "../src/components/home/home-text";
 import { type Demo, demoClient, expectedHome, seedNormal, seedOverdue, seedShort } from "./demo-data";
 import { createConfirmedUser } from "./demo-user";
 

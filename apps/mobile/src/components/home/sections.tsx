@@ -1,4 +1,4 @@
-import type { HomeBill, HomeData } from "@fin-creador/api";
+import { type HomeBill, type HomeData, heroText, shortWarnings } from "@fin-creador/api";
 import { formatDayMonth } from "@fin-creador/domain";
 import { type Href, useRouter } from "expo-router";
 import {
@@ -24,7 +24,6 @@ import { useToast } from "@/components/toast";
 import { categoryIcon } from "@/components/transactions/entry-icon";
 import { comingSoonMessage } from "@/navigation";
 import { dsText, mobile, spacing } from "@/theme";
-import { heroText, shortWarnings } from "./home-text";
 
 // Home's sections (design-spec §5). Every figure comes from HomeData (packages/api buildHome);
 // amounts go through AmountText / formatAmount, dates through the domain formatters.

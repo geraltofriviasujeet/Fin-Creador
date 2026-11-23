@@ -6,6 +6,35 @@ import { loadRecurringData } from "../recurring"
 import { loadTransactionsContext } from "../transactions/load"
 import { type HomeData, type TodayEntry, buildHome } from "./view"
 
+/**
+ * Every entry dated `today` (voided ones too): the same rows account_balances reads, so the
+ * start-of-today balance is exact. Null when the read fails.
+ */
+export async function loadTodayEntries(supabase: UserClient, today: string): Promise<TodayEntry[] | null> {
+  const rows = await allPages((from, to) =>
+    supabase
+      .from("transactions")
+      .select("id, type, amount_minor, currency, occurred_on, account_id, counter_account_id, category_id, voided_at, recurring_rule_id")
+      .eq("occurred_on", today)
+      .order("id")
+      .range(from, to),
+  )
+  return (
+    rows?.map((t) => ({
+      id: t.id,
+      type: t.type as TodayEntry["type"],
+      amountMinor: t.amount_minor,
+      currency: t.currency,
+      occurredOn: t.occurred_on,
+      accountId: t.account_id,
+      counterAccountId: t.counter_account_id,
+      categoryId: t.category_id,
+      voided: t.voided_at !== null,
+      recurringRuleId: t.recurring_rule_id,
+    })) ?? null
+  )
+}
+
 export type HomeLoad = { ok: true; data: HomeData } | { ok: false; reason: "unauthenticated" | "unavailable" }
 
 /**
@@ -23,34 +52,12 @@ export async function loadHomeData(supabase: UserClient, now: Date = new Date())
     loadLoansData(supabase),
     loadGoalsData(supabase),
     supabase.from("profiles").select("display_name").maybeSingle(),
-    // Every row dated today (voided ones too): the same rows account_balances reads, so the
-    // start-of-today balance is exact.
-    allPages((from, to) =>
-      supabase
-        .from("transactions")
-        .select("id, type, amount_minor, currency, occurred_on, account_id, counter_account_id, category_id, voided_at, recurring_rule_id")
-        .eq("occurred_on", today)
-        .order("id")
-        .range(from, to),
-    ),
+    loadTodayEntries(supabase, today),
   ])
   if (!recurring.ok || !loans.ok || !goals.ok || profile.error || !todayRows) {
     const signedOut = [loans, goals].some((r) => !r.ok && r.reason === "unauthenticated")
     return { ok: false, reason: signedOut ? "unauthenticated" : "unavailable" }
   }
-
-  const todayEntries: TodayEntry[] = todayRows.map((t) => ({
-    id: t.id,
-    type: t.type as TodayEntry["type"],
-    amountMinor: t.amount_minor,
-    currency: t.currency,
-    occurredOn: t.occurred_on,
-    accountId: t.account_id,
-    counterAccountId: t.counter_account_id,
-    categoryId: t.category_id,
-    voided: t.voided_at !== null,
-    recurringRuleId: t.recurring_rule_id,
-  }))
 
   return {
     ok: true,
@@ -62,7 +69,7 @@ export async function loadHomeData(supabase: UserClient, now: Date = new Date())
       loans: buildLoansView(loans.data),
       goals: buildGoalsView(goals.data),
       spending: goals.data.spending,
-      todayEntries,
+      todayEntries: todayRows,
     }),
   }
 }
