@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
-// Design-system preview (Sprint 12c) on Expo web at phone width. Runs against a development
+// Mobile app on Expo web at phone width: the design-system preview (12c) and, with CI's local
+// Supabase, the signed-in app (13a; see app-shell.spec.ts). Runs against a development
 // web export (`npm run preview:web`), never a production build: the preview is left out of
 // production. Uses the installed Google Chrome, like the web E2E (no browser download).
 const PORT = 8090;

@@ -1,39 +1,35 @@
-import { layout } from "@fin-creador/design-tokens";
-import { Tabs } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Tabs, useRouter } from "expo-router";
+import type { ComponentProps } from "react";
 import { AppHeader } from "@/components/app-header";
-import { TABS } from "@/navigation";
-import { colors, fontFamily, fontSize } from "@/theme";
+import { TabBar } from "@/components/ds";
+import { ADD_ENTRY, TAB_ROUTES, tabForRoute } from "@/navigation";
+import { colors } from "@/theme";
 
+type TabBarRenderer = NonNullable<ComponentProps<typeof Tabs>["tabBar"]>;
+
+// Home · Activity · ＋ · Plan · Roma (design-spec §5), drawn by the design-system TabBar. The
+// ＋ opens Add; the four tabs switch screens the same way the default bar does (tabPress
+// event first, so a screen can still react to a re-tap).
 export default function TabsLayout() {
-  const insets = useSafeAreaInsets();
-  return (
-    <Tabs
-      screenOptions={{
-        header: () => <AppHeader />,
-        sceneStyle: { backgroundColor: colors.canvas },
-        tabBarActiveTintColor: colors.ink,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontFamily: fontFamily.bodySemibold, fontSize: fontSize.xs },
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.line,
-          height: layout.tabBarHeight + insets.bottom,
-          paddingTop: 6,
-        },
+  const router = useRouter();
+  const renderTabBar: TabBarRenderer = ({ state, emitter, navigateToTab }) => (
+    <TabBar
+      active={tabForRoute(state.routes[state.index]?.name)}
+      onAdd={() => router.push(ADD_ENTRY)}
+      onSelect={(key) => {
+        const route = state.routes.find((r) => r.name === TAB_ROUTES[key]);
+        if (!route) return;
+        const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+        if (!event.defaultPrevented && state.routes[state.index]?.key !== route.key) navigateToTab(route.key);
       }}
-    >
-      {TABS.map(({ name, label, icon: Icon, available }) => (
-        <Tabs.Screen
-          key={name}
-          name={name}
-          options={{
-            title: label,
-            tabBarAccessibilityLabel: available ? label : `${label}, coming soon`,
-            tabBarIcon: ({ color, focused }) => <Icon size={22} color={color} strokeWidth={focused ? 2.25 : 1.75} />,
-          }}
-        />
-      ))}
+    />
+  );
+  return (
+    <Tabs tabBar={renderTabBar} screenOptions={{ header: () => <AppHeader />, sceneStyle: { backgroundColor: colors.canvas } }}>
+      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen name="activity" options={{ title: "Activity" }} />
+      <Tabs.Screen name="plan" options={{ title: "Plan" }} />
+      <Tabs.Screen name="roma" options={{ title: "Roma" }} />
     </Tabs>
   );
 }

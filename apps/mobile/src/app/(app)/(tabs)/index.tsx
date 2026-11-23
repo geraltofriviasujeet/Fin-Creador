@@ -13,7 +13,7 @@ export default function OverviewScreen() {
   const router = useRouter();
   return (
     <Screen>
-      <PageHeader title="Overview" description="Your money at a glance, once you start recording it." />
+      <PageHeader title="Home" description="Your money at a glance, once you start recording it." />
       <IncomeSummaryCard />
       <RecurringSummaryCard />
       <EmptyState
