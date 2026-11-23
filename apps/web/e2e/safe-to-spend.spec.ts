@@ -18,6 +18,8 @@ const money = (minor: number) => formatMoneyWhole(minor, { currency: "INR" })
 const card = (page: Page, title: string) => page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
 const safe = (page: Page) => card(page, "Safe to spend today")
 const comingUp = (page: Page) => card(page, "Coming up")
+/** The big figure: the first match in the card (a figure below it may show the same amount, e.g. For goals ₹0). */
+const headline = (page: Page, amount: string) => safe(page).getByText(amount, { exact: true }).first()
 
 /** A confirmed demo user, signed in on the web, with the phone's demo data written through the public API (RLS). */
 async function demoUser(page: Page, label: string, seed: (demo: Demo) => Promise<void>): Promise<HomeData> {
@@ -47,7 +49,7 @@ test("normal month: the same Safe to spend as the phone, ₹4,250 a day and ₹3
   expect(hero.amountMinor).toBe(4_250_00)
   expect(hero.lines).toEqual(["₹3,050 left today"])
 
-  await expect(safe(page).getByText("₹4,250", { exact: true })).toBeVisible()
+  await expect(headline(page, "₹4,250")).toBeVisible()
   await expect(safe(page).getByText(hero.suffix!, { exact: true })).toBeVisible()
   await expect(safe(page).getByText("₹3,050 left today", { exact: true })).toBeVisible()
   await expect(safe(page).getByRole("progressbar", { name: "₹1,200 spent today of ₹4,250" })).toBeVisible()
@@ -75,7 +77,7 @@ test("overdue bill: counted as due now and labelled Overdue, ₹4,125 a day as o
   expect(hero.amountMinor).toBe(4_125_00)
   expect(hero.lines).toEqual(["₹2,925 left today"])
 
-  await expect(safe(page).getByText("₹4,125", { exact: true })).toBeVisible()
+  await expect(headline(page, "₹4,125")).toBeVisible()
   await expect(safe(page).getByText(hero.suffix!, { exact: true })).toBeVisible()
   await expect(safe(page).getByText("₹2,925 left today", { exact: true })).toBeVisible()
   await expect(safe(page).getByRole("definition")).toHaveText(["₹42,000", "₹4,000", "₹5,000"])
@@ -98,10 +100,12 @@ test("short: ₹0 a day, the shortfall before payday and the account named", asy
   expect(hero.lines[0]).toMatch(/^₹3,000 short before \d{1,2} [A-Z][a-z]{2} in HDFC Bank$/)
   expect(warning).toMatch(/^Rent on \d{1,2} [A-Z][a-z]{2} leaves you ₹3,000 short in HDFC Bank$/)
 
-  await expect(safe(page).getByText("₹0", { exact: true })).toBeVisible()
+  await expect(headline(page, "₹0")).toBeVisible()
   await expect(safe(page).getByText(hero.suffix!, { exact: true })).toBeVisible()
   await expect(safe(page).getByText(hero.lines[0]!, { exact: true })).toBeVisible()
   await expect(safe(page).getByRole("progressbar")).toHaveCount(0)
+  await expect(safe(page).getByRole("definition")).toHaveText(hero.figures.map((f) => money(f.minor)))
+  await expect(safe(page).getByRole("definition")).toHaveText(["₹9,000", "₹12,000", "₹0"])
   await expect(comingUp(page).getByText(warning!)).toBeVisible()
   await shots(page, "13a-overview-safe-short")
 })
