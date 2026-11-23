@@ -10,6 +10,7 @@ import {
   addDays,
   addMinor,
   accountBalance,
+  latestOccurrenceOnOrBefore,
   localDateTime,
   monthRange,
   nextIncomeDate,
@@ -53,6 +54,8 @@ export type HomeBillKind = "bill" | "emi" | "card" | "borrowing" | "statutory"
 /** A bill, EMI, card due, repayment or statutory due still to pay. */
 export type HomeBill = SafeToSpendBill & {
   kind: HomeBillKind
+  /** Due before today and still unpaid: counted as due now, listed first as "Overdue". */
+  overdue: boolean
   /** The account it is paid from, or null when none is set. */
   accountName: string | null
   /** Recurring bills: the category's icon key (for the row's icon). */
@@ -74,7 +77,7 @@ export type HomeData = {
   safe: SafeToSpendResult
   /** Expenses dated today in the profile currency, net of refunds, never below 0 (the hero's bar). */
   spentTodayMinor: number
-  /** Bills due from today to UPCOMING_DAYS ahead, soonest first, at most HOME_COMING_UP_LIMIT. */
+  /** Overdue bills, then those due from today to UPCOMING_DAYS ahead, oldest first, at most HOME_COMING_UP_LIMIT. */
   comingUp: HomeBill[]
   /** How many more are due in that time than comingUp shows. */
   comingUpMore: number
@@ -151,9 +154,14 @@ export function homeIncomes(recurring: RecurringData, todayEntries: readonly Tod
 }
 
 /**
- * Every bill still to pay from `today` through `until`: unpaid occurrences of recurring
- * expenses, loan EMIs and interest, card bills, borrowing repayments and statutory dues.
- * Paid, skipped, covered and archived items are left out.
+ * Every bill still to pay through `until`, overdue ones included: unpaid occurrences of
+ * recurring expenses, loan EMIs and interest, card bills, borrowing repayments and statutory
+ * dues. Paid, skipped, covered and archived items are left out.
+ *
+ * Overdue (before `today`): every pending EMI, card bill, repayment and statutory due past its
+ * date (the bell's list); for a recurring expense, the occurrence the Recurring page shows as
+ * due (its latest date on or before today) when that is before today and not yet posted or
+ * skipped. Earlier missed occurrences are not counted, as Recurring doesn't ask for them.
  */
 export function homeBills({
   recurring,
@@ -171,7 +179,7 @@ export function homeBills({
   const accounts = new Map(context.accounts.map((a) => [a.id, a]))
   const categories = new Map<string, LedgerCategory>(context.categories.map((c) => [c.id, c]))
   const nameOf = (id: string | null) => (id ? (accounts.get(id)?.label ?? null) : null)
-  const inWindow = (date: IsoDate) => date >= today && date <= until
+  const dueBy = (date: IsoDate) => date <= until
   const bills: HomeBill[] = []
 
   for (const rule of recurring.rules) {
@@ -180,11 +188,15 @@ export function homeBills({
     // Occurrences are handled in order, so everything after the latest handled one is unpaid.
     const handled = [p?.lastPostedOn, p?.lastSkippedOn].filter((d): d is IsoDate => Boolean(d)).sort().at(-1) ?? null
     const category = rule.categoryId ? categories.get(rule.categoryId) : undefined
-    for (const date of occurrencesBetween(toSchedule(rule), today, until)) {
+    const schedule = toSchedule(rule)
+    const due = latestOccurrenceOnOrBefore(schedule, today)
+    const overdue = due !== null && due < today ? [due] : []
+    for (const date of [...overdue, ...occurrencesBetween(schedule, today, until)]) {
       if (handled !== null && date <= handled) continue
       bills.push({
         id: `${rule.id}:${date}`,
         kind: "bill",
+        overdue: date < today,
         name: rule.note || category?.name || "Bill",
         dueDate: date,
         amountMinor: rule.amountMinor,
@@ -198,10 +210,11 @@ export function homeBills({
 
   for (const loan of loans.loans) {
     for (const item of loan.items) {
-      if (item.status !== "pending" || item.notNeeded || item.sourceArchived || !inWindow(item.dueDate)) continue
+      if (item.status !== "pending" || item.notNeeded || item.sourceArchived || !dueBy(item.dueDate)) continue
       bills.push({
         id: item.id,
         kind: "emi",
+        overdue: item.dueDate < today,
         name: item.kind === "loan_interest" ? `${loan.name} interest` : `${loan.name} EMI`,
         dueDate: item.dueDate,
         amountMinor: item.split?.totalMinor ?? item.amountMinor,
@@ -215,10 +228,11 @@ export function homeBills({
 
   for (const card of loans.shortTerm?.cards ?? []) {
     const bill = card.pendingBill
-    if (!bill || bill.covered || bill.status !== "pending" || bill.payDefaultMinor <= 0 || !inWindow(bill.dueDate)) continue
+    if (!bill || bill.covered || bill.status !== "pending" || bill.payDefaultMinor <= 0 || !dueBy(bill.dueDate)) continue
     bills.push({
       id: bill.id,
       kind: "card",
+      overdue: bill.dueDate < today,
       name: `${card.name} bill`,
       dueDate: bill.dueDate,
       amountMinor: bill.payDefaultMinor,
@@ -231,11 +245,12 @@ export function homeBills({
 
   for (const b of loans.shortTerm?.borrowings ?? []) {
     for (const due of b.dues) {
-      if (due.status !== "pending" || due.remainingMinor <= 0 || !inWindow(due.dueDate)) continue
+      if (due.status !== "pending" || due.remainingMinor <= 0 || !dueBy(due.dueDate)) continue
       const accountId = due.plannedAccountId ?? due.payFromAccountId
       bills.push({
         id: due.id,
         kind: "borrowing",
+        overdue: due.dueDate < today,
         name: `Repay ${b.name}`,
         dueDate: due.dueDate,
         amountMinor: due.remainingMinor,
@@ -249,11 +264,12 @@ export function homeBills({
 
   for (const d of loans.statutory?.dues ?? []) {
     const item = d.item
-    if (item.status !== "pending" || item.sourceArchived || d.leftMinor <= 0 || !inWindow(item.dueDate)) continue
+    if (item.status !== "pending" || item.sourceArchived || d.leftMinor <= 0 || !dueBy(item.dueDate)) continue
     const accountId = item.plannedAccountId ?? item.payFromAccountId
     bills.push({
       id: item.id,
       kind: "statutory",
+      overdue: item.dueDate < today,
       name: d.name,
       dueDate: item.dueDate,
       amountMinor: d.leftMinor,

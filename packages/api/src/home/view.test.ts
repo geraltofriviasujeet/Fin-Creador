@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { type GoalRecord, buildGoalsView } from "../goals/view"
-import { buildLoansView } from "../loans/view"
+import { type DueRecord, type LoanRecord, buildLoansView } from "../loans/view"
 import type { RecurringRule } from "../recurring/view"
 import type { LedgerAccount, LedgerCategory, TransactionsContext } from "../transactions/types"
 import { HOME_COMING_UP_LIMIT, type HomeInput, type TodayEntry, buildHome, startOfTodayAccounts } from "./view"
@@ -176,12 +176,77 @@ describe("startOfTodayAccounts", () => {
   })
 })
 
+// A ₹2,000 car-loan EMI on the 5th from HDFC Savings; November's is unpaid (overdue).
+const carLoan: LoanRecord = {
+  id: "car", accountId: "car-loan", loanType: "vehicle", typeOther: null, lender: "SBI", nickname: "Car loan", currency: "INR",
+  sanctionedMinor: R(48_000), disbursedMinor: R(48_000), rateBps: 0, rateKind: "fixed", tenureMonths: 24, startMode: "ongoing",
+  openingOutstandingMinor: R(46_000), instalmentMonths: 24, firstDueDate: "2026-10-05", moratoriumMonths: 0, moratoriumInterest: null,
+  capitalisedMinor: 0, emiEstimateMinor: R(2_000), emiMinor: R(2_000), trackingStartedOn: "2026-10-01", archivedAt: null,
+  createdAt: "2026-10-01T00:00:00Z", balanceMinor: -R(44_000),
+}
+const carEmi = (seq: number, dueDate: string, status: DueRecord["status"] = "pending"): DueRecord => ({
+  id: `emi-${seq}`, kind: "loan_emi", loanId: "car", seq, dueDate, amountDueMinor: R(2_000), status, plannedOn: null, plannedAccountId: "savings",
+})
+
+describe("buildHome: overdue bills", () => {
+  const withLoan = (base: HomeInput, dueItems: DueRecord[]): HomeInput => ({
+    ...base,
+    loans: buildLoansView({
+      today, currency: "INR", loans: [carLoan], dueItems, payments: [],
+      accounts: [{ id: "savings", name: "HDFC Savings", currency: "INR", balanceMinor: R(37_300), openingBalanceDate: "2026-01-01" }],
+    }),
+  })
+
+  it("an unpaid EMI past its date is subtracted and listed first in Coming up, marked overdue", () => {
+    // Example 1 plus November's ₹2,000 EMI (5 Nov) still unpaid: (₹42,000 − ₹4,000 − ₹2,000 − ₹2,000) ÷ 8.
+    const home = buildHome(withLoan(example1(), [carEmi(1, "2026-10-05", "paid"), carEmi(2, "2026-11-05"), carEmi(3, "2026-12-05")]))
+    if (home.safe.kind !== "daily") throw new Error("expected a daily figure")
+    expect(home.safe.billsMinor).toBe(R(6_000))
+    expect(home.safe.overdueMinor).toBe(R(2_000))
+    expect(home.safe.dailyMinor).toBe(R(4_250))
+    expect(home.comingUp[0]).toMatchObject({ id: "emi-2", kind: "emi", name: "Car loan EMI", dueDate: "2026-11-05", overdue: true, accountName: "HDFC Savings" })
+    expect(home.comingUp.filter((b) => b.overdue).map((b) => b.id)).toEqual(["emi-2"])
+    // The bell lists it too.
+    expect(home.reminders.map((r) => [r.id, r.reason])).toContainEqual(["emi-2", "overdue"])
+  })
+
+  it("a recurring bill whose date has passed unposted is overdue; only the one Recurring shows as due counts", () => {
+    // Internet (30th) last posted in September: October's is the one due, August's and September's are not asked for again.
+    const base = example1()
+    const progress = new Map([...base.recurring.progress, ["internet", { lastPostedOn: "2026-09-30", lastSkippedOn: null }]])
+    const home = buildHome({ ...base, recurring: { ...base.recurring, progress } })
+    if (home.safe.kind !== "daily") throw new Error("expected a daily figure")
+    expect(home.comingUp[0]).toMatchObject({ id: "internet:2026-10-30", overdue: true })
+    expect(home.safe.overdueMinor).toBe(R(1_000))
+    expect(home.safe.billsMinor).toBe(R(5_000))
+  })
+
+  it("a recurring bill due today is due, not overdue; a skipped past date is not counted", () => {
+    const base = input({
+      accounts: [account("savings")],
+      rules: [salary, rule("today", { startDate: "2026-01-23", amountMinor: R(100) }), rule("skip", { startDate: "2026-01-20", amountMinor: R(100) })],
+      goals: [],
+    })
+    const progress = new Map([["today", { lastPostedOn: "2026-10-23", lastSkippedOn: null }], ["skip", { lastPostedOn: "2026-10-20", lastSkippedOn: "2026-11-20" }]])
+    const home = buildHome({ ...base, recurring: { ...base.recurring, progress } })
+    expect(home.comingUp.filter((b) => b.dueDate <= today).map((b) => [b.id, b.overdue])).toEqual([["today:2026-11-23", false]])
+    expect(home.safe.overdueMinor).toBe(0)
+  })
+
+  it("a paid EMI is not overdue", () => {
+    const home = buildHome(withLoan(example1(), [carEmi(1, "2026-10-05", "paid"), carEmi(2, "2026-11-05", "paid"), carEmi(3, "2026-12-05")]))
+    expect(home.safe.overdueMinor).toBe(0)
+    expect(home.comingUp.some((b) => b.overdue)).toBe(false)
+  })
+})
+
 describe("buildHome: lists", () => {
   it("Coming up: unpaid bills soonest first, capped, with the account name", () => {
     const many = Array.from({ length: 7 }, (_, i) => rule(`b${i}`, { amountMinor: R(100), startDate: `2026-01-${String(24 + i).padStart(2, "0")}`, note: `Bill ${i}` }))
-    const home = buildHome(input({ accounts: [account("savings", { label: "HDFC Savings" })], rules: [salary, ...many], goals: [] }))
+    const octoberPaid = Object.fromEntries(many.map((r) => [r.id, `2026-10-${r.startDate.slice(8)}`]))
+    const home = buildHome(input({ accounts: [account("savings", { label: "HDFC Savings" })], rules: [salary, ...many], posted: octoberPaid, goals: [] }))
     expect(home.comingUp).toHaveLength(HOME_COMING_UP_LIMIT)
-    expect(home.comingUp[0]).toMatchObject({ name: "Bill 0", dueDate: "2026-11-24", accountName: "HDFC Savings", kind: "bill" })
+    expect(home.comingUp[0]).toMatchObject({ name: "Bill 0", dueDate: "2026-11-24", accountName: "HDFC Savings", kind: "bill", overdue: false })
     expect(home.comingUpMore).toBe(2)
   })
 
@@ -196,7 +261,7 @@ describe("buildHome: lists", () => {
           rule("archived", { startDate: "2026-01-27", amountMinor: R(1), archived: true }),
           rule("open", { startDate: "2026-01-28", amountMinor: R(1) }),
         ],
-        posted: { paid: "2026-11-25" },
+        posted: { paid: "2026-11-25", skipped: "2026-10-26", open: "2026-10-28" },
         goals: [],
       }),
     )

@@ -120,6 +120,7 @@ export function ComingUp({ home }: { home: HomeData }) {
               tint="peach"
               title={b.name}
               subtitle={`${formatDayMonth(b.dueDate)} · ${b.accountName ?? "No account set"}`}
+              tag={b.overdue ? "Overdue" : undefined}
               amount={{ minor: b.amountMinor, direction: "out", currency: b.currency }}
             />
           ))

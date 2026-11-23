@@ -5,6 +5,7 @@ import {
   loadHomeData,
   newRequestKey,
   saveAccount,
+  saveGoal,
   saveRecurringRule,
   saveTransaction,
   setCategoryBudget,
@@ -16,7 +17,7 @@ import { createClient } from "@supabase/supabase-js";
 // Demo figures for the Home E2E, written as the demo user through the shared writers (public
 // API, RLS applies; no service key), on CI's throwaway local Supabase only (demo-user.ts checks
 // the URL before any user exists). Dates are relative to the user's today, so the figures are
-// the same on every run: 8 days to the next income, both bills inside them.
+// the same on every run: 8 days to the next income, the bills inside them (or overdue).
 
 export type Demo = { client: UserClient; today: string };
 
@@ -59,6 +60,7 @@ async function addBank(demo: Demo, balance: string) {
   );
 }
 
+/** inDays may be negative: a rule that started in the past and was never posted is overdue. */
 async function addRule(demo: Demo, rule: { type: "income" | "expense"; amount: string; categoryId: string; accountId: string; inDays: number; note: string }) {
   ok(
     await saveRecurringRule(demo.client, {
@@ -71,8 +73,10 @@ async function addRule(demo: Demo, rule: { type: "income" | "expense"; amount: s
 
 /**
  * Normal month: HDFC Bank ₹38,500 and Cash ₹3,500 (₹42,000), salary in 8 days, electricity
- * ₹2,400 in 2 days and phone ₹600 in 5 days, ₹1,200 spent on food today (budget ₹6,000).
- * → (₹42,000 − ₹3,000) ÷ 8 = ₹4,875 a day; ₹3,675 left today.
+ * ₹2,400 in 2 days and phone ₹600 in 5 days, an Emergency fund of ₹60,000 with no target
+ * date (spread over 12 months: ₹5,000 a month, all still due), ₹1,200 spent on food today
+ * (budget ₹6,000). → (₹42,000 − ₹3,000 − ₹5,000) ÷ 8 = ₹4,250 a day; ₹3,050 left today.
+ * Without income: ₹34,000 money left this month.
  */
 export async function seedNormal(demo: Demo, { income = true }: { income?: boolean } = {}) {
   await addBank(demo, "38500");
@@ -90,6 +94,23 @@ export async function seedNormal(demo: Demo, { income = true }: { income?: boole
     "Add today's expense",
   );
   ok(await setCategoryBudget(demo.client, { categoryId: id.food, month: demo.today.slice(0, 7), amount: "6000" }), "Set food budget");
+  ok(
+    await saveGoal(demo.client, {
+      type: "other", name: "Emergency fund", description: "Six months of expenses", amount: "60000", targetDate: "", saved: "",
+      idempotencyKey: newRequestKey(),
+    }),
+    "Add goal",
+  );
+}
+
+/**
+ * Overdue: the normal month plus internet ₹1,000 from HDFC Bank, due 3 days ago and never
+ * paid. → (₹42,000 − ₹4,000 − ₹5,000) ÷ 8 = ₹4,125 a day; ₹2,925 left today.
+ */
+export async function seedOverdue(demo: Demo) {
+  await seedNormal(demo);
+  const id = await ids(demo.client);
+  await addRule(demo, { type: "expense", amount: "1000", categoryId: id.bills, accountId: id.account("HDFC Bank"), inDays: -3, note: "Internet" });
 }
 
 /** Short: HDFC Bank ₹9,000, salary in 8 days, rent ₹12,000 from HDFC Bank in 5 days → ₹3,000 short. */

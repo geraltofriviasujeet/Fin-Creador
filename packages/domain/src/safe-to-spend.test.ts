@@ -87,7 +87,6 @@ const normalMonth = {
     bill("Phone", "2026-11-28", 600),
     bill("Internet", "2026-11-30", 1_000),
     bill("Rent", "2026-12-01", 12_000), // on payday: after the window
-    bill("Overdue", "2026-11-20", 999), // before today: outside the rule's window
   ],
   goals: [goal("Emergency fund", 5_000, [["2026-11-05", 3_000], ["2026-10-20", 4_000]])],
 };
@@ -103,6 +102,7 @@ describe("safeToSpend: worked examples", () => {
     expect(r.days).toBe(8);
     expect(r.moneyLeftMinor).toBe(rs(42_000));
     expect(r.billsMinor).toBe(rs(4_000));
+    expect(r.overdueMinor).toBe(0);
     expect(r.bills.map((b) => b.id)).toEqual(["Electricity", "Phone", "Internet"]);
     expect(r.goalSavingMinor).toBe(rs(2_000)); // ₹5,000 due 1 Nov, ₹3,000 put toward it since
     expect(r.availableMinor).toBe(rs(36_000));
@@ -309,6 +309,21 @@ describe("safeToSpend: goals and shortfalls", () => {
     expect(r.goalSavingMinor).toBe(rs(1_500));
   });
 
+  it("a main income whose first date is still ahead: the month's goal saving still counts", () => {
+    // Salary set up today, first paid on 1 December: no pay cycle yet, so due from 1 November.
+    const r = daily(
+      input({
+        accounts: [account("savings", 42_000)],
+        incomes: [monthlyIncome("Salary", "2026-12-01", 85_000)],
+        bills: [bill("Electricity", "2026-11-25", 2_400), bill("Phone", "2026-11-28", 600)],
+        goals: [goal("Emergency fund", 5_000)],
+      }),
+    );
+    expect(r.days).toBe(8);
+    expect(r.goalSavingMinor).toBe(rs(5_000));
+    expect(r.dailyMinor).toBe(rs(4_250)); // (₹42,000 − ₹3,000 − ₹5,000) ÷ 8
+  });
+
   it("with a weekly main income, goal saving is due from the 1st of the month", () => {
     const weekly = monthlyIncome("Wages", "2026-11-02", 10_000, { schedule: { frequency: "weekly", startDate: "2026-11-02", endDate: null } });
     const r = daily(input({ accounts: [account("savings", 10_000)], incomes: [weekly], goals: [goal("Trip", 3_000, [["2026-11-01", 1_000]])] }));
@@ -355,6 +370,48 @@ describe("safeToSpend: goals and shortfalls", () => {
     );
     expect(r.shortAccounts).toEqual([]);
     expect(r.moneyLeftMinor).toBe(rs(86_000));
+  });
+});
+
+describe("safeToSpend: overdue bills", () => {
+  const salaryOn1st = [monthlyIncome("Salary", "2026-01-01", 85_000)];
+
+  it("an unpaid bill past its date counts as due now, listed first", () => {
+    // Normal month plus a ₹2,000 EMI due 20 November, still unpaid.
+    const r = daily(input({ ...normalMonth, bills: [...normalMonth.bills, bill("Car EMI", "2026-11-20", 2_000)], incomes: salaryOn1st }));
+    expect(r.bills.map((b) => b.id)).toEqual(["Car EMI", "Electricity", "Phone", "Internet"]);
+    expect(r.billsMinor).toBe(rs(6_000));
+    expect(r.overdueMinor).toBe(rs(2_000));
+    expect(r.availableMinor).toBe(rs(34_000)); // ₹42,000 − ₹6,000 − ₹2,000 goal
+    expect(r.dailyMinor).toBe(rs(4_250));
+  });
+
+  it("however old, and with no income date too", () => {
+    const r = safeToSpend(input({ accounts: [account("savings", 10_000)], bills: [bill("Card", "2026-09-05", 3_000), bill("Phone", "2026-11-28", 600)] }));
+    expect(r.kind).toBe("month");
+    expect(r.billsMinor).toBe(rs(3_600));
+    expect(r.overdueMinor).toBe(rs(3_000));
+    expect(r.availableMinor).toBe(rs(6_400));
+  });
+
+  it("an overdue bill can be the one that takes an account short", () => {
+    const r = daily(
+      input({
+        accounts: [account("hdfc", 9_000, { name: "HDFC" })],
+        incomes: salaryOn1st,
+        bills: [bill("Phone", "2026-11-28", 600, "hdfc"), bill("Rent", "2026-11-21", 12_000, "hdfc")],
+      }),
+    );
+    expect(r.shortMinor).toBe(rs(3_600));
+    expect(r.shortAccounts).toEqual([
+      { accountId: "hdfc", accountName: "HDFC", bill: { id: "Rent", name: "Rent", dueDate: "2026-11-21" }, shortAfterBillMinor: rs(3_000), shortByEndMinor: rs(3_600) },
+    ]);
+  });
+
+  it("other currencies still don't count", () => {
+    const r = daily(input({ incomes: salaryOn1st, bills: [{ ...bill("USD card", "2026-11-20", 100), currency: "USD" }] }));
+    expect(r.billsMinor).toBe(0);
+    expect(r.overdueMinor).toBe(0);
   });
 });
 
