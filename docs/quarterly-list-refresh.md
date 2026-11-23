@@ -89,3 +89,32 @@ territory or a renamed city).
    review date, even when nothing changed.
 8. Run `npm run typecheck`, `npm run lint` and `npm test`.
 9. Open one draft PR. The owner reviews and merges it.
+
+## Time-zone offset table
+
+The mobile app reads local dates and times from `packages/domain/src/time-zone-data.ts`, not
+from Intl (Hermes on iOS cannot be trusted to). The table holds each zone's UTC offset and its
+changes from 2020 to 2050, generated from Node's ICU. Governments change time-zone rules a few
+times a year (IANA tzdata releases), so the table goes stale.
+
+**When to regenerate:**
+
+- The unit test "offset table matches Intl" fails in CI for some zones: CI's Node knows a
+  rule the table doesn't (usually after CI's Node version changes or a Node patch release).
+  A different tzdata release on its own only prints a warning; the test fails only when an
+  offset actually differs between 2024 and 2030.
+- A country announces a change to its clocks (abolishing or adding daylight saving time, a new
+  offset) and a Node release with that tzdata is out.
+- At the quarterly refresh, check `process.versions.tz` of CI's Node against
+  `TIME_ZONE_TZDATA` in the table.
+
+**How:**
+
+1. Use the same Node major version as CI (`node-version` in `.github/workflows/ci.yml`), with
+   its latest patch release. Check `node -p process.versions.tz`.
+2. Run `node packages/domain/scripts/generate-time-zone-data.mjs`. It rewrites
+   `time-zone-data.ts` and records the tzdata release in `TIME_ZONE_TZDATA`.
+3. Run `npx vitest run packages/domain/src/local-time.test.ts`: every zone is compared with
+   Intl from 2024 to 2030. A local Node with different tzdata may fail for zones whose rules
+   changed between the two releases; CI's result is the one that counts.
+4. Open a pull request with the regenerated file; CI must be green.
