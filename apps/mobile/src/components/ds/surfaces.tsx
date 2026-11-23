@@ -79,7 +79,7 @@ export type ListRowProps = {
   title: string;
   subtitle?: string;
   /** Amount in minor units, with its direction. */
-  amount?: { minor: number; direction?: Direction; whole?: boolean };
+  amount?: { minor: number; direction?: Direction; whole?: boolean; currency?: string };
   /** Small tag such as "Imported". */
   tag?: string;
   onPress?: () => void;
@@ -108,7 +108,7 @@ export function ListRow({ icon, tint, title, subtitle, amount, tag, onPress, for
           </View>
         ) : null}
       </View>
-      {amount ? <AmountText minor={amount.minor} direction={amount.direction} whole={amount.whole} /> : null}
+      {amount ? <AmountText minor={amount.minor} direction={amount.direction} whole={amount.whole} currency={amount.currency} /> : null}
       {onPress ? <ChevronRight size={18} color={mobile.colors.mutedSubtle} /> : null}
     </View>
   );

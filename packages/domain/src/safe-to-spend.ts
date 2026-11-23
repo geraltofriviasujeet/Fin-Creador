@@ -4,6 +4,8 @@
 //   Safe to spend today = (money left − bills due before the next income − goal saving still
 //   due before the next income) ÷ days until the next income.
 //
+// Bills include overdue ones (unpaid, due before today): they are due now (owner, 2026-11-23).
+//
 // Pure and exact: money in integer minor units, the division rounded down to a whole minor
 // unit. Only the display rounds to whole units (down for amounts to spend, up for a
 // shortfall). "Today" is the date in the profile time zone, read from the bundled offset table
@@ -42,6 +44,7 @@ export interface SafeToSpendBill {
   id: string;
   /** "Rent", "HDFC card", "Car loan EMI". */
   name: string;
+  /** A date before today means overdue: it still counts, as due now. */
   dueDate: IsoDate;
   /** Still to pay. Paid or skipped bills are not passed in. */
   amountMinor: number;
@@ -90,9 +93,12 @@ interface SafeToSpendCommon {
   lastDay: IsoDate;
   /** Counted accounts' balances at the start of today, plus income recorded today on payday. */
   moneyLeftMinor: number;
-  /** Unpaid bills due from today through `lastDay`, oldest first. */
+  /** Unpaid bills due through `lastDay`, overdue ones included, oldest first. */
   bills: SafeToSpendBill[];
+  /** All of `bills`, overdue included. */
   billsMinor: number;
+  /** The part of billsMinor that is overdue (due before today). */
+  overdueMinor: number;
   goalSavingMinor: number;
   /** money left − bills − goal saving. Negative when the bills and goals need more. */
   availableMinor: number;
@@ -232,15 +238,19 @@ export function safeToSpend(input: SafeToSpendInput): SafeToSpendResult {
 
   const lastDay = next === null ? monthRange(today).end : addDays(next, -1);
   const bills = input.bills
-    .filter((b) => b.currency === currency && b.dueDate >= today && b.dueDate <= lastDay)
+    // Overdue bills (before today) are due now, so they count too.
+    .filter((b) => b.currency === currency && b.dueDate <= lastDay)
     .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const billsMinor = addMinor(...bills.map((b) => b.amountMinor));
+  const overdueMinor = addMinor(...bills.filter((b) => b.dueDate < today).map((b) => b.amountMinor));
 
   // Goal saving falls due on the main income's date (a monthly main income), so it follows
-  // the pay cycle; otherwise, and with no income, on the 1st of the calendar month.
+  // the pay cycle; otherwise, and with no income, on the 1st of the calendar month. A main
+  // income whose first date is still ahead has no pay cycle yet: the 1st of the month too, so
+  // the goal is never dropped.
   const main = next === null ? null : mainIncome(incomes, today);
   const goalDueDate =
-    main && main.schedule.frequency === "monthly" ? latestOccurrenceOnOrBefore(main.schedule, today) : monthRange(today).start;
+    (main && main.schedule.frequency === "monthly" ? latestOccurrenceOnOrBefore(main.schedule, today) : null) ?? monthRange(today).start;
   const goalSavingMinor = goalStillDue(goals, goalDueDate, today);
 
   const availableMinor = addMinor(moneyLeftMinor, -billsMinor, -goalSavingMinor);
@@ -250,6 +260,7 @@ export function safeToSpend(input: SafeToSpendInput): SafeToSpendResult {
     moneyLeftMinor,
     bills,
     billsMinor,
+    overdueMinor,
     goalSavingMinor,
     availableMinor,
     shortMinor: availableMinor < 0 ? -availableMinor : 0,

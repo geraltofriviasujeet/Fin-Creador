@@ -31,6 +31,7 @@ async function signIn(page: Page) {
   await expect(page.getByRole("tablist", { name: "Main" })).toBeVisible();
 }
 
+const GREETING = /^Good (morning|afternoon|evening)/;
 const tab = (page: Page, name: string) => page.getByRole("tablist", { name: "Main" }).getByRole("tab", { name, exact: true });
 
 // Expo web keeps tabs you've left mounted and stacked under the current one (phones detach
@@ -46,20 +47,20 @@ test("tab shell: four tabs and the raised ＋, each tab opens its screen", async
 
   await expect(page.getByRole("tablist", { name: "Main" }).getByRole("tab")).toHaveCount(4);
   await expect(tab(page, "Home")).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: GREETING })).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `${SHOTS}/13a-home-shell.png` });
 
-  const screens: [string, string][] = [
+  const screens: [string, string | RegExp][] = [
     ["Activity", "Transactions"],
     ["Plan", "Plan"],
     ["Roma", "Roma"],
-    ["Home", "Home"],
+    ["Home", GREETING],
   ];
   for (const [name, heading] of screens) {
     await tab(page, name).click();
     await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: heading, exact: typeof heading === "string" })).toBeVisible();
     for (const other of ["Home", "Activity", "Plan", "Roma"].filter((n) => n !== name)) {
       await expect(tab(page, other)).toHaveAttribute("aria-selected", "false");
     }
@@ -67,30 +68,22 @@ test("tab shell: four tabs and the raised ＋, each tab opens its screen", async
 
   // ＋ opens the existing add sheet on Expense; closing it returns to the same tab.
   await page.getByRole("button", { name: "Add an entry" }).click();
-  await expect(page.getByText("Add expense", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add expense", exact: true })).toBeVisible();
   await page.goBack();
   await expect(tab(page, "Home")).toHaveAttribute("aria-selected", "true");
 
   expect(errors).toEqual([]);
 });
 
-test("old screens stay reachable: Income, Recurring, Settings and Sign out", async ({ page }) => {
+test("old screens stay reachable from Plan: Recurring, Settings and Sign out", async ({ page }) => {
   const errors = collectErrors(page);
   await signIn(page);
 
-  // Home still carries the Income and Recurring cards until PR 4 of 13a replaces them.
-  await page.getByRole("button", { name: /^Income and accounts\./ }).click();
-  await expect(page.getByRole("heading", { name: "Income", exact: true }).first()).toBeVisible();
-  await page.goBack();
-
-  await page.getByRole("button", { name: /^Recurring\./ }).first().click();
-  await expect(page.getByRole("heading", { name: "Recurring", exact: true }).first()).toBeVisible();
-  await page.goBack();
-
-  // Plan links to Recurring too (bills that repeat) until 13c.
+  // Home reaches Income, Recurring and Settings through the avatar menu (home.spec.ts). Plan
+  // links to Recurring too (bills that repeat) until 13c.
   await tab(page, "Plan").click();
   await screen(page, "Plan").getByRole("button", { name: /^Recurring\./ }).click();
-  await expect(page.getByRole("heading", { name: "Recurring", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recurring", exact: true })).toHaveCount(1);
   await page.goBack();
 
   // Settings is one tap from every tab's header; Sign out is on it.

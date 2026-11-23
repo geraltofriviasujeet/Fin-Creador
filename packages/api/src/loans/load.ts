@@ -2,7 +2,7 @@ import { type DueKind, type DueStatus, type LoanRateKind, type LoanStartMode, ty
 import { type UserClient, userToday } from "../income/client"
 import { loadShortTermData } from "../cards/load"
 import { loadStatutoryData } from "../statutory/load"
-import { type LoansData, buildLoansView } from "./view"
+import { type LoansData, type LoansView, buildLoansView } from "./view"
 import { accountBalances } from "./writers"
 import { allPages } from "../all-pages"
 
@@ -141,7 +141,12 @@ export type BellReminder = {
 export async function loadBellReminders(supabase: UserClient): Promise<BellReminder[] | null> {
   const data = await loadLoansData(supabase)
   if (!data.ok) return null
-  return buildLoansView(data.data).reminders.map((r) => ({
+  return bellReminders(buildLoansView(data.data))
+}
+
+/** The bell's lines from a built Loans view (the phone's Home builds the view once). */
+export function bellReminders(view: LoansView): BellReminder[] {
+  return view.reminders.map((r) => ({
     id: r.id,
     name: r.name,
     label: r.label,

@@ -57,6 +57,9 @@ const ICONS: Record<string, LucideIcon> = {
   interest: Percent,
 };
 
+/** The icon for a category's or income source's icon key ("other" for anything unknown). */
+export const categoryIcon = (key: string | null | undefined): LucideIcon => ICONS[key ?? "other"] ?? Ellipsis;
+
 // The chip colour follows the type, so the icon is never the only signal (the amount sign
 // and the subtitle say it too).
 const CHIP = { expense: colors.peach, income: colors.mint, transfer: colors.blue, refund: colors.mint } as const;
