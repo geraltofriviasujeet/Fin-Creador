@@ -33,6 +33,12 @@ async function signIn(page: Page) {
 
 const tab = (page: Page, name: string) => page.getByRole("tablist", { name: "Main" }).getByRole("tab", { name, exact: true });
 
+// Expo web keeps tabs you've left mounted and stacked under the current one (phones detach
+// them), and their content still matches locators. Scope to the screen whose page heading
+// is `heading`: its nearest ancestor that also holds the header's Settings button.
+const screen = (page: Page, heading: string) =>
+  page.getByRole("heading", { name: heading, exact: true }).locator("xpath=ancestor::div[.//*[@aria-label='Settings']][1]");
+
 test("tab shell: four tabs and the raised ＋, each tab opens its screen", async ({ page }) => {
   if (process.env.CI) expect(HAS_BACKEND, "CI must run these tests against the local Supabase").toBe(true);
   const errors = collectErrors(page);
@@ -83,12 +89,12 @@ test("old screens stay reachable: Income, Recurring, Settings and Sign out", asy
 
   // Plan links to Recurring too (bills that repeat) until 13c.
   await tab(page, "Plan").click();
-  await page.getByRole("button", { name: /^Recurring\./ }).click();
+  await screen(page, "Plan").getByRole("button", { name: /^Recurring\./ }).click();
   await expect(page.getByRole("heading", { name: "Recurring", exact: true }).first()).toBeVisible();
   await page.goBack();
 
   // Settings is one tap from every tab's header; Sign out is on it.
-  await page.getByRole("button", { name: "Settings" }).click();
+  await screen(page, "Plan").getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 
