@@ -138,9 +138,10 @@ test("overdue: an unpaid bill past its date is subtracted and listed first in Co
   await expect(page.getByLabel(hero.label)).toBeVisible();
   await expect(page.getByText("₹2,925 left today", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Bills due: ₹4,000")).toBeVisible();
-  // First row of Coming up, with the label in text (not colour alone).
+  // First row of Coming up, with the label in text (not colour alone). Next month's internet
+  // (about 27 days ahead) is in Coming up's 30 days too, but not overdue and not before payday.
   const rows = page.getByLabel(/^(Internet|Electricity|Phone), \d{1,2} [A-Z][a-z]{2} · HDFC Bank, /);
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(4);
   await expect(rows.first()).toHaveAttribute("aria-label", /^Internet, \d{1,2} [A-Z][a-z]{2} · HDFC Bank, Overdue, Money out, ₹1,000$/);
   await expect(page.getByText("Overdue", { exact: true })).toBeVisible();
   await shot(page, "13a-home-overdue");
