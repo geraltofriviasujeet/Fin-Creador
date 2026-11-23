@@ -28,7 +28,10 @@ const TYPES = [
 
 /** Add a recurring item, or edit / fix / archive one (with `id`). Same rules as the web form. */
 export default function RecurringRuleSheet() {
-  const id = param(useLocalSearchParams<{ id?: string }>().id);
+  const params = useLocalSearchParams<{ id?: string; type?: string }>();
+  const id = param(params.id);
+  // Home's "Set your income date" opens a new rule on Income.
+  const initialType = param(params.type) === "income" ? "income" : undefined;
   const item = useRecurringItem(id);
   return (
     <Sheet eyebrow="Recurring" title={id ? "Edit recurring" : "Add recurring"}>
@@ -37,7 +40,7 @@ export default function RecurringRuleSheet() {
           id && !item ? (
             <FormMessage tone="error" message="We couldn't find this recurring item. Pull to refresh the list and try again." />
           ) : (
-            <RuleForm key={item?.rule.id ?? "new"} data={data} item={item} />
+            <RuleForm key={item?.rule.id ?? "new"} data={data} item={item} initialType={initialType} />
           )
         }
       </TransactionsGate>
@@ -45,13 +48,13 @@ export default function RecurringRuleSheet() {
   );
 }
 
-function RuleForm({ data, item }: { data: TransactionsContext; item: RecurringItem | null }) {
+function RuleForm({ data, item, initialType }: { data: TransactionsContext; item: RecurringItem | null; initialType?: EntryType }) {
   const router = useRouter();
   const rule = item?.rule;
   const editing = Boolean(rule);
   // One key per opened sheet; kept on retry after a failure, so the rule is added once.
   const [requestKey] = useState(newRequestKey);
-  const [type, setType] = useState<EntryType>(rule?.type ?? "expense");
+  const [type, setType] = useState<EntryType>(rule?.type ?? initialType ?? "expense");
   const [amount, setAmount] = useState(rule ? minorToInputString(rule.amountMinor, rule.currency) : "");
   const [categoryId, setCategoryId] = useState(rule?.categoryId ?? "");
   const [accountId, setAccountId] = useState(rule?.accountId ?? "");

@@ -54,7 +54,8 @@ export default function RecurringScreen() {
         />
       }
     >
-      <PageHeader title="Recurring" description="Salary, rent, subscriptions and other repeating items. Nothing is saved until you confirm it." />
+      {/* The stack header shows the title. */}
+      <PageHeader description="Salary, rent, subscriptions and other repeating items. Nothing is saved until you confirm it." />
       {state.status === "ready" && !state.recurring ? (
         <View style={styles.gap}>
           <FormMessage tone="error" message={NETWORK_ERROR} />

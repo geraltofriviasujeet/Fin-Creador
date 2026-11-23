@@ -39,7 +39,8 @@ export default function IncomeScreen() {
         />
       }
     >
-      <PageHeader title="Income" description="See where your money comes from and where it is held." />
+      {/* The stack header shows the title. */}
+      <PageHeader description="See where your money comes from and where it is held." />
       <IncomeGate>{(data) => <IncomeContent data={data} />}</IncomeGate>
     </Screen>
   );
