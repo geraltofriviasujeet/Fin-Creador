@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-11-23 (Sprint 13a: PR 1 tab shell merged (#90); PR 2 domain date and time formatters in review as a draft PR. Earlier: Sprint 12c mobile design system merged into `main` (#89) and re-tested on iPhone; Sprint 12b merged into `main` (#87); mobile app design approved; native sprints 13a–13e planned; the security and release sprint is now Sprint 14.)
+Last updated: 2026-11-23 (Sprint 13a: PR 1 tab shell merged (#90); PR 2 domain date and time formatters in review as a draft PR (#91); Safe to spend rule approved. Earlier: Sprint 12c mobile design system merged into `main` (#89) and re-tested on iPhone; Sprint 12b merged into `main` (#87); mobile app design approved; native sprints 13a–13e planned; the security and release sprint is now Sprint 14.)
 
 ## Sprint status
 
@@ -349,7 +349,8 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-11-23** | Expo web (12c): `react-native-web` and `react-dom` are installed only so CI can render the preview at 390px with Playwright (a development web export served statically). Expo web is not a product platform; phone web stays the Next.js app. `lib/crypto-polyfill.ts` patches an existing crypto object in place and assigns `globalThis.crypto` only when `crypto?.getRandomValues` is missing, so a partial crypto object still gets the polyfill (browsers' `window.crypto` is read-only). | Screenshots and a render check of every component in CI without a device. |
 | **2026-11-23** | Hermes Intl (12c review): shared formatting never depends on `Intl.NumberFormat#formatToParts` (absent on iOS Hermes; it crashed the preview on iPhone), `DateTimeFormat#formatToParts` date parts (iOS Hermes returns one literal part) or `signDisplay`. `packages/domain/src/currency.ts` holds the ISO digit table, a currency→symbol table (INR → ₹) and lakh grouping; `formatMoney` adds the sign itself and falls back to string formatting when Intl is missing or does not group en-IN as 12,34,567; `localDateInTimeZone` parses the formatted text when parts are missing. Tests imitate those engines in Node. DM Sans and Manrope both contain ₹ (checked from the font files in a test), so amounts keep DM Sans. | CI runs Node and Chrome, which have full Intl; only a real phone showed the gap. |
 | **2026-11-23** | Sprint 13a plan (owner): five PRs (tab shell; domain date formatters; Safe to spend and runs-short; Home; Safe to spend on the web Overview). Investments detail moves to 13c; Reports stay web-only until after launch. The signed-in mobile E2E runs in the existing parallel mobile CI job against its own throwaway local Supabase, with demo users created through the public Auth API and confirmed from Mailpit (no service key). Expo web keeps the session in the tab's `sessionStorage` (`lib/session-storage.web.ts`, web bundle only) because expo-secure-store has no web implementation; native keeps the encrypted store. Found while making the signed-in app run on Expo web: (a) `expo-router` `asyncRoutes: { web: false }` in `app.json`, because the development web export names every lazy route chunk with the same empty hash, so the four `_layout` chunks overwrote each other ("Requiring unknown module"); native routes were already eager, so native bundles do not change; (b) the root layout renders nothing until the stored session is read (the splash already covers that time on phones), which removes Expo Router's development-only "ROUTE_NAMES_CHANGED was not handled" error; (c) `LogoMark` puts its screen-reader hiding on a wrapping View and rotates with an SVG `rotate()` transform, because react-native-svg passed the native-only props to the DOM on web. | Web and phone must show the same Safe to spend; the mobile E2E must not lengthen CI's critical path (the web E2E job). |
-| **2026-11-23** | Local time without Intl (13a PR 2): mobile turns an instant into the profile time zone's date and time from `packages/domain/src/time-zone-data.ts`, generated from Node's ICU by `packages/domain/scripts/generate-time-zone-data.mjs` (every zone's UTC offset and each change from 2020 to 2050; zones with the same changes share one entry; about 32 KB). Years outside 2020–2050 use the rules of a year 28 years nearer (same weekdays), so rule changes before 2020 are not reflected; unknown zones throw. Month and weekday names are fixed English. Greeting boundaries match the web (`apps/web/lib/greeting.ts`): morning from midnight to 11:59, afternoon 12:00–16:59, evening from 17:00. A unit test compares the table with Intl for every zone, 2024–2030; if it fails after a Node upgrade, tzdata changed and the script is re-run. The web keeps its Intl formatting for now. | Hermes on iOS lacks `formatToParts` and returns date parts as one string; parsing that string depends on the engine's output format. |
+| **2026-11-23** | Local time without Intl (13a PR 2): mobile turns an instant into the profile time zone's date and time from `packages/domain/src/time-zone-data.ts`, generated from Node's ICU by `packages/domain/scripts/generate-time-zone-data.mjs` (every zone's UTC offset and each change from 2020 to 2050; zones with the same changes share one entry; about 32 KB). Years outside 2020–2050 use the rules of a year 28 years nearer (same weekdays), so rule changes before 2020 are not reflected. An unknown profile zone never throws (owner, PR #91 review): times are shown in the device's zone, or Asia/Kolkata when that is unknown too, with one console warning per zone. Month and weekday names are fixed English. Greeting boundaries match the web (`apps/web/lib/greeting.ts`): morning from midnight to 11:59, afternoon 12:00–16:59, evening from 17:00. The table is generated with CI's Node; a unit test compares it with Intl for every zone, 2024–2030, when the runtime's tzdata release matches the table's, and fails when the runtime's is newer (regenerate: `docs/quarterly-list-refresh.md`, "Time-zone offset table"). The web keeps its Intl formatting for now. | Hermes on iOS lacks `formatToParts` and returns date parts as one string; parsing that string depends on the engine's output format. |
+| **2026-11-23** | Safe to spend rule (owner, approved with changes): the full rule and worked examples are in "Safe to spend rule (approved 2026-11-23)" under Sprint 13. Savings accounts count; FDs, investments and loans don't. Goal saving is counted per pay cycle, not per calendar month. Payday counts the salary already recorded. Several incomes: the earliest upcoming date. Exact minor units; whole rupees only for display. | Matches how people in India spend from their savings account, and follows the pay cycle rather than the calendar. |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -377,6 +378,7 @@ Pending tests:
 
 ## Backlog
 
+- **"Count in Safe to spend" per account (owner 2026-11-23):** a switch on each account to leave it out of (or add it to) Safe to spend's money left; until then all active accounts count.
 - **Flaky web PWA kill-switch E2E (after 13a, owner 2026-11-23):** make the web E2E test of the PWA kill switch reliable (find and fix the cause, no retries to hide it). The kill switch is a safety feature, so its test must not be flaky.
 - **Safe to spend today (web and native, owner 2026-11-22):** money left − bills due before the next income − planned goal saving, divided by the days until the next income. A pure function in `packages/domain`, exact integer maths in minor units, with tests (no income date, bills larger than money left, zero days, month and year boundaries in the user's time zone). Shown in the Home hero card on native (design-spec section 5) and on the web Overview.
 - **"Runs short" warning (web and native, owner 2026-11-22):** per account, the projected balance after each upcoming bill before the next income; warn when it falls below zero ("Rent on 1 Dec leaves you ₹1,980 short in SBI"). Same domain module and tests as Safe to spend; shown on Home "Coming up" (native) and the web Overview.
@@ -1546,6 +1548,70 @@ Built on the 12c components, screen by screen, following
 
 **Dependencies:** 12c. Safe to spend and the runs-short warning need
 their domain functions (backlog) before 13a's hero card is complete.
+
+### Safe to spend rule (approved 2026-11-23)
+
+Built in 13a PR 3 as a pure function in `packages/domain`; web and phone show the same figure.
+
+**Safe to spend today = (money left − bills due before the next income − goal saving still
+due before the next income) ÷ days until the next income.**
+
+- **Money left:** the balances of active accounts (bank accounts, savings and current
+  alike, cash and other) in the profile currency, taken at the start of today, so today's
+  entries don't move the daily figure. Fixed deposits, investments and loans are not counted.
+- **Next income date:** the earliest upcoming date among the person's recurring incomes. If
+  today is an income date, the next date after today is used.
+- **Payday:** if today is an income date and that income is already recorded, the money left
+  also includes the income recorded today (start-of-today balance plus today's income), so
+  the salary is not left out. Today's spending still goes to "left today" only, so it is not
+  subtracted twice.
+- **Bills:** unpaid recurring bills, EMIs and card dues due from today up to the day before
+  the next income date.
+- **Goal saving:** each goal's monthly saving falls due on the date of the main income (the
+  largest recurring income). Goal saving still due is the monthly saving for each due date
+  from the last one up to the day before the next income date, minus what has already been
+  put toward the goal since that due date (never below zero). It follows the pay cycle, not
+  the calendar month, and with two incomes a month it is not counted twice.
+- **Days:** today through the day before the next income date, in the profile time zone.
+- **Left today:** the daily figure minus today's spending.
+- **Exact maths:** everything in minor units (paise); the division rounds down to a whole
+  paisa. Only the display rounds down to whole rupees. A shortfall is shown rounded up, so it
+  is never understated.
+- **Below zero:** ₹0 a day with "₹X short before {next income date}"; the runs-short
+  warning names the account and the bill.
+- **No recurring income:** "Money left this month" (money left − bills to the end of the
+  month − goal saving still due this month), no per-day figure, and a "Set your income date"
+  prompt.
+
+Worked examples (demo figures):
+
+1. **Income on the 15th, monthly goal.** Today is Monday 23 November; salary arrives on the
+   15th, so the next income is 15 December and the days run 23 November to 14 December: 22
+   days. Money left ₹42,000 (savings ₹38,500, cash ₹3,500; a ₹1,00,000 FD is not counted).
+   Bills before 15 December: electricity ₹2,400 (25 Nov), phone ₹600 (28 Nov), rent ₹12,000
+   (1 Dec) = ₹15,000. Emergency fund: ₹5,000 a month, due on 15 November, ₹2,000 put toward it
+   since, so ₹3,000 is still due. ₹42,000 − ₹15,000 − ₹3,000 = ₹24,000; ₹24,000 ÷ 22 =
+   ₹1,090.90 (exact: 24,00,000 paise ÷ 22 = 1,09,090 paise, rounded down). Shown: **₹1,090 a
+   day**. After ₹600 spent today: "₹490 left today".
+2. **Payday, salary already recorded.** Today is Tuesday 1 December; salary of ₹85,000 was
+   recorded this morning and ₹500 has been spent. Start-of-today balance ₹6,200, so money left
+   is ₹6,200 + ₹85,000 = ₹91,200. Next income 1 January: 31 days. Bills before 1 January: rent
+   ₹22,000, EMI ₹8,450, card due ₹6,300 = ₹36,750. Goal saving due today, nothing put toward
+   it yet: ₹5,000. ₹91,200 − ₹36,750 − ₹5,000 = ₹49,450; ÷ 31 = ₹1,595.16. Shown: **₹1,595 a
+   day**, "₹1,095 left today".
+3. **Two incomes.** Salary ₹85,000 on the 1st (the main income) and freelance ₹20,000 on the
+   15th. Today is Thursday 3 December: the earliest upcoming income is 15 December, so 12 days
+   (3–14 December). Money left ₹60,000; bills before 15 December ₹30,450; goal saving due 1
+   December, nothing put toward it: ₹5,000. ₹60,000 − ₹30,450 − ₹5,000 = ₹24,550; ÷ 12 =
+   ₹2,045.83. Shown: **₹2,045 a day**. On 16 December (next income 1 January) the goal's
+   ₹5,000 is not due again if it was put aside after 1 December.
+4. **Bills bigger than money left.** Today is 23 November, salary on 1 December (8 days).
+   Money left ₹9,000, all in "HDFC Savings"; rent ₹12,000 from HDFC Savings on 28 November.
+   ₹9,000 − ₹12,000 = −₹3,000. Shown: **₹0 a day, "₹3,000 short before 1 Dec"**, and the
+   runs-short warning "Rent on 28 Nov leaves you ₹3,000 short in HDFC Savings".
+
+Tests in PR 3 cover these four, plus no income date, zero bills, month and year boundaries
+and leap years in the profile time zone.
 
 ## Sprint 14 — Security, release and production readiness
 

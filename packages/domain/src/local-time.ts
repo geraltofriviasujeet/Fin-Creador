@@ -1,7 +1,8 @@
 // Local date and time in the person's profile time zone, without Intl. Hermes on iOS lacks
 // formatToParts and returns date parts as one string, so mobile cannot ask Intl for the hour
 // in a zone. Offsets come from the generated table in time-zone-data.ts instead, and month and
-// day names are fixed English. Nothing here calls Intl or toLocale*.
+// day names are fixed English. No formatting goes through Intl or toLocale*; Intl is touched
+// only to read the device's zone name when the profile's zone is unknown (guarded).
 import type { IsoDate } from "./dates";
 import { parseIsoDate } from "./dates";
 import { TIME_ZONE_ENTRIES, TIME_ZONE_FIRST_YEAR, TIME_ZONE_INDEX, TIME_ZONE_LAST_YEAR } from "./time-zone-data";
@@ -32,9 +33,39 @@ interface OffsetTable {
 
 const decoded = new Map<number, OffsetTable>();
 
+/** Used when neither the profile's zone nor the device's is in the table (India-first default). */
+export const FALLBACK_TIME_ZONE = "Asia/Kolkata";
+
+function deviceTimeZone(): string | undefined {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof zone === "string" && TIME_ZONE_INDEX[zone] !== undefined ? zone : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const warnedZones = new Set<string>();
+
+/**
+ * The zone to read times in: `timeZone` when the table has it, else the device's zone, else
+ * Asia/Kolkata, with one warning per unknown zone. Never throws, so a bad profile value
+ * cannot break a screen.
+ */
+export function resolveTimeZone(timeZone: string): string {
+  if (TIME_ZONE_INDEX[timeZone] !== undefined) return timeZone;
+  const zone = deviceTimeZone() ?? FALLBACK_TIME_ZONE;
+  if (!warnedZones.has(timeZone)) {
+    warnedZones.add(timeZone);
+    // packages/domain has no DOM or Node types; console exists on Hermes, browsers and Node.
+    const log = (globalThis as { console?: { warn?: (message: string) => void } }).console;
+    log?.warn?.(`Unknown time zone "${timeZone}"; showing dates and times in ${zone}.`);
+  }
+  return zone;
+}
+
 function offsetTable(timeZone: string): OffsetTable {
-  const index = TIME_ZONE_INDEX[timeZone];
-  if (index === undefined) throw new RangeError(`Unknown time zone: ${timeZone}`);
+  const index = TIME_ZONE_INDEX[resolveTimeZone(timeZone)] as number;
   let table = decoded.get(index);
   if (!table) {
     const [first, ...changes] = (TIME_ZONE_ENTRIES[index] as string).split(";");
@@ -57,7 +88,8 @@ export const hasTimeZoneData = (timeZone: string): boolean => TIME_ZONE_INDEX[ti
 /**
  * UTC offset in minutes of `timeZone` at `instant` (330 for Asia/Kolkata). Exact for
  * 2020–2050; other years use the rules of a year 28 years nearer (same weekdays), so a
- * zone's past rule changes before 2020 are not reflected. Throws RangeError for an unknown zone.
+ * zone's past rule changes before 2020 are not reflected. An unknown zone falls back as
+ * `resolveTimeZone` describes. Throws RangeError only for an invalid Date.
  */
 export function timeZoneOffsetMinutes(instant: Date, timeZone: string): number {
   const table = offsetTable(timeZone);

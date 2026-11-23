@@ -7,11 +7,14 @@ import {
   hasTimeZoneData,
   localDateTime,
   partOfDay,
+  resolveTimeZone,
   timeZoneOffsetMinutes,
 } from "./local-time";
-import { TIME_ZONE_INDEX } from "./time-zone-data";
+import { TIME_ZONE_INDEX, TIME_ZONE_TZDATA } from "./time-zone-data";
 
 const at = (iso: string) => new Date(iso);
+// packages/domain has no DOM or Node types.
+const testConsole = (globalThis as unknown as { console: { warn: (message: string) => void } }).console;
 const KOLKATA = "Asia/Kolkata";
 const NEW_YORK = "America/New_York";
 
@@ -107,11 +110,51 @@ describe("greeting by local hour", () => {
 });
 
 describe("time zones", () => {
-  it("knows legacy names and rejects unknown zones", () => {
+  it("knows legacy names", () => {
     expect(hasTimeZoneData("Asia/Calcutta")).toBe(true);
+    expect(hasTimeZoneData("Mars/Olympus")).toBe(false);
     expect(timeZoneOffsetMinutes(at("2026-01-01T00:00:00Z"), "Asia/Calcutta")).toBe(330);
-    expect(() => formatClockTime(at("2026-01-01T00:00:00Z"), "Mars/Olympus")).toThrow(RangeError);
     expect(() => formatDayMonth(new Date("nope"), KOLKATA)).toThrow(RangeError);
+  });
+});
+
+describe("unknown time zone", () => {
+  /** Intl whose default DateTimeFormat reports `zone` as the device's time zone. */
+  function stubDeviceZone(zone: string) {
+    const DateTimeFormat = () => ({ resolvedOptions: () => ({ timeZone: zone }) });
+    vi.stubGlobal("Intl", Object.assign(Object.create(Intl), { DateTimeFormat }));
+  }
+  const instant = at("2026-11-23T16:12:00Z"); // 9:42 PM Kolkata, 11:12 AM New York
+
+  it("falls back to the device's zone and warns once, without throwing", () => {
+    stubDeviceZone(NEW_YORK);
+    const warn = vi.spyOn(testConsole, "warn").mockImplementation(() => {});
+    try {
+      expect(resolveTimeZone("Mars/Olympus")).toBe(NEW_YORK);
+      expect(formatClockTime(instant, "Mars/Olympus")).toBe("11:12 AM");
+      expect(greetingFor("Asha", instant, "Mars/Olympus")).toBe("Good morning, Asha");
+      expect(formatLongDate(instant, "Mars/Olympus")).toBe("Monday, 23 November");
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain("Mars/Olympus");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it.each([
+    ["the device's zone is unknown too", () => stubDeviceZone("Not/AZone")],
+    ["Intl is missing", () => vi.stubGlobal("Intl", undefined)],
+  ])("falls back to Asia/Kolkata when %s", (_case, stub) => {
+    stub();
+    const warn = vi.spyOn(testConsole, "warn").mockImplementation(() => {});
+    try {
+      expect(resolveTimeZone("Venus/Maxwell")).toBe(KOLKATA);
+      expect(formatClockTime(instant, "")).toBe("9:42 PM");
+      expect(formatDayMonth(at("2026-11-30T18:30:00Z"), "Venus/Maxwell")).toBe("1 Dec");
+      expect(partOfDay(instant, "Venus/Maxwell")).toBe("evening");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("reads years outside the table from the same rules", () => {
@@ -145,9 +188,17 @@ describe("with Intl removed (Hermes)", () => {
   });
 });
 
-// The table is generated from ICU; this compares it with this Node's Intl. A failure after a
-// Node upgrade means tzdata changed: re-run packages/domain/scripts/generate-time-zone-data.mjs.
-describe("offset table matches Intl", () => {
+// The table is generated from ICU. When this Node has the same tzdata release, every zone is
+// compared with Intl (CI). A newer runtime release means the table is stale: re-run
+// packages/domain/scripts/generate-time-zone-data.mjs with CI's Node (docs/quarterly-list-refresh.md).
+// An older runtime (a local Node behind CI's) cannot judge newer rules, so the comparison is skipped.
+const runtimeTzdata = (globalThis as { process?: { versions?: { tz?: string } } }).process?.versions?.tz ?? "";
+
+it("time-zone table is not older than this Node's tzdata", () => {
+  expect(runtimeTzdata <= TIME_ZONE_TZDATA, `Node has tzdata ${runtimeTzdata}, the table ${TIME_ZONE_TZDATA}: regenerate it`).toBe(true);
+});
+
+describe.skipIf(runtimeTzdata !== TIME_ZONE_TZDATA)(`offset table matches Intl (tzdata ${TIME_ZONE_TZDATA})`, () => {
   function intlOffset(formatter: Intl.DateTimeFormat, instant: Date): number {
     const name = formatter
       .formatToParts(instant)
