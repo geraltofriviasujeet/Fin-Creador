@@ -62,6 +62,10 @@ function RootNavigator() {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
 
+  // Nothing until the stored session is read (the splash stays up on phones), so the guards
+  // never flip from signed-out to signed-in under a mounted navigator.
+  if (!ready) return null;
+
   // Protected groups: signed-out users can only reach (auth), signed-in users only (app).
   // Explicit redirects: "/" lives inside (app), and (auth) has no index route, so the
   // router's default fallback ("/(auth)") would land on "Unmatched route".

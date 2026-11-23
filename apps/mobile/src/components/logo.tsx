@@ -6,21 +6,22 @@ import { colors, fontFamily } from "@/theme";
 const RING = logoRingPath();
 const CENTER = logo.size / 2;
 
-/** 28pt lime rounded square, rotated −6°, with a dark open ring (design-spec §1). Decorative. */
+/**
+ * 28pt lime rounded square, rotated −6°, with a dark open ring (design-spec §1). Decorative.
+ * The hide-from-screen-readers props sit on a View, and the rotation is an SVG transform
+ * string: react-native-svg passes its own props straight to the DOM on web, where these
+ * native-only names are invalid attributes (React warnings on Expo web).
+ */
 export function LogoMark({ size = logo.size }: { size?: number }) {
   return (
-    <Svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${logo.size} ${logo.size}`}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    >
-      <G rotation={logo.rotationDeg} origin={`${CENTER}, ${CENTER}`}>
-        <Rect width={logo.size} height={logo.size} rx={logo.cornerRadius} fill={colors.accent} />
-        <Path d={RING} fill="none" stroke={colors.ink} strokeWidth={logo.ringStroke} strokeLinecap="round" />
-      </G>
-    </Svg>
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Svg width={size} height={size} viewBox={`0 0 ${logo.size} ${logo.size}`}>
+        <G transform={`rotate(${logo.rotationDeg} ${CENTER} ${CENTER})`}>
+          <Rect width={logo.size} height={logo.size} rx={logo.cornerRadius} fill={colors.accent} />
+          <Path d={RING} fill="none" stroke={colors.ink} strokeWidth={logo.ringStroke} strokeLinecap="round" />
+        </G>
+      </Svg>
+    </View>
   );
 }
 

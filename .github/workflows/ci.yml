@@ -77,11 +77,12 @@ jobs:
       - name: Design-system preview left out of production bundles
         run: node scripts/check-mobile-preview-excluded.mjs apps/mobile/dist apps/mobile/dist-js
 
-  # Sprint 12c: the mobile design-system preview on Expo web at 390px. A development export
-  # (the preview is not in production builds), served statically; Playwright checks every
-  # component renders without errors and saves screenshots as the
-  # mobile-design-system-screenshots artifact. Placeholder public env values only: the
-  # preview makes no network calls and the app never signs in here.
+  # Mobile app on Expo web at 390px, a development export served statically (the design-system
+  # preview is not in production builds). Sprint 12c: every preview component renders without
+  # errors (screenshots: mobile-design-system-screenshots artifact). Sprint 13a: the signed-in
+  # app (tab shell, Home) against its own throwaway local Supabase, with fresh demo users. Runs
+  # in parallel with the web E2E job, so it adds no wall-clock time while it stays shorter.
+  # The job name is kept so any required-check settings still match.
   mobile-preview:
     name: Mobile design-system preview (Expo web)
     runs-on: ubuntu-24.04
@@ -96,24 +97,42 @@ jobs:
           node-version: 24
           cache: npm
 
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.111.0 # keep in step with the CLI used locally
+
       - name: Install dependencies
         run: npm ci
+
+      # Throwaway Supabase on the runner (Postgres with all migrations, Auth, API gateway,
+      # PostgREST, Mailpit). Never the hosted project.
+      - name: Start local Supabase
+        run: supabase start -x realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      # Only the public URL and the public (publishable/anon) key are exported.
+      - name: Point the mobile app at the local Supabase
+        run: |
+          eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|PUBLISHABLE_KEY)=')"
+          {
+            echo "EXPO_PUBLIC_SUPABASE_URL=${API_URL}"
+            echo "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${PUBLISHABLE_KEY:-$ANON_KEY}"
+            echo "EXPO_PUBLIC_WEB_URL=http://localhost:3000"
+          } >> "$GITHUB_ENV"
 
       - name: Export the app for web (development build)
         run: npm run preview:web -w @fin-creador/mobile
         env:
           CI: "1"
-          EXPO_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_preview_placeholder
-          EXPO_PUBLIC_WEB_URL: http://localhost:3000
 
       # Positive control for the production check in the app job: the marker is found here.
       - name: Preview marker present in the development export
         run: node scripts/check-mobile-preview-excluded.mjs --expect-present apps/mobile/dist-web
 
       # Uses the Google Chrome preinstalled on the runner (Playwright channel "chrome").
-      - name: Run preview E2E at 390px
+      - name: Run mobile E2E at 390px (preview, tab shell)
         run: npm run e2e -w @fin-creador/mobile
+        env:
+          MOBILE_E2E_BACKEND: "1"
 
       - name: Upload preview screenshots
         if: always()

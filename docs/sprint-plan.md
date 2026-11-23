@@ -17,7 +17,7 @@ tested, usable feature—not just setup work or static screens.
 # Status and decisions log
 
 Update this section at the end of every sprint or step (see section 9).
-Last updated: 2026-11-23 (Sprint 12c mobile design system in review as a draft PR; review fixes for the iPhone Hermes crash and design notes added. Earlier: Sprint 12b merged into `main` (#87); mobile app design approved; native sprints 13a–13e planned; the security and release sprint is now Sprint 14.)
+Last updated: 2026-11-23 (Sprint 13a started: plan approved, PR 1 tab shell in review as a draft PR. Earlier: Sprint 12c mobile design system merged into `main` (#89) and re-tested on iPhone; Sprint 12b merged into `main` (#87); mobile app design approved; native sprints 13a–13e planned; the security and release sprint is now Sprint 14.)
 
 ## Sprint status
 
@@ -54,8 +54,8 @@ Last updated: 2026-11-23 (Sprint 12c mobile design system in review as a draft P
 | **12a-4** | Search polish, hidden-page audit, CI on main | Done (web) | Built 2026-11-22 on `sprint-12a-4` from `main`, PR #85 merged into `main` (follow-up 12a-4b #86: top-bar search without a reload), no migration. A search shows one header line (count, the matches' spent and received, period) with the list straight after: no summary cards, totals note or "Everything" heading; no matches says "No transactions match “q”" with Clear search. Top-bar, phone and Transactions search say "Search transactions…". Hidden-page audit (table in the PR): Roma no longer restarts the chat when the address changes on another page; a finished count-up never replays when a page is shown again, and a value changed while hidden counts on from the last shown one (reduced motion: jumps). CI also runs every job on push to `main`; the docs-only E2E skip stays PR-only. E2E in `hidden-pages.spec.ts`, `transactions.spec.ts` (1280px) and `phone-web.spec.ts`. When this merges, Sprint 12a is done. |
 | **12** | Phone web, landing, PWA, mobile design system | In progress | Order: 12a phone web (done: #81–#86), the landing page (live separately at www.fincreador.com, with its terms and privacy sections), 12b installable PWA with a read-only offline view, 12c mobile design system, then native screens. Offline saving (queue and sync) is the next release, not Sprint 12. Web runs on Next.js 16.4.5. |
 | **12b** | Installable PWA, read-only offline view | Done (web) | Built 2026-11-22 on `sprint-12b-pwa` from `main`, PR #87 merged into `main`, no migration. `app/manifest.ts`; icons, favicon and offline fonts from `scripts/generate-pwa-assets.ts` (`npm run pwa:assets -w @fin-creador/web`); hand-written `public/sw.js` (production builds only, precache + `/_next/static` cache-first, pages/RSC/API never cached) with `public/sw-kill-switch.js` (docs/deployment.md 4d); `/offline` (`lib/pwa/offline-page.ts`) shows the IndexedDB snapshot from `/api/offline-snapshot` (`lib/pwa/build-snapshot.ts`); offline banner and disabled submit buttons (`components/ui/button.tsx`), Sign out works offline (`lib/pwa/offline-sign-out.ts`); install entry in Settings and phone card; terms and privacy links (`lib/site.ts`). E2E in `e2e/pwa.spec.ts`. **Manual (owner):** install on Android and iPhone; Google sign-in inside the installed iPhone app (email sign-in must work there). |
-| **12c** | Mobile design system (Expo) | In review (draft PR) | Approved design in `docs/design-spec.md` section 5. `mobile` tokens in `packages/design-tokens` (web output unchanged apart from two new CSS variables), Manrope 800, the component set in `apps/mobile/src/components/ds`, and a development-only preview screen (Settings → Developer → Design system; left out of production bundles, checked in CI). Expo web runs in CI only for the preview's Playwright check and screenshots (artifact `mobile-design-system-screenshots`); approved screenshots 00–11 are in `docs/design/mobile/`. Review fixes: Hermes-safe money and date formatting (iPhone crash), sheet, empty state, list-row badge, disabled button, crypto polyfill guard. Existing screens move to the new components in 13a. See "Sprint 12c: mobile design system" below. |
-| **13a** | Native: navigation shell and Home | Not started | See "Sprint 13: native app" below. |
+| **12c** | Mobile design system (Expo) | Done (merged, #89) | Approved design in `docs/design-spec.md` section 5. `mobile` tokens in `packages/design-tokens` (web output unchanged apart from two new CSS variables), Manrope 800, the component set in `apps/mobile/src/components/ds`, and a development-only preview screen (Settings → Developer → Design system; left out of production bundles, checked in CI). Expo web runs in CI only for the preview's Playwright check and screenshots (artifact `mobile-design-system-screenshots`); approved screenshots 00–11 are in `docs/design/mobile/`. Review fixes: Hermes-safe money and date formatting (iPhone crash), sheet, empty state, list-row badge, disabled button, crypto polyfill guard. Existing screens move to the new components in 13a. See "Sprint 12c: mobile design system" below. |
+| **13a** | Native: navigation shell and Home | In progress (PR 1 of 5 in review, draft) | Plan approved 2026-11-23; five PRs, listed under "Sprint 13: native app" below. No migration. PR 1: ds tab bar (Home · Activity · ＋ · Plan · Roma), ＋ opens the existing add sheet, Plan and Roma holding screens, old Goals/Investments placeholder tabs removed; signed-in mobile E2E against a throwaway local Supabase in the mobile CI job. |
 | **13b** | Native: Add and Activity | Not started | |
 | **13c** | Native: Plan | Not started | |
 | **13d** | Native: Roma | Not started | |
@@ -348,6 +348,7 @@ Same two phases as Sprint 3 (owner, 2026-10-23): Phase 1 is a prototype on demo 
 | **2026-11-23** | Mobile accessibility props (12c): components set `accessibilityRole` and `accessibilityLabel`, and use React Native's `aria-*` props for state and value (`aria-selected`, `aria-checked`, `aria-disabled`, `aria-busy`, `aria-value*`) instead of `accessibilityState`/`accessibilityValue`. Small controls (36px) get `hitSlop` to 44px; signed amounts carry a + or − and a spoken "Money in/out" label. | `aria-*` works on iOS, Android and react-native-web alike; react-native-web ignores `accessibilityState`, so the web check could not see selection. |
 | **2026-11-23** | Expo web (12c): `react-native-web` and `react-dom` are installed only so CI can render the preview at 390px with Playwright (a development web export served statically). Expo web is not a product platform; phone web stays the Next.js app. `lib/crypto-polyfill.ts` patches an existing crypto object in place and assigns `globalThis.crypto` only when `crypto?.getRandomValues` is missing, so a partial crypto object still gets the polyfill (browsers' `window.crypto` is read-only). | Screenshots and a render check of every component in CI without a device. |
 | **2026-11-23** | Hermes Intl (12c review): shared formatting never depends on `Intl.NumberFormat#formatToParts` (absent on iOS Hermes; it crashed the preview on iPhone), `DateTimeFormat#formatToParts` date parts (iOS Hermes returns one literal part) or `signDisplay`. `packages/domain/src/currency.ts` holds the ISO digit table, a currency→symbol table (INR → ₹) and lakh grouping; `formatMoney` adds the sign itself and falls back to string formatting when Intl is missing or does not group en-IN as 12,34,567; `localDateInTimeZone` parses the formatted text when parts are missing. Tests imitate those engines in Node. DM Sans and Manrope both contain ₹ (checked from the font files in a test), so amounts keep DM Sans. | CI runs Node and Chrome, which have full Intl; only a real phone showed the gap. |
+| **2026-11-23** | Sprint 13a plan (owner): five PRs (tab shell; domain date formatters; Safe to spend and runs-short; Home; Safe to spend on the web Overview). Investments detail moves to 13c; Reports stay web-only until after launch. The signed-in mobile E2E runs in the existing parallel mobile CI job against its own throwaway local Supabase, with demo users created through the public Auth API and confirmed from Mailpit (no service key). Expo web keeps the session in the tab's `sessionStorage` (`lib/session-storage.web.ts`, web bundle only) because expo-secure-store has no web implementation; native keeps the encrypted store. Found while making the signed-in app run on Expo web: (a) `expo-router` `asyncRoutes: { web: false }` in `app.json`, because the development web export names every lazy route chunk with the same empty hash, so the four `_layout` chunks overwrote each other ("Requiring unknown module"); native routes were already eager, so native bundles do not change; (b) the root layout renders nothing until the stored session is read (the splash already covers that time on phones), which removes Expo Router's development-only "ROUTE_NAMES_CHANGED was not handled" error; (c) `LogoMark` puts its screen-reader hiding on a wrapping View and rotates with an SVG `rotate()` transform, because react-native-svg passed the native-only props to the DOM on web. | Web and phone must show the same Safe to spend; the mobile E2E must not lengthen CI's critical path (the web E2E job). |
 
 ## Sprint 7 Investments: market data decisions
 
@@ -1509,13 +1510,31 @@ Built on the 12c components, screen by screen, following
   Home (hero card, quick actions, Coming up, Where it went, Your money,
   Ask Roma card). Safe to spend and the runs-short warning come from the
   backlog domain functions.
+  13a pull requests (owner-approved plan, 2026-11-23):
+  1. Tab shell: the ds tab bar, ＋ opens the existing add sheet, Plan
+     and Roma holding screens; signed-in mobile E2E in CI.
+  2. Hermes-safe date and time formatters in `packages/domain` (no
+     Intl), with tests.
+  3. Safe to spend and runs-short in `packages/domain`; the rule is
+     approved by the owner in plain words before any code.
+  4. Home: header (greeting, date, avatar menu, bell), hero card, quick
+     actions, Coming up, Where it went, Your money, Ask Roma; loading,
+     empty, error and offline states. No income date set: "Money left
+     this month" with a "Set your income date" prompt, no per-day
+     figure. Avatar menu: Accounts, Recurring, Settings (Sign out one
+     tap away), Investments and Reports as "coming soon".
+  5. Web Overview shows the same Safe to spend figure, so web and phone
+     never disagree.
 - **13b Add and Activity:** the full-screen Add (expense, income,
   transfer, keypad, balance before → after) and Activity (months,
   filters, day groups, swipe to edit or void, search, Import UPI).
 - **13c Plan:** budgets, goals, loans and EMIs, bills that repeat,
-  investments summary.
+  investments summary, and investments detail (opened from the summary
+  and the avatar menu).
 - **13d Roma:** chat with verdict-first answers, working tables, tags,
   follow-up chips and History.
+- **Reports** stay web-only until after launch (owner, 2026-11-23);
+  the avatar menu shows them as "coming soon".
 - **13e Test builds only:** EAS builds; iOS through TestFlight on a
   friend's Apple developer team account; Android internal testing. No
   public store submission (end of Sprint 14).
