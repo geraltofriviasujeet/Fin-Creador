@@ -1,4 +1,4 @@
-import { formatMoney, formatPercentFromBasisPoints } from "@fin-creador/domain";
+import { formatMoney, formatPercentFromBasisPoints, localDateInTimeZone } from "@fin-creador/domain";
 
 // Display helpers for the mobile Income screens. Intl support varies across Hermes builds,
 // so each one falls back to a plain, still-correct format instead of throwing.
@@ -49,9 +49,8 @@ export const param = (v: string | string[] | undefined) => (Array.isArray(v) ? v
 /** "22 Oct 2026" for an instant in the user's time zone; the UTC date if Intl lacks time zones. */
 export function shortDateInZone(instant: string, timeZone: string): string {
   try {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(instant));
-    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-    return shortDate(`${get("year")}-${get("month")}-${get("day")}`);
+    // Shared helper: works on Hermes, whose iOS formatToParts returns no date parts.
+    return shortDate(localDateInTimeZone(new Date(instant), timeZone));
   } catch {
     return shortDate(instant.slice(0, 10));
   }

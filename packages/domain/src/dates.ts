@@ -42,16 +42,28 @@ function mustParse(date: IsoDate) {
   return parsed;
 }
 
-/** Today's (or any instant's) calendar date in an IANA time zone. */
+/**
+ * Today's (or any instant's) calendar date in an IANA time zone. Reads formatToParts when the
+ * engine has it and it returns real parts; Hermes on iOS returns one literal part, so the
+ * en-US "MM/DD/YYYY" text is parsed instead. Throws RangeError for an unknown zone.
+ */
 export function localDateInTimeZone(instant: Date, timeZone: string): IsoDate {
-  const parts = new Intl.DateTimeFormat("en-US", {
+  const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(instant);
-  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
-  return `${pad(get("year"), 4)}-${pad(get("month"))}-${pad(get("day"))}`;
+  });
+  if (typeof formatter.formatToParts === "function") {
+    const parts = formatter.formatToParts(instant);
+    const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+    const date = `${pad(get("year"), 4)}-${pad(get("month"))}-${pad(get("day"))}`;
+    if (isIsoDate(date)) return date;
+  }
+  const m = /(\d{1,2})\D+(\d{1,2})\D+(\d{4})/.exec(formatter.format(instant));
+  const date = m ? `${pad(Number(m[3]), 4)}-${pad(Number(m[1]))}-${pad(Number(m[2]))}` : "";
+  if (!isIsoDate(date)) throw new RangeError(`Could not read the date in ${timeZone}`);
+  return date;
 }
 
 /** The calendar month containing `date`. */

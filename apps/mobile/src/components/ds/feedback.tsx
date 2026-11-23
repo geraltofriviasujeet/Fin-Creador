@@ -187,7 +187,11 @@ export function EmptyState({ icon: Icon, title, body, action }: EmptyStateProps)
         {title}
       </Text>
       {body ? <Text style={[dsText.body, styles.center, styles.muted]}>{body}</Text> : null}
-      {action ? <Button label={action.label} onPress={action.onPress} /> : null}
+      {action ? (
+        <View style={styles.emptyAction}>
+          <Button label={action.label} onPress={action.onPress} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -233,6 +237,8 @@ const styles = StyleSheet.create({
   shortLine: { flexDirection: "row", alignItems: "center", gap: spacing[1] },
   shortText: { ...dsText.caption, fontFamily: fontFamily.bodySemibold, color: mobile.colors.warning },
   empty: { alignItems: "center", gap: spacing[3], paddingVertical: spacing[8], paddingHorizontal: spacing[5] },
+  // Button sets alignSelf flex-start; this wrapper is what gets centred.
+  emptyAction: { alignSelf: "center", marginTop: spacing[1] },
   emptyIcon: {
     width: 56,
     height: 56,

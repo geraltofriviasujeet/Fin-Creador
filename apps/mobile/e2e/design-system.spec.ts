@@ -60,6 +60,19 @@ test("components expose roles, labels and signs", async ({ page }) => {
   await page.getByRole("button", { name: "Delete last digit" }).click();
   await expect(page.getByLabel(/^Amount, ₹1,250$/)).toBeVisible();
 
+  // The inline bottom sheet fits its rows: nothing inside it is clipped or needs scrolling.
+  const clipped = await page.getByTestId("ds-sheet").evaluate((el) =>
+    [...el.querySelectorAll("div")].filter((d) => d.scrollHeight > d.clientHeight + 1 && getComputedStyle(d).overflowY !== "visible").length,
+  );
+  expect(clipped).toBe(0);
+  const lastRow = page.getByTestId("ds-sheet").getByRole("button", { name: /^Cash \(sample\)/ });
+  await lastRow.scrollIntoViewIfNeeded();
+  await expect(lastRow).toBeInViewport({ ratio: 1 });
+
+  // A row with a badge keeps its whole title (the badge sits on the subtitle line).
+  const title = page.getByTestId("ds-rows").getByText("Groceries (sample)", { exact: true });
+  expect(await title.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
   // Every tap target is at least 44×44. The only exception is the 36px "small" size (small
   // buttons, chips), which adds hitSlop on native to reach 44; web does not draw hitSlop, and
   // the unit tests (logic.test.ts) prove hitSlopFor(36) reaches 44.

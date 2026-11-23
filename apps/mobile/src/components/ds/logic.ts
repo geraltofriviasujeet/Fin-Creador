@@ -3,6 +3,7 @@
 import {
   DEFAULT_LOCALE,
   currencyMinorDigits,
+  currencySymbol,
   formatMoney,
   formatMoneyWhole,
   parseAmount,
@@ -131,12 +132,8 @@ export function amountInputState(typed: string, currency = "INR", locale = DEFAU
   return { display, minor: parsed.ok ? parsed.minor : null, label: `Amount, ${display}` };
 }
 
-export function currencySymbol(currency: string, locale = DEFAULT_LOCALE): string {
-  const part = new Intl.NumberFormat(locale, { style: "currency", currency })
-    .formatToParts(0)
-    .find((p) => p.type === "currency");
-  return part?.value ?? currency;
-}
+/** INR → "₹". From packages/domain: a table first, never Intl formatToParts (Hermes lacks it). */
+export { currencySymbol };
 
 // ---- Progress ------------------------------------------------------------------------
 

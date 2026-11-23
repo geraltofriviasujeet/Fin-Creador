@@ -94,16 +94,18 @@ export function ListRow({ icon, tint, title, subtitle, amount, tag, onPress, for
     <View style={[styles.row, (pressed || forcePressed) && styles.rowPressed]}>
       <IconTile icon={icon} tint={tint} />
       <View style={styles.rowText}>
-        <View style={styles.rowTitleLine}>
-          <Text style={[dsText.bodyStrong, styles.shrink]} numberOfLines={1}>
-            {title}
-          </Text>
-          {tag ? <Tag label={tag} /> : null}
-        </View>
-        {subtitle ? (
-          <Text style={dsText.caption} numberOfLines={1}>
-            {subtitle}
-          </Text>
+        <Text style={dsText.bodyStrong} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle || tag ? (
+          <View style={styles.rowSubtitleLine}>
+            {subtitle ? (
+              <Text style={[dsText.caption, styles.shrink]} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            ) : null}
+            {tag ? <Tag label={tag} /> : null}
+          </View>
         ) : null}
       </View>
       {amount ? <AmountText minor={amount.minor} direction={amount.direction} whole={amount.whole} /> : null}
@@ -257,7 +259,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: spacing[3], minHeight: 64, paddingVertical: spacing[2] },
   rowPressed: { backgroundColor: mobile.colors.canvas },
   rowText: { flex: 1, gap: 2 },
-  rowTitleLine: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
+  // It wraps under the subtitle when both do not fit, so neither is cut short.
+  rowSubtitleLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: spacing[2], rowGap: 4 },
   shrink: { flexShrink: 1 },
   tag: {
     borderRadius: mobile.radius.chip,

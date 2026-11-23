@@ -26,6 +26,9 @@ const palette: Record<ButtonVariant, { bg: string; fg: string; border: string; p
   secondary: { bg: mobile.colors.surface, fg: mobile.colors.ink, border: mobile.colors.lineStrong, pressed: mobile.colors.canvas },
 };
 
+/** Disabled primary: muted grey label on the grey tint (AA), not lime on a faded forest. */
+const disabledPrimary = { bg: mobile.categoryTints.grey, fg: mobile.colors.muted, border: mobile.categoryTints.grey, pressed: mobile.categoryTints.grey };
+
 /** Primary (forest/lime), secondary (outline) and small buttons. Small ones get hitSlop to 44px. */
 export function Button({
   label,
@@ -38,8 +41,10 @@ export function Button({
   forcePressed,
   ...props
 }: ButtonProps) {
-  const p = palette[variant];
   const inactive = !!disabled || !!loading;
+  // Loading keeps the normal look with a spinner; only a disabled primary turns grey.
+  const greyed = variant === "primary" && !!disabled && !loading;
+  const p = greyed ? disabledPrimary : palette[variant];
   const small = size === "small";
   return (
     <Pressable
@@ -53,7 +58,7 @@ export function Button({
         small ? styles.small : styles.regular,
         fullWidth && styles.full,
         { backgroundColor: pressed || forcePressed ? p.pressed : p.bg, borderColor: p.border },
-        inactive && styles.inactive,
+        inactive && !greyed && styles.inactive,
       ]}
       {...props}
     >

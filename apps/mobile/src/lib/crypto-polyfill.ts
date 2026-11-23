@@ -18,22 +18,40 @@ const ALGORITHMS: Record<string, CryptoDigestAlgorithm> = {
   "SHA-512": CryptoDigestAlgorithm.SHA512,
 };
 
-const scope = globalThis as unknown as { crypto?: MinimalCrypto };
-const target: MinimalCrypto = scope.crypto ?? {};
+type CryptoScope = { crypto?: MinimalCrypto };
 
-target.getRandomValues ??= getRandomValues;
-target.randomUUID ??= randomUUID;
-if (!target.subtle?.digest) {
-  target.subtle = {
-    ...target.subtle,
-    digest: (algorithm, data) => {
-      const name = (typeof algorithm === "string" ? algorithm : algorithm.name).toUpperCase();
-      const mapped = ALGORITHMS[name];
-      if (!mapped) return Promise.reject(new Error(`Unsupported digest algorithm: ${name}`));
-      return digest(mapped, data);
-    },
-  };
+/**
+ * Fills in getRandomValues, randomUUID and subtle.digest where missing. The guard is
+ * `crypto?.getRandomValues`, not `crypto`: an environment can expose a partial crypto object
+ * (e.g. randomUUID only), and that one still needs the polyfill. An existing object is patched
+ * in place (browsers, for Expo web, where window.crypto is read-only); a frozen partial object
+ * is replaced by one that also carries its own methods.
+ */
+export function installCryptoPolyfill(scope: CryptoScope = globalThis as unknown as CryptoScope): void {
+  const existing = scope.crypto;
+  const target: MinimalCrypto = existing && Object.isExtensible(existing) ? existing : { ...existing };
+
+  target.getRandomValues ??= getRandomValues;
+  target.randomUUID ??= randomUUID;
+  if (!target.subtle?.digest) {
+    target.subtle = {
+      ...target.subtle,
+      digest: (algorithm, data) => {
+        const name = (typeof algorithm === "string" ? algorithm : algorithm.name).toUpperCase();
+        const mapped = ALGORITHMS[name];
+        if (!mapped) return Promise.reject(new Error(`Unsupported digest algorithm: ${name}`));
+        return digest(mapped, data);
+      },
+    };
+  }
+
+  if (!scope.crypto?.getRandomValues) {
+    try {
+      scope.crypto = target;
+    } catch {
+      Object.defineProperty(scope, "crypto", { value: target, configurable: true, writable: true });
+    }
+  }
 }
-// Assign only when missing: an existing crypto object (browsers, for Expo web) was patched
-// in place above, and window.crypto is read-only there.
-if (!scope.crypto) scope.crypto = target;
+
+installCryptoPolyfill();

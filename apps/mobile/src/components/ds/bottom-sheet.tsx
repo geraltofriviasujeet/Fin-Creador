@@ -22,7 +22,10 @@ export function BottomSheet({ visible, title, onClose, children, inline }: Botto
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const panel = (
-    <View accessibilityViewIsModal style={[styles.panel, { paddingBottom: insets.bottom + spacing[5] }]}>
+    <View
+      accessibilityViewIsModal
+      style={[styles.panel, !inline && styles.panelCapped, { paddingBottom: insets.bottom + spacing[5] }]}
+    >
       <View style={styles.handle} importantForAccessibility="no" accessibilityElementsHidden />
       <View style={styles.header}>
         <Text accessibilityRole="header" style={[dsText.cardTitle, styles.title]}>
@@ -37,7 +40,7 @@ export function BottomSheet({ visible, title, onClose, children, inline }: Botto
           <X size={20} color={mobile.colors.ink} />
         </Pressable>
       </View>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
     </View>
@@ -71,8 +74,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: mobile.radius.card,
     paddingHorizontal: spacing[5],
     paddingTop: spacing[2],
-    maxHeight: "90%",
   },
+  // 90% of the screen in the Modal. Not inline: a percentage of a content-sized parent is
+  // circular and clipped the last row.
+  panelCapped: { maxHeight: "90%" },
   handle: {
     alignSelf: "center",
     width: 40,
@@ -92,5 +97,7 @@ const styles = StyleSheet.create({
     backgroundColor: mobile.categoryTints.grey,
   },
   closePressed: { backgroundColor: mobile.colors.line },
+  // Grow to fit every row; shrink (and scroll) only when the panel hits its max height.
+  scroll: { flexGrow: 0, flexShrink: 1 },
   body: { paddingTop: spacing[3], gap: spacing[3] },
 });
