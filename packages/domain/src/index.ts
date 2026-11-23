@@ -39,3 +39,4 @@ export * from "./statement-upi-bhim";
 export * from "./statement-upi-gpay";
 export * from "./statement-upi-read";
 export * from "./local-time";
+export * from "./safe-to-spend";
