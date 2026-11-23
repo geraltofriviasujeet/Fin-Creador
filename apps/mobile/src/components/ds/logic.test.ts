@@ -90,9 +90,10 @@ describe("tap targets", () => {
 
 describe("tab screen bottom padding", () => {
   it("clears the raised + by 24px", () => {
-    // The 56px + rises half its height plus 4px above the bar.
-    expect(RAISED_ADD_OVERLAP).toBe(56 / 2 + 4);
-    expect(TAB_SCREEN_BOTTOM_PADDING).toBe(32 + 24);
+    // The 56px + is lifted half its height plus 4px above its slot, which starts below the
+    // bar's 8px top padding and 1px border: it rises 23px above the bar's edge.
+    expect(RAISED_ADD_OVERLAP).toBe(56 / 2 + 4 - 8 - 1);
+    expect(TAB_SCREEN_BOTTOM_PADDING).toBe(23 + 24);
   });
 });
 

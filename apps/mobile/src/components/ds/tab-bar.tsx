@@ -2,7 +2,7 @@ import { House, type LucideIcon, Plus, ReceiptText, Sparkles, Target } from "luc
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fontFamily, mobile, spacing } from "@/theme";
-import { RAISED_ADD_OVERLAP } from "./logic";
+import { RAISED_ADD_LIFT, TAB_BAR_BORDER_TOP, TAB_BAR_PADDING_TOP } from "./logic";
 
 export type TabKey = "home" | "activity" | "plan" | "roma";
 
@@ -74,9 +74,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     minHeight: mobile.tabBar.height,
-    paddingTop: spacing[2],
+    paddingTop: TAB_BAR_PADDING_TOP,
     backgroundColor: mobile.colors.surface,
-    borderTopWidth: 1,
+    borderTopWidth: TAB_BAR_BORDER_TOP,
     borderTopColor: mobile.colors.line,
   },
   tab: { flex: 1, minHeight: mobile.tapTarget + 8, alignItems: "center", justifyContent: "center", gap: 2 },
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   addSlot: { flex: 1, alignSelf: "stretch", alignItems: "center" },
   add: {
     position: "absolute",
-    top: -RAISED_ADD_OVERLAP,
+    top: -RAISED_ADD_LIFT,
     width: ADD_SIZE,
     height: ADD_SIZE,
     borderRadius: mobile.radius.tileLg,

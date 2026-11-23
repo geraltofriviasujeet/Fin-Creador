@@ -70,8 +70,15 @@ export function tapSize(size: number, slop: number | undefined): number {
   return size + 2 * (slop ?? 0);
 }
 
-/** How far the tab bar's raised ＋ rises above the bar's top edge into the screen above. */
-export const RAISED_ADD_OVERLAP = mobile.tabBar.raisedButton / 2 + spacing[1];
+/** The tab bar's top padding and top border (its edge above the tabs). */
+export const TAB_BAR_PADDING_TOP = spacing[2];
+export const TAB_BAR_BORDER_TOP = 1;
+
+/** How far the raised ＋ is lifted above the top of its slot (inside the bar's padding). */
+export const RAISED_ADD_LIFT = mobile.tabBar.raisedButton / 2 + spacing[1];
+
+/** How far the raised ＋ rises above the bar's top edge into the screen above (23px). */
+export const RAISED_ADD_OVERLAP = RAISED_ADD_LIFT - TAB_BAR_PADDING_TOP - TAB_BAR_BORDER_TOP;
 
 /** Space left between a tab screen's last row and the top of the raised ＋. */
 export const TAB_SCREEN_CLEARANCE = 24;
