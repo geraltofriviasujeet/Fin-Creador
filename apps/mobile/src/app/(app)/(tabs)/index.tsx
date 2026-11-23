@@ -86,5 +86,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: mobile.colors.canvas },
-  secondary: { alignItems: "center", marginTop: -spacing[4] },
+  // Centred under the empty state's primary action (a Button sizes to its label).
+  secondary: { alignSelf: "center", marginTop: -spacing[4] },
 });
