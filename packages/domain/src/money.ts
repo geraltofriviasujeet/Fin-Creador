@@ -1,23 +1,13 @@
 // Money input and arithmetic. Amounts are integer minor units held as JavaScript numbers;
 // the database caps every stored amount at 10^13 minor units so sums stay exact (far
 // below Number.MAX_SAFE_INTEGER). Every addition is checked anyway.
+import { currencyMinorDigits, groupWholeDigits as groupWhole } from "./currency";
 import { minorUnitsToDecimalString } from "./format";
 
 /** Largest amount accepted for one entry or opening balance (matches the database). */
 export const MAX_AMOUNT_MINOR = 10_000_000_000_000;
 
-// ISO 4217 minor-unit digits that differ from 2. Kept as a table (not Intl) so web and
-// mobile (Hermes) agree.
-const ZERO_DIGIT = new Set([
-  "BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "UYI", "VND", "VUV", "XAF", "XOF", "XPF",
-]);
-const THREE_DIGIT = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
-
-export function currencyMinorDigits(currency: string): number {
-  if (ZERO_DIGIT.has(currency)) return 0;
-  if (THREE_DIGIT.has(currency)) return 3;
-  return 2;
-}
+export { currencyMinorDigits, currencySymbol } from "./currency";
 
 /** Sum of minor-unit amounts; throws instead of silently losing precision. */
 export function addMinor(...values: number[]): number {
@@ -77,19 +67,6 @@ export function minorToInputString(minor: number, currency: string): string {
   return text.replace(/\.0+$/, "");
 }
 
-/**
- * Groups the whole part of a plain number string: Indian style for en-IN (12,34,567), else
- * thousands (1,234,567). String work only, so web and mobile (Hermes) agree.
- */
-function groupWhole(whole: string, locale: string): string {
-  if (whole.length <= 3) return whole;
-  const last = whole.slice(-3);
-  const rest = whole.slice(0, -3);
-  const size = locale === "en-IN" ? 2 : 3;
-  const groups: string[] = [];
-  for (let end = rest.length; end > 0; end -= size) groups.unshift(rest.slice(Math.max(0, end - size), end));
-  return `${groups.join(",")},${last}`;
-}
 
 /** Like minorToInputString, with digit grouping for display in an input: 2665464 → "26,654.64". */
 export function minorToGroupedInputString(minor: number, currency: string, locale = "en-IN"): string {

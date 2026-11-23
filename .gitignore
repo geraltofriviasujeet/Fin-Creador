@@ -6,6 +6,7 @@ node_modules/
 out/
 dist/
 dist-js/
+dist-web/
 build/
 .expo/
 .turbo/

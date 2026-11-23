@@ -50,6 +50,10 @@ export const colors = {
   danger: "#9a4636",
   /** Figma danger, for fills/icons. */
   dangerFill: "#b95d4a",
+  /** Mobile warning (design-spec §5): over-budget bars, "leaves you short" banners. Text-safe on surface/canvas. */
+  warning: "#c2412d",
+  /** Mobile neutral category tint (design-spec §5). */
+  tintGrey: "#f0f3f1",
 } as const;
 
 export type ColorToken = keyof typeof colors;
@@ -92,6 +96,17 @@ export const contrastPairs: ReadonlyArray<{
   { fg: "accentDeep", bg: "canvas", min: 3, use: "focus ring on page" },
   { fg: "accent", bg: "nav", min: 3, use: "focus ring on nav" },
   { fg: "accent", bg: "accentDeep", min: 3, use: "focus ring on deep card" },
+  // Mobile design system (design-spec §5).
+  { fg: "successFill", bg: "surface", min: 4.5, use: "mobile Money in amount on cards" },
+  { fg: "successFill", bg: "canvas", min: 4.5, use: "mobile Money in amount on page" },
+  { fg: "warning", bg: "surface", min: 4.5, use: "mobile warning text on cards" },
+  { fg: "warning", bg: "canvas", min: 4.5, use: "mobile warning text on page" },
+  { fg: "surface", bg: "warning", min: 4.5, use: "text on warning fill" },
+  { fg: "warning", bg: "peach", min: 3, use: "warning icon on banner (non-text)" },
+  { fg: "ink", bg: "tintGrey", min: 4.5, use: "text on grey tint" },
+  { fg: "muted", bg: "tintGrey", min: 4.5, use: "secondary text on grey tint" },
+  { fg: "accent", bg: "nav", min: 4.5, use: "lime on forest (primary button label, + icon)" },
+  { fg: "navText", bg: "nav", min: 4.5, use: "text on forest hero card" },
 ];
 
 /** Radii in px. Cards 20, inner blocks 14, buttons/inputs 10. */
@@ -110,7 +125,7 @@ export const shadow = {
 
 export const fonts = {
   /** Headings, big numbers. */
-  heading: { family: "Manrope", weights: [600, 700] },
+  heading: { family: "Manrope", weights: [600, 700, 800] },
   /** Body text. */
   body: { family: "DM Sans", weights: [400, 500, 600, 700] },
 } as const;
@@ -191,3 +206,62 @@ export function logoRingPath(): string {
   // From the upper end of the gap, clockwise the long way round to the lower end.
   return `M ${point(180 + half)} A ${r} ${r} 0 1 1 ${point(180 - half)}`;
 }
+
+/**
+ * Mobile app design system (design-spec §5, approved 22 Nov 2026). React Native only; not
+ * emitted to tokens.css, so web output is unchanged. Colours reuse the palette above.
+ */
+export const mobile = {
+  colors: {
+    /** Hero card, tab bar centre button, primary button. */
+    forest: colors.nav,
+    /** Accent, primary button label. Fill or text on forest only, never text on light. */
+    lime: colors.accent,
+    canvas: colors.canvas,
+    surface: colors.surface,
+    ink: colors.ink,
+    /** Money in amounts (always with a + sign). */
+    moneyIn: colors.successFill,
+    warning: colors.warning,
+    muted: colors.muted,
+    /** Icons and placeholders only. */
+    mutedSubtle: colors.mutedSubtle,
+    line: colors.line,
+    lineStrong: colors.lineStrong,
+    onForest: colors.navText,
+    onForestMuted: colors.navMuted,
+    /** Bottom-sheet backdrop: forest at 45%. */
+    scrim: "rgba(23, 37, 31, 0.45)",
+  },
+  /** Category icon-tile backgrounds. */
+  categoryTints: {
+    peach: colors.peach,
+    mint: colors.mint,
+    blue: colors.blue,
+    lavender: colors.lavender,
+    grey: colors.tintGrey,
+  },
+  /** Type scale in px: size / weight / line height. Never under MIN_FONT_SIZE. */
+  type: {
+    hero: { size: 44, weight: 800, lineHeight: 52 },
+    screenTitle: { size: 28, weight: 800, lineHeight: 34 },
+    cardTitle: { size: 18, weight: 700, lineHeight: 24 },
+    body: { size: 16, weight: 400, lineHeight: 24 },
+    caption: { size: 13, weight: 400, lineHeight: 18 },
+    min: { size: MIN_FONT_SIZE, weight: 500, lineHeight: 16 },
+  },
+  radius: {
+    card: 22,
+    tileSm: 14,
+    tile: 16,
+    tileLg: 18,
+    chip: 99,
+  },
+  /** Card layout: white, no shadow, padding 18, 16 apart. */
+  card: { padding: 18, gap: 16 },
+  /** Minimum tap target in px (44×44). */
+  tapTarget: 44,
+  tabBar: { height: layout.tabBarHeight, raisedButton: 56 },
+} as const;
+
+export type CategoryTint = keyof typeof mobile.categoryTints;

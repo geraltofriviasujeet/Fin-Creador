@@ -1,4 +1,4 @@
-import { colors, fontSize, layout, letterSpacing, radius, spacing } from "@fin-creador/design-tokens";
+import { colors, fontSize, layout, letterSpacing, mobile, radius, spacing } from "@fin-creador/design-tokens";
 import { StyleSheet } from "react-native";
 
 // Native styles built only from @fin-creador/design-tokens (design-spec §2–3).
@@ -6,6 +6,8 @@ import { StyleSheet } from "react-native";
 
 export const fontFamily = {
   heading: "Manrope_700Bold",
+  /** Hero amounts and screen titles (design-spec §5: 800). */
+  headingExtraBold: "Manrope_800ExtraBold",
   headingSemibold: "Manrope_600SemiBold",
   body: "DMSans_400Regular",
   bodyMedium: "DMSans_500Medium",
@@ -56,4 +58,52 @@ export const text = StyleSheet.create({
   },
 });
 
-export { colors, fontSize, radius, spacing };
+/** Mobile design-system type (design-spec §5), built from mobile.type tokens. */
+export const dsText = StyleSheet.create({
+  hero: {
+    fontFamily: fontFamily.headingExtraBold,
+    fontSize: mobile.type.hero.size,
+    lineHeight: mobile.type.hero.lineHeight,
+    letterSpacing: letterSpacing.heading,
+    color: mobile.colors.ink,
+  },
+  screenTitle: {
+    fontFamily: fontFamily.headingExtraBold,
+    fontSize: mobile.type.screenTitle.size,
+    lineHeight: mobile.type.screenTitle.lineHeight,
+    letterSpacing: letterSpacing.heading,
+    color: mobile.colors.ink,
+  },
+  cardTitle: {
+    fontFamily: fontFamily.heading,
+    fontSize: mobile.type.cardTitle.size,
+    lineHeight: mobile.type.cardTitle.lineHeight,
+    color: mobile.colors.ink,
+  },
+  body: {
+    fontFamily: fontFamily.body,
+    fontSize: mobile.type.body.size,
+    lineHeight: mobile.type.body.lineHeight,
+    color: mobile.colors.ink,
+  },
+  bodyStrong: {
+    fontFamily: fontFamily.bodySemibold,
+    fontSize: mobile.type.body.size,
+    lineHeight: mobile.type.body.lineHeight,
+    color: mobile.colors.ink,
+  },
+  caption: {
+    fontFamily: fontFamily.body,
+    fontSize: mobile.type.caption.size,
+    lineHeight: mobile.type.caption.lineHeight,
+    color: mobile.colors.muted,
+  },
+  label: {
+    fontFamily: fontFamily.bodyMedium,
+    fontSize: mobile.type.min.size,
+    lineHeight: mobile.type.min.lineHeight,
+    color: mobile.colors.muted,
+  },
+});
+
+export { colors, fontSize, mobile, radius, spacing };
