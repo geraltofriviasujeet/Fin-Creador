@@ -27,6 +27,8 @@ export function Segmented<T extends string>({
             key={o.value}
             accessibilityRole="tab"
             accessibilityState={{ selected, disabled: inactive }}
+            // React Native Web doesn't map accessibilityState.selected; say it on web too (as the ds TabBar does).
+            aria-selected={selected}
             disabled={inactive}
             onPress={() => !selected && onChange(o.value)}
             style={[styles.item, selected && styles.active]}

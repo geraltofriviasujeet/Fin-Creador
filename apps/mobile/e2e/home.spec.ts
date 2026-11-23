@@ -135,6 +135,9 @@ test("no income date: money left this month and 'Set your income date' opens the
   await page.getByRole("button", { name: "Set your income date" }).click();
   await expect(page.getByRole("heading", { name: "Add recurring", exact: true })).toBeVisible();
   await expect(page.getByRole("tablist", { name: "Type" }).getByRole("tab", { name: "Income" })).toHaveAttribute("aria-selected", "true");
+  // The income form itself: a source and the account it's received into.
+  await expect(page.getByText("Received into", { exact: true })).toBeVisible();
+  await expect(page.getByText("Paid from", { exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
