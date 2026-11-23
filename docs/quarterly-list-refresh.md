@@ -99,9 +99,10 @@ times a year (IANA tzdata releases), so the table goes stale.
 
 **When to regenerate:**
 
-- The unit test "time-zone table is not older than this Node's tzdata" fails in CI. CI's Node
-  has a newer tzdata release than the table (usually after CI's Node version changes or a Node
-  patch release).
+- The unit test "offset table matches Intl" fails in CI for some zones: CI's Node knows a
+  rule the table doesn't (usually after CI's Node version changes or a Node patch release).
+  A different tzdata release on its own only prints a warning; the test fails only when an
+  offset actually differs between 2024 and 2030.
 - A country announces a change to its clocks (abolishing or adding daylight saving time, a new
   offset) and a Node release with that tzdata is out.
 - At the quarterly refresh, check `process.versions.tz` of CI's Node against
@@ -113,7 +114,7 @@ times a year (IANA tzdata releases), so the table goes stale.
    its latest patch release. Check `node -p process.versions.tz`.
 2. Run `node packages/domain/scripts/generate-time-zone-data.mjs`. It rewrites
    `time-zone-data.ts` and records the tzdata release in `TIME_ZONE_TZDATA`.
-3. Run `npx vitest run packages/domain/src/local-time.test.ts`. When your Node's tzdata matches
-   the table, every zone is compared with Intl from 2024 to 2030. A local Node with older tzdata
-   skips that comparison; CI runs it.
+3. Run `npx vitest run packages/domain/src/local-time.test.ts`: every zone is compared with
+   Intl from 2024 to 2030. A local Node with different tzdata may fail for zones whose rules
+   changed between the two releases; CI's result is the one that counts.
 4. Open a pull request with the regenerated file; CI must be green.

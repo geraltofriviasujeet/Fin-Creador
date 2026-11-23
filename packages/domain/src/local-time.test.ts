@@ -188,17 +188,18 @@ describe("with Intl removed (Hermes)", () => {
   });
 });
 
-// The table is generated from ICU. When this Node has the same tzdata release, every zone is
-// compared with Intl (CI). A newer runtime release means the table is stale: re-run
-// packages/domain/scripts/generate-time-zone-data.mjs with CI's Node (docs/quarterly-list-refresh.md).
-// An older runtime (a local Node behind CI's) cannot judge newer rules, so the comparison is skipped.
+// The table is generated from ICU. Every zone is compared with this Node's Intl from 2024 to
+// 2030 on whatever Node runs the tests; only a real offset difference fails. A different tzdata
+// release alone only warns, so a Node update in CI doesn't break unrelated PRs. To fix a
+// failure, regenerate with CI's Node (docs/quarterly-list-refresh.md, "Time-zone offset table").
 const runtimeTzdata = (globalThis as { process?: { versions?: { tz?: string } } }).process?.versions?.tz ?? "";
+if (runtimeTzdata !== TIME_ZONE_TZDATA) {
+  testConsole.warn(
+    `Time-zone table is from tzdata ${TIME_ZONE_TZDATA}, this Node has ${runtimeTzdata || "unknown"}; comparing offsets anyway.`,
+  );
+}
 
-it("time-zone table is not older than this Node's tzdata", () => {
-  expect(runtimeTzdata <= TIME_ZONE_TZDATA, `Node has tzdata ${runtimeTzdata}, the table ${TIME_ZONE_TZDATA}: regenerate it`).toBe(true);
-});
-
-describe.skipIf(runtimeTzdata !== TIME_ZONE_TZDATA)(`offset table matches Intl (tzdata ${TIME_ZONE_TZDATA})`, () => {
+describe(`offset table matches Intl (table tzdata ${TIME_ZONE_TZDATA}, Node tzdata ${runtimeTzdata || "unknown"})`, () => {
   function intlOffset(formatter: Intl.DateTimeFormat, instant: Date): number {
     const name = formatter
       .formatToParts(instant)
