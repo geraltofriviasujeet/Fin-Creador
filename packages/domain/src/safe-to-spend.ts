@@ -179,7 +179,7 @@ function goalStillDue(goals: readonly SafeToSpendGoal[], dueDate: IsoDate | null
 }
 
 function shortfalls(
-  accounts: readonly { account: SafeToSpendAccount; balanceMinor: number }[],
+  accounts: readonly { account: Pick<SafeToSpendAccount, "id" | "name">; balanceMinor: number }[],
   bills: readonly SafeToSpendBill[],
 ): AccountShortfall[] {
   const result: AccountShortfall[] = [];
@@ -280,6 +280,47 @@ export function safeToSpend(input: SafeToSpendInput): SafeToSpendResult {
     leftTodayMinor: addMinor(dailyMinor, -input.spentTodayMinor),
     paydayPending: payday.some((i) => i.recordedToday.length === 0),
   };
+}
+
+export interface DraftMove {
+  accountId: string;
+  accountName: string;
+  currency: string;
+  /** The account's balance now, without the draft (for an edit: without the entry being edited). */
+  beforeMinor: number;
+  /** The same balance with the draft. */
+  afterMinor: number;
+}
+
+export interface DraftShortfall extends AccountShortfall {
+  /** The account was already short for its bills before the draft (the draft makes it worse). */
+  alreadyShort: boolean;
+}
+
+/**
+ * The runs-short warning on Add (Sprint 13b): the first account the draft takes money out of
+ * that is then too low for its unpaid bills before the next income. `bills` are the window's
+ * bills (SafeToSpendResult.bills: overdue ones included, oldest first); only bills paid from
+ * the account and in its currency count. Same rule as Home's shortAccounts, run on the balance
+ * after the draft. A draft that adds money or leaves the balance unchanged never warns.
+ * Informational only: saving is still allowed.
+ */
+export function runsShortAfterDraft(moves: readonly DraftMove[], bills: readonly SafeToSpendBill[]): DraftShortfall | null {
+  for (const move of moves) {
+    checkMinor(move.beforeMinor, "Balance before", true);
+    checkMinor(move.afterMinor, "Balance after", true);
+  }
+  for (const b of bills) checkMinor(b.amountMinor, "Bill amount");
+  for (const move of moves) {
+    if (move.afterMinor >= move.beforeMinor) continue;
+    const own = bills.filter((b) => b.accountId === move.accountId && b.currency === move.currency);
+    const account = { id: move.accountId, name: move.accountName };
+    const [after] = shortfalls([{ account, balanceMinor: move.afterMinor }], own);
+    if (!after) continue;
+    const [before] = shortfalls([{ account, balanceMinor: move.beforeMinor }], own);
+    return { ...after, alreadyShort: before !== undefined };
+  }
+  return null;
 }
 
 function wholeUnit(currency: string): number {
