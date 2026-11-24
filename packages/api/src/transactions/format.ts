@@ -70,6 +70,12 @@ export function fullDate(date: IsoDate): string {
   return `${d} ${MONTHS[m - 1]} ${y}`
 }
 
+/** "Nov 2026"; just "Nov" when `today` is given and in the same year. */
+export function monthLabel(date: IsoDate, today?: IsoDate): string {
+  const { y, m } = parts(date)
+  return today !== undefined && date.slice(0, 4) === today.slice(0, 4) ? MONTHS[m - 1]! : `${MONTHS[m - 1]} ${y}`
+}
+
 /** "Today", "Yesterday" or "Thu, 16 Oct" (with the year when it isn't this year). */
 export function dayHeading(date: IsoDate, today: IsoDate): string {
   if (date === today) return "Today"

@@ -8,6 +8,7 @@ import {
   type SafeToSpendInput,
   ceilToWholeMinor,
   floorToWholeMinor,
+  runsShortAfterDraft,
   safeToSpend,
 } from "./safe-to-spend";
 
@@ -427,5 +428,70 @@ describe("safeToSpend: input checks and display rounding", () => {
     expect(ceilToWholeMinor(3_00_001, "INR")).toBe(3_00_100);
     expect(ceilToWholeMinor(3_00_000, "INR")).toBe(3_00_000);
     expect(floorToWholeMinor(1_234, "JPY")).toBe(1_234);
+  });
+});
+
+describe("runsShortAfterDraft", () => {
+  const move = (beforeRupees: number, afterRupees: number, extra: Partial<Parameters<typeof runsShortAfterDraft>[0][number]> = {}) => ({
+    accountId: "savings",
+    accountName: "Savings",
+    currency: "INR",
+    beforeMinor: rs(beforeRupees),
+    afterMinor: rs(afterRupees),
+    ...extra,
+  });
+  const bills = [bill("Rent", "2026-11-28", 25_000), bill("Phone", "2026-11-29", 600)];
+
+  it("warns when the draft leaves too little for the next bill, naming it", () => {
+    // ₹30,000 covers rent (₹25,000); a ₹6,000 expense leaves ₹24,000.
+    expect(runsShortAfterDraft([move(30_000, 24_000)], bills)).toEqual({
+      accountId: "savings",
+      accountName: "Savings",
+      bill: { id: "Rent", name: "Rent", dueDate: "2026-11-28" },
+      shortAfterBillMinor: rs(1_000),
+      shortByEndMinor: rs(1_600),
+      alreadyShort: false,
+    });
+  });
+
+  it("names the later bill when only that one runs short", () => {
+    const result = runsShortAfterDraft([move(26_000, 25_200)], bills);
+    expect(result?.bill.name).toBe("Phone");
+    expect(result?.shortAfterBillMinor).toBe(rs(400));
+  });
+
+  it("does not warn when the bills are still covered, to the paisa", () => {
+    expect(runsShortAfterDraft([move(30_000, 25_600)], bills)).toBeNull();
+    expect(runsShortAfterDraft([move(30_000, 25_599.99)], bills)?.shortAfterBillMinor).toBe(1);
+  });
+
+  it("never warns for money coming in or an unchanged balance", () => {
+    expect(runsShortAfterDraft([move(100, 1_100)], bills)).toBeNull();
+    expect(runsShortAfterDraft([move(100, 100)], bills)).toBeNull();
+  });
+
+  it("says when the account was already short before the draft", () => {
+    expect(runsShortAfterDraft([move(20_000, 19_000)], bills)?.alreadyShort).toBe(true);
+  });
+
+  it("counts only the account's own bills in its currency, overdue ones included", () => {
+    const mixed = [
+      bill("Overdue EMI", "2026-11-20", 5_000),
+      bill("Other account", "2026-11-25", 50_000, "current"),
+      bill("No account", "2026-11-25", 50_000, null),
+      { ...bill("Dollar bill", "2026-11-25", 50_000), currency: "USD" },
+    ];
+    expect(runsShortAfterDraft([move(6_000, 5_000)], mixed)).toBeNull();
+    expect(runsShortAfterDraft([move(6_000, 4_000)], mixed)?.bill.name).toBe("Overdue EMI");
+  });
+
+  it("checks a transfer's From account, not its To account", () => {
+    const transfer = [move(30_000, 20_000), move(0, 10_000, { accountId: "current", accountName: "Current" })];
+    expect(runsShortAfterDraft(transfer, [...bills, bill("Card", "2026-11-28", 15_000, "current")])?.accountName).toBe("Savings");
+  });
+
+  it("rejects amounts that are not whole minor units", () => {
+    expect(() => runsShortAfterDraft([{ ...move(10, 5), beforeMinor: 1000.5 }], bills)).toThrow(RangeError);
+    expect(() => runsShortAfterDraft([move(10, 5)], [{ ...bills[0]!, amountMinor: -1 }])).toThrow(RangeError);
   });
 });

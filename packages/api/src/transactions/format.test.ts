@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Lookup } from "./filters"
-import { accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, signedAmount, signedAmountWhole } from "./format"
+import { accountChipText, dayHeading, entryKindLabel, entryTitle, fullDate, monthLabel, signedAmount, signedAmountWhole } from "./format"
 import type { LedgerItem } from "./types"
 
 const lookup: Lookup = {
@@ -49,5 +49,13 @@ describe("entry text", () => {
     expect(dayHeading("2026-10-16", "2026-10-23")).toBe("Fri, 16 Oct")
     expect(dayHeading("2025-12-31", "2026-01-01")).toBe("Yesterday")
     expect(dayHeading("2025-12-30", "2026-01-01")).toBe("Tue, 30 Dec 2025")
+  })
+})
+
+describe("monthLabel", () => {
+  it("shows the year unless it is today's year", () => {
+    expect(monthLabel("2026-11-01")).toBe("Nov 2026")
+    expect(monthLabel("2026-11-01", "2026-11-24")).toBe("Nov")
+    expect(monthLabel("2025-12-01", "2026-01-05")).toBe("Dec 2025")
   })
 })
