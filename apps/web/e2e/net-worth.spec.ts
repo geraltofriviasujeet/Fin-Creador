@@ -156,8 +156,8 @@ test("net worth: empty state, then the worked example to the rupee; another user
   await expect(lineOf(page, "Borrowed (principal)")).toContainText("₹5,000")
   await expect(lineOf(page, "Statutory dues left")).toContainText("₹1,000")
   await expect(nw.getByText("Card credit (overpaid)")).toHaveCount(0)
-  // Total available keeps its definition: the summary card shows the same figure.
-  await expect(page.getByRole("region", { name: /^Summary/ })).toContainText("₹55,100")
+  // Total available keeps its definition: Money left in Safe to spend shows the same figure.
+  await expect(page.getByTestId("amount-total-available")).toHaveText("₹55,100")
   await nw.scrollIntoViewIfNeeded()
   await shot(page, "net-worth-example")
 

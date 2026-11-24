@@ -20,7 +20,7 @@ import {
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { formatAmount } from "@/components/ds/logic";
-import { AmountText, Button, Card, IconTile, ListRow, ProgressBar, SectionHeader, WarningBanner } from "@/components/ds";
+import { AmountText, Card, IconTile, ListRow, ProgressBar, SectionHeader, WarningBanner } from "@/components/ds";
 import { useToast } from "@/components/toast";
 import { categoryIcon } from "@/components/transactions/entry-icon";
 import { comingSoonMessage } from "@/navigation";
@@ -30,11 +30,8 @@ import { dsText, mobile, spacing } from "@/theme";
 // amounts go through AmountText / formatAmount, dates through the domain formatters.
 
 const addSheet = (type: "expense" | "income" | "transfer"): Href => ({ pathname: "/sheets/transaction", params: { type } });
-/** "Set your income date": a recurring income (the date Safe to spend counts to). */
-export const INCOME_SETUP: Href = { pathname: "/sheets/recurring-rule", params: { type: "income" } };
 
 export function HeroCard({ home }: { home: HomeData }) {
-  const router = useRouter();
   const hero = heroText(home);
   return (
     <Card tone="forest" style={styles.hero}>
@@ -72,12 +69,6 @@ export function HeroCard({ home }: { home: HomeData }) {
           </View>
         ))}
       </View>
-      {hero.needsIncomeDate ? (
-        <View style={styles.prompt}>
-          <Text style={[dsText.caption, styles.onForest]}>Set the date your income arrives to see a daily figure.</Text>
-          <Button label="Set your income date" variant="secondary" size="small" icon={CalendarClock} onPress={() => router.push(INCOME_SETUP)} />
-        </View>
-      ) : null}
     </Card>
   );
 }
@@ -258,7 +249,6 @@ const styles = StyleSheet.create({
   bar: { gap: spacing[1] },
   figures: { flexDirection: "row", gap: spacing[3] },
   figure: { flex: 1, gap: 2 },
-  prompt: { gap: spacing[2], alignItems: "flex-start" },
   actions: { flexDirection: "row", gap: spacing[2] },
   action: {
     flex: 1,

@@ -17,6 +17,8 @@ const money = (minor: number) => formatMoneyWhole(minor, { currency: "INR" })
 
 const card = (page: Page, title: string) => page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
 const safe = (page: Page) => card(page, "Safe to spend today")
+/** The hero's shared figures (after Money left, the only one that is a link). */
+const heroFigures = (page: Page) => safe(page).getByRole("definition").filter({ hasNot: page.getByRole("link") })
 const comingUp = (page: Page) => card(page, "Coming up")
 /** The big figure: the first match in the card (a figure below it may show the same amount, e.g. For goals ₹0). */
 const headline = (page: Page, amount: string) => safe(page).getByText(amount, { exact: true }).first()
@@ -54,11 +56,12 @@ test("normal month: the same Safe to spend as the phone, ₹4,250 a day and ₹3
   await expect(safe(page).getByText("₹3,050 left today", { exact: true })).toBeVisible()
   await expect(safe(page).getByRole("progressbar", { name: "₹1,200 spent today of ₹4,250" })).toBeVisible()
   const figures = safe(page).getByRole("definition")
-  await expect(figures).toHaveText(hero.figures.map((f) => money(f.minor)))
-  await expect(figures).toHaveText(["₹42,000", "₹3,000", "₹5,000"])
-  // The breakdown's first figure is the balance at the start of today; the summary card below
-  // keeps "Money left" for the current balance.
-  await expect(safe(page).getByRole("term")).toHaveText(["At start of today", "Bills due", "For goals"])
+  // Money left (the current balance) first, then the shared breakdown from packages/api.
+  await expect(figures.nth(0).getByRole("link")).toHaveAttribute("href", "/income")
+  await expect(figures.nth(0).getByTestId("amount-total-available")).toBeVisible()
+  await expect(figures.filter({ hasNot: page.getByRole("link") })).toHaveText(hero.figures.map((f) => money(f.minor)))
+  await expect(figures.filter({ hasNot: page.getByRole("link") })).toHaveText(["₹42,000", "₹3,000", "₹5,000"])
+  await expect(safe(page).getByRole("term")).toHaveText(["Money left", "At start of today", "Bills due", "For goals"])
 
   // Coming up: both bills, soonest first, with their account; nothing overdue.
   const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
@@ -83,7 +86,7 @@ test("overdue bill: counted as due now and labelled Overdue, ₹4,125 a day as o
   await expect(headline(page, "₹4,125")).toBeVisible()
   await expect(safe(page).getByText(hero.suffix!, { exact: true })).toBeVisible()
   await expect(safe(page).getByText("₹2,925 left today", { exact: true })).toBeVisible()
-  await expect(safe(page).getByRole("definition")).toHaveText(["₹42,000", "₹4,000", "₹5,000"])
+  await expect(heroFigures(page)).toHaveText(["₹42,000", "₹4,000", "₹5,000"])
 
   // Overdue first, with its label, then the bills still to come.
   const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
@@ -106,7 +109,7 @@ test("paise: the EMI row and Bills due round the same way, so the rows add up", 
   expect(hero.amountMinor).toBe(2_822_00)
 
   await expect(headline(page, "₹2,822")).toBeVisible()
-  await expect(safe(page).getByRole("definition")).toHaveText(["₹42,000", "₹14,424", "₹5,000"])
+  await expect(heroFigures(page)).toHaveText(["₹42,000", "₹14,424", "₹5,000"])
   const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
   await expect(bills).toHaveCount(3)
   await expect(bills.filter({ hasText: "Education EMI" })).toContainText("₹11,424")
@@ -135,13 +138,13 @@ test("short: ₹0 a day, the shortfall before payday and the account named", asy
   await expect(shortLine).toHaveText(`Warning: ${hero.lines[0]}`)
   await expect(shortLine).toHaveCSS("color", "rgb(255, 168, 148)")
   await expect(safe(page).getByRole("progressbar")).toHaveCount(0)
-  await expect(safe(page).getByRole("definition")).toHaveText(hero.figures.map((f) => money(f.minor)))
-  await expect(safe(page).getByRole("definition")).toHaveText(["₹9,000", "₹12,000", "₹0"])
+  await expect(heroFigures(page)).toHaveText(hero.figures.map((f) => money(f.minor)))
+  await expect(heroFigures(page)).toHaveText(["₹9,000", "₹12,000", "₹0"])
   await expect(comingUp(page).getByText(warning!)).toBeVisible()
   await shots(page, "13a-overview-safe-short")
 })
 
-test("no income date: money left this month and a link to set the income date", async ({ page }) => {
+test("no income date: money left this month, with no income-date prompt", async ({ page }) => {
   const home = await demoUser(page, "no-income", (d) => seedNormal(d, { income: false }))
   const hero = heroText(home)
   expect(hero.title).toBe("Money left this month")
@@ -152,6 +155,6 @@ test("no income date: money left this month and a link to set the income date", 
   await expect(left.getByText(/a day, until/)).toHaveCount(0)
   await expect(safe(page)).toHaveCount(0)
   await shots(page, "13a-overview-safe-no-income-date")
-  await left.getByRole("link", { name: "Set your income date" }).click()
-  await expect(page).toHaveURL(/\/recurring$/)
+  // Income is added when it arrives, at the user's choice: no prompt to set a date.
+  await expect(left.getByText(/income date|your income arrives/i)).toHaveCount(0)
 })

@@ -1,6 +1,6 @@
 import type * as React from "react"
 import Link from "next/link"
-import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, PiggyBank, Wallet } from "lucide-react"
+import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, PiggyBank } from "lucide-react"
 import {
   type ChartChoices,
   type DashboardBreakdown,
@@ -37,7 +37,6 @@ import {
 import { cn } from "cn"
 import { PageHeader } from "@/components/shell/app-shell"
 import { Badge } from "@/components/ui/badge"
-import { AnimatedAmount } from "@/components/ui/count-up"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
@@ -51,7 +50,7 @@ import { CategoryPie } from "./category-pie"
 import { ComingUpCard, SafeToSpendCard, SafeToSpendUnavailable } from "./safe-to-spend"
 import { TimeChart } from "./time-chart"
 
-// The summary cards are summary figures: whole rupees (Money left is a balance, exact paise).
+// The summary cards are summary figures: whole rupees.
 const whole = (minor: number, currency: string) => formatMoneyWhole(minor, { currency })
 
 export const OVERVIEW_HEADER = { title: "Overview", description: "Your money at a glance." }
@@ -99,7 +98,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
   const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
   const otherAccounts = holdings.rows.filter((r) => !r.inTotal).length
-  // The four cards: this month only (Money left is today's Total available).
+  // The three cards: this month only.
   const m = month.totals
   const savingsRate = savingsRateBasisPoints(m)
   // Shown beside whole-rupee Income and Spent: their difference, so the three figures add up.
@@ -118,29 +117,12 @@ export function OverviewView({ context, name, period, range, comparison, totals,
       />
 
       {/* Safe to spend first, as on the phone; a brand-new account sees the first-run card instead. */}
-      {home ? !home.isNew && <SafeToSpendCard home={home} /> : <SafeToSpendUnavailable />}
+      {home ? !home.isNew && <SafeToSpendCard home={home} moneyLeftMinor={holdings.totalAvailableMinor} /> : <SafeToSpendUnavailable />}
 
       {!context.hasEntries && <FirstRun hasAccounts={holdings.rows.length > 0} />}
 
-      {/* Four cards only, always this month; one per row on phones. */}
-      <section aria-label="Summary this month" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard
-          tone="deep"
-          icon={<Wallet aria-hidden="true" className="size-5" />}
-          label="Money left"
-          value={<AnimatedAmount id="total-available" minor={holdings.totalAvailableMinor} currency={currency} />}
-          footer={
-            holdings.rows.length === 0 ? (
-              <FooterLink href="/income" dark>
-                Add an account
-              </FooterLink>
-            ) : (
-              <FooterLink href="/income" dark>
-                Across {holdings.rows.length - otherAccounts} {holdings.rows.length - otherAccounts === 1 ? "account" : "accounts"} today
-              </FooterLink>
-            )
-          }
-        />
+      {/* Three even cards, always this month; one per row on phones. Money left is in Safe to spend. */}
+      <section aria-label="Summary this month" className="grid gap-4 md:grid-cols-3">
         <SummaryCard
           icon={<ArrowDownToLine aria-hidden="true" className="size-5" />}
           chip="bg-chip-mint"

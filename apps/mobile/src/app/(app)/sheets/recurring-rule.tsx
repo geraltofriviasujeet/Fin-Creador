@@ -30,7 +30,7 @@ const TYPES = [
 export default function RecurringRuleSheet() {
   const params = useLocalSearchParams<{ id?: string; type?: string }>();
   const id = param(params.id);
-  // Home's "Set your income date" opens a new rule on Income.
+  // type=income opens a new rule on Income.
   const initialType = param(params.type) === "income" ? "income" : undefined;
   const item = useRecurringItem(id);
   return (

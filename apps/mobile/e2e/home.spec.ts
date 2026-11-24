@@ -184,7 +184,7 @@ test("overdue: an unpaid bill past its date is subtracted and listed first in Co
   expect(errors).toEqual([]);
 });
 
-test("no income date: money left this month and 'Set your income date' opens the income setup", async ({ page }) => {
+test("no income date: money left this month, with no income-date prompt", async ({ page }) => {
   const errors = collectErrors(page);
   const { email, password, demo } = await newUser("no-income", (d) => seedNormal(d, { income: false }));
   const hero = heroText(await expectedHome(demo));
@@ -198,12 +198,8 @@ test("no income date: money left this month and 'Set your income date' opens the
   await expect(page.getByText(/a day, until/)).toHaveCount(0);
   await shot(page, "13a-home-no-income-date");
 
-  await page.getByRole("button", { name: "Set your income date" }).click();
-  await expect(page.getByRole("heading", { name: "Add recurring", exact: true })).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "Type" }).getByRole("tab", { name: "Income" })).toHaveAttribute("aria-selected", "true");
-  // The income form itself: a source and the account it's received into.
-  await expect(page.getByText("Received into", { exact: true })).toBeVisible();
-  await expect(page.getByText("Paid from", { exact: true })).toHaveCount(0);
+  // Income is added when it arrives, at the user's choice: no prompt to set a date.
+  await expect(page.getByText(/income date|your income arrives/i)).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
