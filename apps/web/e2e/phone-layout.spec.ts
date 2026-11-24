@@ -61,9 +61,9 @@ test("Income and Overview read well at 375px", async ({ page }) => {
   await page.screenshot({ path: `${SHOTS}/phone-375-bank-accounts.png` })
   await page.keyboard.press("Escape")
 
-  // Overview: the four cards, one per row, and no sideways scroll anywhere on the page.
+  // Overview: the three cards, one per row, and no sideways scroll anywhere on the page.
   await page.goto("/")
-  await expectStacked(page.getByRole("region", { name: /^Summary/ }).locator("[data-slot=card]"), 4)
+  await expectStacked(page.getByRole("region", { name: /^Summary/ }).locator("[data-slot=card]"), 3)
   await expectNoSideScroll(page)
   await page.screenshot({ path: `${SHOTS}/phone-375-overview.png`, fullPage: true })
 })

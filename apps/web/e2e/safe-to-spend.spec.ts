@@ -17,6 +17,8 @@ const money = (minor: number) => formatMoneyWhole(minor, { currency: "INR" })
 
 const card = (page: Page, title: string) => page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
 const safe = (page: Page) => card(page, "Safe to spend today")
+/** The hero's shared figures (after Money left, the only one that is a link). */
+const heroFigures = (page: Page) => safe(page).getByRole("definition").filter({ hasNot: page.getByRole("link") })
 const comingUp = (page: Page) => card(page, "Coming up")
 /** The big figure: the first match in the card (a figure below it may show the same amount, e.g. For goals ₹0). */
 const headline = (page: Page, amount: string) => safe(page).getByText(amount, { exact: true }).first()
@@ -84,7 +86,7 @@ test("overdue bill: counted as due now and labelled Overdue, ₹4,125 a day as o
   await expect(headline(page, "₹4,125")).toBeVisible()
   await expect(safe(page).getByText(hero.suffix!, { exact: true })).toBeVisible()
   await expect(safe(page).getByText("₹2,925 left today", { exact: true })).toBeVisible()
-  await expect(safe(page).getByRole("definition")).toHaveText(["₹42,000", "₹4,000", "₹5,000"])
+  await expect(heroFigures(page)).toHaveText(["₹42,000", "₹4,000", "₹5,000"])
 
   // Overdue first, with its label, then the bills still to come.
   const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
@@ -107,7 +109,7 @@ test("paise: the EMI row and Bills due round the same way, so the rows add up", 
   expect(hero.amountMinor).toBe(2_822_00)
 
   await expect(headline(page, "₹2,822")).toBeVisible()
-  await expect(safe(page).getByRole("definition")).toHaveText(["₹42,000", "₹14,424", "₹5,000"])
+  await expect(heroFigures(page)).toHaveText(["₹42,000", "₹14,424", "₹5,000"])
   const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
   await expect(bills).toHaveCount(3)
   await expect(bills.filter({ hasText: "Education EMI" })).toContainText("₹11,424")
@@ -136,8 +138,8 @@ test("short: ₹0 a day, the shortfall before payday and the account named", asy
   await expect(shortLine).toHaveText(`Warning: ${hero.lines[0]}`)
   await expect(shortLine).toHaveCSS("color", "rgb(255, 168, 148)")
   await expect(safe(page).getByRole("progressbar")).toHaveCount(0)
-  await expect(safe(page).getByRole("definition")).toHaveText(hero.figures.map((f) => money(f.minor)))
-  await expect(safe(page).getByRole("definition")).toHaveText(["₹9,000", "₹12,000", "₹0"])
+  await expect(heroFigures(page)).toHaveText(hero.figures.map((f) => money(f.minor)))
+  await expect(heroFigures(page)).toHaveText(["₹9,000", "₹12,000", "₹0"])
   await expect(comingUp(page).getByText(warning!)).toBeVisible()
   await shots(page, "13a-overview-safe-short")
 })

@@ -67,9 +67,9 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await page.goto("/")
   await expect(page.getByRole("heading", { name: "Nothing recorded yet" })).toBeHidden()
   // 10,000 + 500 − 250 − 400 + 5,000; the transfer moves money without changing the total.
-  const safe = page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: "Safe to spend today" }) })
-  await expect(safe.getByRole("term").first()).toHaveText("Money left")
-  await expect(safe.getByRole("definition").first()).toContainText("₹14,850")
+  // Money left, the first figure in the Safe to spend card.
+  await expect(page.getByRole("term").first()).toHaveText("Money left")
+  await expect(page.getByTestId("amount-total-available")).toHaveText("₹14,850")
   await expect(card(page, "Income this month")).toContainText("₹5,000")
   await expect(card(page, "Income this month")).toContainText("1 income entry")
   await expect(card(page, "Spent this month")).toContainText("₹650")
