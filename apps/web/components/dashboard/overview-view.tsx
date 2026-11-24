@@ -25,6 +25,7 @@ import {
   DASHBOARD_PERIODS,
   addMinor,
   bucketSizeFor,
+  categoryBarPercents,
   changeBasisPoints,
   displayedNetWhole,
   formatMoneyWhole,
@@ -445,7 +446,8 @@ function CategoryCard({
   charts: ChartChoices
 }) {
   const total = addMinor(...breakdown.categories.map((c) => c.expenseMinor))
-  const largest = breakdown.categories[0]?.expenseMinor ?? 0
+  // Against the largest row, Everything else included; capped at 100%.
+  const widths = categoryBarPercents(breakdown.categories)
   return (
     <Card aria-labelledby="categories-title">
       <CardHeading
@@ -461,7 +463,7 @@ function CategoryCard({
         <CategoryPie categories={breakdown.categories} range={range} currency={currency} lookup={lookup} />
       ) : (
         <ul aria-label="Categories" className="grid gap-3.5">
-          {breakdown.categories.map((c) => {
+          {breakdown.categories.map((c, i) => {
             const category = c.categoryId ? lookup.categories.get(c.categoryId) : undefined
             const label = c.categoryId === null ? "Everything else" : `${category?.name ?? "Category"}${category?.archived ? " (archived)" : ""}`
             const share = ratioToBasisPoints(c.expenseMinor, total) ?? 0
@@ -473,8 +475,8 @@ function CategoryCard({
                     {money(c.expenseMinor, currency)} <span className="text-xs text-muted-foreground">· {formatPercentFromBasisPoints(share)}</span>
                   </span>
                 </span>
-                <span aria-hidden="true" className="mt-1.5 block h-2 rounded-full bg-canvas">
-                  <span className="block h-2 rounded-full bg-chart" style={{ width: `${Math.max((c.expenseMinor / largest) * 100, 2)}%` }} />
+                <span aria-hidden="true" className="mt-1.5 block h-2 overflow-hidden rounded-full bg-canvas">
+                  <span className="block h-2 rounded-full bg-chart" style={{ width: `${widths[i] ?? 0}%` }} />
                 </span>
               </>
             )
