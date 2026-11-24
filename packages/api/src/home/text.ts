@@ -21,8 +21,6 @@ export type HeroText = {
   figures: { label: string; minor: number }[]
   /** Spent today against the daily figure (0..1), or null when there is no daily figure. */
   spentBar: { value: number; label: string } | null
-  /** No income date: the "Set your income date" prompt. */
-  needsIncomeDate: boolean
   /** Everything above in one sentence, for screen readers. */
   label: string
 }
@@ -87,7 +85,6 @@ export function heroText(home: Pick<HomeData, "safe" | "currency" | "spentTodayM
       short,
       figures,
       spentBar,
-      needsIncomeDate: false,
       label: [`Safe to spend today: ${headline}`, ...lines].join(". "),
     }
   }
@@ -103,7 +100,6 @@ export function heroText(home: Pick<HomeData, "safe" | "currency" | "spentTodayM
     short,
     figures,
     spentBar: null,
-    needsIncomeDate: true,
     label: [`Money left this month: ${money(amountMinor, currency)}`, ...lines].join(". "),
   }
 }

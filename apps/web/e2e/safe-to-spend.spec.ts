@@ -54,11 +54,12 @@ test("normal month: the same Safe to spend as the phone, ₹4,250 a day and ₹3
   await expect(safe(page).getByText("₹3,050 left today", { exact: true })).toBeVisible()
   await expect(safe(page).getByRole("progressbar", { name: "₹1,200 spent today of ₹4,250" })).toBeVisible()
   const figures = safe(page).getByRole("definition")
-  await expect(figures).toHaveText(hero.figures.map((f) => money(f.minor)))
-  await expect(figures).toHaveText(["₹42,000", "₹3,000", "₹5,000"])
-  // The breakdown's first figure is the balance at the start of today; the summary card below
-  // keeps "Money left" for the current balance.
-  await expect(safe(page).getByRole("term")).toHaveText(["At start of today", "Bills due", "For goals"])
+  // Money left (the current balance) first, then the shared breakdown from packages/api.
+  await expect(figures.nth(0).getByRole("link")).toHaveAttribute("href", "/income")
+  await expect(figures.nth(0).getByTestId("amount-total-available")).toBeVisible()
+  await expect(figures.filter({ hasNot: page.getByRole("link") })).toHaveText(hero.figures.map((f) => money(f.minor)))
+  await expect(figures.filter({ hasNot: page.getByRole("link") })).toHaveText(["₹42,000", "₹3,000", "₹5,000"])
+  await expect(safe(page).getByRole("term")).toHaveText(["Money left", "At start of today", "Bills due", "For goals"])
 
   // Coming up: both bills, soonest first, with their account; nothing overdue.
   const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
@@ -141,7 +142,7 @@ test("short: ₹0 a day, the shortfall before payday and the account named", asy
   await shots(page, "13a-overview-safe-short")
 })
 
-test("no income date: money left this month and a link to set the income date", async ({ page }) => {
+test("no income date: money left this month, with no income-date prompt", async ({ page }) => {
   const home = await demoUser(page, "no-income", (d) => seedNormal(d, { income: false }))
   const hero = heroText(home)
   expect(hero.title).toBe("Money left this month")
@@ -152,6 +153,6 @@ test("no income date: money left this month and a link to set the income date", 
   await expect(left.getByText(/a day, until/)).toHaveCount(0)
   await expect(safe(page)).toHaveCount(0)
   await shots(page, "13a-overview-safe-no-income-date")
-  await left.getByRole("link", { name: "Set your income date" }).click()
-  await expect(page).toHaveURL(/\/recurring$/)
+  // Income is added when it arrives, at the user's choice: no prompt to set a date.
+  await expect(left.getByText(/income date|your income arrives/i)).toHaveCount(0)
 })

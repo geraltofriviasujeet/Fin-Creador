@@ -38,7 +38,6 @@ describe("heroText", () => {
     expect(h.spentBar?.label).toBe("₹1,200 spent today of ₹4,500")
     expect(h.spentBar?.value).toBeCloseTo(1_200 / 4_500, 3)
     expect(h.short).toBe(false)
-    expect(h.needsIncomeDate).toBe(false)
     expect(h.label).toBe("Safe to spend today: ₹4,500 a day, until 1 Dec. ₹3,300 left today")
   })
 
@@ -85,13 +84,12 @@ describe("heroText", () => {
     expect(h.lines[0]).toBe("₹1 short before 1 Dec in HDFC Savings")
   })
 
-  it("no income date: money left this month with the 'Set your income date' prompt and no daily figure", () => {
+  it("no income date: money left this month and no daily figure (no prompt: income is added when it arrives)", () => {
     const h = heroText(home({ incomes: [] }))
     expect(h.title).toBe("Money left this month")
     expect(h.amountMinor).toBe(R(36_000))
     expect(h.suffix).toBeNull()
     expect(h.spentBar).toBeNull()
-    expect(h.needsIncomeDate).toBe(true)
   })
 
   it("spending past today's figure says how far over, never a negative 'left'", () => {
