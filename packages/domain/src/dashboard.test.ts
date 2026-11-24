@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bucketSizeFor,
+  categoryBarPercents,
   changeBasisPoints,
   comparisonFor,
   dashboardRange,
@@ -188,6 +189,26 @@ describe("partialBucket", () => {
   it("treats a short range as months when asked (Reports: one month, so far)", () => {
     expect(partialBucket("2026-10-01", { start: "2026-10-01", end: "2026-10-28" }, "month")).toEqual({ start: "2026-10-01", end: "2026-10-28" });
     expect(partialBucket("2026-09-01", { start: "2026-09-01", end: "2026-10-28" }, "month")).toBeNull();
+  });
+});
+
+describe("categoryBarPercents", () => {
+  it("scales against Everything else when it is the largest row, and never past 100%", () => {
+    // Real case: Utilities & bills ₹31,053 is the top named category, Everything else ₹36,216.
+    const widths = categoryBarPercents([
+      { categoryId: "utilities", expenseMinor: 31_053_00 },
+      { categoryId: "food", expenseMinor: 10_000_00 },
+      { categoryId: null, expenseMinor: 36_216_00 },
+    ]);
+    expect(widths[2]).toBe(100);
+    expect(widths[0]).toBeCloseTo(85.74, 2);
+    expect(widths.every((w) => w >= 0 && w <= 100)).toBe(true);
+  });
+
+  it("keeps a small row visible and gives nothing to no spending", () => {
+    expect(categoryBarPercents([{ categoryId: "a", expenseMinor: 1_000_000 }, { categoryId: "b", expenseMinor: 1 }])).toEqual([100, 2]);
+    expect(categoryBarPercents([{ categoryId: "a", expenseMinor: 0 }])).toEqual([0]);
+    expect(categoryBarPercents([])).toEqual([]);
   });
 });
 

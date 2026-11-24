@@ -194,6 +194,19 @@ export interface CategorySpend {
  * "Everything else" row (categoryId null) for the rest, if any. Rows at or below zero are
  * dropped: a share of spending needs spending (refundedCategories lists the ones below zero).
  */
+/**
+ * Bar widths (percent, 0–100) for spending rows, each against the largest row, whichever it
+ * is ("Everything else" can be larger than the top named category). Never above 100, so a
+ * bar can't overflow; a row above zero gets at least `minPercent` so it stays visible.
+ */
+export function categoryBarPercents(rows: readonly CategorySpend[], minPercent = 2): number[] {
+  const largest = Math.max(0, ...rows.map((r) => r.expenseMinor));
+  return rows.map((r) => {
+    if (largest === 0 || r.expenseMinor <= 0) return 0;
+    return Math.min(100, Math.max(minPercent, (r.expenseMinor / largest) * 100));
+  });
+}
+
 export function topCategories(rows: readonly CategorySpend[], limit = 5): CategorySpend[] {
   const sorted = rows
     .filter((r) => r.expenseMinor > 0)
