@@ -12,6 +12,7 @@ import {
   CreditCard,
   FileText,
   HandCoins,
+  Info,
   Landmark,
   type LucideIcon,
   ScanLine,
@@ -23,6 +24,7 @@ import { formatAmount } from "@/components/ds/logic";
 import { AmountText, Card, IconTile, ListRow, ProgressBar, SectionHeader, WarningBanner } from "@/components/ds";
 import { useToast } from "@/components/toast";
 import { categoryIcon } from "@/components/transactions/entry-icon";
+import { useTransactions } from "@/lib/transactions-store";
 import { comingSoonMessage } from "@/navigation";
 import { dsText, mobile, spacing } from "@/theme";
 
@@ -61,6 +63,14 @@ export function HeroCard({ home }: { home: HomeData }) {
           <Text style={[dsText.caption, styles.onForestMuted]}>{hero.spentBar.label}</Text>
         </View>
       ) : null}
+      {/* The safety note: information only, one quiet line under the bar (same text as web). */}
+      {hero.note ? (
+        <View style={styles.noteLine}>
+          <Info size={14} color={mobile.colors.onForestMuted} style={styles.noteIcon} />
+          <Text style={[dsText.caption, styles.onForestMuted, styles.shrink]}>{hero.note}</Text>
+        </View>
+      ) : null}
+      <SpendLimitLink home={home} />
       <View style={styles.figures}>
         {hero.figures.map((f) => (
           <View key={f.label} style={styles.figure} accessible accessibilityLabel={`${f.label}: ${formatAmount(f.minor, { currency: home.currency }).label}`}>
@@ -70,6 +80,28 @@ export function HeroCard({ home }: { home: HomeData }) {
         ))}
       </View>
     </Card>
+  );
+}
+
+/**
+ * "Set a daily limit" / "Change limit" (pre-13b 2 PR 4), opening the spend limit sheet. A limit
+ * in another currency than the profile's isn't in home.limit, so the saved one is checked too.
+ */
+function SpendLimitLink({ home }: { home: HomeData }) {
+  const router = useRouter();
+  const { state } = useTransactions();
+  const stored = state.status === "ready" ? state.spendLimit?.limit : null;
+  const saved = home.limit !== null || !!stored;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint="Opens the daily spend limit"
+      onPress={() => router.push("/sheets/spend-limit")}
+      hitSlop={8}
+      style={({ pressed }) => [styles.limitLink, pressed && styles.pressed]}
+    >
+      <Text style={[dsText.bodyStrong, styles.onForest, styles.underline]}>{saved ? "Change limit" : "Set a daily limit"}</Text>
+    </Pressable>
   );
 }
 
@@ -247,6 +279,10 @@ const styles = StyleSheet.create({
   shortIcon: { marginTop: 2 },
   shrink: { flexShrink: 1 },
   bar: { gap: spacing[1] },
+  noteLine: { flexDirection: "row", alignItems: "flex-start", gap: spacing[1], marginTop: -spacing[2] },
+  noteIcon: { marginTop: 2 },
+  limitLink: { alignSelf: "flex-start", minHeight: mobile.tapTarget, justifyContent: "center", marginVertical: -spacing[2] },
+  underline: { textDecorationLine: "underline" },
   figures: { flexDirection: "row", gap: spacing[3] },
   figure: { flex: 1, gap: 2 },
   actions: { flexDirection: "row", gap: spacing[2] },

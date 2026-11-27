@@ -90,6 +90,8 @@ export type OverviewViewProps = {
   home: HomeData | null
   /** The saved daily spend limit as set (null when none), for the card's link. */
   spendLimit: SpendLimit | null
+  /** Money left at the end of the same day last month; null when it couldn't be read (no comparison line). */
+  moneyLeftBefore: number | null
 }
 
 function longDate(date: string): string {
@@ -97,7 +99,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans, home, spendLimit }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans, home, spendLimit, moneyLeftBefore }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
@@ -129,6 +131,12 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           chip="bg-chip-lavender"
           label="Money left"
           value={<AnimatedAmount id="total-available" minor={holdings.totalAvailableMinor} currency={currency} wholeUnits />}
+          // A balance, so it compares with one day (the end of the same day last month), not a span of days.
+          change={
+            moneyLeftBefore === null ? undefined : (
+              <Change bp={changeBasisPoints(holdings.totalAvailableMinor, moneyLeftBefore)} upIsGood vs="vs same day last month" />
+            )
+          }
           footer={
             <MoneyLeftAccounts
               rows={holdings.rows.map((r) => ({

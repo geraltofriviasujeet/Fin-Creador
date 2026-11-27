@@ -18,6 +18,7 @@ import {
   loadTransactionTotals,
   money,
   periodLabel,
+  spendLimitLabel,
   periodRange,
   previousPeriod,
   rangeText,
@@ -27,7 +28,7 @@ import {
 } from "@fin-creador/api";
 import { formatPercentFromBasisPoints, incomeTrendBasisPoints, savingsRateBasisPoints } from "@fin-creador/domain";
 import { useRouter } from "expo-router";
-import { Plus, Repeat, RotateCw, Search, Wallet } from "lucide-react-native";
+import { Gauge, Plus, Repeat, RotateCw, Search, Wallet } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Badge } from "@/components/badge";
@@ -84,7 +85,10 @@ type ListState =
 
 function Activity({ data }: { data: TransactionsContext }) {
   const router = useRouter();
-  const { version } = useTransactions();
+  const { state, version } = useTransactions();
+  // The daily spend limit (pre-13b 2 PR 4): left out if it couldn't be read, so it never offers "Set" over a saved one.
+  const spendLimit = state.status === "ready" ? state.spendLimit : null;
+  const limitLabel = spendLimit?.limit ? spendLimitLabel(spendLimit.limit) : null;
   const { today, currency } = data;
   const defaults = useMemo(() => readFilters(new URLSearchParams(), today), [today]);
   const [f, setF] = useState<Filters>(defaults);
@@ -149,6 +153,15 @@ function Activity({ data }: { data: TransactionsContext }) {
     <View style={styles.gap}>
       <Button label="Add transaction" icon={Plus} onPress={() => addTransaction()} />
       <Button label="Recurring" variant="secondary" icon={Repeat} onPress={() => router.push("/recurring")} accessibilityHint="Opens recurring items: what is due and what it costs" />
+      {spendLimit ? (
+        <Button
+          label={limitLabel ? `Limit ${limitLabel}` : "Set daily spend limit"}
+          variant="secondary"
+          icon={Gauge}
+          onPress={() => router.push("/sheets/spend-limit")}
+          accessibilityHint={limitLabel ? "Change daily spend limit" : "One cap for everyday spending"}
+        />
+      ) : null}
       <Segmented label="Transaction type" options={TYPE_TABS} value={f.type} onChange={(type) => go({ type })} />
 
       <Card style={styles.filters}>

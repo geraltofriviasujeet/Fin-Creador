@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type AccountWithActivity, accountBalance, countsTowardBalance, summarizeHoldings } from "./holdings";
+import { type AccountWithActivity, accountBalance, countsTowardBalance, moneyLeftFromBalances, summarizeHoldings } from "./holdings";
 
 const account = (over: Partial<AccountWithActivity>): AccountWithActivity => ({
   id: "a",
@@ -83,3 +83,31 @@ describe("summarizeHoldings and loan accounts", () => {
   });
 });
 
+
+describe("moneyLeftFromBalances", () => {
+  const accounts = [
+    { id: "bank", kind: "bank", currency: "INR" },
+    { id: "cash", kind: "cash", currency: "INR" },
+    { id: "usd", kind: "bank", currency: "USD" },
+    { id: "loan", kind: "loan", currency: "INR" },
+  ];
+
+  it("sums money accounts in the profile currency only", () => {
+    const balances = [
+      { accountId: "bank", balanceMinor: 30_000_00 },
+      { accountId: "cash", balanceMinor: 2_500_50 },
+      { accountId: "usd", balanceMinor: 900_00 },
+      { accountId: "loan", balanceMinor: -50_000_00 },
+      { accountId: "unknown", balanceMinor: 1_00 },
+    ];
+    expect(moneyLeftFromBalances(balances, accounts, "INR")).toBe(32_500_50);
+  });
+
+  it("counts an overdrawn account as negative", () => {
+    expect(moneyLeftFromBalances([{ accountId: "bank", balanceMinor: -1_000_00 }, { accountId: "cash", balanceMinor: 400_00 }], accounts, "INR")).toBe(-600_00);
+  });
+
+  it("is 0 when no account was open on the date", () => {
+    expect(moneyLeftFromBalances([], accounts, "INR")).toBe(0);
+  });
+});

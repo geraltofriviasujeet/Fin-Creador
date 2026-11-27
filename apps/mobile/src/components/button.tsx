@@ -66,6 +66,7 @@ const styles = StyleSheet.create({
   full: { alignSelf: "stretch" },
   inactive: { opacity: 0.6 },
   pressedBrand: { opacity: 0.85 },
-  content: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
-  label: { fontFamily: fontFamily.bodySemibold, fontSize: fontSize.base },
+  // A long label wraps (320pt screens, large text) instead of running past the button.
+  content: { flexDirection: "row", alignItems: "center", gap: spacing[2], maxWidth: "100%" },
+  label: { flexShrink: 1, textAlign: "center", fontFamily: fontFamily.bodySemibold, fontSize: fontSize.base },
 });

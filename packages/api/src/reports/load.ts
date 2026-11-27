@@ -11,6 +11,7 @@ import {
   isMoneyAccountKind,
   localDateInTimeZone,
   monthRange,
+  moneyLeftFromBalances,
   netWorth,
   netWorthSeries,
   trendDates,
@@ -137,4 +138,22 @@ export async function loadNetWorthTrend(supabase: UserClient, firstMonth: IsoDat
     })),
   })
   return { ok: true, data: { today: day.today, currency, timeZone, points, current: current.ok ? netWorth(current.data) : null } }
+}
+
+/**
+ * Money left at the end of a past day (the Overview's Money left card compares with the same
+ * day last month): account_balances_at for that date, summed by moneyLeftFromBalances. Null
+ * when a read fails, so the card leaves the comparison out instead of showing a wrong one.
+ */
+export async function loadMoneyLeftOn(supabase: UserClient, date: IsoDate, currency: string): Promise<number | null> {
+  const [accounts, balances] = await Promise.all([
+    supabase.from("accounts").select("id, kind, currency"),
+    supabase.rpc("account_balances_at", { p_dates: [date] }),
+  ])
+  if (accounts.error || balances.error || !Array.isArray(balances.data)) return null
+  return moneyLeftFromBalances(
+    balances.data.map((b) => ({ accountId: b.account_id, balanceMinor: b.balance_minor })),
+    accounts.data,
+    currency,
+  )
 }
