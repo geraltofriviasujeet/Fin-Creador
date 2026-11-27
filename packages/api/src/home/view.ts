@@ -7,23 +7,27 @@ import {
   type SafeToSpendIncome,
   type SafeToSpendResult,
   type Schedule,
+  type SpendLimitToday,
   addDays,
   addMinor,
   accountBalance,
   latestOccurrenceOnOrBefore,
   localDateTime,
   monthRange,
+  everydaySpendingMinor,
+  limitExceedsMoneyAfterBills,
   nextIncomeDate,
   occurrencesBetween,
-  periodTotals,
   postedActivity,
   safeToSpend,
+  spendLimitToday,
   summarizeHoldings,
 } from "@fin-creador/domain"
 import type { GoalsView } from "../goals/view"
 import { type BellReminder, bellReminders } from "../loans/load"
 import type { LoansView } from "../loans/view"
 import { type RecurringData, UPCOMING_DAYS } from "../recurring"
+import type { SpendLimit } from "../spend-limit/load"
 import type { LedgerAccount, LedgerCategory, TransactionsContext } from "../transactions/types"
 
 // The phone's Home (Sprint 13a PR 4), built from the loaders the web already uses, with the
@@ -47,6 +51,8 @@ export type TodayEntry = {
   categoryId: string | null
   voided: boolean
   recurringRuleId: string | null
+  /** Part of an EMI, card bill, repayment or statutory due payment (due_payment_id or liability_payment_id). */
+  paymentId: string | null
 }
 
 export type HomeBillKind = "bill" | "emi" | "card" | "borrowing" | "statutory"
@@ -66,6 +72,16 @@ export type HomeAccount = { id: string; label: string; kind: "bank" | "cash" | "
 
 export type HomeCategory = { id: string; name: string; icon: string | null; spentMinor: number; budget: BudgetStatus | null }
 
+/**
+ * The daily spend limit as Home shows it: what was set, today's figure (packages/domain
+ * spendLimitToday) and the safety note (decisions log 2026-11-24 "Daily spend limit: final rule").
+ */
+export type HomeSpendLimit = SpendLimit & {
+  today: SpendLimitToday
+  /** The daily limit × days left in Safe to spend's window is more than money left after bills. */
+  exceedsMoneyAfterBills: boolean
+}
+
 export type HomeData = {
   /** Display name for the greeting (first word only is shown), or null. */
   name: string | null
@@ -75,8 +91,13 @@ export type HomeData = {
   /** No account and no entry yet: Home shows its first-run state. */
   isNew: boolean
   safe: SafeToSpendResult
-  /** Expenses dated today in the profile currency, net of refunds, never below 0 (the hero's bar). */
+  /**
+   * Spending today in the profile currency (the hero's bar): expenses net of refunds, leaving
+   * out bills from recurring rules and EMI, card, repayment and statutory payments, never below 0.
+   */
   spentTodayMinor: number
+  /** The daily spend limit, or null when none is set (or it is in another currency than the profile's). */
+  limit: HomeSpendLimit | null
   /** Overdue bills, then those due from today to UPCOMING_DAYS ahead, oldest first, at most HOME_COMING_UP_LIMIT. */
   comingUp: HomeBill[]
   /** How many more are due in that time than comingUp shows. */
@@ -99,6 +120,10 @@ export type HomeInput = {
   /** This month's expense per category, profile currency (GoalsData.spending). */
   spending: ReadonlyMap<string, number>
   todayEntries: readonly TodayEntry[]
+  /** The daily spend limit (loadSpendLimit), or null. */
+  spendLimit: SpendLimit | null
+  /** Expense and refund entries from the limit's period start to yesterday ([] without a limit; loadSpendLimitInputs). */
+  earlierEntries: readonly TodayEntry[]
 }
 
 const toSchedule = (r: { frequency: Schedule["frequency"]; startDate: IsoDate; endDate: IsoDate | null }): Schedule => ({
@@ -306,7 +331,7 @@ export function buildHome(input: HomeInput): HomeData {
   const until = candidates.at(-1) ?? upcomingEnd
   const bills = homeBills({ recurring, loans, context, today, until })
 
-  const spentTodayMinor = Math.max(0, periodTotals(todayEntries, { start: today, end: today }, currency).expenseMinor)
+  const spentTodayMinor = everydaySpendingMinor(todayEntries, { start: today, end: today }, currency)
   const safe = safeToSpend({
     now,
     timeZone,
@@ -317,6 +342,14 @@ export function buildHome(input: HomeInput): HomeData {
     goals: homeGoals(goals),
     spentTodayMinor,
   })
+
+  // A limit saved in another currency is not used (the profile currency changed since).
+  const rule = input.spendLimit && input.spendLimit.currency === currency ? input.spendLimit : null
+  const limitToday = rule ? spendLimitToday(rule, [...input.earlierEntries, ...todayEntries], today, currency) : null
+  const limit: HomeSpendLimit | null =
+    rule && limitToday
+      ? { ...rule, today: limitToday, exceedsMoneyAfterBills: limitExceedsMoneyAfterBills(limitToday.dailyMinor, safe.days, safe.availableMinor) }
+      : null
 
   const upcoming = bills.filter((b) => b.dueDate <= upcomingEnd)
 
@@ -346,6 +379,7 @@ export function buildHome(input: HomeInput): HomeData {
     isNew: context.accounts.length === 0 && !context.hasEntries,
     safe,
     spentTodayMinor,
+    limit,
     comingUp: upcoming.slice(0, HOME_COMING_UP_LIMIT),
     comingUpMore: Math.max(0, upcoming.length - HOME_COMING_UP_LIMIT),
     where: { spentMinor: addMinor(...categories.map((c) => c.spentMinor)), categories: categories.slice(0, HOME_CATEGORY_LIMIT) },

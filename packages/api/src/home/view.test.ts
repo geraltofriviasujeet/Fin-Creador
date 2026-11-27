@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { type GoalRecord, buildGoalsView } from "../goals/view"
 import { type DueRecord, type LoanRecord, buildLoansView } from "../loans/view"
 import type { RecurringRule } from "../recurring/view"
+import type { SpendLimit } from "../spend-limit/load"
 import type { LedgerAccount, LedgerCategory, TransactionsContext } from "../transactions/types"
 import { HOME_COMING_UP_LIMIT, type HomeInput, type TodayEntry, buildHome, startOfTodayAccounts } from "./view"
 
@@ -24,7 +25,7 @@ const rule = (id: string, over: Partial<RecurringRule> = {}): RecurringRule => (
 })
 const entry = (id: string, over: Partial<TodayEntry>): TodayEntry => ({
   id, type: "expense", amountMinor: 0, currency: "INR", occurredOn: today, accountId: "savings", counterAccountId: null,
-  categoryId: "food", voided: false, recurringRuleId: null, ...over,
+  categoryId: "food", voided: false, recurringRuleId: null, paymentId: null, ...over,
 })
 const goal = (over: Partial<GoalRecord> = {}): GoalRecord => ({
   id: "emergency", type: "emergency", name: "Emergency fund", targetMinor: R(12_000), savedMinor: R(8_000), currency: "INR", // ₹4,000 left over two months: ₹2,000 a month
@@ -49,6 +50,8 @@ function input({
   goals = [goal()],
   spending = new Map<string, number>(),
   hasEntries = true,
+  spendLimit = null,
+  earlierEntries = [],
 }: {
   accounts: LedgerAccount[]
   rules: RecurringRule[]
@@ -57,6 +60,8 @@ function input({
   goals?: GoalRecord[]
   spending?: Map<string, number>
   hasEntries?: boolean
+  spendLimit?: SpendLimit | null
+  earlierEntries?: TodayEntry[]
 }): HomeInput {
   const context: TransactionsContext = {
     today, currency: "INR", timeZone: "Asia/Kolkata", accounts, loanAccounts: [], cardAccounts: [], categories,
@@ -74,6 +79,8 @@ function input({
     goals: buildGoalsView({ today, currency: "INR", goals, budgetRows: [], categories: [], spending }),
     spending,
     todayEntries,
+    spendLimit,
+    earlierEntries,
   }
 }
 
@@ -87,24 +94,25 @@ const example1 = () =>
   })
 
 describe("buildHome: Safe to spend", () => {
-  it("example 1: ₹4,500 a day until 1 Dec, ₹3,300 left today", () => {
+  it("example 1 (final rule): (₹42,000 − ₹4,000) ÷ 8 = ₹4,750 a day until 1 Dec, ₹3,550 left today", () => {
     const home = buildHome(example1())
-    expect(home.safe.kind).toBe("daily")
-    if (home.safe.kind !== "daily") return
     expect(home.safe.moneyLeftMinor).toBe(R(42_000)) // start of today: today's ₹1,200 is not subtracted
     expect(home.safe.billsMinor).toBe(R(4_000))
-    expect(home.safe.goalSavingMinor).toBe(R(2_000))
+    expect(home.safe.goalSavingMinor).toBe(R(2_000)) // shown as For goals, not subtracted
     expect(home.safe.nextIncomeDate).toBe("2026-12-01")
     expect(home.safe.days).toBe(8)
-    expect(home.safe.dailyMinor).toBe(R(4_500))
-    expect(home.safe.leftTodayMinor).toBe(R(3_300))
+    expect(home.safe.dailyMinor).toBe(R(4_750))
+    expect(home.safe.leftTodayMinor).toBe(R(3_550))
     expect(home.safe.shortAccounts).toEqual([])
+    expect(home.limit).toBeNull()
   })
 
-  it("example 1 with no income date: ₹36,000 money left this month", () => {
+  it("example 1 with no income date: to the month's end, the same ₹4,750 a day", () => {
     const home = buildHome({ ...example1(), recurring: { rules: monthlyBills, progress: example1().recurring.progress } })
-    expect(home.safe.kind).toBe("month")
-    expect(home.safe.availableMinor).toBe(R(36_000))
+    expect(home.safe.nextIncomeDate).toBeNull()
+    expect(home.safe.lastDay).toBe("2026-11-30")
+    expect(home.safe.availableMinor).toBe(R(38_000))
+    expect(home.safe.dailyMinor).toBe(R(4_750))
   })
 
   it("example 5: ₹0 a day, ₹3,000 short before 1 Dec, HDFC Savings named with the rent", () => {
@@ -116,7 +124,6 @@ describe("buildHome: Safe to spend", () => {
         goals: [],
       }),
     )
-    if (home.safe.kind !== "daily") throw new Error("expected a daily figure")
     expect(home.safe.dailyMinor).toBe(0)
     expect(home.safe.shortMinor).toBe(R(3_000))
     expect(home.safe.shortAccounts).toEqual([
@@ -133,7 +140,6 @@ describe("buildHome: Safe to spend", () => {
         goals: [],
       }),
     )
-    if (home.safe.kind !== "daily") throw new Error("expected a daily figure")
     expect(home.safe.moneyLeftMinor).toBe(R(91_200))
     expect(home.safe.paydayPending).toBe(false)
   })
@@ -148,7 +154,7 @@ describe("buildHome: Safe to spend", () => {
     const other = buildHome(input({ ...base, todayEntries: [entry("gift", { type: "income", amountMinor: R(85_000), categoryId: "gift" })] }))
     expect(bySource.safe.moneyLeftMinor).toBe(R(91_200))
     expect(other.safe.moneyLeftMinor).toBe(R(6_200))
-    expect(other.safe.kind === "daily" && other.safe.paydayPending).toBe(true)
+    expect(other.safe.paydayPending).toBe(true)
   })
 })
 
@@ -198,12 +204,11 @@ describe("buildHome: overdue bills", () => {
   })
 
   it("an unpaid EMI past its date is subtracted and listed first in Coming up, marked overdue", () => {
-    // Example 1 plus November's ₹2,000 EMI (5 Nov) still unpaid: (₹42,000 − ₹4,000 − ₹2,000 − ₹2,000) ÷ 8.
+    // Example 1 plus November's ₹2,000 EMI (5 Nov) still unpaid: (₹42,000 − ₹4,000 − ₹2,000) ÷ 8.
     const home = buildHome(withLoan(example1(), [carEmi(1, "2026-10-05", "paid"), carEmi(2, "2026-11-05"), carEmi(3, "2026-12-05")]))
-    if (home.safe.kind !== "daily") throw new Error("expected a daily figure")
     expect(home.safe.billsMinor).toBe(R(6_000))
     expect(home.safe.overdueMinor).toBe(R(2_000))
-    expect(home.safe.dailyMinor).toBe(R(4_250))
+    expect(home.safe.dailyMinor).toBe(R(4_500))
     expect(home.comingUp[0]).toMatchObject({ id: "emi-2", kind: "emi", name: "Car loan EMI", dueDate: "2026-11-05", overdue: true, accountName: "HDFC Savings" })
     expect(home.comingUp.filter((b) => b.overdue).map((b) => b.id)).toEqual(["emi-2"])
     // The bell lists it too.
@@ -215,7 +220,6 @@ describe("buildHome: overdue bills", () => {
     const base = example1()
     const progress = new Map([...base.recurring.progress, ["internet", { lastPostedOn: "2026-09-30", lastSkippedOn: null }]])
     const home = buildHome({ ...base, recurring: { ...base.recurring, progress } })
-    if (home.safe.kind !== "daily") throw new Error("expected a daily figure")
     expect(home.comingUp[0]).toMatchObject({ id: "internet:2026-10-30", overdue: true })
     expect(home.safe.overdueMinor).toBe(R(1_000))
     expect(home.safe.billsMinor).toBe(R(5_000))
@@ -289,7 +293,57 @@ describe("buildHome: lists", () => {
   it("a new user (no account, no entry) is flagged for the first-run state", () => {
     const home = buildHome(input({ accounts: [], rules: [], goals: [], hasEntries: false }))
     expect(home.isNew).toBe(true)
-    expect(home.safe.kind).toBe("month")
+    expect(home.safe.nextIncomeDate).toBeNull()
     expect(home.reminders).toEqual([])
+  })
+})
+
+describe("buildHome: spending and the daily spend limit", () => {
+  const week = (over: Partial<SpendLimit> = {}): SpendLimit => ({ amountMinor: R(7_000), currency: "INR", period: "week", periodDays: 7, startsOn: "2026-11-20", ...over })
+
+  it("spent today leaves out bills from recurring rules, EMI and card payments, transfers and other currencies", () => {
+    const home = buildHome({
+      ...example1(),
+      todayEntries: [
+        entry("lunch", { amountMinor: R(1_200) }),
+        entry("refund", { type: "refund", amountMinor: R(200) }),
+        entry("electricity", { amountMinor: R(2_400), recurringRuleId: "electricity" }),
+        entry("emi-interest", { amountMinor: R(900), paymentId: "pay-1" }),
+        entry("atm", { type: "transfer", amountMinor: R(2_000), counterAccountId: "cash" }),
+        entry("usd", { amountMinor: 500, currency: "USD" }),
+      ],
+    })
+    expect(home.spentTodayMinor).toBe(R(1_000))
+  })
+
+  it("₹7,000 a week from 20 Nov, ₹4,000 spent on earlier days: (₹7,000 − ₹4,000) ÷ 4 days left = ₹750 a day", () => {
+    const home = buildHome({
+      ...example1(),
+      spendLimit: week(),
+      earlierEntries: [entry("shoes", { amountMinor: R(3_000), occurredOn: "2026-11-21" }), entry("dinner", { amountMinor: R(1_000), occurredOn: "2026-11-22" })],
+    })
+    expect(home.limit).toMatchObject({ period: "week", startsOn: "2026-11-20" })
+    expect(home.limit?.today).toEqual({
+      period: { start: "2026-11-20", end: "2026-11-26" },
+      daysLeft: 4,
+      spentEarlierMinor: R(4_000),
+      spentTodayMinor: R(1_200),
+      dailyMinor: R(750),
+      leftTodayMinor: -R(450),
+    })
+    // ₹750 × 8 days is well within the ₹38,000 left after bills.
+    expect(home.limit?.exceedsMoneyAfterBills).toBe(false)
+    // Safe to spend itself is unchanged by the limit.
+    expect(home.safe.dailyMinor).toBe(R(4_750))
+  })
+
+  it("the safety note: ₹5,000 a day for 8 days is more than the ₹38,000 left after bills", () => {
+    const home = buildHome({ ...example1(), spendLimit: week({ period: "day", periodDays: 1, amountMinor: R(5_000) }) })
+    expect(home.limit?.today.dailyMinor).toBe(R(5_000))
+    expect(home.limit?.exceedsMoneyAfterBills).toBe(true)
+  })
+
+  it("a limit saved in another currency is not used", () => {
+    expect(buildHome({ ...example1(), spendLimit: week({ currency: "USD" }) }).limit).toBeNull()
   })
 })

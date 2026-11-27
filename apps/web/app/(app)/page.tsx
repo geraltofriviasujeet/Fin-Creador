@@ -17,6 +17,7 @@ import {
   loadRecurringData,
   loadTransactionPage,
   loadTransactionTotals,
+  loadSpendLimitInputs,
   loadTodayEntries,
   loadTransactionsContext,
   readDashboardParams,
@@ -65,7 +66,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   const chartsAreMonth = period === "month"
 
   const now = new Date()
-  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans, todayEntries] = await Promise.all([
+  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans, todayEntries, spendLimit] = await Promise.all([
     loadTransactionTotals(supabase, { from: range.start, to: range.end }, currency),
     comparison ? loadTransactionTotals(supabase, { from: comparison.previous.start, to: comparison.previous.end }, currency) : null,
     chartsAreMonth ? null : loadTransactionTotals(supabase, { from: thisMonth.start, to: thisMonth.end }, currency),
@@ -80,6 +81,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
     loadInvestmentsData(supabase),
     loadLoansData(supabase),
     loadTodayEntries(supabase, today),
+    loadSpendLimitInputs(supabase, today),
   ])
   if (!totals.ok || (prevTotals && !prevTotals.ok) || (monthTotals && !monthTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
   const month = chartsAreMonth
@@ -96,7 +98,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   // Safe to spend (13a PR 5): the phone Home's buildHome on the same data, so both show the
   // same figures. It needs every part; if one failed, the card says so (never a partial figure).
   const home: HomeData | null =
-    recurring.ok && loansView && goals.ok && goalsView && !profile.error && todayEntries
+    recurring.ok && loansView && goals.ok && goalsView && !profile.error && todayEntries && spendLimit
       ? buildHome({
           now,
           name: profile.data?.display_name ?? null,
@@ -106,6 +108,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
           goals: goalsView,
           spending: goals.data.spending,
           todayEntries,
+          ...spendLimit,
         })
       : null
 
