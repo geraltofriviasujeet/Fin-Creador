@@ -76,7 +76,8 @@ async function addRule(demo: Demo, rule: { type: "income" | "expense"; amount: s
  * ₹2,400 in 2 days and phone ₹600 in 5 days, an Emergency fund of ₹60,000 with no target
  * date (spread over 12 months: ₹5,000 a month, all still due), ₹1,200 spent on food today
  * (budget ₹6,000). → (₹42,000 − ₹3,000 − ₹5,000) ÷ 8 = ₹4,250 a day; ₹3,050 left today.
- * Without income: ₹34,000 money left this month.
+ * Without income: ₹34,000 money left this month, less only the bills due before month end
+ * (see noIncomeMoneyLeftMinor).
  */
 export async function seedNormal(demo: Demo, { income = true }: { income?: boolean } = {}) {
   await addBank(demo, "38500");
@@ -101,6 +102,15 @@ export async function seedNormal(demo: Demo, { income = true }: { income?: boole
     }),
     "Add goal",
   );
+}
+
+/**
+ * The normal month without income: ₹42,000 − ₹5,000 goal saving − the bills due by month end.
+ * Near month end the phone (in 5 days) or electricity (in 2 days) falls in next month.
+ */
+export function noIncomeMoneyLeftMinor(today: string): number {
+  const inMonth = (days: number) => addDays(today, days).slice(0, 7) === today.slice(0, 7);
+  return 42_000_00 - 5_000_00 - (inMonth(2) ? 2_400_00 : 0) - (inMonth(5) ? 600_00 : 0);
 }
 
 /**

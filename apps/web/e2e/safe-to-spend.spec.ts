@@ -4,7 +4,7 @@ import { type Database, type HomeData, heroText, shortWarnings, userToday } from
 import { formatMoneyWhole } from "@fin-creador/domain"
 // The phone's Home E2E seeders (Sprint 13a PR 4), reused so the web is checked against exactly
 // the same demo user data and the same expected figures as the phone.
-import { type Demo, expectedHome, seedNormal, seedOverdue, seedPaise, seedShort } from "../../mobile/e2e/demo-data"
+import { type Demo, expectedHome, noIncomeMoneyLeftMinor, seedNormal, seedOverdue, seedPaise, seedShort } from "../../mobile/e2e/demo-data"
 import { PASSWORD, signUpConfirmed, uniqueEmail } from "./helpers"
 
 // Sprint 13a PR 5: Safe to spend on the web Overview, against the throwaway local Supabase with
@@ -147,10 +147,11 @@ test("no income date: money left this month, with no income-date prompt", async 
   const home = await demoUser(page, "no-income", (d) => seedNormal(d, { income: false }))
   const hero = heroText(home)
   expect(hero.title).toBe("Money left this month")
-  expect(hero.amountMinor).toBe(34_000_00)
+  // ₹34,000 in most of the month; a bill due after month end isn't taken off.
+  expect(hero.amountMinor).toBe(noIncomeMoneyLeftMinor(home.today))
 
   const left = card(page, "Money left this month")
-  await expect(left).toContainText("₹34,000")
+  await expect(left).toContainText(money(hero.amountMinor))
   await expect(left.getByText(/a day, until/)).toHaveCount(0)
   await expect(safe(page)).toHaveCount(0)
   await shots(page, "13a-overview-safe-no-income-date")
