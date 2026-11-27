@@ -1,10 +1,9 @@
 import Link from "next/link"
 import { CalendarClock, ChevronRight, CircleAlert, CreditCard, FileText, HandCoins, Landmark, type LucideIcon } from "lucide-react"
 import { type HomeBill, type HomeData, UPCOMING_DAYS, billDisplayMinor, heroText, shortWarnings } from "@fin-creador/api"
-import { formatDayMonth, formatMoneyWhole } from "@fin-creador/domain"
+import { formatDayMonth, formatMoneyWhole, formatPercentFromBasisPoints } from "@fin-creador/domain"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
-import { AnimatedAmount } from "@/components/ui/count-up"
 
 // Safe to spend and Coming up on the web Overview (Sprint 13a PR 5). Every figure and every
 // sentence comes from packages/api (buildHome, heroText, shortWarnings), the same as the
@@ -15,8 +14,8 @@ const whole = (minor: number, currency: string) => formatMoneyWhole(minor, { cur
 /** U+2212, as the phone shows money out. */
 const MINUS = "−"
 
-/** `moneyLeftMinor`: today's Total available (summarizeHoldings), the current balance. */
-export function SafeToSpendCard({ home, moneyLeftMinor }: { home: HomeData; moneyLeftMinor: number }) {
+/** `savingsRateBp`: this month's savings rate (null when there is no income this month). */
+export function SafeToSpendCard({ home, savingsRateBp }: { home: HomeData; savingsRateBp: number | null }) {
   const hero = heroText(home)
   const { currency } = home
   return (
@@ -62,22 +61,26 @@ export function SafeToSpendCard({ home, moneyLeftMinor }: { home: HomeData; mone
         )}
       </div>
       <dl className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4 md:grid-cols-4 lg:grid-cols-2 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-        {/* Money left: the current balance (exact), linking to the accounts, as the old summary card did. */}
-        <div className="grid min-w-0 gap-1">
-          <dt className="text-xs text-nav-text">Money left</dt>
-          <dd className="truncate font-heading text-lg font-semibold tabular-nums">
-            <Link href="/income" className="underline-offset-4 hover:underline">
-              <AnimatedAmount id="total-available" minor={moneyLeftMinor} currency={currency} />
-              <span className="sr-only">, see your accounts</span>
-            </Link>
-          </dd>
-        </div>
         {hero.figures.map((f) => (
           <div key={f.label} className="grid min-w-0 gap-1">
             <dt className="text-xs text-nav-text">{f.label}</dt>
             <dd className="truncate font-heading text-lg font-semibold tabular-nums">{whole(f.minor, currency)}</dd>
           </div>
         ))}
+        {/* This month's savings rate (web only; Money left is the first card in the row below). */}
+        <div className="grid min-w-0 gap-1">
+          <dt className="text-xs text-nav-text">Savings rate</dt>
+          <dd className="truncate font-heading text-lg font-semibold tabular-nums">
+            {savingsRateBp === null ? (
+              <>
+                <span aria-hidden="true">—</span>
+                <span className="sr-only">No income this month</span>
+              </>
+            ) : (
+              formatPercentFromBasisPoints(savingsRateBp)
+            )}
+          </dd>
+        </div>
       </dl>
     </Card>
   )

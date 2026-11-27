@@ -22,11 +22,10 @@ test("first run: empty states and no invented figures", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Nothing recorded yet" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Go to Income" })).toBeVisible()
 
-  // Three cards only, in this order, always this month (Money left is in Safe to spend).
-  await expect(summary(page).locator("[data-slot=card]").getByRole("heading")).toHaveText(["Income this month", "Spent this month", "Savings rate"])
+  // Three cards only, in this order (Savings rate is in the Safe to spend card).
+  await expect(summary(page).locator("[data-slot=card]").getByRole("heading")).toHaveText(["Money left", "Spent this month", "Income this month"])
+  await expect(card(page, "Money left")).toContainText("Add an account")
   await expect(card(page, "Income this month")).toContainText("₹0")
-  await expect(card(page, "Savings rate")).toContainText("—")
-  await expect(card(page, "Savings rate")).toContainText("No income this month")
   await expect(panel(page, "Spending overview")).toContainText("No spending recorded this month.")
   await expect(panel(page, "Spending by category")).toContainText("No spending recorded this month.")
   await expect(panel(page, "Income vs expenses")).toContainText("No income or expenses recorded this month.")
@@ -37,10 +36,9 @@ test("first run: empty states and no invented figures", async ({ page }) => {
   await shot(page, "overview-empty")
 })
 
-// Sprint 12a-1b: Income and Spent are shown in whole rupees; Net cash flow is their shown
-// difference, so the three add up on screen. ₹100.50 − ₹50.49 is ₹50.01 exact (₹50), but the
-// cards show ₹101 and ₹50, so the net shows +₹51. The exact figure stays in Reports.
-test("net cash flow is the shown income minus the shown spending", async ({ page }) => {
+// Every amount on the three cards is in whole rupees; the maths stays in paise and the exact
+// figures stay on Income, Transactions and Reports.
+test("the three cards show whole rupees", async ({ page }) => {
   await signUpConfirmed(page, "Chitra Das", uniqueEmail("overview-net"))
   await page.goto("/income")
   await addBank(page, { bank: "HDFC Bank", last4: "4821", opening: "1,000" })
@@ -50,8 +48,9 @@ test("net cash flow is the shown income minus the shown spending", async ({ page
   await page.goto("/")
   await expect(card(page, "Income this month")).toContainText("₹101")
   await expect(card(page, "Spent this month")).toContainText("₹50")
-  await expect(card(page, "Savings rate")).toContainText("Net cash flow +₹51")
-  await expect(card(page, "Savings rate")).not.toContainText("+₹50")
+  await expect(card(page, "Spent this month")).not.toContainText("₹50.49")
+  // 1,000 + 100.50 − 50.49 = 1,050.01, shown as ₹1,050.
+  await expect(card(page, "Money left").getByTestId("amount-total-available")).toHaveText("₹1,050")
 })
 
 test("figures reconcile with the Transactions page; periods, links and other users", async ({ page }) => {
@@ -67,15 +66,15 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await page.goto("/")
   await expect(page.getByRole("heading", { name: "Nothing recorded yet" })).toBeHidden()
   // 10,000 + 500 − 250 − 400 + 5,000; the transfer moves money without changing the total.
-  // Money left, the first figure in the Safe to spend card.
-  await expect(page.getByRole("term").first()).toHaveText("Money left")
-  await expect(page.getByTestId("amount-total-available")).toHaveText("₹14,850")
+  // Money left, the first card in the row, with its link to the accounts.
+  await expect(card(page, "Money left").getByTestId("amount-total-available")).toHaveText("₹14,850")
+  await expect(card(page, "Money left").getByRole("link", { name: "Across 2 accounts today" })).toHaveAttribute("href", "/income")
   await expect(card(page, "Income this month")).toContainText("₹5,000")
   await expect(card(page, "Income this month")).toContainText("1 income entry")
   await expect(card(page, "Spent this month")).toContainText("₹650")
   await expect(card(page, "Spent this month")).toContainText("2 expenses")
-  await expect(card(page, "Savings rate")).toContainText("87%")
-  await expect(card(page, "Savings rate")).toContainText("+₹4,350")
+  // Savings rate moved into the Safe to spend card: (5,000 − 650) ÷ 5,000.
+  await expect(page.locator("dl > div").filter({ has: page.getByText("Savings rate", { exact: true }) })).toContainText("87%")
   // Nothing last month: changes show "—", never infinity.
   await expect(card(page, "Income this month")).toContainText("vs same days last month (nothing to compare)")
 

@@ -1,6 +1,6 @@
 import type * as React from "react"
 import Link from "next/link"
-import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, PiggyBank } from "lucide-react"
+import { ArrowDownRight, ArrowDownToLine, ArrowRight, ArrowUpFromLine, ArrowUpRight, ChevronRight, Inbox, Wallet } from "lucide-react"
 import {
   type ChartChoices,
   type DashboardBreakdown,
@@ -27,10 +27,8 @@ import {
   bucketSizeFor,
   categoryBarPercents,
   changeBasisPoints,
-  displayedNetWhole,
   formatMoneyWhole,
   formatPercentFromBasisPoints,
-  savingsRatePointsChange,
   ratioToBasisPoints,
   savingsRateBasisPoints,
   summarizeHoldings,
@@ -39,6 +37,7 @@ import { cn } from "cn"
 import { PageHeader } from "@/components/shell/app-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { AnimatedAmount } from "@/components/ui/count-up"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { TextField } from "@/components/ui/field"
@@ -101,9 +100,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
   const otherAccounts = holdings.rows.filter((r) => !r.inTotal).length
   // The three cards: this month only.
   const m = month.totals
-  const savingsRate = savingsRateBasisPoints(m)
-  // Shown beside whole-rupee Income and Spent: their difference, so the three figures add up.
-  const shownNet = displayedNetWhole(m.incomeMinor, m.expenseMinor, currency)
+  const inTotal = holdings.rows.length - otherAccounts
   const vs = month.comparison?.label ?? ""
   // Spending is net of refunds and may be below zero (a refunded day): still shown, drawn at zero.
   const hasSpending = breakdown.buckets.some((b) => b.expenseMinor !== 0)
@@ -118,21 +115,20 @@ export function OverviewView({ context, name, period, range, comparison, totals,
       />
 
       {/* Safe to spend first, as on the phone; a brand-new account sees the first-run card instead. */}
-      {home ? !home.isNew && <SafeToSpendCard home={home} moneyLeftMinor={holdings.totalAvailableMinor} /> : <SafeToSpendUnavailable />}
+      {home ? !home.isNew && <SafeToSpendCard home={home} savingsRateBp={savingsRateBasisPoints(m)} /> : <SafeToSpendUnavailable />}
 
       {!context.hasEntries && <FirstRun hasAccounts={holdings.rows.length > 0} />}
 
-      {/* Three even cards, always this month; one per row on phones. Money left is in Safe to spend. */}
+      {/* Three even cards; one per row on phones. Money left is today's balance, the other two this month. */}
       <section aria-label="Summary this month" className="grid gap-4 md:grid-cols-3">
         <SummaryCard
-          icon={<ArrowDownToLine aria-hidden="true" className="size-5" />}
-          chip="bg-chip-mint"
-          label="Income this month"
-          value={whole(m.incomeMinor, currency)}
-          change={<Change bp={month.prevTotals ? changeBasisPoints(m.incomeMinor, month.prevTotals.incomeMinor) : null} upIsGood vs={vs} />}
+          icon={<Wallet aria-hidden="true" className="size-5" />}
+          chip="bg-chip-lavender"
+          label="Money left"
+          value={<AnimatedAmount id="total-available" minor={holdings.totalAvailableMinor} currency={currency} wholeUnits />}
           footer={
-            <FooterLink href={transactionsHref(month.range, { type: "income" })}>
-              {m.incomeCount} income {m.incomeCount === 1 ? "entry" : "entries"}
+            <FooterLink href="/income">
+              {inTotal === 0 ? "Add an account" : `Across ${inTotal} ${inTotal === 1 ? "account" : "accounts"} today`}
             </FooterLink>
           }
         />
@@ -145,24 +141,20 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           footer={
             <FooterLink href={transactionsHref(month.range, { type: "expense" })}>
               {m.expenseCount} {m.expenseCount === 1 ? "expense" : "expenses"}
-              {m.refundCount > 0 && `, less ${money(m.refundMinor, currency)} refunded`}
+              {m.refundCount > 0 && `, less ${whole(m.refundMinor, currency)} refunded`}
             </FooterLink>
           }
         />
         <SummaryCard
-          icon={<PiggyBank aria-hidden="true" className="size-5" />}
-          chip="bg-chip-lavender"
-          label="Savings rate"
-          value={savingsRate === null ? "—" : formatPercentFromBasisPoints(savingsRate)}
-          change={<Change bp={month.prevTotals ? savingsRatePointsChange(m, month.prevTotals) : null} points upIsGood vs={vs} />}
+          icon={<ArrowDownToLine aria-hidden="true" className="size-5" />}
+          chip="bg-chip-mint"
+          label="Income this month"
+          value={whole(m.incomeMinor, currency)}
+          change={<Change bp={month.prevTotals ? changeBasisPoints(m.incomeMinor, month.prevTotals.incomeMinor) : null} upIsGood vs={vs} />}
           footer={
-            <span>
-              {savingsRate === null ? "No income this month · " : ""}
-              Net cash flow{" "}
-              <span className={cn("font-semibold tabular-nums", shownNet < 0n ? "text-danger" : "text-ink")}>
-                {formatMoneyWhole(shownNet, { currency, signed: true })}
-              </span>
-            </span>
+            <FooterLink href={transactionsHref(month.range, { type: "income" })}>
+              {m.incomeCount} income {m.incomeCount === 1 ? "entry" : "entries"}
+            </FooterLink>
           }
         />
       </section>
@@ -559,8 +551,8 @@ export function OverviewSkeleton() {
         <span className="h-12 w-64 max-w-full rounded bg-white/10" />
         <span className="h-4 w-40 rounded bg-white/10" />
       </Card>
-      <div className="mb-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
+      <div className="mb-4 grid gap-4 md:grid-cols-3">
+        {Array.from({ length: 3 }, (_, i) => (
           <Card key={i} className="grid gap-4">
             <span className="h-4 w-28 rounded bg-canvas" />
             <span className="h-9 w-40 rounded bg-canvas" />

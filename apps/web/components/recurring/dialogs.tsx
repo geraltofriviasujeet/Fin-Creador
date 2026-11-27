@@ -49,7 +49,16 @@ export function RecurringDialogs({ open, onClose, titleOf, ...data }: Data & { o
         </DialogContent>
       )}
       {open?.kind === "edit" && (
-        <DialogContent eyebrow="Recurring" title={`Edit ${titleOf(open.item)}`} description="Changes apply to future occurrences. Entries already saved don't change.">
+        <DialogContent
+          eyebrow="Recurring"
+          title={`Edit ${titleOf(open.item)}`}
+          description={
+            // Restarting saves nothing: only the latest date already passed shows under Due, to confirm or skip.
+            open.item.kind === "ended"
+              ? "To restart it, choose a later end date or clear it. Nothing is saved for the dates it missed; if one has passed, the latest shows under Due for you to confirm or skip."
+              : "Changes apply to future occurrences. Entries already saved don't change."
+          }
+        >
           <RuleForm {...data} item={open.item} onDone={onClose} />
         </DialogContent>
       )}

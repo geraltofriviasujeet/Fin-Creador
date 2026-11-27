@@ -163,6 +163,10 @@ export function RecurringPageView({ context, view }: { context: TransactionsCont
           <RecurringPanel title="Ended" count={view.ended.length} description="Past their end date. Their entries stay." empty="No recurring items have ended.">
             {view.ended.map((i) => (
               <RecurringRow key={i.rule.id} item={i} lookup={lookup} today={today}>
+                {/* Change or remove the end date to restart it (no new item needed). */}
+                <Button variant="ghost" size="sm" aria-label={`Edit ${title(i)}`} onClick={() => setOpen({ kind: "edit", item: i })}>
+                  Edit
+                </Button>
                 <Button variant="ghost" size="sm" aria-label={`Archive ${title(i)}`} onClick={() => setOpen({ kind: "archive", item: i })}>
                   Archive
                 </Button>

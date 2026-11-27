@@ -17,8 +17,9 @@ const money = (minor: number) => formatMoneyWhole(minor, { currency: "INR" })
 
 const card = (page: Page, title: string) => page.locator("[data-slot=card]").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
 const safe = (page: Page) => card(page, "Safe to spend today")
-/** The hero's shared figures (after Money left, the only one that is a link). */
-const heroFigures = (page: Page) => safe(page).getByRole("definition").filter({ hasNot: page.getByRole("link") })
+/** The hero's shared figures from packages/api (Savings rate, web only, comes after them). */
+const heroFigures = (page: Page) =>
+  safe(page).locator("dl > div").filter({ hasNot: page.getByText("Savings rate", { exact: true }) }).getByRole("definition")
 const comingUp = (page: Page) => card(page, "Coming up")
 /** The big figure: the first match in the card (a figure below it may show the same amount, e.g. For goals ₹0). */
 const headline = (page: Page, amount: string) => safe(page).getByText(amount, { exact: true }).first()
@@ -55,13 +56,11 @@ test("normal month: the same Safe to spend as the phone, ₹4,250 a day and ₹3
   await expect(safe(page).getByText(hero.suffix!, { exact: true })).toBeVisible()
   await expect(safe(page).getByText("₹3,050 left today", { exact: true })).toBeVisible()
   await expect(safe(page).getByRole("progressbar", { name: "₹1,200 spent today of ₹4,250" })).toBeVisible()
-  const figures = safe(page).getByRole("definition")
-  // Money left (the current balance) first, then the shared breakdown from packages/api.
-  await expect(figures.nth(0).getByRole("link")).toHaveAttribute("href", "/income")
-  await expect(figures.nth(0).getByTestId("amount-total-available")).toBeVisible()
-  await expect(figures.filter({ hasNot: page.getByRole("link") })).toHaveText(hero.figures.map((f) => money(f.minor)))
-  await expect(figures.filter({ hasNot: page.getByRole("link") })).toHaveText(["₹42,000", "₹3,000", "₹5,000"])
-  await expect(safe(page).getByRole("term")).toHaveText(["Money left", "At start of today", "Bills due", "For goals"])
+  // The shared breakdown from packages/api, then this month's Savings rate (Money left is the first card below).
+  await expect(heroFigures(page)).toHaveText(hero.figures.map((f) => money(f.minor)))
+  await expect(heroFigures(page)).toHaveText(["₹42,000", "₹3,000", "₹5,000"])
+  await expect(safe(page).getByRole("term")).toHaveText(["At start of today", "Bills due", "For goals", "Savings rate"])
+  await expect(safe(page).getByTestId("amount-total-available")).toHaveCount(0)
 
   // Coming up: both bills, soonest first, with their account; nothing overdue.
   const bills = comingUp(page).getByRole("list", { name: "Bills coming up" }).getByRole("listitem")
