@@ -254,6 +254,15 @@ updating, a broken offline page), remove it from every browser:
 
 The kill switch is exercised in CI (`apps/web/e2e/pwa.spec.ts`, "kill switch").
 
+## 4e. Daily spend limit (Pre-13b 2)
+
+Migration `20261127120000_spend_limits.sql` (table `spend_limits`, function `set_spend_limit`)
+comes in PR 1. **It must be applied to prod before PR 2 is merged:** from PR 2, `buildHome`
+reads `spend_limits`, so the Overview and the phone's Home fail to load (Safe to spend
+unavailable) on a database without it. Order: CI green on PR 1, apply to dev, test, back up
+prod (section 4), apply to prod, then merge PR 1 and later PR 2. Run `npm run db:types` after
+applying to dev: the types for this table were written by hand in the generated format.
+
 ## 5. Upgrade before any commercial launch
 
 Do all of these before payments, paying customers or a public launch, and only once the

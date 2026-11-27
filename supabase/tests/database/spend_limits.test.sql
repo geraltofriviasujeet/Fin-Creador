@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(48);
+select plan(50);
 
 -- Users A and B (fictional). Sign-up gives each a profile.
 insert into auth.users (id, email) values
@@ -86,6 +86,12 @@ select results_eq(
   $$ select amount_minor, starts_on = public.t_a_today() - 3, updated_at > now() - interval '1 minute' from public.spend_limits $$,
   $$ values (900000::bigint, true, true) $$,
   'a change of amount keeps starts_on; updated_at is the database time'
+);
+select lives_ok($$ select public.set_spend_limit(900000, 'week', 7) $$, 'A repeats the same call (a double submit)');
+select results_eq(
+  $$ select count(*), bool_and(starts_on = public.t_a_today() - 3), min(amount_minor) from public.spend_limits $$,
+  $$ values (1::bigint, true, 900000::bigint) $$,
+  'the repeated call keeps one row and keeps starts_on'
 );
 select lives_ok($$ select public.set_spend_limit(500000, 'custom', 10) $$, 'A changes the period to 10 days');
 select results_eq(
