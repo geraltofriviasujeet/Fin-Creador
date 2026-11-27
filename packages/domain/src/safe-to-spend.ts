@@ -1,8 +1,10 @@
-// Safe to spend today and the runs-short warning (Sprint 13a PR 3). The rule is in
-// docs/sprint-plan.md, "Safe to spend rule (approved 2026-11-23)":
+// Safe to spend today and the runs-short warning (Sprint 13a PR 3), with the final rule
+// (docs/sprint-plan.md, decisions log 2026-11-24 "Daily spend limit: final rule"):
 //
-//   Safe to spend today = (money left − bills due before the next income − goal saving still
-//   due before the next income) ÷ days until the next income.
+//   Safe to spend today = (money left − bills due before the window ends) ÷ days left in the
+//   window, today included. The window ends the day before the next income, or at the month's
+//   end when there is no recurring income. Goal saving is worked out (the "For goals" figure)
+//   but not subtracted.
 //
 // Bills include overdue ones (unpaid, due before today): they are due now (owner, 2026-11-23).
 //
@@ -72,7 +74,7 @@ export interface SafeToSpendInput {
   incomes: readonly SafeToSpendIncome[];
   bills: readonly SafeToSpendBill[];
   goals: readonly SafeToSpendGoal[];
-  /** Expenses dated today in the profile currency. Reduces "left today" only. */
+  /** Spending today in the profile currency (spend-limit.ts everydaySpendingMinor). Reduces "left today" only. */
   spentTodayMinor: number;
 }
 
@@ -87,10 +89,14 @@ export interface AccountShortfall {
   shortByEndMinor: number;
 }
 
-interface SafeToSpendCommon {
+export interface SafeToSpendResult {
   today: IsoDate;
   /** Last day of the window (inclusive): the day before the next income, or the month's end. */
   lastDay: IsoDate;
+  /** The next recurring income date, or null when there is none (the window ends at month end). */
+  nextIncomeDate: IsoDate | null;
+  /** Today through lastDay: at least 1. */
+  days: number;
   /** Counted accounts' balances at the start of today, plus income recorded today on payday. */
   moneyLeftMinor: number;
   /** Unpaid bills due through `lastDay`, overdue ones included, oldest first. */
@@ -99,33 +105,21 @@ interface SafeToSpendCommon {
   billsMinor: number;
   /** The part of billsMinor that is overdue (due before today). */
   overdueMinor: number;
+  /** Goal saving still due (shown as "For goals"); not subtracted from the daily figure. */
   goalSavingMinor: number;
-  /** money left − bills − goal saving. Negative when the bills and goals need more. */
+  /** Money left after bills: money left − bills. Negative when the bills need more. */
   availableMinor: number;
   /** −availableMinor when that is negative, else 0. */
   shortMinor: number;
   /** Accounts whose bills in the window take them below zero, in account order. */
   shortAccounts: AccountShortfall[];
+  /** availableMinor ÷ days, rounded down to a whole minor unit; 0 when short. */
+  dailyMinor: number;
+  /** dailyMinor − today's spending (negative once today's spending passes it). */
+  leftTodayMinor: number;
+  /** Today is an income date but that income is not recorded yet, so it is not counted. */
+  paydayPending: boolean;
 }
-
-export type SafeToSpendResult =
-  | (SafeToSpendCommon & {
-      kind: "daily";
-      nextIncomeDate: IsoDate;
-      /** Today through the day before the next income: at least 1. */
-      days: number;
-      /** availableMinor ÷ days, rounded down to a whole minor unit; 0 when short. */
-      dailyMinor: number;
-      /** dailyMinor − today's spending (negative once today's spending passes it). */
-      leftTodayMinor: number;
-      /** Today is an income date but that income is not recorded yet, so it is not counted. */
-      paydayPending: boolean;
-    })
-  | (SafeToSpendCommon & {
-      /** No recurring income: "Money left this month" and a "Set your income date" prompt. */
-      kind: "month";
-      needsIncomeDate: true;
-    });
 
 function checkMinor(value: number, name: string, allowNegative = false) {
   if (!Number.isSafeInteger(value) || (!allowNegative && value < 0)) {
@@ -203,7 +197,7 @@ function shortfalls(
   return result;
 }
 
-/** Safe to spend today, or money left this month when there is no recurring income. */
+/** Safe to spend today: a daily figure to the day before the next income, or to the month's end. */
 export function safeToSpend(input: SafeToSpendInput): SafeToSpendResult {
   const { currency } = input;
   checkMinor(input.spentTodayMinor, "Today's spending");
@@ -253,10 +247,15 @@ export function safeToSpend(input: SafeToSpendInput): SafeToSpendResult {
     (main && main.schedule.frequency === "monthly" ? latestOccurrenceOnOrBefore(main.schedule, today) : null) ?? monthRange(today).start;
   const goalSavingMinor = goalStillDue(goals, goalDueDate, today);
 
-  const availableMinor = addMinor(moneyLeftMinor, -billsMinor, -goalSavingMinor);
-  const common: SafeToSpendCommon = {
+  // Final rule (owner, 2026-11-24): goals are not subtracted.
+  const availableMinor = addMinor(moneyLeftMinor, -billsMinor);
+  const days = daysBetween(today, lastDay) + 1;
+  const dailyMinor = availableMinor > 0 ? Number(BigInt(availableMinor) / BigInt(days)) : 0;
+  return {
     today,
     lastDay,
+    nextIncomeDate: next,
+    days,
     moneyLeftMinor,
     bills,
     billsMinor,
@@ -265,17 +264,6 @@ export function safeToSpend(input: SafeToSpendInput): SafeToSpendResult {
     availableMinor,
     shortMinor: availableMinor < 0 ? -availableMinor : 0,
     shortAccounts: shortfalls(balances, bills),
-  };
-
-  if (next === null) return { ...common, kind: "month", needsIncomeDate: true };
-
-  const days = daysBetween(today, next);
-  const dailyMinor = availableMinor > 0 ? Number(BigInt(availableMinor) / BigInt(days)) : 0;
-  return {
-    ...common,
-    kind: "daily",
-    nextIncomeDate: next,
-    days,
     dailyMinor,
     leftTodayMinor: addMinor(dailyMinor, -input.spentTodayMinor),
     paydayPending: payday.some((i) => i.recordedToday.length === 0),

@@ -7,11 +7,12 @@ import {
   saveAccount,
   saveGoal,
   saveRecurringRule,
+  saveSpendLimit,
   saveTransaction,
   setCategoryBudget,
   userToday,
 } from "@fin-creador/api";
-import { addDays } from "@fin-creador/domain";
+import { addDays, daysInMonth, floorToWholeMinor } from "@fin-creador/domain";
 import { createClient } from "@supabase/supabase-js";
 
 // Demo figures for the Home E2E, written as the demo user through the shared writers (public
@@ -75,9 +76,9 @@ async function addRule(demo: Demo, rule: { type: "income" | "expense"; amount: s
  * Normal month: HDFC Bank ₹38,500 and Cash ₹3,500 (₹42,000), salary in 8 days, electricity
  * ₹2,400 in 2 days and phone ₹600 in 5 days, an Emergency fund of ₹60,000 with no target
  * date (spread over 12 months: ₹5,000 a month, all still due), ₹1,200 spent on food today
- * (budget ₹6,000). → (₹42,000 − ₹3,000 − ₹5,000) ÷ 8 = ₹4,250 a day; ₹3,050 left today.
- * Without income: ₹34,000 money left this month, less only the bills due before month end
- * (see noIncomeMoneyLeftMinor).
+ * (budget ₹6,000). Final rule (goals shown, not subtracted): (₹42,000 − ₹3,000) ÷ 8 = ₹4,875
+ * a day; ₹3,675 left today. Without income: the same, shared over the days to the month's end
+ * (see noIncomeDailyMinor).
  */
 export async function seedNormal(demo: Demo, { income = true }: { income?: boolean } = {}) {
   await addBank(demo, "38500");
@@ -105,17 +106,21 @@ export async function seedNormal(demo: Demo, { income = true }: { income?: boole
 }
 
 /**
- * The normal month without income: ₹42,000 − ₹5,000 goal saving − the bills due by month end.
- * Near month end the phone (in 5 days) or electricity (in 2 days) falls in next month.
+ * The normal month without income, as shown (whole rupees): (₹42,000 − the bills due by month
+ * end) ÷ the days left in the month, today included. Near month end the phone (in 5 days) or
+ * electricity (in 2 days) falls in next month.
  */
-export function noIncomeMoneyLeftMinor(today: string): number {
+export function noIncomeDailyMinor(today: string): number {
   const inMonth = (days: number) => addDays(today, days).slice(0, 7) === today.slice(0, 7);
-  return 42_000_00 - 5_000_00 - (inMonth(2) ? 2_400_00 : 0) - (inMonth(5) ? 600_00 : 0);
+  const afterBills = 42_000_00 - (inMonth(2) ? 2_400_00 : 0) - (inMonth(5) ? 600_00 : 0);
+  const [year, month, day] = today.split("-").map(Number) as [number, number, number];
+  const days = daysInMonth(year, month) - day + 1;
+  return floorToWholeMinor(Math.floor(afterBills / days), "INR");
 }
 
 /**
  * Overdue: the normal month plus internet ₹1,000 from HDFC Bank, due 3 days ago and never
- * paid. → (₹42,000 − ₹4,000 − ₹5,000) ÷ 8 = ₹4,125 a day; ₹2,925 left today.
+ * paid. → (₹42,000 − ₹4,000) ÷ 8 = ₹4,750 a day; ₹3,550 left today.
  */
 export async function seedOverdue(demo: Demo) {
   await seedNormal(demo);
@@ -127,7 +132,7 @@ export async function seedOverdue(demo: Demo) {
  * Paise: the normal month plus an Education EMI of ₹11,423.40 from HDFC Bank in 3 days. Coming
  * up shows it as ₹11,424 (an amount to pay rounds up) and Bills due is the rows as shown:
  * ₹2,400 + ₹600 + ₹11,424 = ₹14,424 (exact total ₹14,423.40).
- * → (₹42,000 − ₹14,423.40 − ₹5,000) ÷ 8 = ₹2,822.07 → ₹2,822 a day; ₹1,622 left today.
+ * → (₹42,000 − ₹14,423.40) ÷ 8 = ₹3,447.07 → ₹3,447 a day; ₹2,247 left today.
  */
 export async function seedPaise(demo: Demo) {
   await seedNormal(demo);
@@ -142,6 +147,16 @@ export async function seedShort(demo: Demo) {
   const hdfc = id.account("HDFC Bank");
   await addRule(demo, { type: "income", amount: "85000", categoryId: id.salary, accountId: hdfc, inDays: 8, note: "Salary" });
   await addRule(demo, { type: "expense", amount: "12000", categoryId: id.home, accountId: hdfc, inDays: 5, note: "Rent" });
+}
+
+/**
+ * Daily spend limit: the normal month plus ₹14,000 a week, set today (so the week starts
+ * today). → ₹14,000 ÷ 7 = ₹2,000 daily limit; ₹1,200 spent today → ₹800 left. ₹2,000 × 8 days
+ * is within the ₹39,000 left after bills, so no safety note.
+ */
+export async function seedLimit(demo: Demo) {
+  await seedNormal(demo);
+  ok(await saveSpendLimit(demo.client, { period: "week", amount: "14000" }), "Set spend limit");
 }
 
 /** What Home should show for this user: the shared loader's result, read as them. */

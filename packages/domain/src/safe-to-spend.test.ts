@@ -67,11 +67,8 @@ const input = (overrides: Partial<SafeToSpendInput>): SafeToSpendInput => ({
   ...overrides,
 });
 
-const daily = (i: SafeToSpendInput) => {
-  const result = safeToSpend(i);
-  if (result.kind !== "daily") throw new Error("expected a daily figure");
-  return result;
-};
+// Final rule (owner, 2026-11-24): always a daily figure, and goal saving is shown but not subtracted.
+const daily = safeToSpend;
 
 /** Example 1 and the no-income-date example share these figures. */
 const normalMonth = {
@@ -93,7 +90,7 @@ const normalMonth = {
 };
 
 describe("safeToSpend: worked examples", () => {
-  it("normal month: ₹42,000 left → ₹4,500 a day, ₹3,300 left today after ₹1,200 spent", () => {
+  it("normal month: ₹42,000 left → ₹4,750 a day, ₹3,550 left today after ₹1,200 spent", () => {
     const r = daily(
       input({ ...normalMonth, incomes: [monthlyIncome("Salary", "2026-01-01", 85_000)], spentTodayMinor: rs(1_200) }),
     );
@@ -105,10 +102,10 @@ describe("safeToSpend: worked examples", () => {
     expect(r.billsMinor).toBe(rs(4_000));
     expect(r.overdueMinor).toBe(0);
     expect(r.bills.map((b) => b.id)).toEqual(["Electricity", "Phone", "Internet"]);
-    expect(r.goalSavingMinor).toBe(rs(2_000)); // ₹5,000 due 1 Nov, ₹3,000 put toward it since
-    expect(r.availableMinor).toBe(rs(36_000));
-    expect(r.dailyMinor).toBe(rs(4_500));
-    expect(r.leftTodayMinor).toBe(rs(3_300));
+    expect(r.goalSavingMinor).toBe(rs(2_000)); // ₹5,000 due 1 Nov, ₹3,000 put toward it since: shown, not subtracted
+    expect(r.availableMinor).toBe(rs(38_000));
+    expect(r.dailyMinor).toBe(rs(4_750));
+    expect(r.leftTodayMinor).toBe(rs(3_550));
     expect(r.shortMinor).toBe(0);
     expect(r.shortAccounts).toEqual([]);
     expect(r.paydayPending).toBe(false);
@@ -128,7 +125,7 @@ describe("safeToSpend: worked examples", () => {
     expect(r.leftTodayMinor).toBe(-rs(250));
     expect(r.availableMinor).toBe(-rs(3_000));
     expect(r.shortMinor).toBe(rs(3_000));
-    expect(formatDayMonth(r.nextIncomeDate)).toBe("1 Dec");
+    expect(formatDayMonth(r.nextIncomeDate!)).toBe("1 Dec");
     expect(r.shortAccounts).toEqual([
       {
         accountId: "hdfc",
@@ -140,17 +137,32 @@ describe("safeToSpend: worked examples", () => {
     ]);
   });
 
-  it("no income date: money left this month ₹36,000, no per-day figure, flagged", () => {
+  it("no income date: to the month's end, today included: (₹42,000 − ₹4,000) ÷ 8 = ₹4,750 a day", () => {
     const r = safeToSpend(input({ ...normalMonth, spentTodayMinor: rs(1_200) }));
-    expect(r.kind).toBe("month");
-    if (r.kind !== "month") return;
-    expect(r.needsIncomeDate).toBe(true);
+    expect(r.nextIncomeDate).toBeNull();
     expect(r.lastDay).toBe("2026-11-30");
-    expect(r.availableMinor).toBe(rs(36_000));
-    expect(r).not.toHaveProperty("dailyMinor");
+    expect(r.days).toBe(8);
+    expect(r.availableMinor).toBe(rs(38_000));
+    expect(r.dailyMinor).toBe(rs(4_750));
+    expect(r.leftTodayMinor).toBe(rs(3_550));
   });
 
-  it("income on the 15th with a monthly goal: ₹1,090 a day, ₹490 left today", () => {
+  it("the owner's example: ₹22,055 − ₹9,072 bills = ₹12,983, ÷ 7 days = ₹1,854 a day", () => {
+    const r = safeToSpend(
+      input({
+        now: noonIst("2026-11-24"),
+        accounts: [account("savings", 22_055)],
+        bills: [bill("Rent", "2026-11-28", 9_072)],
+        goals: [goal("Trip", 2_88_340)],
+      }),
+    );
+    expect(r.days).toBe(7);
+    expect(r.availableMinor).toBe(rs(12_983));
+    expect(floorToWholeMinor(r.dailyMinor, "INR")).toBe(rs(1_854));
+    expect(r.goalSavingMinor).toBe(rs(2_88_340)); // shown as For goals only
+  });
+
+  it("income on the 15th with a monthly goal: ₹1,227 a day, ₹627 left today", () => {
     const r = daily(
       input({
         accounts: [account("savings", 38_500), account("cash", 3_500, { kind: "cash" })],
@@ -164,9 +176,9 @@ describe("safeToSpend: worked examples", () => {
     expect(r.days).toBe(22);
     expect(r.billsMinor).toBe(rs(15_000));
     expect(r.goalSavingMinor).toBe(rs(3_000)); // the ₹5,000 on 10 Nov was last cycle's
-    expect(r.dailyMinor).toBe(1_09_090); // 24,00,000 paise ÷ 22, rounded down
-    expect(floorToWholeMinor(r.dailyMinor, "INR")).toBe(rs(1_090));
-    expect(floorToWholeMinor(r.leftTodayMinor, "INR")).toBe(rs(490));
+    expect(r.dailyMinor).toBe(1_22_727); // 27,00,000 paise ÷ 22, rounded down
+    expect(floorToWholeMinor(r.dailyMinor, "INR")).toBe(rs(1_227));
+    expect(floorToWholeMinor(r.leftTodayMinor, "INR")).toBe(rs(627));
   });
 
   it("payday with the salary already recorded: start of today plus the salary", () => {
@@ -186,9 +198,9 @@ describe("safeToSpend: worked examples", () => {
     expect(r.moneyLeftMinor).toBe(rs(91_200));
     expect(r.billsMinor).toBe(rs(36_750));
     expect(r.goalSavingMinor).toBe(rs(5_000)); // due today; last month's saving doesn't count
-    expect(r.dailyMinor).toBe(1_59_516);
-    expect(floorToWholeMinor(r.dailyMinor, "INR")).toBe(rs(1_595));
-    expect(floorToWholeMinor(r.leftTodayMinor, "INR")).toBe(rs(1_095));
+    expect(r.dailyMinor).toBe(1_75_645); // 54,45,000 paise ÷ 31
+    expect(floorToWholeMinor(r.dailyMinor, "INR")).toBe(rs(1_756));
+    expect(floorToWholeMinor(r.leftTodayMinor, "INR")).toBe(rs(1_256));
     expect(r.paydayPending).toBe(false);
   });
 
@@ -221,7 +233,7 @@ describe("safeToSpend: worked examples", () => {
     expect(r.days).toBe(12);
     expect(r.billsMinor).toBe(rs(30_450));
     expect(r.goalSavingMinor).toBe(rs(5_000));
-    expect(r.dailyMinor).toBe(2_04_583);
+    expect(r.dailyMinor).toBe(2_46_250); // (₹60,000 − ₹30,450) ÷ 12
 
     // 16 December: next income 1 January. Saved on 2 December, so not due again.
     const later = daily(
@@ -280,21 +292,24 @@ describe("safeToSpend: dates and time zones", () => {
 
   it("no income date at the year's end: the month ends on 31 December", () => {
     const r = safeToSpend(input({ now: noonIst("2026-12-31"), accounts: [account("savings", 2_000)], bills: [bill("Phone", "2026-12-31", 500), bill("Rent", "2027-01-01", 900)] }));
-    expect(r.kind).toBe("month");
+    expect(r.nextIncomeDate).toBeNull();
     expect(r.lastDay).toBe("2026-12-31");
+    expect(r.days).toBe(1);
     expect(r.availableMinor).toBe(rs(1_500));
+    expect(r.dailyMinor).toBe(rs(1_500));
   });
 
   it("no income date in a leap February: the month ends on the 29th", () => {
     const r = safeToSpend(input({ now: noonIst("2028-02-20"), bills: [bill("Phone", "2028-02-29", 500)] }));
     expect(r.lastDay).toBe("2028-02-29");
+    expect(r.days).toBe(10);
     expect(r.billsMinor).toBe(rs(500));
   });
 
   it("an income that has ended or is archived gives no income date", () => {
     const ended = monthlyIncome("Old job", "2025-01-01", 50_000, { schedule: { frequency: "monthly", startDate: "2025-01-01", endDate: "2026-06-01" } });
     const archived = monthlyIncome("Archived", "2026-01-01", 50_000, { archived: true });
-    expect(safeToSpend(input({ incomes: [ended, archived] })).kind).toBe("month");
+    expect(safeToSpend(input({ incomes: [ended, archived] })).nextIncomeDate).toBeNull();
   });
 });
 
@@ -322,7 +337,7 @@ describe("safeToSpend: goals and shortfalls", () => {
     );
     expect(r.days).toBe(8);
     expect(r.goalSavingMinor).toBe(rs(5_000));
-    expect(r.dailyMinor).toBe(rs(4_250)); // (₹42,000 − ₹3,000 − ₹5,000) ÷ 8
+    expect(r.dailyMinor).toBe(rs(4_875)); // (₹42,000 − ₹3,000) ÷ 8; the goal is not subtracted
   });
 
   it("with a weekly main income, goal saving is due from the 1st of the month", () => {
@@ -383,16 +398,17 @@ describe("safeToSpend: overdue bills", () => {
     expect(r.bills.map((b) => b.id)).toEqual(["Car EMI", "Electricity", "Phone", "Internet"]);
     expect(r.billsMinor).toBe(rs(6_000));
     expect(r.overdueMinor).toBe(rs(2_000));
-    expect(r.availableMinor).toBe(rs(34_000)); // ₹42,000 − ₹6,000 − ₹2,000 goal
-    expect(r.dailyMinor).toBe(rs(4_250));
+    expect(r.availableMinor).toBe(rs(36_000)); // ₹42,000 − ₹6,000
+    expect(r.dailyMinor).toBe(rs(4_500));
   });
 
   it("however old, and with no income date too", () => {
     const r = safeToSpend(input({ accounts: [account("savings", 10_000)], bills: [bill("Card", "2026-09-05", 3_000), bill("Phone", "2026-11-28", 600)] }));
-    expect(r.kind).toBe("month");
+    expect(r.nextIncomeDate).toBeNull();
     expect(r.billsMinor).toBe(rs(3_600));
     expect(r.overdueMinor).toBe(rs(3_000));
     expect(r.availableMinor).toBe(rs(6_400));
+    expect(r.dailyMinor).toBe(rs(800)); // 8 days to 30 November
   });
 
   it("an overdue bill can be the one that takes an account short", () => {

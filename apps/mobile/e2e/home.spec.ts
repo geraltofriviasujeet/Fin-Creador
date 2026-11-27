@@ -1,7 +1,7 @@
 import { type Page, expect, test } from "@playwright/test";
-import { heroText, shortWarnings } from "@fin-creador/api";
+import { AFTER_BILLS_LINE, heroText, shortWarnings } from "@fin-creador/api";
 import { formatAmount } from "../src/components/ds/logic";
-import { type Demo, demoClient, expectedHome, noIncomeMoneyLeftMinor, seedNormal, seedOverdue, seedPaise, seedShort } from "./demo-data";
+import { type Demo, demoClient, expectedHome, noIncomeDailyMinor, seedLimit, seedNormal, seedOverdue, seedPaise, seedShort } from "./demo-data";
 import { createConfirmedUser } from "./demo-user";
 
 // Sprint 13a PR 4: Home on Expo web at 390px against CI's throwaway local Supabase, with a fresh
@@ -60,19 +60,20 @@ test("Home shows the demo user's Safe to spend, Coming up, Where it went and You
   const home = await expectedHome(demo);
   const hero = heroText(home);
 
-  // The fixed demo arithmetic, through the shared loader: (₹42,000 − ₹3,000 bills − ₹5,000
-  // goal saving) ÷ 8 days.
-  expect(home.safe.kind).toBe("daily");
-  expect(hero.amountMinor).toBe(4_250_00);
-  expect(hero.lines).toEqual(["₹3,050 left today"]);
+  // The fixed demo arithmetic, through the shared loader (final rule: goal saving is shown, not
+  // subtracted): (₹42,000 − ₹3,000 bills) ÷ 8 days.
+  expect(home.safe.nextIncomeDate).not.toBeNull();
+  expect(hero.amountMinor).toBe(4_875_00);
+  expect(hero.lines).toEqual([AFTER_BILLS_LINE, "₹3,675 left today"]);
   expect(hero.figures.map((f) => f.minor)).toEqual([42_000_00, 3_000_00, 5_000_00]);
 
   await signIn(page, email, password);
   await expect(greeting(page)).toHaveText(/^Good (morning|afternoon|evening), Demo$/);
   await expect(page.getByLabel(hero.label)).toBeVisible();
   await expect(page.getByText(money(hero.amountMinor), { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(hero.suffix!, { exact: true })).toBeVisible();
-  await expect(page.getByText("₹3,050 left today", { exact: true })).toBeVisible();
+  await expect(page.getByText(hero.suffix, { exact: true })).toBeVisible();
+  await expect(page.getByText(AFTER_BILLS_LINE, { exact: true })).toBeVisible();
+  await expect(page.getByText("₹3,675 left today", { exact: true })).toBeVisible();
   await expect(page.getByLabel("At start of today: ₹42,000")).toBeVisible();
   await expect(page.getByLabel("Bills due: ₹3,000")).toBeVisible();
   await expect(page.getByLabel("For goals: ₹5,000")).toBeVisible();
@@ -126,7 +127,7 @@ test("paise: the EMI row and Bills due round the same way, so the rows add up", 
   const hero = heroText(home);
   expect(home.safe.billsMinor).toBe(14_423_40); // exact
   expect(hero.figures.map((f) => f.minor)).toEqual([42_000_00, 14_424_00, 5_000_00]);
-  expect(hero.amountMinor).toBe(2_822_00);
+  expect(hero.amountMinor).toBe(3_447_00);
 
   await signIn(page, email, password);
   await expect(page.getByLabel("Bills due: ₹14,424")).toBeVisible();
@@ -161,16 +162,16 @@ test("overdue: an unpaid bill past its date is subtracted and listed first in Co
   const { email, password, demo } = await newUser("overdue", seedOverdue);
   const home = await expectedHome(demo);
   const hero = heroText(home);
-  // (₹42,000 − ₹4,000 bills, ₹1,000 of them overdue − ₹5,000 goal saving) ÷ 8 days.
+  // (₹42,000 − ₹4,000 bills, ₹1,000 of them overdue) ÷ 8 days.
   expect(home.safe.overdueMinor).toBe(1_000_00);
-  expect(hero.amountMinor).toBe(4_125_00);
+  expect(hero.amountMinor).toBe(4_750_00);
   expect(hero.figures.map((f) => f.minor)).toEqual([42_000_00, 4_000_00, 5_000_00]);
   expect(home.comingUp[0]).toMatchObject({ name: "Internet", overdue: true });
   expect(home.comingUp.filter((b) => b.overdue)).toHaveLength(1);
 
   await signIn(page, email, password);
   await expect(page.getByLabel(hero.label)).toBeVisible();
-  await expect(page.getByText("₹2,925 left today", { exact: true })).toBeVisible();
+  await expect(page.getByText("₹3,550 left today", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Bills due: ₹4,000")).toBeVisible();
   // First row of Coming up, with the label in text (not colour alone). Next month's internet
   // (about 27 days ahead) is in Coming up's 30 days too, but not overdue and not before payday.
@@ -184,18 +185,18 @@ test("overdue: an unpaid bill past its date is subtracted and listed first in Co
   expect(errors).toEqual([]);
 });
 
-test("no income date: money left this month, with no income-date prompt", async ({ page }) => {
+test("no income date: a daily figure to the month's end, with no income-date prompt", async ({ page }) => {
   const errors = collectErrors(page);
   const { email, password, demo } = await newUser("no-income", (d) => seedNormal(d, { income: false }));
   const hero = heroText(await expectedHome(demo));
-  expect(hero.title).toBe("Money left this month");
-  // ₹42,000 − ₹3,000 bills − ₹5,000 goal saving (bills after month end don't count).
-  expect(hero.amountMinor).toBe(noIncomeMoneyLeftMinor(demo.today));
+  expect(hero.title).toBe("Safe to spend today");
+  // (₹42,000 − the bills due by month end) ÷ days left in the month; goals not subtracted.
+  expect(hero.amountMinor).toBe(noIncomeDailyMinor(demo.today));
 
   await signIn(page, email, password);
-  await expect(page.getByText("Money left this month", { exact: true })).toBeVisible();
   await expect(page.getByLabel(hero.label)).toBeVisible();
-  await expect(page.getByText(/a day, until/)).toHaveCount(0);
+  await expect(page.getByText(hero.suffix, { exact: true })).toBeVisible();
+  await expect(page.getByText("Money left this month", { exact: true })).toHaveCount(0);
   await shot(page, "13a-home-no-income-date");
 
   // Income is added when it arrives, at the user's choice: no prompt to set a date.
@@ -235,7 +236,7 @@ test("offline: keeps what was loaded with the time; a cold start offline shows T
   const errors = collectErrors(page, { allowBlocked: true });
   const { email, password } = await newUser("offline", (d) => seedNormal(d));
   await signIn(page, email, password);
-  await expect(page.getByText("₹3,050 left today", { exact: true })).toBeVisible();
+  await expect(page.getByText("₹3,675 left today", { exact: true })).toBeVisible();
 
   // Network to the backend blocked; coming back to Home refreshes it.
   await page.route(SUPABASE, (route) => route.abort("internetdisconnected"));
@@ -243,7 +244,7 @@ test("offline: keeps what was loaded with the time; a cold start offline shows T
   await tab(page, "Home").click();
   const banner = page.getByRole("alert", { name: /^You're offline\. Showing what was loaded at \d{1,2}:\d{2} (AM|PM)\.$/ });
   await expect(banner).toBeVisible();
-  await expect(page.getByText("₹3,050 left today", { exact: true })).toBeVisible();
+  await expect(page.getByText("₹3,675 left today", { exact: true })).toBeVisible();
   await shot(page, "13a-home-offline");
 
   // Cold start offline (the session is still in the tab): nothing to show, Try again.
@@ -251,9 +252,30 @@ test("offline: keeps what was loaded with the time; a cold start offline shows T
   await expect(page.getByRole("heading", { name: "You're offline" })).toBeVisible();
   await page.unroute(SUPABASE);
   await page.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByText("₹3,050 left today", { exact: true })).toBeVisible();
+  await expect(page.getByText("₹3,675 left today", { exact: true })).toBeVisible();
   await expect(banner).toHaveCount(0);
   expect(errors.filter((e) => !BLOCKED.test(e))).toEqual([]);
+});
+
+test("daily spend limit: '₹800 left of your ₹2,000 daily limit' with the spent bar", async ({ page }) => {
+  const errors = collectErrors(page);
+  const { email, password, demo } = await newUser("limit", seedLimit);
+  const home = await expectedHome(demo);
+  const hero = heroText(home);
+  // ₹14,000 a week set today: ₹2,000 a day; ₹1,200 spent today.
+  expect(home.limit?.today.dailyMinor).toBe(2_000_00);
+  expect(hero.amountMinor).toBe(800_00);
+  expect(hero.suffix).toBe("left of your ₹2,000 daily limit");
+  expect(hero.lines).toEqual([]);
+  expect(hero.figures.map((f) => f.minor)).toEqual([42_000_00, 3_000_00, 5_000_00]);
+
+  await signIn(page, email, password);
+  await expect(page.getByLabel(hero.label)).toBeVisible();
+  await expect(page.getByText(hero.suffix, { exact: true })).toBeVisible();
+  await expect(page.getByText("₹1,200 spent today of ₹2,000", { exact: true })).toBeVisible();
+  await expect(page.getByText(AFTER_BILLS_LINE, { exact: true })).toHaveCount(0);
+  await shot(page, "pre13b-home-spend-limit");
+  expect(errors).toEqual([]);
 });
 
 test("avatar menu: Accounts, Recurring and Settings open, coming soon items say so, Sign out", async ({ page }) => {
