@@ -1,7 +1,7 @@
 import { type Page, expect, test } from "@playwright/test";
 import { heroText, shortWarnings } from "@fin-creador/api";
 import { formatAmount } from "../src/components/ds/logic";
-import { type Demo, demoClient, expectedHome, seedNormal, seedOverdue, seedPaise, seedShort } from "./demo-data";
+import { type Demo, demoClient, expectedHome, noIncomeMoneyLeftMinor, seedNormal, seedOverdue, seedPaise, seedShort } from "./demo-data";
 import { createConfirmedUser } from "./demo-user";
 
 // Sprint 13a PR 4: Home on Expo web at 390px against CI's throwaway local Supabase, with a fresh
@@ -189,8 +189,8 @@ test("no income date: money left this month, with no income-date prompt", async 
   const { email, password, demo } = await newUser("no-income", (d) => seedNormal(d, { income: false }));
   const hero = heroText(await expectedHome(demo));
   expect(hero.title).toBe("Money left this month");
-  // ₹42,000 − ₹3,000 bills − ₹5,000 goal saving.
-  expect(hero.amountMinor).toBe(34_000_00);
+  // ₹42,000 − ₹3,000 bills − ₹5,000 goal saving (bills after month end don't count).
+  expect(hero.amountMinor).toBe(noIncomeMoneyLeftMinor(demo.today));
 
   await signIn(page, email, password);
   await expect(page.getByText("Money left this month", { exact: true })).toBeVisible();

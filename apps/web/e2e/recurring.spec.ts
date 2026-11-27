@@ -122,6 +122,39 @@ test("a recurring expense is due, confirmed through the Add dialog, and costed",
   await expect(page.getByRole("link", { name: "Open Recurring" })).toHaveAttribute("href", "/recurring")
 })
 
+test("an ended item can be edited to restart it; the missed dates are never saved", async ({ page }) => {
+  await newUser(page, "rec-restart")
+  // Weekly from 30 days ago: dates at 30, 23, 16, 9 and 2 days ago.
+  await addRule(page, { amount: "1,500", category: "Medical", from: "HDFC Bank ··4821", frequency: "Weekly", start: daysAgo(30), note: "Gym fees" })
+
+  // End it after its first date, and skip that date: it moves to Ended.
+  await panel(page, /^Other recurring/).getByRole("button", { name: "Edit Gym fees" }).click()
+  const end = dialog(page, "Edit Gym fees")
+  await end.getByLabel("Ends on (optional)").fill(daysAgo(30))
+  await end.getByRole("button", { name: "Save changes" }).click()
+  await expect(toast(page, "Recurring item saved.")).toBeVisible()
+  await panel(page, /^Due/).getByRole("button", { name: "Skip Gym fees" }).click()
+  await page.getByRole("dialog", { name: /^Skip / }).getByRole("button", { name: "Skip", exact: true }).click()
+  await expect(toast(page, "Skipped. Nothing was saved for this date.")).toBeVisible()
+  const ended = panel(page, /^Ended/)
+  await expect(ended).toContainText("Gym fees")
+  await expect(ended.getByRole("button", { name: "Archive Gym fees" })).toBeVisible()
+
+  // Edit from Ended and clear the end date: it restarts.
+  await ended.getByRole("button", { name: "Edit Gym fees" }).click()
+  const restart = dialog(page, "Edit Gym fees")
+  await expect(restart).toContainText("To restart it, choose a later end date or clear it.")
+  await restart.getByLabel("Ends on (optional)").fill("")
+  await restart.getByRole("button", { name: "Save changes" }).click()
+  await expect(toast(page, "Recurring item saved.").last()).toBeVisible()
+  await expect(ended).toContainText("No recurring items have ended.")
+  // Only the latest missed date is due, waiting to be confirmed; nothing was saved for any of them.
+  await expect(panel(page, /^Due/).getByRole("button", { name: /^Confirm/ })).toHaveCount(1)
+  await expect(panel(page, /^Due/)).toContainText("Gym fees")
+  await page.goto(ledgerSince(35))
+  await expect(ledgerRow(page, "Gym fees")).toHaveCount(0)
+})
+
 test("skip and undo; archive and restore; a fixed rule posts again", async ({ page }) => {
   await newUser(page, "rec-skip")
   await addRule(page, { amount: "25,000", category: "Rent & housing", from: "HDFC Bank ··4821", frequency: "Weekly", start: daysAgo(14), note: "Flat rent" })

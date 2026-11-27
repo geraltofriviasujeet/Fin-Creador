@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
-import { countUpValue, formatMoney } from "@fin-creador/domain"
+import { countUpValue, formatMoney, formatMoneyWhole } from "@fin-creador/domain"
 
 // Counting a money figure from one server value to the next (balance feedback). Display only:
 // both ends come from the server, the frames between are whole minor units, and the last frame
@@ -66,8 +66,20 @@ const lastShown = new Map<string, { minor: number; currency: string }>()
  * Overview). `id` names the figure; the first time it is shown there is nothing to count from.
  * Screen readers get only the final value.
  */
-/** `twoDecimals`: always show the minor units (₹1,33,390.00), as on the Income page. */
-export function AnimatedAmount({ id, minor, currency, twoDecimals = false }: { id: string; minor: number; currency: string; twoDecimals?: boolean }) {
+/** `twoDecimals`: always show the minor units (₹1,33,390.00), as on the Income page. `wholeUnits`: whole rupees (Overview cards). */
+export function AnimatedAmount({
+  id,
+  minor,
+  currency,
+  twoDecimals = false,
+  wholeUnits = false,
+}: {
+  id: string
+  minor: number
+  currency: string
+  twoDecimals?: boolean
+  wholeUnits?: boolean
+}) {
   const [range, setRange] = useState(() => {
     const last = lastShown.get(id)
     return { from: last && last.currency === currency ? last.minor : minor, to: minor }
@@ -80,12 +92,13 @@ export function AnimatedAmount({ id, minor, currency, twoDecimals = false }: { i
     lastShown.set(id, { minor, currency })
   }, [id, minor, currency])
 
+  const format = (value: number) => (wholeUnits ? formatMoneyWhole(value, { currency }) : formatMoney(value, { currency, trimZeroFraction: !twoDecimals }))
   return (
     <>
       <span aria-hidden="true" data-testid={`amount-${id}`} data-value={minor}>
-        {formatMoney(shown, { currency, trimZeroFraction: !twoDecimals })}
+        {format(shown)}
       </span>
-      <span className="sr-only">{formatMoney(minor, { currency, trimZeroFraction: !twoDecimals })}</span>
+      <span className="sr-only">{format(minor)}</span>
     </>
   )
 }
