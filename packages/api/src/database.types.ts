@@ -1766,6 +1766,39 @@ export type Database = {
         }
         Relationships: []
       }
+      spend_limits: {
+        Row: {
+          amount_minor: number
+          created_at: string
+          currency: string
+          period: string
+          period_days: number | null
+          starts_on: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_minor: number
+          created_at?: string
+          currency: string
+          period: string
+          period_days?: number | null
+          starts_on: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          amount_minor?: number
+          created_at?: string
+          currency?: string
+          period?: string
+          period_days?: number | null
+          starts_on?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       statutory_dues: {
         Row: {
           amount_minor: number
@@ -3487,6 +3520,25 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "recurring_rules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_spend_limit: {
+        Args: { p_amount_minor: number; p_period: string; p_period_days?: number }
+        Returns: {
+          amount_minor: number
+          created_at: string
+          currency: string
+          period: string
+          period_days: number | null
+          starts_on: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "spend_limits"
           isOneToOne: true
           isSetofReturn: false
         }
