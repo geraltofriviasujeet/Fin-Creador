@@ -1,9 +1,10 @@
 import Link from "next/link"
-import { CalendarClock, ChevronRight, CircleAlert, CreditCard, FileText, HandCoins, Landmark, type LucideIcon } from "lucide-react"
-import { type HomeBill, type HomeData, UPCOMING_DAYS, billDisplayMinor, heroText, shortWarnings } from "@fin-creador/api"
+import { CalendarClock, ChevronRight, CircleAlert, CreditCard, FileText, HandCoins, Info, Landmark, type LucideIcon } from "lucide-react"
+import { type HomeBill, type HomeData, type SpendLimit, UPCOMING_DAYS, billDisplayMinor, heroText, shortWarnings } from "@fin-creador/api"
 import { formatDayMonth, formatMoneyWhole, formatPercentFromBasisPoints } from "@fin-creador/domain"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
+import { SpendLimitButton } from "@/components/spend-limit/spend-limit-dialog"
 
 // Safe to spend and Coming up on the web Overview (Sprint 13a PR 5). Every figure and every
 // sentence comes from packages/api (buildHome, heroText, shortWarnings), the same as the
@@ -14,8 +15,12 @@ const whole = (minor: number, currency: string) => formatMoneyWhole(minor, { cur
 /** U+2212, as the phone shows money out. */
 const MINUS = "−"
 
-/** `savingsRateBp`: this month's savings rate (null when there is no income this month). */
-export function SafeToSpendCard({ home, savingsRateBp }: { home: HomeData; savingsRateBp: number | null }) {
+/**
+ * `savingsRateBp`: this month's savings rate (null when there is no income this month).
+ * `spendLimit`: the saved daily spend limit as set (home.limit leaves out one in another
+ * currency), for the "Set a daily limit" / "Change limit" link.
+ */
+export function SafeToSpendCard({ home, savingsRateBp, spendLimit }: { home: HomeData; savingsRateBp: number | null; spendLimit: SpendLimit | null }) {
   const hero = heroText(home)
   const { currency } = home
   return (
@@ -59,6 +64,14 @@ export function SafeToSpendCard({ home, savingsRateBp }: { home: HomeData; savin
             <p className="text-xs text-nav-text">{hero.spentBar.label}</p>
           </div>
         )}
+        {/* The safety note: information only, one quiet line under the bar. */}
+        {hero.note && (
+          <p className="flex max-w-md items-start gap-1.5 text-xs text-nav-text">
+            <Info aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+            {hero.note}
+          </p>
+        )}
+        <SpendLimitButton limit={spendLimit} currency={currency} variant="card" />
       </div>
       <dl className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4 md:grid-cols-4 lg:grid-cols-2 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
         {hero.figures.map((f) => (

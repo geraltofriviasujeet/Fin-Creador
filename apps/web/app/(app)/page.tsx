@@ -145,6 +145,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
       investments={investments.ok ? buildInvestmentsView(investments.data) : null}
       loans={loansView}
       home={home}
+      spendLimit={spendLimit?.spendLimit ?? null}
     />
   )
 }

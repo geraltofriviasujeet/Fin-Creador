@@ -6,6 +6,7 @@ import {
   type DashboardBreakdown,
   type GoalsView,
   type HomeData,
+  type SpendLimit,
   type InvestmentsView,
   type LoansView,
   CHART_OPTIONS,
@@ -87,6 +88,8 @@ export type OverviewViewProps = {
   loans: LoansView | null
   /** Safe to spend and Coming up, from the phone Home's buildHome (null when a part couldn't load). */
   home: HomeData | null
+  /** The saved daily spend limit as set (null when none), for the card's link. */
+  spendLimit: SpendLimit | null
 }
 
 function longDate(date: string): string {
@@ -94,7 +97,7 @@ function longDate(date: string): string {
   return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
-export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans, home }: OverviewViewProps) {
+export function OverviewView({ context, name, period, range, comparison, totals, month, breakdown, recent, charts, upcoming, netWorth, goals, investments, loans, home, spendLimit }: OverviewViewProps) {
   const { today, currency, timeZone } = context
   const lookup: Lookup = ledgerLookup(context)
   const holdings = summarizeHoldings(context.accounts, currency)
@@ -115,7 +118,7 @@ export function OverviewView({ context, name, period, range, comparison, totals,
       />
 
       {/* Safe to spend first, as on the phone; a brand-new account sees the first-run card instead. */}
-      {home ? !home.isNew && <SafeToSpendCard home={home} savingsRateBp={savingsRateBasisPoints(m)} /> : <SafeToSpendUnavailable />}
+      {home ? !home.isNew && <SafeToSpendCard home={home} savingsRateBp={savingsRateBasisPoints(m)} spendLimit={spendLimit} /> : <SafeToSpendUnavailable />}
 
       {!context.hasEntries && <FirstRun hasAccounts={holdings.rows.length > 0} />}
 

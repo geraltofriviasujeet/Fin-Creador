@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Menu } from "@base-ui/react/menu"
 import { Ellipsis, Plus, Search, X } from "lucide-react"
-import { type LedgerItem, type PageCursor,
+import { type LedgerItem, type PageCursor, type SpendLimit,
   type RecurringView, type TransactionTotals, type TransactionsContext, type Filters, type Lookup, ledgerLookup, PERIODS, TYPE_TABS, filtersToQuery, groupByDay, hasActiveFilters, hasNarrowingFilters, periodLabel, readFilters, toApiFilters } from "@fin-creador/api"
 import {
   type DateRange,
@@ -28,6 +28,7 @@ import { UPI_IMPORT_HREF } from "@/components/statements/upi-links"
 import { AddEntryDialog, EditEntryDialog, HistoryDialog, RefundEntryDialog, VoidEntryDialog } from "./entry-modals"
 import type { EntryType } from "./transaction-form"
 import { useAddDeepLink } from "@/lib/use-add-deep-link"
+import { SpendLimitButton } from "@/components/spend-limit/spend-limit-dialog"
 
 const ADD_TYPES: readonly EntryType[] = ["expense", "income", "transfer", "refund"]
 
@@ -48,9 +49,11 @@ export type TransactionsViewProps = {
   open: { kind: "edit" | "history"; entry: LedgerItem } | null
   /** Recurring items for the compact Upcoming card (null when they couldn't load). */
   upcoming: RecurringView | null
+  /** The daily spend limit (limit null when none is set); null when it couldn't be read. */
+  spendLimit: { limit: SpendLimit | null } | null
 }
 
-export function TransactionsView({ context, filters: loaded, range, first, totals, prevTotals, open, upcoming }: TransactionsViewProps) {
+export function TransactionsView({ context, filters: loaded, range, first, totals, prevTotals, open, upcoming, spendLimit }: TransactionsViewProps) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -183,6 +186,7 @@ export function TransactionsView({ context, filters: loaded, range, first, total
         {...TRANSACTIONS_HEADER}
         actions={
           <div className="flex flex-wrap gap-3">
+            {spendLimit && <SpendLimitButton limit={spendLimit.limit} currency={currency} variant="header" />}
             <Link href={UPI_IMPORT_HREF} className={cn(buttonVariants({ variant: "secondary", size: "lg" }))}>
               Import UPI statement
             </Link>
