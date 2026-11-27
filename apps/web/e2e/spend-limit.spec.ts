@@ -46,9 +46,9 @@ test("set a weekly limit from Transactions, change it from the card, see the not
   await set.getByRole("radio", { name: "1 week" }).check()
   await set.getByLabel("Amount").fill("14000")
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.screenshot({ path: `${SHOTS}/390-spend-limit-dialog.png` })
+  await page.screenshot({ path: `${SHOTS}/390-spend-limit-dialog.png` , animations: "disabled" })
   await page.setViewportSize({ width: 1440, height: 900 })
-  await page.screenshot({ path: `${SHOTS}/1440-spend-limit-dialog.png` })
+  await page.screenshot({ path: `${SHOTS}/1440-spend-limit-dialog.png` , animations: "disabled" })
   await set.getByRole("button", { name: "Save" }).click()
   await expect(toast(page, "Daily spend limit saved.")).toBeVisible()
   await expect(set).toBeHidden()
@@ -63,9 +63,9 @@ test("set a weekly limit from Transactions, change it from the card, see the not
   await expect(card(page).getByRole("progressbar", { name: "₹1,200 spent today of ₹2,000" })).toBeVisible()
   await expect(card(page).getByText(AFTER_BILLS_LINE, { exact: true })).toHaveCount(0)
   await expect(card(page).getByText(LIMIT_NOTE)).toHaveCount(0)
-  await card(page).screenshot({ path: `${SHOTS}/1440-overview-spend-limit-card.png` })
+  await card(page).screenshot({ path: `${SHOTS}/1440-overview-spend-limit-card.png` , animations: "disabled" })
   await page.setViewportSize({ width: 390, height: 844 })
-  await card(page).screenshot({ path: `${SHOTS}/390-overview-spend-limit-card.png` })
+  await card(page).screenshot({ path: `${SHOTS}/390-overview-spend-limit-card.png` , animations: "disabled" })
   await page.setViewportSize({ width: 1440, height: 900 })
 
   // 3. Change it from the card's link: the dialog opens with what was set.
@@ -93,7 +93,7 @@ test("set a weekly limit from Transactions, change it from the card, see the not
   expect(hero.note).toBe(LIMIT_NOTE)
   await expect(card(page).getByText("₹48,800", { exact: true }).first()).toBeVisible()
   await expect(card(page).getByText(LIMIT_NOTE, { exact: true })).toBeVisible()
-  await card(page).screenshot({ path: `${SHOTS}/1440-overview-spend-limit-card-note.png` })
+  await card(page).screenshot({ path: `${SHOTS}/1440-overview-spend-limit-card-note.png` , animations: "disabled" })
 
   // 5. Remove it (with a confirm): the card goes back to Safe to spend after bills.
   await card(page).getByRole("button", { name: "Change limit" }).click()
