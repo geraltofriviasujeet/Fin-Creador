@@ -107,7 +107,8 @@ test("set a weekly limit from Activity, change it from Home, see the note, remov
   await period(page, "Change your spend limit", "1 day").click();
   await page.route(SUPABASE, (route) => route.abort("internetdisconnected"));
   await change.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(change.getByText(/Check your connection and try again|couldn't reach the server/)).toBeVisible();
+  await expect(change.getByText(/Check your connection/)).toBeVisible();
+  await expect(change.getByText(/session has ended/)).toHaveCount(0);
   await expect(change).toBeVisible();
   await expect(period(page, "Change your spend limit", "1 day")).toHaveAttribute("aria-selected", "true");
   await expect(change.getByLabel("Amount")).toHaveValue("50000");

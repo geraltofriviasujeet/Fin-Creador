@@ -1,4 +1,4 @@
-import { type SpendLimit, removeSpendLimit, saveSpendLimit, spendLimitLabel } from "@fin-creador/api";
+import { type SpendLimit, type WriteResult, removeSpendLimit, saveSpendLimit, spendLimitLabel } from "@fin-creador/api";
 import { minorToInputString } from "@fin-creador/domain";
 import {
   SPEND_LIMIT_MAX_CUSTOM_DAYS,
@@ -18,6 +18,8 @@ import { Sheet } from "@/components/income/sheet";
 import { Segmented } from "@/components/segmented";
 import { TextField } from "@/components/text-field";
 import { TransactionsGate } from "@/components/transactions/transactions-gate";
+import { backendUnreachable } from "@/lib/home-data";
+import { NETWORK_ERROR } from "@/lib/income-store";
 import { useTransactions } from "@/lib/transactions-store";
 import { useSave } from "@/lib/use-save";
 import { getSupabase } from "@/lib/supabase";
@@ -38,6 +40,16 @@ export const SPEND_LIMIT_DESCRIPTION =
 function per(period: SpendLimitPeriod, days: string): string {
   if (period !== "custom") return `each ${period}`;
   return /^\d{1,3}$/.test(days.trim()) ? `every ${Number(days)} days` : "in each period";
+}
+
+/**
+ * Runs a shared writer; if it fails because the phone can't reach the server, says so. Offline,
+ * the writers' session check fails first and would otherwise read "Your session has ended".
+ */
+async function write(run: () => Promise<WriteResult>): Promise<WriteResult> {
+  const result = await run();
+  if (result.status === "error" && (await backendUnreachable())) return { status: "error", message: NETWORK_ERROR };
+  return result;
 }
 
 export default function SpendLimitSheet() {
@@ -101,7 +113,7 @@ function SpendLimitForm({ limit, currency }: { limit: SpendLimit | null; currenc
       return;
     }
     setCheckErrors({});
-    void save(() => saveSpendLimit(getSupabase(), values));
+    void save(() => write(() => saveSpendLimit(getSupabase(), values)));
   }
 
   if (confirming && limit) {
@@ -112,7 +124,7 @@ function SpendLimitForm({ limit, currency }: { limit: SpendLimit | null; currenc
           Remove your limit of <Text style={styles.strong}>{spendLimitLabel(limit)}</Text>? Safe to spend goes back to what you can spend each day after
           your bills.
         </Text>
-        <Button label={busy ? "Removing…" : "Remove limit"} fullWidth loading={busy} onPress={() => void save(() => removeSpendLimit(getSupabase()))} />
+        <Button label={busy ? "Removing…" : "Remove limit"} fullWidth loading={busy} onPress={() => void save(() => write(() => removeSpendLimit(getSupabase())))} />
         <Button label="Keep limit" variant="secondary" fullWidth disabled={busy} onPress={() => setConfirming(false)} />
       </View>
     );
