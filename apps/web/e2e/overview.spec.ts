@@ -86,6 +86,8 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await expect(page.locator("dl > div").filter({ has: page.getByText("Savings rate", { exact: true }) })).toContainText("87%")
   // Nothing last month: changes show "—", never infinity.
   await expect(card(page, "Income this month")).toContainText("vs same days last month (nothing to compare)")
+  // Money left is a balance: it compares with the same day last month, before these accounts opened.
+  await expect(card(page, "Money left")).toContainText("vs same day last month (nothing to compare)")
 
   const categories = panel(page, "Spending by category").getByRole("list", { name: "Categories" }).getByRole("listitem")
   await expect(categories).toHaveCount(2)

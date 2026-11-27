@@ -17,6 +17,7 @@ import {
   loadRecurringData,
   loadTransactionPage,
   loadTransactionTotals,
+  loadMoneyLeftOn,
   loadSpendLimitInputs,
   loadTodayEntries,
   loadTransactionsContext,
@@ -66,7 +67,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
   const chartsAreMonth = period === "month"
 
   const now = new Date()
-  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans, todayEntries, spendLimit] = await Promise.all([
+  const [totals, prevTotals, monthTotals, monthPrevTotals, breakdown, recent, recurring, profile, goals, investments, loans, todayEntries, spendLimit, moneyLeftBefore] = await Promise.all([
     loadTransactionTotals(supabase, { from: range.start, to: range.end }, currency),
     comparison ? loadTransactionTotals(supabase, { from: comparison.previous.start, to: comparison.previous.end }, currency) : null,
     chartsAreMonth ? null : loadTransactionTotals(supabase, { from: thisMonth.start, to: thisMonth.end }, currency),
@@ -82,6 +83,8 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
     loadLoansData(supabase),
     loadTodayEntries(supabase, today),
     loadSpendLimitInputs(supabase, today),
+    // Money left on the same day last month, for the Money left card (optional: left out if it fails).
+    monthComparison ? loadMoneyLeftOn(supabase, monthComparison.previous.end, currency) : null,
   ])
   if (!totals.ok || (prevTotals && !prevTotals.ok) || (monthTotals && !monthTotals.ok) || !breakdown.ok || !recent.ok) return <LoadError />
   const month = chartsAreMonth
@@ -146,6 +149,7 @@ async function OverviewContent({ searchParams }: { searchParams: SearchParams })
       loans={loansView}
       home={home}
       spendLimit={spendLimit?.spendLimit ?? null}
+      moneyLeftBefore={moneyLeftBefore}
     />
   )
 }

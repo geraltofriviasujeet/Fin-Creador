@@ -96,3 +96,19 @@ export function summarizeHoldings<A extends AccountWithActivity>(
     archived: accounts.filter((a) => a.archived && isMoneyAccountKind(a.kind)),
   };
 }
+
+/**
+ * Money left on a past date (the Overview's "vs same day last month"): the balances that
+ * account_balances_at gives for that date, summed over money accounts (bank, cash, other) in
+ * the profile currency. That function already counts only accounts open on the date and not
+ * yet archived, by the same posting rule as today's balance. Liability accounts and other
+ * currencies are left out, as in Total available.
+ */
+export function moneyLeftFromBalances(
+  balances: readonly { accountId: string; balanceMinor: number }[],
+  accounts: readonly { id: string; kind: string; currency: string }[],
+  profileCurrency: string,
+): number {
+  const counted = new Set(accounts.filter((a) => isMoneyAccountKind(a.kind) && a.currency === profileCurrency).map((a) => a.id));
+  return addMinor(0, ...balances.filter((b) => counted.has(b.accountId)).map((b) => b.balanceMinor));
+}
