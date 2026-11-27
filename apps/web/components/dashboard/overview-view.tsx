@@ -47,6 +47,7 @@ import { InvestmentsOverviewCard } from "@/components/investments/overview-card"
 import { DueSoonOverviewCard } from "@/components/loans/due-soon"
 import { greeting } from "@/lib/greeting"
 import { CategoryPie } from "./category-pie"
+import { MoneyLeftAccounts, type MoneyLeftRow } from "./money-left-accounts"
 import { ComingUpCard, SafeToSpendCard, SafeToSpendUnavailable } from "./safe-to-spend"
 import { TimeChart } from "./time-chart"
 
@@ -100,7 +101,6 @@ export function OverviewView({ context, name, period, range, comparison, totals,
   const otherAccounts = holdings.rows.filter((r) => !r.inTotal).length
   // The three cards: this month only.
   const m = month.totals
-  const inTotal = holdings.rows.length - otherAccounts
   const vs = month.comparison?.label ?? ""
   // Spending is net of refunds and may be below zero (a refunded day): still shown, drawn at zero.
   const hasSpending = breakdown.buckets.some((b) => b.expenseMinor !== 0)
@@ -127,9 +127,18 @@ export function OverviewView({ context, name, period, range, comparison, totals,
           label="Money left"
           value={<AnimatedAmount id="total-available" minor={holdings.totalAvailableMinor} currency={currency} wholeUnits />}
           footer={
-            <FooterLink href="/income">
-              {inTotal === 0 ? "Add an account" : `Across ${inTotal} ${inTotal === 1 ? "account" : "accounts"} today`}
-            </FooterLink>
+            <MoneyLeftAccounts
+              rows={holdings.rows.map((r) => ({
+                id: r.account.id,
+                label: r.account.label,
+                kind: r.account.kind as MoneyLeftRow["kind"],
+                currency: r.account.currency,
+                balanceMinor: r.balanceMinor,
+                inTotal: r.inTotal,
+              }))}
+              totalMinor={holdings.totalAvailableMinor}
+              currency={currency}
+            />
           }
         />
         <SummaryCard

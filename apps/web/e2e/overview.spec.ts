@@ -1,5 +1,5 @@
 import { type Page, expect, test } from "@playwright/test"
-import { addBank, addCash, addEntry, overviewHeading, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
+import { addBank, addCash, addEntry, dialog, overviewHeading, signOut, signUpConfirmed, uniqueEmail } from "./helpers"
 
 // Overview dashboard end to end (Sprint 5), against the throwaway local Supabase. Entries
 // are dated today (the Add dialog's default), so they all fall in this week, month and year.
@@ -66,9 +66,18 @@ test("figures reconcile with the Transactions page; periods, links and other use
   await page.goto("/")
   await expect(page.getByRole("heading", { name: "Nothing recorded yet" })).toBeHidden()
   // 10,000 + 500 − 250 − 400 + 5,000; the transfer moves money without changing the total.
-  // Money left, the first card in the row, with its link to the accounts.
+  // Money left, the first card in the row; "See all accounts" shows each balance, cash included.
   await expect(card(page, "Money left").getByTestId("amount-total-available")).toHaveText("₹14,850")
-  await expect(card(page, "Money left").getByRole("link", { name: "Across 2 accounts today" })).toHaveAttribute("href", "/income")
+  await card(page, "Money left").getByRole("button", { name: "See all accounts (2)" }).click()
+  const accounts = dialog(page, "Money left").getByRole("list", { name: "Accounts in Money left" }).getByRole("listitem")
+  await expect(accounts).toHaveCount(2)
+  await expect(accounts.nth(0)).toContainText("HDFC Bank ··4821")
+  await expect(accounts.nth(0)).toContainText("₹13,350") // 10,000 − 250 − 400 + 5,000 − 1,000
+  await expect(accounts.nth(1)).toContainText("Cash in hand")
+  await expect(accounts.nth(1)).toContainText("₹1,500") // 500 + 1,000
+  await expect(dialog(page, "Money left")).toContainText("Total₹14,850")
+  await dialog(page, "Money left").getByRole("button", { name: "Close" }).click()
+  await expect(dialog(page, "Money left")).toBeHidden()
   await expect(card(page, "Income this month")).toContainText("₹5,000")
   await expect(card(page, "Income this month")).toContainText("1 income entry")
   await expect(card(page, "Spent this month")).toContainText("₹650")
