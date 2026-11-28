@@ -261,6 +261,10 @@ test("kill switch: the self-unregistering worker clears caches and unregisters",
   await cdp.send("ServiceWorker.enable")
   page.on("console", (m) => swLog.push(`${Date.now() - t0}ms console ${m.text()}`))
   page.on("framenavigated", (f) => f === page.mainFrame() && swLog.push(`${Date.now() - t0}ms navigated ${f.url()}`))
+  const short = (u: string) => u.replace("http://localhost:3000", "").slice(0, 60)
+  page.on("request", (r) => swLog.push(`${Date.now() - t0}ms req ${r.resourceType()} ${short(r.url())}`))
+  page.on("requestfinished", (r) => swLog.push(`${Date.now() - t0}ms done ${short(r.url())}`))
+  page.on("requestfailed", (r) => swLog.push(`${Date.now() - t0}ms FAILED ${short(r.url())} ${r.failure()?.errorText}`))
 
   await page.goto("/sign-in")
   swLog.push(`${Date.now() - t0}ms on sign-in; controller=${await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? "none")}`)
@@ -282,9 +286,20 @@ test("kill switch: the self-unregistering worker clears caches and unregisters",
       })
       .catch((e) => String(e))
     console.log(`KILL-SWITCH DIAG\n${swLog.join("\n")}\nstate ${state}`)
+    // Does the waiting kill switch activate once this tab leaves the page?
+    swLog.length = 0
+    await page.goto("/offline").catch((e) => swLog.push(`goto offline: ${e}`))
+    await page.waitForTimeout(4000)
+    const after = await page
+      .evaluate(async () => {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        return JSON.stringify({ regs: regs.map((r) => ({ w: r.waiting?.scriptURL, a: r.active?.scriptURL })), caches: await caches.keys() })
+      })
+      .catch((e) => String(e))
+    console.log(`KILL-SWITCH AFTER-LEAVE\n${swLog.join("\n")}\nstate ${after}`)
     throw error
   }
-  console.log(`KILL-SWITCH OK ${swLog.filter((l) => / (activat|redundant)/.test(l)).slice(-4).join(" | ")}`)
+  console.log(`KILL-SWITCH OK\n${swLog.join("\n")}`)
   await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0)
   await expect.poll(() => page.evaluate(async () => (await caches.keys()).length)).toBe(0)
 })
