@@ -23,6 +23,7 @@ import { Screen } from "@/components/screen";
 import { useToast } from "@/components/toast";
 import { money, shortDateInZone, trendText } from "@/lib/income-format";
 import { NETWORK_ERROR, useIncome } from "@/lib/income-store";
+import { explainFailure } from "@/lib/use-save";
 import { getSupabase } from "@/lib/supabase";
 import { TOUCH_TARGET, colors, fontFamily, fontSize, radius, spacing, text } from "@/theme";
 
@@ -96,7 +97,7 @@ function IncomeContent({ data }: { data: IncomePageData }) {
               style: "destructive",
               onPress: async () => {
                 try {
-                  const r = await setAccountArchived(getSupabase(), { id: account.id, archived: true });
+                  const r = await explainFailure(await setAccountArchived(getSupabase(), { id: account.id, archived: true }));
                   toast.show(r.message);
                   if (r.status === "success") void refresh();
                 } catch {
@@ -113,7 +114,7 @@ function IncomeContent({ data }: { data: IncomePageData }) {
   return (
     <>
       <View style={styles.actions}>
-        <Button label="Add income" icon={Plus} onPress={() => router.push({ pathname: "/sheets/transaction", params: { type: "income" } })} />
+        <Button label="Add income" icon={Plus} onPress={() => router.push({ pathname: "/add", params: { type: "income" } })} />
         <Button label="Add bank account" variant="secondary" icon={Plus} onPress={() => router.push({ pathname: "/sheets/account", params: { kind: "bank" } })} />
       </View>
 
@@ -154,7 +155,7 @@ function IncomeContent({ data }: { data: IncomePageData }) {
           <View style={styles.empty}>
             <Text style={text.label}>No income recorded yet</Text>
             <Text style={text.bodySmall}>Your sources appear here with this month’s and this year’s income.</Text>
-            <Button label="Add income" icon={Plus} onPress={() => router.push({ pathname: "/sheets/transaction", params: { type: "income" } })} />
+            <Button label="Add income" icon={Plus} onPress={() => router.push({ pathname: "/add", params: { type: "income" } })} />
           </View>
         ) : (
           view.sourceRows.map(({ source, monthMinor, yearMinor, linked, onlyVoided }) => (

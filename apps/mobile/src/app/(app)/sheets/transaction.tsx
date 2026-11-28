@@ -44,8 +44,9 @@ const isType = (v: string): v is EntryType => v === "expense" || v === "income" 
 const REFUND_TYPE = { value: "refund", label: "Refund" } as const;
 
 /**
- * Add transaction (bottom sheet, design-spec §6) for expenses, income and transfers, or
- * Edit (with `id`): same fields and rules as the web form, saved through the shared writer.
+ * Edit (with `id`) and recurring confirm (with `ruleId`), as a bottom sheet (design-spec §6):
+ * same fields and rules as the web form, saved through the shared writer. New entries open the
+ * full-screen Add (`/add`, Sprint 13b PR 2); this sheet is replaced in PR 3.
  */
 export default function TransactionSheet() {
   const params = useLocalSearchParams<{ type?: string; id?: string; accountId?: string; ruleId?: string }>();

@@ -60,6 +60,8 @@ export type TransactionsContext = {
   categories: LedgerCategory[]
   /** For fast entry: a new expense starts from the account of the latest expense. */
   lastExpenseAccountId: string | null
+  /** The latest expense's category, shown first on the phone's Add (may be archived: check before use). */
+  lastExpenseCategoryId: string | null
   /** Whether the person has any entry at all (empty state vs "nothing matches"). */
   hasEntries: boolean
 }

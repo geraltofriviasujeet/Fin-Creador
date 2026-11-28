@@ -31,7 +31,7 @@ import { dsText, mobile, spacing } from "@/theme";
 // Home's sections (design-spec §5). Every figure comes from HomeData (packages/api buildHome);
 // amounts go through AmountText / formatAmount, dates through the domain formatters.
 
-const addSheet = (type: "expense" | "income" | "transfer"): Href => ({ pathname: "/sheets/transaction", params: { type } });
+const addSheet = (type: "expense" | "income" | "transfer"): Href => ({ pathname: "/add", params: { type } });
 
 export function HeroCard({ home }: { home: HomeData }) {
   const hero = heroText(home);

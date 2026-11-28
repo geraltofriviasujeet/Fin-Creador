@@ -65,7 +65,7 @@ function input({
 }): HomeInput {
   const context: TransactionsContext = {
     today, currency: "INR", timeZone: "Asia/Kolkata", accounts, loanAccounts: [], cardAccounts: [], categories,
-    lastExpenseAccountId: null, hasEntries,
+    lastExpenseAccountId: null, lastExpenseCategoryId: null, hasEntries,
   }
   return {
     now,

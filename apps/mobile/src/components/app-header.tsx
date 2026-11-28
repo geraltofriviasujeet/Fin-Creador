@@ -25,7 +25,7 @@ export function AppHeader() {
           onPress={() => toast.show(comingSoonMessage("Notifications"))}
         />
         <Button label="Settings" variant="secondary" icon={Settings} iconOnly onPress={() => router.push("/settings")} />
-        <Button label="Add transaction" icon={Plus} iconOnly onPress={() => router.push({ pathname: "/sheets/transaction", params: { type: "expense" } })} />
+        <Button label="Add transaction" icon={Plus} iconOnly onPress={() => router.push({ pathname: "/add", params: { type: "expense" } })} />
       </View>
     </View>
   );

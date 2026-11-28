@@ -1,4 +1,4 @@
-import { type SpendLimit, type WriteResult, removeSpendLimit, saveSpendLimit, spendLimitLabel } from "@fin-creador/api";
+import { type SpendLimit, removeSpendLimit, saveSpendLimit, spendLimitLabel } from "@fin-creador/api";
 import { minorToInputString } from "@fin-creador/domain";
 import {
   SPEND_LIMIT_MAX_CUSTOM_DAYS,
@@ -18,8 +18,6 @@ import { Sheet } from "@/components/income/sheet";
 import { Segmented } from "@/components/segmented";
 import { TextField } from "@/components/text-field";
 import { TransactionsGate } from "@/components/transactions/transactions-gate";
-import { backendUnreachable } from "@/lib/home-data";
-import { NETWORK_ERROR } from "@/lib/income-store";
 import { useTransactions } from "@/lib/transactions-store";
 import { useSave } from "@/lib/use-save";
 import { getSupabase } from "@/lib/supabase";
@@ -31,7 +29,7 @@ import { colors, fontFamily, spacing, text } from "@/theme";
 // period (1 day, 1 week, 1 month or a custom 2–365 days) and an amount; Remove with a confirm
 // step. The shared schema checks the form here and the shared writer checks it again; the
 // database sets the currency and the period's first day. A failed save (offline included)
-// keeps everything typed. Sheet handles safe areas and keeps the fields above the keyboard.
+// keeps everything typed; useSave says "Check your connection" when the phone is offline. Sheet handles safe areas and keeps the fields above the keyboard.
 
 export const SPEND_LIMIT_DESCRIPTION =
   "One cap for everyday spending. Bills, EMIs, card payments and transfers don't count. Safe to spend shows what's left for each day.";
@@ -40,16 +38,6 @@ export const SPEND_LIMIT_DESCRIPTION =
 function per(period: SpendLimitPeriod, days: string): string {
   if (period !== "custom") return `each ${period}`;
   return /^\d{1,3}$/.test(days.trim()) ? `every ${Number(days)} days` : "in each period";
-}
-
-/**
- * Runs a shared writer; if it fails because the phone can't reach the server, says so. Offline,
- * the writers' session check fails first and would otherwise read "Your session has ended".
- */
-async function write(run: () => Promise<WriteResult>): Promise<WriteResult> {
-  const result = await run();
-  if (result.status === "error" && (await backendUnreachable())) return { status: "error", message: NETWORK_ERROR };
-  return result;
 }
 
 export default function SpendLimitSheet() {
@@ -113,7 +101,7 @@ function SpendLimitForm({ limit, currency }: { limit: SpendLimit | null; currenc
       return;
     }
     setCheckErrors({});
-    void save(() => write(() => saveSpendLimit(getSupabase(), values)));
+    void save(() => saveSpendLimit(getSupabase(), values));
   }
 
   if (confirming && limit) {
@@ -124,7 +112,7 @@ function SpendLimitForm({ limit, currency }: { limit: SpendLimit | null; currenc
           Remove your limit of <Text style={styles.strong}>{spendLimitLabel(limit)}</Text>? Safe to spend goes back to what you can spend each day after
           your bills.
         </Text>
-        <Button label={busy ? "Removing…" : "Remove limit"} fullWidth loading={busy} onPress={() => void save(() => write(() => removeSpendLimit(getSupabase())))} />
+        <Button label={busy ? "Removing…" : "Remove limit"} fullWidth loading={busy} onPress={() => void save(() => removeSpendLimit(getSupabase()))} />
         <Button label="Keep limit" variant="secondary" fullWidth disabled={busy} onPress={() => setConfirming(false)} />
       </View>
     );

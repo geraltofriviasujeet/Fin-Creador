@@ -16,7 +16,7 @@ describe("tab routes", () => {
     expect(tabForRoute(undefined)).toBe("home");
   });
 
-  it("opens the existing add sheet on Expense", () => {
-    expect(ADD_ENTRY).toEqual({ pathname: "/sheets/transaction", params: { type: "expense" } });
+  it("opens the full-screen Add on Expense", () => {
+    expect(ADD_ENTRY).toEqual({ pathname: "/add", params: { type: "expense" } });
   });
 });

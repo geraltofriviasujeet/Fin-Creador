@@ -29,7 +29,7 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
     loadCategories(),
     supabase
       .from("transactions")
-      .select("account_id")
+      .select("account_id, category_id")
       .eq("type", "expense")
       .is("voided_at", null)
       .order("created_at", { ascending: false })
@@ -104,6 +104,8 @@ export async function loadTransactionsContext(supabase: UserClient): Promise<Tra
       categories,
       // Capitalised loan interest is an expense on a loan account: never offered as a default.
       lastExpenseAccountId: accounts.some((a) => a.id === lastExpenseRes.data?.account_id) ? (lastExpenseRes.data?.account_id ?? null) : null,
+      // Add puts the latest expense's category first among its tiles (13b; same query).
+      lastExpenseCategoryId: lastExpenseRes.data?.category_id ?? null,
       hasEntries: anyEntryRes.data !== null,
     },
   }

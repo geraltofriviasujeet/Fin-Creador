@@ -30,6 +30,7 @@ import { useToast } from "@/components/toast";
 import { EntryIcon } from "@/components/transactions/entry-icon";
 import { TransactionsGate } from "@/components/transactions/transactions-gate";
 import { NETWORK_ERROR } from "@/lib/income-store";
+import { explainFailure } from "@/lib/use-save";
 import { useRecurringView } from "@/lib/recurring";
 import { getSupabase } from "@/lib/supabase";
 import { useTransactions } from "@/lib/transactions-store";
@@ -92,7 +93,7 @@ function RecurringContent() {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await run();
+      const r = await explainFailure(await run());
       toast.show(r.message);
       if (r.status === "success") void refresh();
     } catch {

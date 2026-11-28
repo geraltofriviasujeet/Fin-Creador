@@ -89,8 +89,11 @@ link).
 ### Add
 
 - Full screen. Expense / Income / Transfer segmented control.
-- Large amount; 4×2 category tiles with icons.
-- "Paid from" row showing the balance before → after.
+- Large amount; 4×2 category tiles with icons (the person's order, last used first, then
+  More).
+- "Paid from" row showing the balance before → after; it opens an account picker with each
+  balance. A red runs-short banner when the draft would leave the account short for a bill
+  before the next income (information only).
 - Today and Add a note; number keypad.
 - One primary button: "Save ₹<amount> expense".
 

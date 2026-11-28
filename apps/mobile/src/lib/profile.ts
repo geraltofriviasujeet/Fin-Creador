@@ -7,6 +7,8 @@ import {
 } from "@fin-creador/api";
 import { profileUpdateSchema } from "@fin-creador/schemas";
 import { type FormState, validate } from "./form-state";
+import { backendUnreachable } from "./home-data";
+import { NETWORK_ERROR } from "./income-store";
 import { getSupabase } from "./supabase";
 
 // Same rules as apps/web/app/(app)/settings: shared schema, the five granted columns,
@@ -29,7 +31,10 @@ export async function saveProfile(input: ProfileFormValues): Promise<FormState> 
 
   const supabase = getSupabase();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { status: "error", message: "Your session has ended. Please sign in again." };
+  if (!auth.user) {
+    // Offline, the session check fails too: say so rather than "Your session has ended".
+    return { status: "error", message: (await backendUnreachable()) ? NETWORK_ERROR : "Your session has ended. Please sign in again." };
+  }
 
   const { data, error } = await supabase
     .from("profiles")
