@@ -1,4 +1,4 @@
-import { type Page, expect, test } from "@playwright/test";
+import { type Locator, type Page, expect, test } from "@playwright/test";
 import { dayHeading, monthLabel, saveAccount } from "@fin-creador/api";
 import { addDays, monthRange, previousMonthRange } from "@fin-creador/domain";
 import { type Demo, demoClient, seedActivity, seedNormal } from "./demo-data";
@@ -8,7 +8,8 @@ import { createConfirmedUser } from "./demo-user";
 // Supabase, with a fresh demo user per test (demo data only, see seedActivity). Month chips and
 // the picker, Money in / Money out with net and savings rate, the chips and More filters, day
 // groups with day totals, Edited / Voided tags, Load more, search over all time, and the empty,
-// no-matches and offline states. Screenshots for review go to e2e-screenshots (CI artifact).
+// no-matches and offline states. PR 5: swipe a row for Edit and Void, and the Import UPI sheet.
+// Screenshots for review go to e2e-screenshots (CI artifact).
 
 const SHOTS = "e2e-screenshots";
 const SUPABASE = /^https?:\/\/(127\.0\.0\.1|localhost):54321\//;
@@ -47,6 +48,33 @@ async function signIn(page: Page, email: string, password: string) {
 const tab = (page: Page, name: string) => page.getByRole("tablist", { name: "Main" }).getByRole("tab", { name, exact: true });
 // Expo web keeps other tabs mounted under the current one: scope to Activity.
 const activity = (page: Page) => page.getByTestId("activity-screen");
+
+/** A finger swipe to the left across a row (touch events, as on a phone). */
+async function swipeLeft(page: Page, row: Locator) {
+  const box = await row.boundingBox();
+  if (!box) throw new Error("row not on screen");
+  const y = box.y + box.height / 2;
+  const from = box.x + box.width - 24;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: from, y }] });
+  for (let i = 1; i <= 10; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: from - i * 22, y }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+}
+
+/** Waits until something that slides (a row's actions, a sheet) stops moving. */
+async function settled(locator: Locator) {
+  await expect(locator).toBeInViewport({ ratio: 1 });
+  let last = "";
+  await expect
+    .poll(async () => {
+      const now = JSON.stringify(await locator.boundingBox());
+      const same = now === last;
+      last = now;
+      return same;
+    }, { intervals: [100] })
+    .toBe(true);
+}
 
 async function shot(page: Page, name: string) {
   await page.evaluate(() => document.fonts.ready);
@@ -108,6 +136,9 @@ test("a month with data: tiles, day groups and totals, tags, Load more, chips, M
   await a.getByRole("button", { name: "Load more", exact: true }).click();
   await expect(a.getByRole("button", { name: /^Dinner, .+, Voided, not counted, Reason: Entered twice, Money out, ₹900$/ })).toBeVisible();
   await expect(a.getByRole("button", { name: /^Salary,/ })).toHaveCount(0);
+  // Every day is loaded now, so each has its total: the 5th's teas, and ₹0 for the 4th (only the voided dinner).
+  await expect(a.getByRole("heading", { name: `${day(5)}. Money out ₹1,000`, exact: true })).toBeVisible();
+  await expect(a.getByRole("heading", { name: `${day(4)}. No money in or out`, exact: true })).toBeVisible();
   await a.getByRole("button", { name: /^Dinner,/ }).scrollIntoViewIfNeeded();
   await shot(page, "13b-activity-filters");
 
@@ -188,5 +219,58 @@ test("offline: the list stays with the time it was loaded; another month offline
   await page.unroute(SUPABASE);
   await a.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(a.getByRole("heading", { name: /^Nothing in / })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("swipe a row for Edit and Void; Import UPI opens the web's import page", async ({ page }) => {
+  const errors = collectErrors(page);
+  const { email, password } = await newUser("activity-swipe", (d) => seedNormal(d));
+  await signIn(page, email, password);
+  await tab(page, "Activity").click();
+  const a = activity(page);
+  const groceries = a.getByRole("button", { name: /^Groceries, .+, Money out, ₹1,200$/ });
+  const edit = a.getByRole("button", { name: "Edit", exact: true });
+  const voidAction = a.getByRole("button", { name: "Void", exact: true });
+  await expect(groceries).toBeVisible();
+  // A closed row has no hidden buttons.
+  await expect(voidAction).toHaveCount(0);
+
+  await swipeLeft(page, groceries);
+  await settled(voidAction);
+  await expect(edit).toBeInViewport({ ratio: 1 });
+  await shot(page, "13b-activity-swipe");
+
+  // Tapping the open row closes it; it doesn't open the entry.
+  await groceries.click();
+  await expect(voidAction).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Void expense", exact: true })).toHaveCount(0);
+
+  // Edit opens Add on that entry.
+  await swipeLeft(page, groceries);
+  await edit.click();
+  await expect(page.getByRole("heading", { name: "Edit expense", exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Edit expense", exact: true })).toHaveCount(0);
+
+  // Void opens the entry at its void step (reason, one-way warning); voiding takes it off the list.
+  await swipeLeft(page, groceries);
+  await voidAction.click();
+  await expect(page.getByText(/^Void this expense\? It stops counting/)).toBeVisible();
+  await page.getByLabel("Reason (optional)").fill("Entered twice");
+  await page.getByRole("button", { name: "Void expense", exact: true }).click();
+  await expect(a.getByRole("button", { name: /^Groceries,/ })).toHaveCount(0);
+
+  // Import UPI: a sheet, and Open on the web opens the web's import page (stubbed: no web app here).
+  await page.context().route(/^http:\/\/localhost:3000\//, (route) => route.fulfill({ contentType: "text/html", body: "<title>Import UPI statement</title>" }));
+  await a.getByRole("button", { name: "Import UPI", exact: true }).click();
+  const openWeb = page.getByRole("button", { name: "Open on the web", exact: true });
+  await expect(page.getByText("Import UPI is on the web for now", { exact: true })).toBeVisible();
+  await settled(openWeb);
+  await shot(page, "13b-activity-import-upi");
+  const popup = page.waitForEvent("popup");
+  await openWeb.click();
+  await (await popup).waitForURL(/\/transactions\/import\/upi$/);
+  await expect(openWeb).toHaveCount(0);
+
   expect(errors).toEqual([]);
 });

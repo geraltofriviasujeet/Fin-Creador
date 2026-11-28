@@ -24,12 +24,11 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native
 import { ActivityHeader, ActivitySkeleton, DayGroup, Summary } from "@/components/activity/parts";
 import { MonthPicker, MoreFilters } from "@/components/activity/sheets";
 import { Button, Chip, EmptyState, OfflineBanner, WarningBanner } from "@/components/ds";
+import { ImportUpiSheet } from "@/components/import-upi-sheet";
 import { Screen } from "@/components/screen";
-import { useToast } from "@/components/toast";
 import { visibleMonthChips } from "@/lib/activity-text";
 import { useTransactions } from "@/lib/transactions-store";
 import { useActivityList } from "@/lib/use-activity-list";
-import { comingSoonMessage } from "@/navigation";
 import { dsText, mobile, spacing } from "@/theme";
 
 /**
@@ -41,7 +40,7 @@ import { dsText, mobile, spacing } from "@/theme";
  */
 export default function ActivityScreen() {
   const { state, refresh } = useTransactions();
-  const toast = useToast();
+  const [upi, setUpi] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [f, setF] = useState<ActivityFilters | null>(null);
   const data = state.status === "ready" ? state.data : null;
@@ -67,8 +66,9 @@ export default function ActivityScreen() {
       <ActivityHeader
         query={filters?.q ?? ""}
         onSearch={(q) => filters && setF({ ...filters, q })}
-        onImportUpi={() => toast.show(comingSoonMessage("Import UPI"))}
+        onImportUpi={() => setUpi(true)}
       />
+      <ImportUpiSheet visible={upi} onClose={() => setUpi(false)} />
       <Screen aboveTabBar refreshControl={<RefreshControl refreshing={pulling} onRefresh={onRefresh} tintColor={mobile.colors.ink} />}>
         {body}
       </Screen>
@@ -81,6 +81,7 @@ function Activity({ data, filters: f, setFilters }: { data: TransactionsContext;
   const { state, version } = useTransactions();
   const { list, reload, loadMore } = useActivityList(f, data.currency, version);
   const [sheet, setSheet] = useState<"month" | "more" | null>(null);
+  const [swipedId, setSwipedId] = useState<string | null>(null);
   const { today, currency } = data;
   const lookup = useMemo(() => ledgerLookup(data), [data]);
   const chips = useMemo(() => monthChips(today), [today]);
@@ -196,6 +197,16 @@ function Activity({ data, filters: f, setFilters }: { data: TransactionsContext;
               currency={currency}
               lookup={lookup}
               onOpen={(entry) => router.push({ pathname: "/sheets/entry", params: { id: entry.id } })}
+              onEdit={(entry) => {
+                setSwipedId(null);
+                router.push({ pathname: "/add", params: { id: entry.id } });
+              }}
+              onVoid={(entry) => {
+                setSwipedId(null);
+                router.push({ pathname: "/sheets/entry", params: { id: entry.id, step: "void" } });
+              }}
+              swipedId={swipedId}
+              onSwipe={setSwipedId}
             />
           ))}
           <View style={styles.footer}>

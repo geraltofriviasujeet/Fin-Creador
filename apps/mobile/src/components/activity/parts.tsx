@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AmountText, Card, IconTile, Tag } from "@/components/ds";
+import { SWIPE_ACCESSIBILITY_ACTIONS, SwipeRow } from "@/components/activity/swipe-row";
 import { categoryIcon } from "@/components/transactions/entry-icon";
 import { dayTotalLabel, dayTotalText, summaryText } from "@/lib/activity-text";
 import { dsText, fontFamily, mobile, spacing } from "@/theme";
@@ -147,10 +148,16 @@ type DayProps = {
   currency: string;
   lookup: Lookup;
   onOpen: (entry: LedgerItem) => void;
+  /** The swipe (and accessibility) actions: Edit opens Add, Void opens the entry at its void step. */
+  onEdit: (entry: LedgerItem) => void;
+  onVoid: (entry: LedgerItem) => void;
+  /** The one row whose swipe actions are showing. */
+  swipedId: string | null;
+  onSwipe: (id: string | null) => void;
 };
 
 /** One day: its heading and total (left out while the day may continue on the next page), then its entries. */
-export function DayGroup({ date, today, rows, totals, currency, lookup, onOpen }: DayProps) {
+export function DayGroup({ date, today, rows, totals, currency, lookup, onOpen, onEdit, onVoid, swipedId, onSwipe }: DayProps) {
   const heading = dayHeading(date, today);
   const total = dayTotalText(totals, currency);
   return (
@@ -160,13 +167,24 @@ export function DayGroup({ date, today, rows, totals, currency, lookup, onOpen }
         {total ? <Text style={styles.dayTotal}>{total}</Text> : null}
       </View>
       {rows.map((entry) => (
-        <EntryRow key={entry.id} entry={entry} lookup={lookup} onPress={() => onOpen(entry)} />
+        <SwipeRow
+          key={entry.id}
+          enabled={!entry.voided}
+          open={swipedId === entry.id}
+          onOpenChange={(open) => onSwipe(open ? entry.id : null)}
+          onEdit={() => onEdit(entry)}
+          onVoid={() => onVoid(entry)}
+        >
+          {(guard) => <EntryRow entry={entry} lookup={lookup} onPress={guard(() => onOpen(entry))} onEdit={() => onEdit(entry)} onVoid={() => onVoid(entry)} />}
+        </SwipeRow>
       ))}
     </Card>
   );
 }
 
-function EntryRow({ entry, lookup, onPress }: { entry: LedgerItem; lookup: Lookup; onPress: () => void }) {
+type RowProps = { entry: LedgerItem; lookup: Lookup; onPress: () => void; onEdit: () => void; onVoid: () => void };
+
+function EntryRow({ entry, lookup, onPress, onEdit, onVoid }: RowProps) {
   const title = entryTitle(entry, lookup);
   const subtitle = `${entryKindLabel(entry, lookup)} · ${accountChipText(entry, lookup)}`;
   const category = entry.categoryId ? lookup.categories.get(entry.categoryId) : undefined;
@@ -185,7 +203,14 @@ function EntryRow({ entry, lookup, onPress }: { entry: LedgerItem; lookup: Looku
     .filter(Boolean)
     .join(", ");
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={spoken} accessibilityHint="Opens details, edit, void and history" onPress={onPress}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={spoken}
+      accessibilityHint={entry.voided ? "Opens details and history" : "Opens details, edit, void and history. Swipe left, or use actions, for Edit and Void."}
+      accessibilityActions={entry.voided ? undefined : [...SWIPE_ACCESSIBILITY_ACTIONS]}
+      onAccessibilityAction={(e) => (e.nativeEvent.actionName === "edit" ? onEdit() : e.nativeEvent.actionName === "void" ? onVoid() : undefined)}
+      onPress={onPress}
+    >
       {({ pressed }) => (
         <View style={[styles.row, pressed && styles.rowPressed]}>
           <IconTile icon={icon} tint={TINT[entry.type]} />

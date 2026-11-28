@@ -48,8 +48,12 @@ describe("day totals", () => {
     expect(dayTotalLabel({ inMinor: 80_000_00, outMinor: 1_200_50 }, "INR")).toBe("Money in ₹80,000, money out ₹1,200.50");
   });
 
-  it("is empty for a transfers-only day or a day still loading", () => {
-    expect(dayTotalText({ inMinor: 0, outMinor: 0 }, "INR")).toBe("");
+  it("shows ₹0 for a whole day of transfers or voided entries (owner, PR 5)", () => {
+    expect(dayTotalText({ inMinor: 0, outMinor: 0 }, "INR")).toBe("₹0");
+    expect(dayTotalLabel({ inMinor: 0, outMinor: 0 }, "INR")).toBe("No money in or out");
+  });
+
+  it("is empty for a day still loading", () => {
     expect(dayTotalText(null, "INR")).toBe("");
     expect(dayTotalLabel(null, "INR")).toBe("");
   });
