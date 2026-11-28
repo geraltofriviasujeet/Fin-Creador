@@ -241,6 +241,7 @@ test("swipe a row for Edit and Void; Import UPI opens the web's import page", as
   await shot(page, "13b-activity-swipe");
 
   // Tapping the open row closes it; it doesn't open the entry.
+  await settled(groceries);
   await groceries.click();
   await expect(voidAction).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Void expense", exact: true })).toHaveCount(0);
@@ -249,8 +250,10 @@ test("swipe a row for Edit and Void; Import UPI opens the web's import page", as
   await swipeLeft(page, groceries);
   await edit.click();
   await expect(page.getByRole("heading", { name: "Edit expense", exact: true })).toBeVisible();
-  await page.goBack();
+  // Add's own close button (a quick browser Back can race expo-router's push on the web).
+  await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Edit expense", exact: true })).toHaveCount(0);
+  await settled(groceries);
 
   // Void opens the entry at its void step (reason, one-way warning); voiding takes it off the list.
   await swipeLeft(page, groceries);

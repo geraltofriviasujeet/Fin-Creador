@@ -13,8 +13,8 @@ const ACTION_WIDTH = 76;
 const OPEN_X = -ACTION_WIDTH * 2;
 /** A horizontal move this far (and clearly more sideways than up or down) starts a swipe. */
 const START_SLOP = 10;
-/** A click that ends a drag on Expo web arrives right after the release: ignore it. */
-const TAP_AFTER_SWIPE_MS = 350;
+/** A click that ends a mouse drag on Expo web arrives within a few ms of the release: ignore it. */
+const TAP_AFTER_SWIPE_MS = 100;
 
 type Props = {
   /** False for a voided entry: it can't be edited or voided. */
