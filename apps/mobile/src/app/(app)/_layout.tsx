@@ -37,6 +37,7 @@ export default function AppLayout() {
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
       <Stack.Screen name="income" options={{ title: "Income" }} />
       <Stack.Screen name="recurring" options={{ title: "Recurring" }} />
+      <Stack.Screen name="budgets" options={{ title: "Budgets" }} />
       <Stack.Screen name="add" options={ADD} />
       <Stack.Screen name="sheets/entry" options={SHEET} />
       <Stack.Screen name="sheets/recurring-rule" options={SHEET} />
@@ -47,6 +48,7 @@ export default function AppLayout() {
       <Stack.Screen name="sheets/archived" options={SHEET} />
       <Stack.Screen name="sheets/cash" options={SHEET} />
       <Stack.Screen name="sheets/spend-limit" options={SHEET} />
+      <Stack.Screen name="sheets/budget" options={SHEET} />
     </Stack>
     </TransactionsProvider>
     </IncomeDataProvider>

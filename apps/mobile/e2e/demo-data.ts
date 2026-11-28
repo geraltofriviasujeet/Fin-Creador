@@ -46,6 +46,8 @@ async function ids(client: UserClient) {
   const expense = (icon: string) => categories?.find((c) => c.kind === "expense" && c.icon === icon)?.id ?? ""
   return {
     food: expense("food"),
+    shopping: expense("shopping"),
+    travel: expense("travel"),
     bills: expense("bills"),
     home: expense("home"),
     salary: categories?.find((c) => c.kind === "income" && c.source_type === "salary")?.id ?? "",
@@ -165,6 +167,35 @@ export async function seedShort(demo: Demo) {
 export async function seedLimit(demo: Demo) {
   await seedNormal(demo);
   ok(await saveSpendLimit(demo.client, { period: "week", amount: "14000" }), "Set spend limit");
+}
+
+async function addExpense(demo: Demo, e: { amount: string; categoryId: string; accountId: string; note: string }) {
+  ok(
+    await saveTransaction(demo.client, {
+      type: "expense", amount: e.amount, categoryId: e.categoryId, accountId: e.accountId, counterAccountId: "", paymentMode: "", refundOfId: "",
+      occurredOn: demo.today, note: e.note, idempotencyKey: newRequestKey(),
+    }),
+    `Add ${e.note}`,
+  );
+}
+
+/**
+ * Plan (13c PR 2): the normal month plus, today from HDFC Bank, dinner ₹3,900 (Food & dining
+ * ₹5,100 of ₹6,000: 85%, near limit), shoes ₹3,600 against a Shopping budget of ₹3,000 (120%,
+ * over budget) and a ₹500 train ticket against a Travel budget of ₹4,000 (12%). → All budgets
+ * ₹9,200 spent of ₹13,000, ₹3,800 left. Net worth: HDFC Bank ₹38,500 − ₹9,200 = ₹29,300 plus
+ * Cash ₹3,500 = ₹32,800, no liabilities.
+ */
+export async function seedPlan(demo: Demo) {
+  await seedNormal(demo);
+  const id = await ids(demo.client);
+  const hdfc = id.account("HDFC Bank");
+  const month = demo.today.slice(0, 7);
+  await addExpense(demo, { amount: "3900", categoryId: id.food, accountId: hdfc, note: "Dinner" });
+  ok(await setCategoryBudget(demo.client, { categoryId: id.shopping, month, amount: "3000" }), "Set shopping budget");
+  await addExpense(demo, { amount: "3600", categoryId: id.shopping, accountId: hdfc, note: "Shoes" });
+  ok(await setCategoryBudget(demo.client, { categoryId: id.travel, month, amount: "4000" }), "Set travel budget");
+  await addExpense(demo, { amount: "500", categoryId: id.travel, accountId: hdfc, note: "Train ticket" });
 }
 
 /**
