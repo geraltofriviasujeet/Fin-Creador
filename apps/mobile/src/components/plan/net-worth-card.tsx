@@ -66,9 +66,7 @@ function NetWorthBody({ state, retry }: { state: LoadedState<NetWorthData>; retr
   return (
     <Card>
       <SectionProblem state={state} retry={retry} timeZone={timeZone} />
-      <Text style={dsText.caption}>
-        What you own minus what you owe, as of {fullDate(view.today)} ({timeZone} time), in {view.currency}.
-      </Text>
+      <Text style={dsText.caption}>What you own minus what you owe, today.</Text>
       {view.empty ? (
         <>
           <Text style={dsText.body}>Add an account, a holding or a loan to see your net worth.</Text>

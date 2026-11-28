@@ -5,21 +5,23 @@ import { ChevronRight, Plus } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AmountText, Button, Card, ProgressBar, SectionHeader, Tag } from "@/components/ds";
-import { budgetBadge, budgetBarLabel, budgetMonthHeading, budgetsSummaryText, leftWord } from "@/lib/plan-text";
+import { budgetBadge, budgetBarLabel, budgetBarTone, budgetMonthHeading, budgetsSummaryText, leftWord } from "@/lib/plan-text";
 import type { LoadedState } from "@/lib/use-loaded";
 import { dsText, fontFamily, mobile, spacing } from "@/theme";
 import { SectionProblem, SectionSkeleton, SectionUnavailable } from "./section-state";
 
 // Budgets on the phone (Sprint 13c PR 2): the Plan card and the rows of the Budgets screen, from
-// the web Goals page's view (buildGoalsView) and planBudgets. Bars turn the warning colour at the
-// domain's 80% (budgetStatus), not the design spec's 90%, so web and phone agree; the level is
-// also said in words. The even-spend mark shows where spending would be if spread evenly over
+// the web Goals page's view (buildGoalsView) and planBudgets. Bars turn amber at the domain's 80%
+// (budgetStatus), not the design spec's 90%, so web and phone agree, and red only once over
+// budget (owner, 13c PR 3); the level is also said in words. The even-spend mark shows where spending would be if spread evenly over
 // the month (this month only). Exact amounts, as the web shows them.
 
 /** Opens the budget sheet: a category's budget (from that month), or a new one. */
 export function budgetSheet(month: string, categoryId?: string) {
   return { pathname: "/sheets/budget" as const, params: categoryId ? { month: month.slice(0, 7), categoryId } : { month: month.slice(0, 7) } };
 }
+
+const BAR_COLOR = { ok: mobile.colors.forest, caution: mobile.colors.cautionFill, over: mobile.colors.warning } as const;
 
 export function BudgetBar({ name, status, marker }: { name: string; status: BudgetStatus; marker?: number }) {
   return (
@@ -28,7 +30,7 @@ export function BudgetBar({ name, status, marker }: { name: string; status: Budg
       label={budgetBarLabel(name, status)}
       marker={marker}
       warnAt={null}
-      color={status.level === "ok" ? mobile.colors.forest : mobile.colors.warning}
+      color={BAR_COLOR[budgetBarTone(status)]}
     />
   );
 }

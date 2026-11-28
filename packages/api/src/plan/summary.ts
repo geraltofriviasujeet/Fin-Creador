@@ -1,4 +1,4 @@
-import { type BudgetStatus, type IsoDate, evenSpendShare } from "@fin-creador/domain"
+import { type BudgetStatus, type GoalPace, type IsoDate, evenSpendShare, goalPace, localDateTime } from "@fin-creador/domain"
 import type { ShortTermView } from "../cards/view"
 import type { BudgetItem, GoalItem, GoalsView } from "../goals/view"
 import type { InvestmentsView } from "../investments/view"
@@ -38,14 +38,21 @@ export type PlanBudgets = {
   resetCount: number
 }
 
+/**
+ * Budgets in the order to look at them (owner, 13c PR 3): over budget first, then near limit,
+ * then the rest, each by share used (highest first), then by name; budgets in another currency
+ * (no status) last, by name. Used by the Plan card and the Budgets screen alike.
+ */
+export function budgetsByNeed<T extends Pick<BudgetItem, "status" | "category">>(budgets: readonly T[]): T[] {
+  const rank = (b: T) => (b.status ? LEVEL_ORDER[b.status.level] : 3)
+  return [...budgets].sort(
+    (a, b) => rank(a) - rank(b) || (b.status?.usedBps ?? 0) - (a.status?.usedBps ?? 0) || byText(a.category.name, b.category.name),
+  )
+}
+
 export function planBudgets(view: Pick<GoalsView, "today" | "currency" | "budgets" | "total" | "budgetMonth">): PlanBudgets {
   const withStatus = view.budgets.filter((b): b is BudgetItem & { status: BudgetStatus } => b.status !== null)
-  const top = [...withStatus]
-    .sort(
-      (a, b) =>
-        LEVEL_ORDER[a.status.level] - LEVEL_ORDER[b.status.level] || b.status.usedBps - a.status.usedBps || byText(a.category.name, b.category.name),
-    )
-    .slice(0, PLAN_TOP_BUDGETS)
+  const top = budgetsByNeed(withStatus).slice(0, PLAN_TOP_BUDGETS)
   return {
     currency: view.currency,
     month: view.budgetMonth.start,
@@ -68,6 +75,22 @@ export type PlanGoals = {
 
 export function planGoals(view: Pick<GoalsView, "active" | "archived">): PlanGoals {
   return { top: view.active.slice(0, PLAN_TOP_GOALS), count: view.active.length, archivedCount: view.archived.length }
+}
+
+/**
+ * On track or behind (domain goalPace) from the day the goal was added in the person's time
+ * zone. Null without a target date, or when the time zone or the added time can't be read.
+ */
+export function goalPaceOf(item: Pick<GoalItem, "goal">, view: Pick<GoalsView, "today" | "timeZone">): GoalPace | null {
+  if (!view.timeZone) return null
+  const added = new Date(item.goal.createdAt)
+  if (Number.isNaN(added.getTime())) return null
+  try {
+    const { goal } = item
+    return goalPace({ targetMinor: goal.targetMinor, savedMinor: goal.savedMinor, targetDate: goal.targetDate, startedOn: localDateTime(added, view.timeZone).date, today: view.today })
+  } catch {
+    return null
+  }
 }
 
 /** One thing to pay next on the Loans & dues card. */

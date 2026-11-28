@@ -29,3 +29,14 @@ export function useBudgets(month?: string) {
   }, [month]);
   return useLoaded<GoalsView>(load, BUDGETS_ERROR);
 }
+
+export const GOALS_ERROR = "We couldn't load your goals. Please try again.";
+
+/** Goals (13c PR 3): the same view as the budgets (the web Goals page's), loaded on its own. */
+export function useGoalsView() {
+  const load = useCallback(async () => {
+    const r = await loadGoalsData(getSupabase());
+    return r.ok ? { ok: true as const, data: buildGoalsView(r.data) } : r;
+  }, []);
+  return useLoaded<GoalsView>(load, GOALS_ERROR);
+}

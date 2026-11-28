@@ -26,10 +26,10 @@ export default function TabsLayout() {
   );
   return (
     <Tabs tabBar={renderTabBar} screenOptions={{ header: () => <AppHeader />, sceneStyle: { backgroundColor: colors.canvas } }}>
-      {/* Home and Activity draw their own headers (Home: avatar menu, greeting, bell; Activity: Search and Import UPI). */}
+      {/* Home, Activity and Plan draw their own headers (Home: avatar menu, greeting, bell; Activity: Search and Import UPI; Plan: bell and Settings). */}
       <Tabs.Screen name="index" options={{ title: "Home", headerShown: false }} />
       <Tabs.Screen name="activity" options={{ title: "Activity", headerShown: false }} />
-      <Tabs.Screen name="plan" options={{ title: "Plan" }} />
+      <Tabs.Screen name="plan" options={{ title: "Plan", headerShown: false }} />
       <Tabs.Screen name="roma" options={{ title: "Roma" }} />
     </Tabs>
   );

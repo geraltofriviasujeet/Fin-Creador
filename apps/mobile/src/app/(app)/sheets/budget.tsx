@@ -9,7 +9,7 @@ import { Button } from "@/components/button";
 import { FormMessage } from "@/components/form-message";
 import { Sheet } from "@/components/income/sheet";
 import { SelectField } from "@/components/select-field";
-import { TextField } from "@/components/text-field";
+import { MoneyField } from "@/components/money-field";
 import { useBudgets } from "@/lib/plan-data";
 import { budgetMonthOptions } from "@/lib/plan-text";
 import { getSupabase } from "@/lib/supabase";
@@ -125,12 +125,11 @@ function BudgetForm({ view, item, categoryId: wanted }: { view: GoalsView; item?
           searchPlaceholder="Search categories"
         />
       )}
-      <TextField
+      <MoneyField
         label="Monthly budget"
         value={amount}
-        onChangeText={setAmount}
-        keyboardType="decimal-pad"
-        placeholder="0.00"
+        onChange={setAmount}
+        currency={view.currency}
         autoFocus={Boolean(item)}
         error={errors.amount}
         hint={item ? `In ${view.currency}. 0 or blank removes it from that month on.` : `In ${view.currency}.`}

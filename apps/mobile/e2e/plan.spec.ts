@@ -1,15 +1,17 @@
 import { type Page, expect, test } from "@playwright/test";
-import { buildGoalsView, loadGoalsData, loadNetWorthData, monthLabel } from "@fin-creador/api";
-import { formatMoney, netWorth } from "@fin-creador/domain";
-import { type Demo, demoClient, seedPlan } from "./demo-data";
+import { buildGoalsView, fullDate, goalPaceOf, loadGoalsData, loadNetWorthData, monthLabel } from "@fin-creador/api";
+import { addDays, formatDayMonth, formatMoney, netWorth } from "@fin-creador/domain";
+import { type Demo, backdateGoal, demoClient, seedPlan, seedPlanGoals } from "./demo-data";
 import { createConfirmedUser } from "./demo-user";
 
 // Plan tab (13c PR 2) on Expo web at 390px against CI's throwaway local Supabase, with a fresh
 // demo user (seedPlan: Food & dining ₹5,100 of ₹6,000, near limit; Shopping ₹3,600 of ₹3,000,
 // over budget; Travel ₹500 of ₹4,000). Net worth and the budget figures are checked against the
 // shared loaders read as the same user. Then the Budgets screen, the budget sheet (change, a
-// refused amount keeps the input, set a new one, a later month, remove). Screenshots for review
-// go to e2e-screenshots (CI artifact).
+// refused amount keeps the input, set a new one, a later month, remove). 13c PR 3: Goals (the
+// Goals screen and every goal sheet), Bills that repeat (Confirm through Add, Skip, See all) and
+// Recurring's Ended hint (seedPlanGoals, one goal backdated on CI's local database). Screenshots
+// for review go to e2e-screenshots (CI artifact).
 
 const SHOTS = "e2e-screenshots";
 const SUPABASE = /^https?:\/\/(127\.0\.0\.1|localhost):54321\//;
@@ -48,7 +50,12 @@ const budgets = (page: Page) => page.getByTestId("budgets-screen");
 // The sheet's scrolling body: its title row and the form (or the confirm step).
 const sheet = (page: Page, title: string) =>
   page.getByRole("heading", { name: title, exact: true }).locator("xpath=ancestor::div[.//*[@aria-label='Cancel' or @aria-label='Keep budget']][1]");
+const goalsScreen = (page: Page) => page.getByTestId("goals-screen");
 const row = (scope: ReturnType<Page["getByTestId"]>, name: string) => scope.getByRole("button").filter({ has: scope.page().getByText(name, { exact: true }) });
+// The fill colour of a progress bar (its first child), as rgb().
+const barColour = (bar: ReturnType<Page["getByRole"]>) => bar.evaluate((el) => getComputedStyle(el.firstElementChild as Element).backgroundColor);
+const RED = "rgb(194, 65, 45)"; // mobile warning #c2412d: over budget only
+const AMBER = "rgb(168, 106, 0)"; // mobile cautionFill #a86a00: near limit
 const inr = (minor: number) => formatMoney(minor, { currency: "INR" });
 
 async function expectedFigures(demo: Demo) {
@@ -82,6 +89,15 @@ test("Plan: net worth and budgets, the Budgets screen and the budget sheet", asy
   await expect(row(plan(page), "Food & dining").getByText("Near limit", { exact: true })).toBeVisible();
   await expect(plan(page).getByRole("progressbar", { name: "Shopping: 120% used, over budget" })).toBeVisible();
   await expect(plan(page).getByRole("progressbar", { name: "Food & dining: 85% used, near limit" })).toBeVisible();
+  // Red only when over budget; near limit is amber (owner, 13c PR 3). The words say it too.
+  expect(await barColour(plan(page).getByRole("progressbar", { name: "Shopping: 120% used, over budget" }))).toBe(RED);
+  expect(await barColour(plan(page).getByRole("progressbar", { name: "Food & dining: 85% used, near limit" }))).toBe(AMBER);
+  // Plan's header: the title with the bell and Settings, and no add button (the tab bar's + only).
+  await expect(plan(page).getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
+  await expect(plan(page).getByRole("button", { name: "Notifications", exact: true })).toBeVisible();
+  await expect(plan(page).getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add transaction" })).toHaveCount(0);
+  await expect(plan(page).getByText("What you own minus what you owe, today.", { exact: true })).toBeVisible();
   // Over first, then near limit, then the most used.
   const names = await plan(page).getByRole("progressbar").evaluateAll((bars) => bars.map((b) => b.getAttribute("aria-label")?.split(":")[0]));
   expect(names).toEqual(["All budgets", "Shopping", "Food & dining", "Travel"]);
@@ -94,17 +110,27 @@ test("Plan: net worth and budgets, the Budgets screen and the budget sheet", asy
   await expect(budgets(page).getByRole("progressbar", { name: "Travel: 12% used" })).toHaveAttribute("aria-valuetext", /even-spend mark at \d+ percent/);
   await expect(row(budgets(page), "Shopping").getByText("Over budget", { exact: true })).toBeVisible();
   await expect(row(budgets(page), "Food & dining").getByText("Near limit", { exact: true })).toBeVisible();
+  // Over budget first, then near limit, then the rest by share used (not by name).
+  const listed = await budgets(page).getByRole("progressbar").evaluateAll((bars) => bars.map((b) => b.getAttribute("aria-label")?.split(":")[0]));
+  expect(listed).toEqual(["All budgets", "Shopping", "Food & dining", "Travel"]);
+  expect(await barColour(budgets(page).getByRole("progressbar", { name: "Shopping: 120% used, over budget" }))).toBe(RED);
+  expect(await barColour(budgets(page).getByRole("progressbar", { name: "Food & dining: 85% used, near limit" }))).toBe(AMBER);
   await shot(page, "13c-plan-02-budgets");
 
   // 3. Budget sheet: change Food & dining to ₹8,000 (a refused amount keeps the input first).
   await row(budgets(page), "Food & dining").click();
   const food = sheet(page, "Budget for Food & dining");
   await expect(food).toBeVisible();
-  await expect(food.getByLabel("Monthly budget")).toHaveValue("6000");
+  // The amount with Indian grouping beside the ₹ sign, as Add shows it.
+  await expect(food.getByLabel("Monthly budget")).toHaveValue("6,000");
+  await expect(food.getByText("₹", { exact: true })).toBeVisible();
   await shot(page, "13c-plan-03-budget-sheet");
-  await food.getByLabel("Monthly budget").fill("80x");
+  // A refused amount keeps what was typed (only digits and one point can be typed).
+  await food.getByLabel("Monthly budget").fill("99999999999999");
+  await expect(food.getByLabel("Monthly budget")).toHaveValue("99,99,99,99,99,999");
   await food.getByRole("button", { name: "Save budget" }).click();
-  await expect(food.getByLabel("Monthly budget")).toHaveValue("80x");
+  await expect(food.getByText("Amount is too large", { exact: true })).toBeVisible();
+  await expect(food.getByLabel("Monthly budget")).toHaveValue("99,99,99,99,99,999");
   await expect(food).toBeVisible();
   await food.getByLabel("Monthly budget").fill("8000");
   await food.getByRole("button", { name: "Save budget" }).click();
@@ -161,4 +187,115 @@ test("Plan: a section that can't load says so and the others still show", async 
   await page.unroute(SUPABASE);
   await plan(page).getByRole("button", { name: "Retry: your budgets" }).click();
   await expect(plan(page).getByText("1 over budget · 1 near limit", { exact: true })).toBeVisible();
+});
+
+test("Plan: goals and bills that repeat, the Goals screen, goal sheets and Recurring's Ended hint", async ({ page }) => {
+  if (process.env.CI) expect(process.env.MOBILE_E2E_BACKEND, "CI must run these tests against the local Supabase").toBeTruthy();
+  const errors = collectErrors(page);
+  const { email, password } = await createConfirmedUser("plan-goals");
+  const demo = await demoClient(email, password);
+  const { bikeStartedOn } = await seedPlanGoals(demo);
+  backdateGoal(email, "New bike", bikeStartedOn);
+
+  // The pace the shared helper finds for the same user: the bike behind, the trip on track.
+  const loaded = await loadGoalsData(demo.client);
+  if (!loaded.ok) throw new Error("Shared goals loader failed for the demo user");
+  const view = buildGoalsView(loaded.data);
+  const goal = (name: string) => view.active.find((g) => g.goal.name === name)!;
+  expect(goalPaceOf(goal("New bike"), view)).toEqual({ status: "behind", expectedMinor: 40_000_00, shortMinor: 30_000_00 });
+  expect(goalPaceOf(goal("Goa trip"), view)?.status).toBe("on_track");
+  expect(goalPaceOf(goal("Emergency fund"), view)).toBeNull();
+  expect(goal("Goa trip").goal.targetMinor).toBe(40_000_00);
+  expect(goal("New bike").goal.targetMinor).toBe(130_000_00);
+
+  await signIn(page, email, password);
+  await tab(page, "Plan").click();
+
+  // 1. Plan → Goals: the pace in words; Bills that repeat: due chips first, then coming up.
+  await expect(plan(page).getByText("1 behind · 1 on track", { exact: true })).toBeVisible();
+  await expect(row(plan(page), "New bike").getByText("Behind", { exact: true })).toBeVisible();
+  await expect(row(plan(page), "Goa trip").getByText("On track", { exact: true })).toBeVisible();
+  await expect(plan(page).getByText("2 to confirm", { exact: true })).toBeVisible();
+  await expect(plan(page).getByText(`Overdue · ${formatDayMonth(addDays(demo.today, -3))}`, { exact: true })).toBeVisible();
+  await expect(plan(page).getByRole("button", { name: "Confirm Internet", exact: true })).toBeVisible();
+  await expect(plan(page).getByRole("button", { name: "Skip Newspaper, Today", exact: true })).toBeVisible();
+  await expect(plan(page).getByRole("button", { name: /^Electricity, -₹2,400, / })).toBeVisible();
+  await plan(page).getByRole("heading", { name: "Goals", exact: true }).evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await shot(page, "13c-plan-04-goals-bills");
+
+  // 2. Goals screen: rings, saved of target, On track / Behind and how far behind.
+  await plan(page).getByRole("button", { name: "See all goals" }).click();
+  await expect(goalsScreen(page)).toBeVisible();
+  await expect(goalsScreen(page).getByText("₹8,000 of ₹40,000", { exact: true })).toBeVisible();
+  await expect(goalsScreen(page).getByText("₹10,000 of ₹1,30,000", { exact: true })).toBeVisible();
+  await expect(goalsScreen(page).getByText("₹30,000 behind an even pace since you added it", { exact: true })).toBeVisible();
+  await expect(goalsScreen(page).getByRole("progressbar", { name: "New bike: 7% saved" })).toBeVisible();
+  await expect(goalsScreen(page).getByRole("progressbar", { name: "Goa trip: 20% saved" })).toBeVisible();
+  await expect(goalsScreen(page).getByText("Save ₹5,000 a month, assuming 12 months (no target date)", { exact: true })).toBeVisible();
+  // Ask Roma per goal stays hidden until 13d.
+  await expect(goalsScreen(page).getByRole("button", { name: /^Ask Roma/ })).toHaveCount(0);
+  await shot(page, "13c-plan-05-goals");
+
+  // 3. Plan a goal (Other): the amount to save shows as it is typed.
+  await goalsScreen(page).getByRole("button", { name: "Plan a goal", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Plan a goal", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Other", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Diwali gifts");
+  await page.getByLabel("What it's for", { exact: true }).fill("Gifts for the family");
+  await page.getByLabel("Amount", { exact: true }).fill("15000");
+  await expect(page.getByLabel("Amount", { exact: true })).toHaveValue("15,000");
+  await expect(page.getByText("Amount to save", { exact: true })).toBeVisible();
+  await shot(page, "13c-plan-06-add-goal");
+  await page.getByRole("button", { name: "Add goal", exact: true }).click();
+  await expect(page.getByText("Goal added.", { exact: true })).toBeVisible();
+  await expect(goalsScreen(page).getByText("₹0 of ₹15,000", { exact: true })).toBeVisible();
+
+  // 4. Update saved: ₹8,000 → ₹20,000 on the Goa trip.
+  await goalsScreen(page).getByRole("button", { name: "Update saved amount for Goa trip" }).click();
+  await expect(page.getByLabel("Saved so far", { exact: true })).toHaveValue("8,000");
+  await page.getByLabel("Saved so far", { exact: true }).fill("20000");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Saved amount updated.", { exact: true })).toBeVisible();
+  await expect(goalsScreen(page).getByText("₹20,000 of ₹40,000", { exact: true })).toBeVisible();
+
+  // 5. Archive, restore, delete permanently.
+  await goalsScreen(page).getByRole("button", { name: "Archive Diwali gifts" }).click();
+  await expect(page.getByRole("heading", { name: "Archive Diwali gifts?", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(page.getByText("Goal archived.", { exact: true })).toBeVisible();
+  await goalsScreen(page).getByRole("button", { name: "Show archived (2)" }).click();
+  await goalsScreen(page).getByRole("button", { name: "Restore Old laptop" }).click();
+  await expect(page.getByText("Goal restored.", { exact: true })).toBeVisible();
+  await goalsScreen(page).getByRole("button", { name: "Delete Diwali gifts permanently" }).click();
+  await expect(page.getByRole("heading", { name: "Delete Diwali gifts permanently?", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Delete permanently", exact: true }).click();
+  await expect(page.getByText("Goal deleted.", { exact: true })).toBeVisible();
+  await expect(goalsScreen(page).getByText("Diwali gifts", { exact: true })).toHaveCount(0);
+  const after = await loadGoalsData(demo.client);
+  if (!after.ok) throw new Error("Shared goals loader failed for the demo user");
+  expect(after.data.goals.map((g) => g.name).sort()).toEqual(["Emergency fund", "Goa trip", "New bike", "Old laptop"]);
+
+  // 6. Bills that repeat: Confirm through Add, Skip through its sheet.
+  await page.goBack();
+  await plan(page).getByRole("button", { name: "Confirm Internet", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Add expense", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Save ₹1,000 expense", exact: true }).click();
+  await expect(page.getByText("Expense saved.", { exact: true })).toBeVisible();
+  await expect(plan(page).getByRole("button", { name: "Confirm Internet", exact: true })).toHaveCount(0);
+  await plan(page).getByRole("button", { name: "Skip Newspaper, Today", exact: true }).click();
+  await expect(page.getByRole("heading", { name: `Skip ${fullDate(demo.today)}?`, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await expect(page.getByText("Skipped. Nothing was saved for this date.", { exact: true })).toBeVisible();
+  await expect(plan(page).getByRole("button", { name: /^Skip Newspaper/ })).toHaveCount(0);
+
+  // 7. See all → Recurring; an Ended item's Edit says how to restart it.
+  await plan(page).getByRole("button", { name: "See all bills that repeat" }).click();
+  await page.getByRole("button", { name: /^Gym membership, / }).click();
+  await expect(page.getByRole("heading", { name: "Edit recurring", exact: true })).toBeVisible();
+  await expect(
+    page.getByText("To restart it, choose a later end date or clear it. Nothing is saved for the dates it missed; if one has passed, the latest shows under Due for you to confirm or skip.", { exact: true }),
+  ).toBeVisible();
+  await shot(page, "13c-plan-07-recurring-ended");
+
+  expect(errors).toEqual([]);
 });

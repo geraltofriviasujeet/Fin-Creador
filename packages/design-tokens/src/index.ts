@@ -54,6 +54,8 @@ export const colors = {
   warning: "#c2412d",
   /** Warning text on forest (hero card shortfall line), with the warning icon. AA on nav and accentDeep. */
   warningOnDark: "#ffa894",
+  /** Mobile caution (a budget near its limit, a goal behind): text on peach and surface. Bars use chartAmber. */
+  caution: "#8a5600",
   /** Mobile neutral category tint (design-spec §5). */
   tintGrey: "#f0f3f1",
 } as const;
@@ -105,6 +107,9 @@ export const contrastPairs: ReadonlyArray<{
   { fg: "warning", bg: "canvas", min: 4.5, use: "mobile warning text on page" },
   { fg: "surface", bg: "warning", min: 4.5, use: "text on warning fill" },
   { fg: "warning", bg: "peach", min: 3, use: "warning icon on banner (non-text)" },
+  { fg: "caution", bg: "peach", min: 4.5, use: "mobile Near limit / Behind tag" },
+  { fg: "caution", bg: "surface", min: 4.5, use: "mobile caution text on cards" },
+  { fg: "chartAmber", bg: "line", min: 3, use: "mobile near-limit bar on its track (non-text)" },
   { fg: "ink", bg: "tintGrey", min: 4.5, use: "text on grey tint" },
   { fg: "muted", bg: "tintGrey", min: 4.5, use: "secondary text on grey tint" },
   { fg: "accent", bg: "nav", min: 4.5, use: "lime on forest (primary button label, + icon)" },
@@ -226,7 +231,12 @@ export const mobile = {
     ink: colors.ink,
     /** Money in amounts (always with a + sign). */
     moneyIn: colors.successFill,
+    /** Over budget, short, overdue: red. */
     warning: colors.warning,
+    /** Near limit, behind: amber text (on peach or white). Never used for over budget. */
+    caution: colors.caution,
+    /** Near-limit bar fill (amber). */
+    cautionFill: colors.chartAmber,
     /** Warning tag text (Overdue) on peach: the web's negative badge colours. */
     danger: colors.danger,
     /** Warning text and icon on the forest hero. */

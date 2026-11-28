@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AmountText, Card, IconTile, Tag } from "@/components/ds";
 import { SWIPE_ACCESSIBILITY_ACTIONS, SwipeRow } from "@/components/activity/swipe-row";
+import { HeaderIconButton } from "@/components/tab-header";
 import { categoryIcon } from "@/components/transactions/entry-icon";
 import { dayTotalLabel, dayTotalText, summaryText } from "@/lib/activity-text";
 import { dsText, fontFamily, mobile, spacing } from "@/theme";
@@ -46,8 +47,8 @@ export function ActivityHeader({ query, onSearch, onImportUpi }: HeaderProps) {
         <Text accessibilityRole="header" style={[dsText.screenTitle, styles.flex]}>
           Activity
         </Text>
-        <IconButton icon={Search} label="Search entries" selected={open} onPress={() => (open ? close() : setOpen(true))} />
-        <IconButton icon={ScanLine} label="Import UPI" onPress={onImportUpi} />
+        <HeaderIconButton icon={Search} label="Search entries" selected={open} onPress={() => (open ? close() : setOpen(true))} />
+        <HeaderIconButton icon={ScanLine} label="Import UPI" onPress={onImportUpi} />
       </View>
       {open ? (
         <View style={styles.searchRow}>
@@ -71,20 +72,6 @@ export function ActivityHeader({ query, onSearch, onImportUpi }: HeaderProps) {
         </View>
       ) : null}
     </View>
-  );
-}
-
-function IconButton({ icon: Icon, label, selected, onPress }: { icon: typeof Search; label: string; selected?: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      aria-expanded={selected}
-      onPress={onPress}
-      style={({ pressed }) => [styles.iconButton, selected && styles.iconButtonOn, pressed && styles.pressed]}
-    >
-      <Icon size={22} color={selected ? mobile.colors.onForest : mobile.colors.ink} />
-    </Pressable>
   );
 }
 
@@ -256,17 +243,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
   header: { backgroundColor: mobile.colors.canvas, paddingHorizontal: spacing[4], paddingBottom: spacing[2], gap: spacing[2] },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
-  iconButton: {
-    width: mobile.tapTarget,
-    height: mobile.tapTarget,
-    borderRadius: mobile.radius.chip,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: mobile.colors.surface,
-    borderWidth: 1,
-    borderColor: mobile.colors.line,
-  },
-  iconButtonOn: { backgroundColor: mobile.colors.forest, borderColor: mobile.colors.forest },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",

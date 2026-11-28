@@ -117,11 +117,17 @@ function AvatarMenu({ visible, onClose }: { visible: boolean; onClose: () => voi
 }
 
 /** The same list as the web bell: EMIs, card bills, repayments and dues overdue, today or tomorrow. */
-function BellSheet({ visible, onClose, reminders }: { visible: boolean; onClose: () => void; reminders: BellReminder[] | null }) {
+export function BellSheet({ visible, onClose, reminders, pendingText = "Reminders will show once Home has loaded." }: {
+  visible: boolean;
+  onClose: () => void;
+  reminders: BellReminder[] | null;
+  /** Shown while the reminders are not loaded (null). */
+  pendingText?: string;
+}) {
   return (
     <BottomSheet visible={visible} title="Due soon" onClose={onClose}>
       {reminders === null ? (
-        <Text style={dsText.body}>Reminders will show once Home has loaded.</Text>
+        <Text style={dsText.body}>{pendingText}</Text>
       ) : reminders.length === 0 ? (
         <Text style={dsText.body}>Nothing due today or tomorrow.</Text>
       ) : (

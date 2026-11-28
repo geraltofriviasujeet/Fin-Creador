@@ -4,14 +4,14 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { isoToLocalDate, localDateToIso, shortDate } from "@/lib/income-format";
 import { colors, fontFamily, fontSize, radius, spacing, text } from "@/theme";
 
-type Props = { label: string; value: string; max: string; onChange: (iso: string) => void; hint?: string; error?: string };
+type Props = { label: string; value: string; max: string; min?: string; onChange: (iso: string) => void; hint?: string; error?: string };
 
-/** Native date picker (calendar dates only). `max` is today from the database, never the phone clock. */
-export function DateField({ label, value, max, onChange, hint, error }: Props) {
+/** Native date picker (calendar dates only). `max` (and `min`) come from the database's today, never the phone clock. */
+export function DateField({ label, value, max, min, onChange, hint, error }: Props) {
   const pick = (date?: Date) => {
     if (!date) return;
     const iso = localDateToIso(date);
-    onChange(iso > max ? max : iso);
+    onChange(iso > max ? max : min && iso < min ? min : iso);
   };
 
   return (
@@ -22,6 +22,7 @@ export function DateField({ label, value, max, onChange, hint, error }: Props) {
           <DateTimePicker
             value={isoToLocalDate(value)}
             maximumDate={isoToLocalDate(max)}
+            minimumDate={min ? isoToLocalDate(min) : undefined}
             mode="date"
             display="compact"
             accessibilityLabel={label}
@@ -37,6 +38,7 @@ export function DateField({ label, value, max, onChange, hint, error }: Props) {
             DateTimePickerAndroid.open({
               value: isoToLocalDate(value),
               maximumDate: isoToLocalDate(max),
+              minimumDate: min ? isoToLocalDate(min) : undefined,
               mode: "date",
               // Called only when a date is chosen; dismissing changes nothing.
               onValueChange: (_, date) => pick(date),

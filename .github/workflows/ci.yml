@@ -119,6 +119,13 @@ jobs:
             echo "EXPO_PUBLIC_WEB_URL=http://localhost:3000"
           } >> "$GITHUB_ENV"
 
+      # The runner's own database, for the one fixture that sets what the API can't (a goal's
+      # "added" time, 13c PR 3 Goals). Never a hosted project; the spec checks the host too.
+      - name: Local database URL for E2E fixtures
+        run: |
+          eval "$(supabase status -o env | grep -E '^DB_URL=')"
+          echo "E2E_DB_URL=${DB_URL}" >> "$GITHUB_ENV"
+
       - name: Export the app for web (development build)
         run: npm run preview:web -w @fin-creador/mobile
         env:
