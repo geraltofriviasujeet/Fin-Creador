@@ -14,6 +14,7 @@
 // total can differ by a few paise from the sum of the rounded rows. A latest price that is
 // missing or 0 means "no price": the record keeps its invested amount but gets no value or
 // profit and stays out of value and profit totals. Valuation happens here only, not in SQL.
+import { currencySymbol, groupWholeDigits } from "./currency";
 import { addDays, type IsoDate } from "./dates";
 import { DEFAULT_LOCALE, minorUnitsToDecimalString } from "./format";
 import { divRoundHalfAway } from "./goals";
@@ -229,8 +230,11 @@ export function priceAge(priceDate: IsoDate, today: IsoDate): PriceAge {
 }
 
 // ---------------------------------------------------------------------------
-// Display: scaled values as exact decimal strings, formatted by Intl (no floats)
+// Display: scaled values as exact decimal strings, grouped without Intl (no floats)
 // ---------------------------------------------------------------------------
+// No Intl, so Hermes on iOS and Android shows exactly what the web shows. The output equals
+// Intl.NumberFormat for en-IN (lakh grouping) and en-US (thousands); other locales get commas
+// and a full stop too, not their own separators (no caller passes one).
 
 /** 125000 → "12.5"; keeps at least `minDecimals` places (exact, from the integer). */
 export function scaledToDecimalString(scaled: number, minDecimals = 0): string {
@@ -240,21 +244,24 @@ export function scaledToDecimalString(scaled: number, minDecimals = 0): string {
   return kept ? `${whole}.${kept}` : (whole ?? "0");
 }
 
+/** "-1234.5" → { sign: "-", text: "1,234.5" } with the locale's whole-number grouping. */
+function groupDecimal(decimal: string, locale: string): { sign: string; text: string } {
+  const negative = decimal.startsWith("-");
+  const [whole = "0", fraction] = (negative ? decimal.slice(1) : decimal).split(".");
+  const grouped = groupWholeDigits(whole, locale);
+  return { sign: negative ? "-" : "", text: fraction ? `${grouped}.${fraction}` : grouped };
+}
+
 /** Units for display: 1234.5 units → "1,234.5" (up to 4 decimals, Indian grouping by default). */
 export function formatUnits(unitsScaled: number, locale = DEFAULT_LOCALE): string {
-  const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: UNIT_SCALE });
-  return formatter.format(scaledToDecimalString(unitsScaled) as unknown as number);
+  const { sign, text } = groupDecimal(scaledToDecimalString(unitsScaled), locale);
+  return `${sign}${text}`;
 }
 
 /** A price per unit in rupees: 12505000 → "₹1,250.50", 287924 → "₹28.7924" (2 to 4 decimals). */
 export function formatPriceScaled(priceScaled: number, locale = DEFAULT_LOCALE): string {
-  const formatter = new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: PRICE_SCALE,
-  });
-  return formatter.format(scaledToDecimalString(priceScaled, 2) as unknown as number);
+  const { sign, text } = groupDecimal(scaledToDecimalString(priceScaled, 2), locale);
+  return `${sign}${currencySymbol("INR", locale)}${text}`;
 }
 
 /** A scaled value back into a form field: 12505000 → "1250.5". */

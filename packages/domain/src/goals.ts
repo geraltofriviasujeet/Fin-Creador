@@ -7,7 +7,7 @@
 // once, half away from zero, to the minor unit, the same rule as ratioToBasisPoints.
 import { addMinor } from "./money";
 import { ratioToBasisPoints } from "./format";
-import { parseIsoDate, type IsoDate } from "./dates";
+import { daysInMonth, parseIsoDate, type IsoDate } from "./dates";
 
 /** Exact num / den rounded half away from zero (den > 0). */
 export function divRoundHalfAway(num: bigint, den: bigint): bigint {
@@ -207,6 +207,25 @@ export function budgetStatus(spentMinor: number, budgetMinor: number): BudgetSta
     leftMinor: budgetMinor - spentMinor,
     level,
   };
+}
+
+/**
+ * The even-spend mark on a monthly budget bar (Sprint 13c, phone): the share of the budget
+ * month that has passed by the end of `today`, so spending at the mark is on pace. Days are
+ * whole calendar days; `today` is the date in the profile time zone (localDateInTimeZone).
+ * Today counts as passed: on 1 Nov the mark is 1/30, on 30 Nov it is 1. A month still ahead
+ * is 0, a month already over is 1. Display only: never used for money arithmetic.
+ */
+export function evenSpendShare(month: IsoDate, today: IsoDate): number {
+  const m = parseIsoDate(month);
+  const t = parseIsoDate(today);
+  if (!m) throw new RangeError("Month must be a valid YYYY-MM-DD date");
+  if (!t) throw new RangeError("Today must be a valid YYYY-MM-DD date");
+  const monthKey = m.year * 12 + m.month;
+  const todayKey = t.year * 12 + t.month;
+  if (todayKey < monthKey) return 0;
+  if (todayKey > monthKey) return 1;
+  return t.day / daysInMonth(m.year, m.month);
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import {
   budgetsForMonth,
   divRoundHalfAway,
   emi,
+  evenSpendShare,
   goalFigures,
   monthsToTarget,
   percentOfMinor,
@@ -302,5 +303,48 @@ describe("budgetStatus", () => {
 
   it("needs a budget above zero", () => {
     expect(() => budgetStatus(0, 0)).toThrow(RangeError);
+  });
+});
+
+describe("evenSpendShare (budget bar's even-spend mark)", () => {
+  it.each([
+    ["2026-11-01", "2026-11-01", 1 / 30],
+    ["2026-11-01", "2026-11-15", 15 / 30],
+    ["2026-11-01", "2026-11-30", 1],
+    ["2026-12-01", "2026-12-31", 1],
+    ["2026-12-01", "2026-12-01", 1 / 31],
+    ["2027-02-01", "2027-02-14", 14 / 28],
+    ["2028-02-01", "2028-02-14", 14 / 29],
+    ["2028-02-01", "2028-02-29", 1],
+    ["2100-02-01", "2100-02-28", 1],
+  ])("month %s on %s is %d", (month, today, share) => {
+    expect(evenSpendShare(month, today)).toBeCloseTo(share, 12);
+  });
+
+  it("accepts any date in the month as the month", () => {
+    expect(evenSpendShare("2026-11-20", "2026-11-15")).toBe(evenSpendShare("2026-11-01", "2026-11-15"));
+  });
+
+  it("is 0 for a month still ahead and 1 for a month already over", () => {
+    expect(evenSpendShare("2026-12-01", "2026-11-30")).toBe(0);
+    expect(evenSpendShare("2027-01-01", "2026-12-31")).toBe(0);
+    expect(evenSpendShare("2026-10-01", "2026-11-01")).toBe(1);
+    expect(evenSpendShare("2025-12-01", "2026-01-01")).toBe(1);
+  });
+
+  it("follows the profile time zone at midnight", () => {
+    // 31 Oct 18:30 UTC is 1 Nov 00:00 in Asia/Kolkata: November has started there.
+    const kolkata = localDateInTimeZone(new Date("2026-10-31T18:30:00Z"), "Asia/Kolkata");
+    expect(evenSpendShare("2026-11-01", kolkata)).toBeCloseTo(1 / 30, 12);
+    const utc = localDateInTimeZone(new Date("2026-10-31T18:30:00Z"), "UTC");
+    expect(evenSpendShare("2026-11-01", utc)).toBe(0);
+    // One minute earlier it is still 31 Oct in Kolkata.
+    const before = localDateInTimeZone(new Date("2026-10-31T18:29:00Z"), "Asia/Kolkata");
+    expect(evenSpendShare("2026-10-01", before)).toBe(1);
+  });
+
+  it("rejects dates that are not YYYY-MM-DD", () => {
+    expect(() => evenSpendShare("2026-11", "2026-11-01")).toThrow(RangeError);
+    expect(() => evenSpendShare("2026-11-01", "2026-02-30")).toThrow(RangeError);
   });
 });
