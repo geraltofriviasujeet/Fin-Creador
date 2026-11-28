@@ -1,16 +1,21 @@
 import { type LedgerAccount, money } from "@fin-creador/api";
 import { accountBalance } from "@fin-creador/domain";
-import { Banknote, Check, ChevronRight, Landmark, Wallet } from "lucide-react-native";
+import { Banknote, Check, ChevronRight, CreditCard, Landmark, Wallet } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { BottomSheet, IconTile } from "@/components/ds";
+import { cardPosition } from "@/lib/add-entry";
 import { dsText, fontFamily, mobile, spacing } from "@/theme";
 
-// The account rows and picker on Add (Sprint 13b PR 2): "Paid from" (or Received into, From,
+// The account rows and picker on Add (Sprint 13b PRs 2–3): "Paid from" (or Received into, From,
 // To) with the balance before → after, and a bottom sheet listing each account with its
 // balance now. Balances are the loaded figures (the server's account_balances); the "after"
-// is the shared previewDraft's, informational only.
+// is the shared previewDraft's, informational only. A credit card (expenses and refunds only,
+// as on the web) shows what is owed: "owed ₹6,000 → owed ₹7,250".
 
-const accountIcon = (a: LedgerAccount) => (a.kind === "cash" ? Banknote : a.kind === "bank" ? Landmark : Wallet);
+const accountIcon = (a: LedgerAccount) => (a.kind === "cash" ? Banknote : a.kind === "bank" ? Landmark : a.kind === "card" ? CreditCard : Wallet);
+
+/** A balance as the row shows it: money for an account, "owed ₹X" for a card. */
+const shown = (a: LedgerAccount, minor: number) => (a.kind === "card" ? cardPosition(minor, a.currency) : money(minor, a.currency));
 
 export type AccountRowProps = {
   label: string;
@@ -23,12 +28,14 @@ export type AccountRowProps = {
 
 /** One tappable row: the role ("Paid from"), the account, and its balance before → after. */
 export function AccountRow({ label, account, move, error, onPress }: AccountRowProps) {
-  const now = account ? money(accountBalance(account), account.currency) : null;
-  const figures = account && move ? `${money(move.before, account.currency)} → ${money(move.after, account.currency)}` : now;
+  const now = account ? shown(account, accountBalance(account)) : null;
+  const figures = account && move ? `${shown(account, move.before)} → ${shown(account, move.after)}` : now;
+  // "Balance ₹37,300 now", or for a card "owed ₹6,000 now".
+  const word = account?.kind === "card" ? "" : "Balance ";
   const spoken = account
     ? move
-      ? `${label}: ${account.label}. Balance ${money(move.before, account.currency)} now, ${money(move.after, account.currency)} after. Change account`
-      : `${label}: ${account.label}. Balance ${now}. Change account`
+      ? `${label}: ${account.label}. ${word}${shown(account, move.before)} now, ${shown(account, move.after)} after. Change account`
+      : `${label}: ${account.label}. ${word}${now}. Change account`
     : `${label}: choose an account`;
   return (
     <View style={styles.rowWrap}>
@@ -44,8 +51,14 @@ export function AccountRow({ label, account, move, error, onPress }: AccountRowP
           <Text style={dsText.bodyStrong} numberOfLines={1}>
             {account?.label ?? "Choose an account"}
           </Text>
+          {/* A card's "owed ₹6,000 → owed ₹42,000" is too long beside its name: it goes underneath. */}
+          {figures && account?.kind === "card" ? (
+            <Text style={[styles.figures, styles.figuresBelow]} numberOfLines={1}>
+              {figures}
+            </Text>
+          ) : null}
         </View>
-        {figures ? (
+        {figures && account?.kind !== "card" ? (
           <Text style={[styles.figures, move && move.after < 0 ? styles.negative : null]} numberOfLines={1} adjustsFontSizeToFit>
             {figures}
           </Text>
@@ -77,12 +90,13 @@ export function AccountPicker({ visible, title, accounts, selectedId, onPick, on
       <View accessibilityRole="radiogroup" accessibilityLabel={title} style={styles.list}>
         {accounts.map((a) => {
           const selected = a.id === selectedId;
-          const balance = money(accountBalance(a), a.currency);
+          const card = a.kind === "card";
+          const balance = shown(a, accountBalance(a));
           return (
             <Pressable
               key={a.id}
               accessibilityRole="radio"
-              accessibilityLabel={`${a.label}, balance ${balance}`}
+              accessibilityLabel={card ? `${a.label}, ${balance}` : `${a.label}, balance ${balance}`}
               aria-checked={selected}
               aria-selected={selected}
               onPress={() => onPick(a.id)}
@@ -93,9 +107,11 @@ export function AccountPicker({ visible, title, accounts, selectedId, onPick, on
                 <Text style={dsText.bodyStrong} numberOfLines={1}>
                   {a.label}
                 </Text>
-                <Text style={dsText.caption}>{a.currency === "INR" ? "Balance now" : `Balance now, in ${a.currency}`}</Text>
+                <Text style={dsText.caption}>
+                  {(card ? "Credit card" : "Balance now") + (a.currency === "INR" ? "" : `, in ${a.currency}`)}
+                </Text>
               </View>
-              <Text style={[styles.figures, accountBalance(a) < 0 ? styles.negative : null]}>{balance}</Text>
+              <Text style={[styles.figures, !card && accountBalance(a) < 0 ? styles.negative : null]}>{balance}</Text>
               {selected ? <Check size={20} color={mobile.colors.forest} strokeWidth={2.5} /> : <View style={styles.checkSpace} />}
             </Pressable>
           );
@@ -123,6 +139,7 @@ const styles = StyleSheet.create({
   rowPressed: { backgroundColor: mobile.colors.canvas },
   rowText: { flex: 1, minWidth: 0 },
   figures: { fontFamily: fontFamily.bodySemibold, fontSize: mobile.type.caption.size, color: mobile.colors.ink, fontVariant: ["tabular-nums"], flexShrink: 1, maxWidth: "55%" },
+  figuresBelow: { maxWidth: "100%" },
   negative: { color: mobile.colors.warning },
   error: { ...dsText.caption, color: mobile.colors.warning, fontFamily: fontFamily.bodySemibold },
   list: { gap: spacing[2] },

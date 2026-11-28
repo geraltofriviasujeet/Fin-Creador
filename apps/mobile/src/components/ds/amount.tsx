@@ -78,12 +78,15 @@ export type NumberKeypadProps = {
   disabled?: boolean;
   /** Draw this key pressed (design-system preview only). */
   forcePressedKey?: KeypadKey;
+  /** 48px keys instead of 56px (still above the 44px tap target), so Add's date and note row fits above it on a 390×844 phone. */
+  compact?: boolean;
 };
 
 const KEY_HEIGHT = 56;
+const KEY_HEIGHT_COMPACT = 48;
 
-/** 4×3 number keypad: digits, decimal point and delete. Every key is 56px tall. */
-export function NumberKeypad({ onKey, disabled, forcePressedKey }: NumberKeypadProps) {
+/** 4×3 number keypad: digits, decimal point and delete. Every key is 56px tall (48px compact). */
+export function NumberKeypad({ onKey, disabled, forcePressedKey, compact }: NumberKeypadProps) {
   return (
     <View accessibilityLabel="Number keypad" style={styles.pad}>
       {KEYPAD_ROWS.map((row) => (
@@ -98,6 +101,7 @@ export function NumberKeypad({ onKey, disabled, forcePressedKey }: NumberKeypadP
               onPress={() => onKey(key)}
               style={({ pressed }) => [
                 styles.key,
+                compact && styles.keyCompact,
                 (pressed || forcePressedKey === key) && styles.keyPressed,
                 disabled && styles.keyDisabled,
               ]}
@@ -131,6 +135,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  keyCompact: { height: KEY_HEIGHT_COMPACT },
   keyPressed: { backgroundColor: mobile.categoryTints.grey },
   keyDisabled: { opacity: 0.45 },
   keyText: { fontFamily: fontFamily.headingSemibold, fontSize: mobile.type.screenTitle.size - 4, color: mobile.colors.ink },

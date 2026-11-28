@@ -78,7 +78,7 @@ function EntryDetails({ entry, lookup }: { entry: LedgerItem; lookup: Lookup }) 
       <Summary entry={entry} lookup={lookup} />
       {!entry.voided && panel !== "void" ? (
         <View style={styles.actions}>
-          <Button label="Edit" variant="secondary" icon={Pencil} onPress={() => router.replace({ pathname: "/sheets/transaction", params: { id: entry.id } })} />
+          <Button label="Edit" variant="secondary" icon={Pencil} onPress={() => router.replace({ pathname: "/add", params: { id: entry.id } })} />
           <Button label="Void" variant="secondary" icon={Undo2} onPress={() => setPanel("void")} />
         </View>
       ) : null}

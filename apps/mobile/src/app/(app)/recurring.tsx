@@ -144,7 +144,7 @@ function RecurringContent() {
             i,
             <View style={styles.actions}>
               <Button label="Skip" variant="ghost" onPress={() => router.push({ pathname: "/sheets/recurring-skip", params: { id: i.rule.id } })} />
-              <Button label="Confirm" onPress={() => router.push({ pathname: "/sheets/transaction", params: { ruleId: i.rule.id } })} />
+              <Button label="Confirm" onPress={() => router.push({ pathname: "/add", params: { ruleId: i.rule.id } })} />
             </View>
           )
         )}
