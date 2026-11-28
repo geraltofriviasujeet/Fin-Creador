@@ -80,6 +80,14 @@ class SwipeState {
     Animated.timing(this.x, { toValue: to, duration: 180, useNativeDriver: Platform.OS !== "web" }).start(({ finished }) => finished && done());
   }
 
+  /** Closed at once, actions unmounted: used when an action runs and the screen moves on. */
+  snapClosed() {
+    this.x.stopAnimation();
+    this.offset = 0;
+    this.x.setValue(0);
+    this.setRevealed(false);
+  }
+
   /** A tap on the row: ignored right after a swipe, closes an open row, otherwise opens it. */
   press(onPress: () => void) {
     if (Date.now() - this.swipedAt < TAP_AFTER_SWIPE_MS) return;
@@ -107,12 +115,24 @@ export function SwipeRow({ enabled, open, onOpenChange, onEdit, onVoid, children
     if (!open && swipe.offset !== 0) swipe.settle(0);
   }, [open, swipe]);
 
+  // An action only runs from a row that is open; the row shuts at once before the screen moves on.
+  const act = (run: () => void) => () => {
+    if (!open) return;
+    swipe.snapClosed();
+    run();
+  };
+
   return (
     <View style={styles.wrap}>
       {revealed ? (
-        <View style={styles.actions} accessibilityElementsHidden={!open} importantForAccessibility={open ? "auto" : "no-hide-descendants"}>
-          <Action icon={Pencil} label="Edit" tone="forest" onPress={onEdit} />
-          <Action icon={Undo2} label="Void" tone="warning" onPress={onVoid} />
+        <View
+          style={styles.actions}
+          pointerEvents={open ? "box-none" : "none"}
+          accessibilityElementsHidden={!open}
+          importantForAccessibility={open ? "auto" : "no-hide-descendants"}
+        >
+          <Action icon={Pencil} label="Edit" tone="forest" onPress={act(onEdit)} />
+          <Action icon={Undo2} label="Void" tone="warning" onPress={act(onVoid)} />
         </View>
       ) : null}
       <Animated.View style={[styles.front, { transform: [{ translateX: swipe.x }] }]} {...swipe.pan.panHandlers}>
