@@ -103,7 +103,7 @@ test("Home shows the demo user's Safe to spend, Coming up, Where it went and You
   }).toPass();
   await page.screenshot({ path: `${SHOTS}/13a-home-scrolled-end.png` });
 
-  // Quick actions open the existing sheet on the right type; Import UPI is coming soon.
+  // Quick actions open the existing sheet on the right type; Import UPI says it is on the web for now.
   await page.getByRole("button", { name: "Income", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Add income", exact: true })).toBeVisible();
   await page.goBack();
@@ -111,7 +111,9 @@ test("Home shows the demo user's Safe to spend, Coming up, Where it went and You
   await expect(page.getByRole("heading", { name: "Add transfer", exact: true })).toBeVisible();
   await page.goBack();
   await page.getByRole("button", { name: "Import UPI" }).click();
-  await expect(page.getByText("Import UPI is coming in a later update.")).toBeVisible();
+  await expect(page.getByText("Import UPI is on the web for now", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close Import UPI", exact: true }).click();
+  await expect(page.getByText("Import UPI is on the web for now", { exact: true })).toHaveCount(0);
 
   // Ask Roma opens the Roma tab.
   await page.getByRole("button", { name: "Ask Roma" }).click();

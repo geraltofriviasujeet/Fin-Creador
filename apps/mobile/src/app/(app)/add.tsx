@@ -397,7 +397,7 @@ function AddForm({
         ) : null}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: bottomInset + spacing[3] }]}>
+      <View testID="add-footer" style={[styles.footer, { paddingBottom: bottomInset + spacing[3] }]}>
         {/* Above the keypad, so they show as the amount is typed (the rows above may scroll). */}
         {short ? <WarningBanner message={runsShortText(short, moveFor(short.accountId)?.account.currency ?? currency)} /> : null}
         {/* One short line, so the amount at the top stays on screen at 390×844 (owner, #105). */}
@@ -496,11 +496,13 @@ const styles = StyleSheet.create({
   lockNote: { textAlign: "center" },
   gatePad: { paddingTop: spacing[1] },
   loading: { marginTop: spacing[6] },
-  body: { paddingHorizontal: spacing[4], paddingBottom: spacing[4], gap: spacing[3] },
+  // Tighter gaps (13b PR 5) keep the "Paid from" row whole above the footer at 390×844.
+  body: { paddingHorizontal: spacing[4], paddingBottom: spacing[4], gap: spacing[2] },
   empty: { padding: spacing[4], gap: spacing[3] },
   section: { gap: spacing[2] },
-  grid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -spacing[1] },
-  cell: { width: "25%", padding: spacing[1] },
+  // 6pt between tiles: room for "Bank charges" on one line of a 390pt-wide tile.
+  grid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -3 },
+  cell: { width: "25%", padding: 3 },
   fixed: {
     flexDirection: "row",
     alignItems: "center",
@@ -513,7 +515,7 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", gap: spacing[2] },
   amount: { backgroundColor: mobile.colors.canvas },
   limitNote: { flexDirection: "row", alignItems: "center", gap: spacing[1] },
-  footer: { gap: spacing[2], paddingHorizontal: spacing[4], paddingTop: spacing[3], borderTopWidth: 1, borderTopColor: mobile.colors.line, backgroundColor: mobile.colors.canvas },
+  footer: { gap: spacing[2], paddingHorizontal: spacing[4], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: mobile.colors.line, backgroundColor: mobile.colors.canvas },
   list: { gap: spacing[1] },
   option: { flexDirection: "row", alignItems: "center", gap: spacing[3], minHeight: 52, paddingHorizontal: spacing[2], borderRadius: mobile.radius.tile },
   optionPressed: { backgroundColor: mobile.colors.canvas },

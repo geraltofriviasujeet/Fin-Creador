@@ -226,6 +226,18 @@ test("390×844: Today, the note and the keypad are on screen without scrolling; 
   await onScreenAfterNote(add);
   // The account row is on screen too, with its before → after.
   await expect(add.getByText("₹37,300 → ₹36,050", { exact: true })).toBeInViewport({ ratio: 1 });
+  // The whole "Paid from" row, border included, sits above the date/note and keypad panel (owner, PR 5).
+  const row = await add.getByRole("button", { name: /^Paid from: HDFC Bank\./ }).boundingBox();
+  const footer = await page.getByTestId("add-footer").boundingBox();
+  expect(row && footer && row.y + row.height <= footer.y).toBe(true);
+  // Every category name reads in full (two lines at most), none cut short with "…".
+  const tiles = add.getByRole("radiogroup", { name: "Category" }).getByRole("radio");
+  expect(await tiles.count()).toBeGreaterThan(4);
+  for (const tile of await tiles.all()) {
+    const name = (await tile.getAttribute("aria-label")) ?? "";
+    const clipped = await tile.getByText(name, { exact: true }).evaluate((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
+    expect(clipped, `"${name}" is cut short`).toBe(false);
+  }
   await shot(page, "13b-add-390-expense");
 
   // Income: the same row above the keypad.

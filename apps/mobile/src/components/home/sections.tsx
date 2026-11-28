@@ -19,13 +19,13 @@ import {
   Sparkles,
   Wallet,
 } from "lucide-react-native";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { formatAmount } from "@/components/ds/logic";
 import { AmountText, Card, IconTile, ListRow, ProgressBar, SectionHeader, WarningBanner } from "@/components/ds";
-import { useToast } from "@/components/toast";
+import { ImportUpiSheet } from "@/components/import-upi-sheet";
 import { categoryIcon } from "@/components/transactions/entry-icon";
 import { useTransactions } from "@/lib/transactions-store";
-import { comingSoonMessage } from "@/navigation";
 import { dsText, mobile, spacing } from "@/theme";
 
 // Home's sections (design-spec §5). Every figure comes from HomeData (packages/api buildHome);
@@ -118,14 +118,17 @@ function QuickAction({ icon, tint, label, onPress }: { icon: LucideIcon; tint: "
 
 export function QuickActions() {
   const router = useRouter();
-  const toast = useToast();
+  const [upi, setUpi] = useState(false);
   return (
-    <View style={styles.actions} accessibilityRole="toolbar" accessibilityLabel="Quick actions">
-      <QuickAction icon={ArrowUpRight} tint="peach" label="Expense" onPress={() => router.push(addSheet("expense"))} />
-      <QuickAction icon={ArrowDownLeft} tint="mint" label="Income" onPress={() => router.push(addSheet("income"))} />
-      <QuickAction icon={ScanLine} tint="lavender" label="Import UPI" onPress={() => toast.show(comingSoonMessage("Import UPI"))} />
-      <QuickAction icon={ArrowLeftRight} tint="blue" label="Transfer" onPress={() => router.push(addSheet("transfer"))} />
-    </View>
+    <>
+      <View style={styles.actions} accessibilityRole="toolbar" accessibilityLabel="Quick actions">
+        <QuickAction icon={ArrowUpRight} tint="peach" label="Expense" onPress={() => router.push(addSheet("expense"))} />
+        <QuickAction icon={ArrowDownLeft} tint="mint" label="Income" onPress={() => router.push(addSheet("income"))} />
+        <QuickAction icon={ScanLine} tint="lavender" label="Import UPI" onPress={() => setUpi(true)} />
+        <QuickAction icon={ArrowLeftRight} tint="blue" label="Transfer" onPress={() => router.push(addSheet("transfer"))} />
+      </View>
+      <ImportUpiSheet visible={upi} onClose={() => setUpi(false)} />
+    </>
   );
 }
 

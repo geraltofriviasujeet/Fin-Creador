@@ -34,7 +34,10 @@ type Loaded<T> = { status: "loading" } | { status: "error" } | { status: "ready"
 
 /** One entry: details, then Edit, Void (one-way, with a reason) and History (if edited). */
 export default function EntrySheet() {
-  const id = param(useLocalSearchParams<{ id?: string }>().id);
+  const params = useLocalSearchParams<{ id?: string; step?: string }>();
+  const id = param(params.id);
+  // Activity's swipe "Void" opens the entry at its void step.
+  const startVoid = param(params.step) === "void";
   const [entry, setEntry] = useState<Loaded<LedgerItem>>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -62,16 +65,16 @@ export default function EntrySheet() {
               </View>
             );
           }
-          return <EntryDetails entry={entry.value} lookup={lookup} />;
+          return <EntryDetails entry={entry.value} lookup={lookup} startVoid={startVoid} />;
         }}
       </TransactionsGate>
     </Sheet>
   );
 }
 
-function EntryDetails({ entry, lookup }: { entry: LedgerItem; lookup: Lookup }) {
+function EntryDetails({ entry, lookup, startVoid }: { entry: LedgerItem; lookup: Lookup; startVoid: boolean }) {
   const router = useRouter();
-  const [panel, setPanel] = useState<"none" | "void" | "history">("none");
+  const [panel, setPanel] = useState<"none" | "void" | "history">(startVoid && !entry.voided ? "void" : "none");
   const edited = Boolean(entry.replacesId);
   return (
     <View style={styles.gap}>

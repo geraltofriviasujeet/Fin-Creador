@@ -2,6 +2,7 @@ import type { CategoryTint } from "@fin-creador/design-tokens";
 import { ChevronRight, type LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { categoryLabelSize } from "@/lib/category-label";
 import { dsText, fontFamily, mobile, spacing } from "@/theme";
 import { AmountText } from "./amount";
 import { type Direction, formatAmount, hitSlopFor, listRowLabel } from "./logic";
@@ -150,7 +151,11 @@ export type CategoryTileProps = {
   forcePressed?: boolean;
 };
 
-/** Category choice in the Add screen's 4×2 grid. Selection shows a forest ring and a heavier label. */
+/**
+ * Category choice in the Add screen's 4×2 grid. Selection shows a forest ring. The label wraps
+ * to two lines (a single long word drops to 11px, categoryLabelSize) and keeps one weight, so
+ * selecting a tile never re-wraps its name (13b PR 5).
+ */
 export function CategoryTile({ icon, tint, label, selected, disabled, onPress, forcePressed }: CategoryTileProps) {
   return (
     <Pressable
@@ -166,8 +171,8 @@ export function CategoryTile({ icon, tint, label, selected, disabled, onPress, f
         disabled && styles.disabled,
       ]}
     >
-      <IconTile icon={icon} tint={tint} size={40} />
-      <Text style={[styles.categoryLabel, selected && styles.categoryLabelSelected]} numberOfLines={1}>
+      <IconTile icon={icon} tint={tint} size={36} />
+      <Text style={[styles.categoryLabel, { fontSize: categoryLabelSize(label) }]} numberOfLines={2}>
         {label}
       </Text>
     </Pressable>
@@ -281,19 +286,19 @@ const styles = StyleSheet.create({
     minWidth: mobile.tapTarget,
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing[1],
+    gap: 2,
     borderRadius: mobile.radius.tileLg,
     borderWidth: 2,
     borderColor: "transparent",
     backgroundColor: mobile.colors.surface,
-    paddingVertical: spacing[2],
-    // Keeps a long label (bold when selected) clear of the selection ring.
-    paddingHorizontal: spacing[1],
+    // Two label lines fit in the 84pt height: 2 + 6 + 36 + 2 + 30 + 6 + 2.
+    paddingVertical: 6,
+    // Keeps the label just clear of the selection ring.
+    paddingHorizontal: 2,
   },
   categorySelected: { borderColor: mobile.colors.forest },
   categoryPressed: { backgroundColor: mobile.colors.canvas },
-  categoryLabel: { fontFamily: fontFamily.bodyMedium, fontSize: mobile.type.min.size, color: mobile.colors.ink },
-  categoryLabelSelected: { fontFamily: fontFamily.bodyBold },
+  categoryLabel: { fontFamily: fontFamily.bodyMedium, lineHeight: 15, color: mobile.colors.ink, textAlign: "center" },
   disabled: { opacity: 0.45 },
   chip: {
     minHeight: CHIP_HEIGHT,

@@ -50,7 +50,7 @@ export function summaryText(totals: TransactionTotals, currency: string, previou
   };
 }
 
-/** A day's total beside its heading: "+₹85,000 · −₹1,200" (exact, like the rows); "" when nothing moved in or out. */
+/** A day's total beside its heading: "+₹85,000 · −₹1,200" (exact, like the rows); "₹0" when nothing moved in or out; "" while the day may continue on the next page. */
 export function dayTotalText(totals: { inMinor: number; outMinor: number } | null, currency: string): string {
   if (!totals) return "";
   const parts: string[] = [];
@@ -58,7 +58,8 @@ export function dayTotalText(totals: { inMinor: number; outMinor: number } | nul
   if (totals.outMinor > 0) parts.push(`−${formatMoney(totals.outMinor, { currency })}`);
   // Refunds above the day's spending: money came back.
   if (totals.outMinor < 0) parts.push(`+${formatMoney(-totals.outMinor, { currency })} back`);
-  return parts.join(" · ");
+  // A whole day of transfers or voided entries still has a total: nothing came in or went out.
+  return parts.length > 0 ? parts.join(" · ") : formatMoney(0, { currency });
 }
 
 /** The same in words for a screen reader: "Money in ₹85,000, money out ₹1,200". */
@@ -69,7 +70,7 @@ export function dayTotalLabel(totals: { inMinor: number; outMinor: number } | nu
   if (totals.outMinor > 0) parts.push(`money out ${formatMoney(totals.outMinor, { currency })}`);
   if (totals.outMinor < 0) parts.push(`refunded ${formatMoney(-totals.outMinor, { currency })}`);
   const text = parts.join(", ");
-  return text ? text[0]!.toUpperCase() + text.slice(1) : "";
+  return text ? text[0]!.toUpperCase() + text.slice(1) : "No money in or out";
 }
 
 /** The month chips, plus the picked month at the end when it is older than the chips show. */
