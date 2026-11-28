@@ -1,7 +1,7 @@
 import { currencySymbol } from "@fin-creador/domain";
 import { CircleAlert } from "lucide-react-native";
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { cleanAmountTyping, groupTypedAmount } from "@/components/ds/logic";
 import { colors, fontFamily, fontSize, radius, spacing, text } from "@/theme";
 
@@ -47,7 +47,7 @@ export function MoneyField({ label, value, onChange, currency, hint, error, auto
           autoFocus={autoFocus}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={styles.input}
+          style={[styles.input, Platform.OS === "web" && styles.noWebOutline]}
         />
       </View>
       {hint && !error ? <Text style={text.caption}>{hint}</Text> : null}
@@ -66,6 +66,8 @@ const styles = StyleSheet.create({
   box: { flexDirection: "row", alignItems: "center", minHeight: 48, borderRadius: radius.control, backgroundColor: colors.surface, paddingHorizontal: spacing[3], gap: 4 },
   symbol: { fontFamily: fontFamily.bodySemibold, fontSize: fontSize.base, color: colors.ink },
   input: { flex: 1, minHeight: 44, fontFamily: fontFamily.body, fontSize: fontSize.base, color: colors.ink, fontVariant: ["tabular-nums"] },
+  // The box draws the focus (2px border); the browser's own ring inside it would be a second one.
+  noWebOutline: { outlineWidth: 0 },
   error: { flexDirection: "row", alignItems: "center", gap: 6 },
   errorText: { color: colors.danger, fontFamily: fontFamily.bodyMedium },
 });

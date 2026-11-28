@@ -28,7 +28,8 @@ const ICON: Record<GoalType, LucideIcon> = {
   other: Sparkles,
 };
 
-const TYPE_LABEL = Object.fromEntries(GOAL_TYPE_OPTIONS.map((t) => [t.value, t.label])) as Record<GoalType, string>;
+// The web's labels, except "Vehicle" (the web says "Wheeler"), as the phone's add sheet names it.
+const TYPE_LABEL = { ...Object.fromEntries(GOAL_TYPE_OPTIONS.map((t) => [t.value, t.label])), vehicle: "Vehicle" } as Record<GoalType, string>;
 
 /** The goal's icon; a vehicle shows its kind (bike, car or HMV), as on the web. */
 export function goalIcon(item: GoalItem): LucideIcon {

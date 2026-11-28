@@ -229,6 +229,7 @@ test("Plan: goals and bills that repeat, the Goals screen, goal sheets and Recur
   await expect(goalsScreen(page)).toBeVisible();
   await expect(goalsScreen(page).getByText("₹8,000 of ₹40,000", { exact: true })).toBeVisible();
   await expect(goalsScreen(page).getByText("₹10,000 of ₹1,30,000", { exact: true })).toBeVisible();
+  await expect(goalsScreen(page).getByText("Vehicle", { exact: true })).toBeVisible();
   await expect(goalsScreen(page).getByText("₹30,000 behind an even pace since you added it", { exact: true })).toBeVisible();
   await expect(goalsScreen(page).getByRole("progressbar", { name: "New bike: 7% saved" })).toBeVisible();
   await expect(goalsScreen(page).getByRole("progressbar", { name: "Goa trip: 20% saved" })).toBeVisible();
@@ -290,6 +291,8 @@ test("Plan: goals and bills that repeat, the Goals screen, goal sheets and Recur
   await expect(plan(page).getByRole("button", { name: /^Skip Newspaper/ })).toHaveCount(0);
 
   // 7. See all → Recurring; an Ended item's Edit says how to restart it.
+  // The toast clears first, so the screenshot shows the whole sheet.
+  await expect(page.getByText("Skipped. Nothing was saved for this date.", { exact: true })).toBeHidden({ timeout: 10_000 });
   await plan(page).getByRole("button", { name: "See all bills that repeat" }).click();
   await page.getByRole("button", { name: /^Gym membership, / }).click();
   await expect(page.getByRole("heading", { name: "Edit recurring", exact: true })).toBeVisible();
