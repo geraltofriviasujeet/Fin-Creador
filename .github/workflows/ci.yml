@@ -302,7 +302,7 @@ jobs:
       - name: TEMP repeat PWA spec
         if: steps.scope.outputs.docs_only != 'true'
         working-directory: apps/web
-        run: npx playwright test e2e/pwa.spec.ts --project=chromium --repeat-each=15 --retries=0 --max-failures=0
+        run: npx playwright test e2e/pwa.spec.ts --project=chromium --repeat-each=30 --retries=0 --max-failures=0
 
       # Uses the Google Chrome preinstalled on the runner (Playwright channel "chrome").
       # E2E_DB_URL (the runner's local database, never a hosted one) is only for this step: the

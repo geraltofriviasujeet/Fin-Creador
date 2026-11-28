@@ -250,56 +250,16 @@ test("kill switch: the self-unregistering worker clears caches and unregisters",
   await expect.poll(() => page.evaluate(async () => (await caches.keys()).length)).toBeGreaterThan(0)
 
   // The sign-in page doesn't register the worker, so nothing re-registers after the reload.
-  // TEMP diagnostics (flake hunt): every service worker version's state, as DevTools sees it.
-  const cdp = await page.context().newCDPSession(page)
-  const t0 = Date.now()
-  const swLog: string[] = []
-  cdp.on("ServiceWorker.workerVersionUpdated", ({ versions }) => {
-    for (const v of versions) swLog.push(`${Date.now() - t0}ms v${v.versionId} ${v.scriptURL.replace(/^.*\//, "")} ${v.status}/${v.runningStatus} clients=${(v.controlledClients ?? []).length}`)
-  })
-  cdp.on("ServiceWorker.workerErrorReported", ({ errorMessage }) => swLog.push(`${Date.now() - t0}ms error ${errorMessage.errorMessage}`))
-  await cdp.send("ServiceWorker.enable")
-  page.on("console", (m) => swLog.push(`${Date.now() - t0}ms console ${m.text()}`))
-  page.on("framenavigated", (f) => f === page.mainFrame() && swLog.push(`${Date.now() - t0}ms navigated ${f.url()}`))
-  const short = (u: string) => u.replace("http://localhost:3000", "").slice(0, 60)
-  page.on("request", (r) => swLog.push(`${Date.now() - t0}ms req ${r.resourceType()} ${short(r.url())}`))
-  page.on("requestfinished", (r) => swLog.push(`${Date.now() - t0}ms done ${short(r.url())}`))
-  page.on("requestfailed", (r) => swLog.push(`${Date.now() - t0}ms FAILED ${short(r.url())} ${r.failure()?.errorText}`))
-
   await page.goto("/sign-in")
-  swLog.push(`${Date.now() - t0}ms on sign-in; controller=${await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? "none")}`)
-  const reloaded = page.waitForEvent("load", { timeout: 15_000 })
+  // Register only once nothing is in flight. The sign-in page prefetches "/" right after load,
+  // and those fetches go through the old worker. If one is still open when the kill switch
+  // finishes installing, Chrome restarts the old worker to serve it and never activates the
+  // kill switch (seen in CI traces: it stays waiting, nothing reloads).
+  await page.waitForLoadState("networkidle")
+  const reloaded = page.waitForEvent("load")
   // The kill switch reloads this tab, which may end the evaluate itself.
   await page.evaluate(() => navigator.serviceWorker.register("/sw-kill-switch.js", { scope: "/" })).catch(() => {})
-  swLog.push(`${Date.now() - t0}ms register returned`)
-  try {
-    await reloaded
-  } catch (error) {
-    const state = await page
-      .evaluate(async () => {
-        const regs = await navigator.serviceWorker.getRegistrations()
-        return JSON.stringify({
-          controller: navigator.serviceWorker.controller?.scriptURL ?? null,
-          regs: regs.map((r) => ({ i: r.installing?.scriptURL, w: r.waiting?.scriptURL, a: r.active?.scriptURL, as: r.active?.state })),
-          caches: await caches.keys(),
-        })
-      })
-      .catch((e) => String(e))
-    console.log(`KILL-SWITCH DIAG\n${swLog.join("\n")}\nstate ${state}`)
-    // Does the waiting kill switch activate once this tab leaves the page?
-    swLog.length = 0
-    await page.goto("/offline").catch((e) => swLog.push(`goto offline: ${e}`))
-    await page.waitForTimeout(4000)
-    const after = await page
-      .evaluate(async () => {
-        const regs = await navigator.serviceWorker.getRegistrations()
-        return JSON.stringify({ regs: regs.map((r) => ({ w: r.waiting?.scriptURL, a: r.active?.scriptURL })), caches: await caches.keys() })
-      })
-      .catch((e) => String(e))
-    console.log(`KILL-SWITCH AFTER-LEAVE\n${swLog.join("\n")}\nstate ${after}`)
-    throw error
-  }
-  console.log(`KILL-SWITCH OK\n${swLog.join("\n")}`)
+  await reloaded
   await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0)
   await expect.poll(() => page.evaluate(async () => (await caches.keys()).length)).toBe(0)
 })
