@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { currencySymbol } from "./currency";
 import { localDateInTimeZone } from "./dates";
 import { formatMoney, formatMoneyWhole, formatPercentFromBasisPoints } from "./format";
+import { formatPriceScaled, formatUnits } from "./investments";
 import { regroupAmountInput } from "./money";
 
 const RealNumberFormat = Intl.NumberFormat;
@@ -96,5 +97,20 @@ describe("dates in a time zone when formatToParts has no date parts (Hermes iOS)
     } finally {
       proto.formatToParts = saved;
     }
+  });
+});
+
+describe("investment units and prices on an engine without a usable Intl (Hermes)", () => {
+  it("formats with lakh grouping and never calls Intl.NumberFormat", () => {
+    const NumberFormat = vi.fn(() => {
+      throw new Error("Intl.NumberFormat must not be called");
+    });
+    vi.stubGlobal("Intl", Object.assign(Object.create(Intl), { NumberFormat }));
+    expect(formatUnits(12_345_678)).toBe("1,234.5678");
+    expect(formatUnits(1_000_000_000)).toBe("1,00,000");
+    expect(formatPriceScaled(12_505_000)).toBe("₹1,250.50");
+    expect(formatPriceScaled(287_924)).toBe("₹28.7924");
+    expect(formatPriceScaled(10_000_000_000_000)).toBe("₹1,00,00,00,000.00");
+    expect(NumberFormat).not.toHaveBeenCalled();
   });
 });

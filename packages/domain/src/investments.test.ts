@@ -234,3 +234,53 @@ describe("display of units and prices", () => {
     expect(formatPriceScaled(MAX_PRICE_SCALED)).toBe("₹1,00,00,00,000.00");
   });
 });
+
+// Sprint 13c: formatUnits and formatPriceScaled no longer use Intl (Hermes on the phone). The
+// web must not change: these compare against the former Intl formatter on many values.
+describe("unit and price formatting matches the former Intl output", () => {
+  const intlUnits = (scaled: number, locale: string) =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: 4 }).format(scaledToDecimalString(scaled) as unknown as number);
+  const intlPrice = (scaled: number, locale: string) =>
+    new Intl.NumberFormat(locale, { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(
+      scaledToDecimalString(scaled, 2) as unknown as number,
+    );
+
+  // Deterministic spread over every digit count from 1 to 14 (no Math.random in tests).
+  function* values(): Generator<number> {
+    const edges = [0, 1, 9, 10, 99, 100, 999, 1_000, 9_999, 10_000, 99_999, 100_000, 125_000, 287_924, 999_999, 1_000_000, 12_505_000];
+    for (const v of edges) yield v;
+    for (let p = 0; p <= 13; p += 1) {
+      yield 10 ** p;
+      yield 10 ** p - 1 || 0;
+    }
+    yield MAX_UNITS_SCALED;
+    yield MAX_PRICE_SCALED;
+    let seed = 20261128;
+    for (let i = 0; i < 2_000; i += 1) {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      const digits = (i % 14) + 1;
+      yield (seed * 4_657 + i) % 10 ** digits;
+    }
+  }
+
+  it.each(["en-IN", "en-US"])("formatUnits in %s", (locale) => {
+    for (const v of values()) {
+      expect(formatUnits(v, locale), `${v}`).toBe(intlUnits(v, locale));
+      expect(formatUnits(-v, locale), `-${v}`).toBe(intlUnits(-v, locale));
+    }
+  });
+
+  it.each(["en-IN", "en-US"])("formatPriceScaled in %s", (locale) => {
+    for (const v of values()) {
+      expect(formatPriceScaled(v, locale), `${v}`).toBe(intlPrice(v, locale));
+      if (v > 0) expect(formatPriceScaled(-v, locale), `-${v}`).toBe(intlPrice(-v, locale));
+    }
+  });
+
+  it("uses the default locale (en-IN) like before", () => {
+    for (const v of values()) {
+      expect(formatUnits(v)).toBe(intlUnits(v, "en-IN"));
+      expect(formatPriceScaled(v)).toBe(intlPrice(v, "en-IN"));
+    }
+  });
+});
