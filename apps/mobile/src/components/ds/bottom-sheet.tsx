@@ -1,6 +1,6 @@
 import { X } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { dsText, mobile, spacing } from "@/theme";
 import { useReducedMotion } from "./motion";
@@ -56,10 +56,11 @@ export function BottomSheet({ visible, title, onClose, children, inline }: Botto
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.backdropWrap}>
+      {/* iOS: a text field in the sheet (Add's note) lifts the panel above the keyboard. */}
+      <KeyboardAvoidingView style={styles.backdropWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close sheet" style={styles.backdrop} onPress={onClose} />
         {panel}
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
