@@ -14,6 +14,9 @@ const SHEET = {
   contentStyle: { backgroundColor: colors.surface },
 };
 
+// Add (Sprint 13b): a full-screen modal on both platforms; it draws its own header and safe areas.
+const ADD = { presentation: "fullScreenModal" as const, headerShown: false, contentStyle: { backgroundColor: colors.canvas } };
+
 export const unstable_settings = { anchor: "(tabs)" };
 
 export default function AppLayout() {
@@ -34,6 +37,7 @@ export default function AppLayout() {
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
       <Stack.Screen name="income" options={{ title: "Income" }} />
       <Stack.Screen name="recurring" options={{ title: "Recurring" }} />
+      <Stack.Screen name="add" options={ADD} />
       <Stack.Screen name="sheets/transaction" options={SHEET} />
       <Stack.Screen name="sheets/entry" options={SHEET} />
       <Stack.Screen name="sheets/recurring-rule" options={SHEET} />

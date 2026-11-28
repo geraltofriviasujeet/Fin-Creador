@@ -145,7 +145,7 @@ function Activity({ data }: { data: TransactionsContext }) {
     }
   }
 
-  const addTransaction = (type: "expense" | "income" = "expense") => router.push({ pathname: "/sheets/transaction", params: { type } });
+  const addTransaction = (type: "expense" | "income" = "expense") => router.push({ pathname: "/add", params: { type } });
   const label = periodLabel(f);
   const hasAccounts = data.accounts.some((a) => !a.archived);
 

@@ -37,7 +37,7 @@ const ROWS: Record<string, unknown[]> = {
     { id: "exp", kind: "expense", name: "Loan interest", source_type: null, icon: "bills", default_account_id: null, is_default: true, key: null, archived_at: null },
   ],
   // The latest expense is capitalised interest on the loan account.
-  transactions: [{ account_id: "loan", id: "t1" }],
+  transactions: [{ account_id: "loan", category_id: "exp", id: "t1" }],
 }
 
 /** Answers selects from ROWS, applying `.in()` and `.eq()` filters the loaders send. */
@@ -96,6 +96,8 @@ describe("liability accounts are never money accounts", () => {
     ])
     // Never the default account of a new expense.
     expect(lastExpenseAccountId).toBeNull()
+    // Its category is still offered first on the phone's Add (an expense category either way).
+    expect(result.data.lastExpenseCategoryId).toBe("exp")
     // A loan payment's transfer names both sides; a bank and a loan with the same name differ.
     const lookup = ledgerLookup(result.data)
     expect(accountName("bank", lookup)).toBe("HDFC Bank")

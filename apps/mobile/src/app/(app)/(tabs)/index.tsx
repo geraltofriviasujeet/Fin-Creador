@@ -56,7 +56,7 @@ export default function HomeScreen() {
           action={{ label: "Add an account", onPress: () => router.push({ pathname: "/sheets/account", params: { kind: "bank" } }) }}
         />
         <View style={styles.secondary}>
-          <Button label="Add expense" variant="secondary" onPress={() => router.push({ pathname: "/sheets/transaction", params: { type: "expense" } })} />
+          <Button label="Add expense" variant="secondary" onPress={() => router.push({ pathname: "/add", params: { type: "expense" } })} />
         </View>
       </>
     );
