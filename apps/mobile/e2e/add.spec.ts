@@ -256,7 +256,7 @@ test("edit from Activity: type locked, figures filled in, Save changes", async (
 
   // Today's ₹1,200 groceries, from Activity's list → details → Edit.
   await mainTab(page, "Activity").click();
-  const activity = page.getByRole("heading", { name: "Transactions", exact: true }).locator("xpath=ancestor::div[.//*[@aria-label='Settings']][1]");
+  const activity = page.getByTestId("activity-screen");
   await activity.getByRole("button", { name: /₹1,200$/ }).first().click();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   const add = addScreen(page);
@@ -321,7 +321,7 @@ test("recurring confirm: type and category set by the rule, saved against the oc
   expect(errors).toEqual([]);
 });
 
-test("expense paid by credit card: owed before → after, the limit note, never runs-short", async ({ page }) => {
+test("expense paid by credit card: owed before → after, the limit note on one line with the amount on screen, never runs-short", async ({ page }) => {
   const errors = collectErrors(page);
   // The normal month plus a card: ₹50,000 limit, ₹6,000 owed today.
   const { email, password, demo } = await newUser("add-card", async (d) => {
@@ -344,7 +344,10 @@ test("expense paid by credit card: owed before → after, the limit note, never 
   await sheetClosed(page, "Paid from");
   await expect(add.getByText("owed ₹6,000 → owed ₹42,000", { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(add.getByText("Travel (card)", { exact: true })).toBeVisible();
-  await expect(add.getByText("This takes Travel to 84% of its limit. You can still save it.", { exact: true })).toBeVisible();
+  // The limit note is one short line, and the amount stays on screen (it sticks above the rows): owner, #105.
+  await expect(add.getByLabel("84% of Travel's limit. You can still save it.", { exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(add.getByLabel("Amount, ₹36,000", { exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(add.getByRole("button", { name: "Today", exact: true })).toBeInViewport({ ratio: 1 });
   // A card never runs short; payment mode is for bank accounts only.
   await expect(add.getByText(/leaves you .* short/)).toHaveCount(0);
   await expect(add.getByText("Payment mode (optional)")).toHaveCount(0);

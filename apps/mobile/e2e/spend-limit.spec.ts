@@ -37,8 +37,7 @@ async function signIn(page: Page, email: string, password: string) {
 
 const tab = (page: Page, name: string) => page.getByRole("tablist", { name: "Main" }).getByRole("tab", { name, exact: true });
 // Expo web keeps other tabs mounted under the current one: scope to the visible screen.
-const activity = (page: Page) =>
-  page.getByRole("heading", { name: "Transactions", exact: true }).locator("xpath=ancestor::div[.//*[@aria-label='Settings']][1]");
+const activity = (page: Page) => page.getByTestId("activity-screen");
 type Title = "Set a spend limit" | "Change your spend limit";
 // The sheet's scrolling body: its title row and the form (or the confirm step).
 const sheet = (page: Page, title: Title) =>

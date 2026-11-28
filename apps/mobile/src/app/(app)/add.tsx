@@ -5,7 +5,7 @@ import {
   type RecurringItem,
   type TransactionsContext,
   balancesWithout,
-  cardLimitWarning,
+  cardLimitNote,
   confirmRecurringOccurrence,
   fullDate,
   loadEntry,
@@ -17,7 +17,7 @@ import {
 import { type SafeToSpendBill, minorToInputString, parseAmount, runsShortAfterDraft } from "@fin-creador/domain";
 import { PAYMENT_MODES } from "@fin-creador/schemas";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { CalendarDays, Check, LayoutGrid, NotebookPen, X } from "lucide-react-native";
+import { CalendarDays, Check, Info, LayoutGrid, NotebookPen, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -252,7 +252,7 @@ function AddForm({
   const moveFor = (id: string | undefined) => preview.moves.find((m) => m.account.id === id);
   const windowBills = bills ? billsWithout(bills, recurring?.rule.id ?? null, recurring?.date ?? null) : null;
   const short = windowBills ? runsShortAfterDraft(draftMoves(preview.moves), windowBills) : null;
-  const limitWarning = cardLimitWarning(preview.moves.find((m) => m.account.kind === "card"));
+  const limitNote = cardLimitNote(preview.moves.find((m) => m.account.kind === "card"));
   // A refund takes an expense category (it lowers that category's spending).
   const kind = type === "income" ? "income" : "expense";
   const { tiles, more } = categoryTiles(data.categories, kind, {
@@ -309,8 +309,11 @@ function AddForm({
 
   return (
     <View style={styles.flex}>
-      <ScrollView style={styles.flex} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <AmountInput value={amount} currency={currency} error={fieldErrors.amount} />
+      {/* The amount sticks to the top while the rows below scroll, so it is always on screen (owner, #105). */}
+      <ScrollView style={styles.flex} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" stickyHeaderIndices={[0]}>
+        <View style={styles.amount}>
+          <AmountInput value={amount} currency={currency} error={fieldErrors.amount} />
+        </View>
 
         {formError ? <FormMessage tone="error" message={formError} /> : null}
 
@@ -397,7 +400,15 @@ function AddForm({
       <View style={[styles.footer, { paddingBottom: bottomInset + spacing[3] }]}>
         {/* Above the keypad, so they show as the amount is typed (the rows above may scroll). */}
         {short ? <WarningBanner message={runsShortText(short, moveFor(short.accountId)?.account.currency ?? currency)} /> : null}
-        {limitWarning ? <FormMessage tone="info" message={`${limitWarning} You can still save it.`} /> : null}
+        {/* One short line, so the amount at the top stays on screen at 390×844 (owner, #105). */}
+        {limitNote ? (
+          <View accessible accessibilityLabel={`${limitNote}. You can still save it.`} style={styles.limitNote}>
+            <Info size={16} color={mobile.colors.muted} />
+            <Text style={[dsText.caption, styles.flex]} numberOfLines={1}>
+              {limitNote}
+            </Text>
+          </View>
+        ) : null}
         {/* Date and note sit right above the keypad: on screen without scrolling on a 390×844 phone. */}
         <View style={styles.chips}>
           <Chip icon={CalendarDays} label={occurredOn === today ? "Today" : fullDate(occurredOn)} onPress={() => setPicker("date")} />
@@ -500,6 +511,8 @@ const styles = StyleSheet.create({
   },
   error: { ...dsText.caption, color: mobile.colors.warning, fontFamily: fontFamily.bodySemibold },
   chips: { flexDirection: "row", gap: spacing[2] },
+  amount: { backgroundColor: mobile.colors.canvas },
+  limitNote: { flexDirection: "row", alignItems: "center", gap: spacing[1] },
   footer: { gap: spacing[2], paddingHorizontal: spacing[4], paddingTop: spacing[3], borderTopWidth: 1, borderTopColor: mobile.colors.line, backgroundColor: mobile.colors.canvas },
   list: { gap: spacing[1] },
   option: { flexDirection: "row", alignItems: "center", gap: spacing[3], minHeight: 52, paddingHorizontal: spacing[2], borderRadius: mobile.radius.tile },

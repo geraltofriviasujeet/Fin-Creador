@@ -52,7 +52,7 @@ test("tab shell: four tabs and the raised ＋, each tab opens its screen", async
   await page.screenshot({ path: `${SHOTS}/13a-home-shell.png` });
 
   const screens: [string, string | RegExp][] = [
-    ["Activity", "Transactions"],
+    ["Activity", "Activity"],
     ["Plan", "Plan"],
     ["Roma", "Roma"],
     ["Home", GREETING],
