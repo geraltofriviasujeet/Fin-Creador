@@ -103,9 +103,10 @@ function Budgets({ view }: { view: GoalsView }) {
             )}
           </Card>
           <Card style={styles.list}>
-            {view.budgets.map((item) => (
+            {view.budgets.map((item, i) => (
               <BudgetRow
                 key={item.category.id}
+                first={i === 0}
                 item={item}
                 currency={view.currency}
                 marker={marker}

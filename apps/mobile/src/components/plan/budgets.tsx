@@ -59,11 +59,19 @@ export function BudgetTotal({ total, currency, marker }: { total: BudgetStatus; 
 }
 
 /** One category's budget. Pressing it opens the budget sheet (change, remove or set again). */
-export function BudgetRow({ item, currency, marker, later, onPress }: { item: BudgetItem; currency: string; marker?: number; later: boolean; onPress: () => void }) {
+export function BudgetRow({ item, currency, marker, later, first, onPress }: {
+  item: BudgetItem;
+  currency: string;
+  marker?: number;
+  later: boolean;
+  /** First row of its own card: no divider above it. */
+  first?: boolean;
+  onPress: () => void;
+}) {
   const { category, status, since, budget } = item;
   const action = status ? "Change budget" : "Set your budget again";
   return (
-    <Pressable accessibilityRole="button" accessibilityHint={action} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityHint={action} onPress={onPress} style={({ pressed }) => [styles.row, first && styles.firstRow, pressed && styles.pressed]}>
       <View style={styles.rowHead}>
         <View style={styles.rowTitle}>
           <Text style={dsText.bodyStrong} numberOfLines={1}>
@@ -163,6 +171,7 @@ const styles = StyleSheet.create({
   row: { gap: 6, paddingVertical: spacing[2], borderTopWidth: 1, borderTopColor: mobile.colors.line, minHeight: mobile.tapTarget },
   rowHead: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
   rowTitle: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: spacing[2], rowGap: 2 },
+  firstRow: { borderTopWidth: 0 },
   pressed: { backgroundColor: mobile.colors.canvas },
   start: { alignSelf: "flex-start" },
 });
