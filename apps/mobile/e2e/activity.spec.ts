@@ -104,6 +104,8 @@ test("a month with data: tiles, day groups and totals, tags, Load more, chips, M
   await page.getByRole("switch", { name: "Show voided entries" }).click();
   await page.getByRole("button", { name: "Show results", exact: true }).click();
   await expect(a.getByRole("button", { name: "More filters · 1", exact: true })).toBeVisible();
+  // The 50 teas on the 5th fill the first page again; the dinner (the 4th) is on the next.
+  await a.getByRole("button", { name: "Load more", exact: true }).click();
   await expect(a.getByRole("button", { name: /^Dinner, .+, Voided, not counted, Reason: Entered twice, Money out, ₹900$/ })).toBeVisible();
   await expect(a.getByRole("button", { name: /^Salary,/ })).toHaveCount(0);
   await a.getByRole("button", { name: /^Dinner,/ }).scrollIntoViewIfNeeded();
