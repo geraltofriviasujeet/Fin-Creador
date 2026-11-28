@@ -1,436 +1,233 @@
 import {
-  type Filters,
-  type LedgerItem,
-  type Lookup,
-  ledgerLookup,
-  PERIODS,
-  type PageCursor,
-  TYPE_TABS,
-  type TransactionTotals,
+  ACTIVITY_CHIPS,
+  type ActivityFilters,
   type TransactionsContext,
-  accountChipText,
-  dayHeading,
-  entryKindLabel,
-  entryTitle,
-  groupByDay,
-  hasActiveFilters,
-  loadTransactionPage,
-  loadTransactionTotals,
-  money,
-  periodLabel,
+  activeChip,
+  activityRange,
+  clearActivityFilters,
+  dayTotals,
+  hasActivityFilters,
+  initialActivityFilters,
+  isSearching,
+  ledgerLookup,
+  monthChips,
+  monthLabel,
+  moreFiltersCount,
   spendLimitLabel,
-  periodRange,
-  previousPeriod,
-  rangeText,
-  readFilters,
-  signedAmount,
-  toApiFilters,
+  withMonth,
 } from "@fin-creador/api";
-import { formatPercentFromBasisPoints, incomeTrendBasisPoints, savingsRateBasisPoints } from "@fin-creador/domain";
-import { useRouter } from "expo-router";
-import { Gauge, Plus, Repeat, RotateCw, Search, Wallet } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { Badge } from "@/components/badge";
-import { Button } from "@/components/button";
-import { Card, CardDescription, CardTitle } from "@/components/card";
-import { EmptyState } from "@/components/empty-state";
-import { FormMessage } from "@/components/form-message";
-import { DateField } from "@/components/income/date-field";
-import { StatCard } from "@/components/income/stat-card";
-import { PageHeader } from "@/components/page-header";
+import { formatClockTime } from "@fin-creador/domain";
+import { useFocusEffect, useRouter } from "expo-router";
+import { CalendarDays, CircleAlert, CloudOff, Gauge, Landmark, Repeat, Search, SlidersHorizontal, Wallet } from "lucide-react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityHeader, ActivitySkeleton, DayGroup, Summary } from "@/components/activity/parts";
+import { MonthPicker, MoreFilters } from "@/components/activity/sheets";
+import { Button, Chip, EmptyState, OfflineBanner, WarningBanner } from "@/components/ds";
 import { Screen } from "@/components/screen";
-import { Segmented } from "@/components/segmented";
-import { SelectField } from "@/components/select-field";
-import { TextField } from "@/components/text-field";
-import { TextLink } from "@/components/text-link";
-import { EntryIcon } from "@/components/transactions/entry-icon";
-import { TransactionsGate } from "@/components/transactions/transactions-gate";
-import { NETWORK_ERROR } from "@/lib/income-store";
-import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/components/toast";
+import { visibleMonthChips } from "@/lib/activity-text";
 import { useTransactions } from "@/lib/transactions-store";
-import { TOUCH_TARGET, colors, fontFamily, fontSize, spacing, text } from "@/theme";
+import { useActivityList } from "@/lib/use-activity-list";
+import { comingSoonMessage } from "@/navigation";
+import { dsText, mobile, spacing } from "@/theme";
 
 /**
- * Activity tab (Sprint 3): every expense, income and transfer, filtered and searched in the
- * database through the loaders shared with the web /transactions page.
+ * Activity tab (Sprint 13b PR 4, design-spec §5): month chips and a month picker, Money in /
+ * Money out, the All / Spent / Received / Transfers chips and More filters, entries by day
+ * with day totals, Search (all time) and Import UPI in the header. Filtering, search and
+ * totals run in the database through the loaders shared with the web (packages/api
+ * activity.ts); nothing is kept on the phone.
  */
 export default function ActivityScreen() {
   const { state, refresh } = useTransactions();
+  const toast = useToast();
   const [pulling, setPulling] = useState(false);
-  return (
-    <Screen
-      aboveTabBar
-      refreshControl={
-        <RefreshControl
-          refreshing={pulling}
-          onRefresh={() => {
-            setPulling(true);
-            void refresh().finally(() => setPulling(false));
-          }}
-          tintColor={colors.ink}
-        />
-      }
-    >
-      <PageHeader title="Transactions" description="See every rupee coming in and going out." />
-      {state.status === "ready" ? <Activity data={state.data} /> : <TransactionsGate>{() => null}</TransactionsGate>}
-    </Screen>
-  );
-}
+  const [f, setF] = useState<ActivityFilters | null>(null);
+  const data = state.status === "ready" ? state.data : null;
+  const filters = f ?? (data ? initialActivityFilters(data.today) : null);
 
-type ListState =
-  | { status: "loading" }
-  | { status: "error" }
-  | { status: "ready"; items: LedgerItem[]; nextCursor: PageCursor | null; totals: TransactionTotals; prevTotals: TransactionTotals | null };
-
-function Activity({ data }: { data: TransactionsContext }) {
-  const router = useRouter();
-  const { state, version } = useTransactions();
-  // The daily spend limit (pre-13b 2 PR 4): left out if it couldn't be read, so it never offers "Set" over a saved one.
-  const spendLimit = state.status === "ready" ? state.spendLimit : null;
-  const limitLabel = spendLimit?.limit ? spendLimitLabel(spendLimit.limit) : null;
-  const { today, currency } = data;
-  const defaults = useMemo(() => readFilters(new URLSearchParams(), today), [today]);
-  const [f, setF] = useState<Filters>(defaults);
-  const [query, setQuery] = useState("");
-  const [list, setList] = useState<ListState>({ status: "loading" });
-  const [attempt, setAttempt] = useState(0);
-  const [more, setMore] = useState<"idle" | "loading" | "error">("idle");
-  const range = periodRange(f, today);
-  const key = JSON.stringify(f);
-
-  const lookup: Lookup = useMemo(
-    () => ledgerLookup(data),
-    [data]
-  );
-
-  useEffect(() => {
-    let active = true;
-    const supabase = getSupabase();
-    const filters = JSON.parse(key) as Filters;
-    const r = periodRange(filters, today);
-    const prev = previousPeriod(filters, today);
-    Promise.all([
-      loadTransactionPage(supabase, toApiFilters(filters, r), { currency }),
-      loadTransactionTotals(supabase, toApiFilters(filters, r), currency),
-      prev ? loadTransactionTotals(supabase, toApiFilters(filters, prev), currency) : null,
-    ])
-      .then(([page, totals, prevTotals]) => {
-        if (!active) return;
-        if (!page.ok || !totals.ok || (prevTotals && !prevTotals.ok)) return setList({ status: "error" });
-        setList({ status: "ready", items: page.items, nextCursor: page.nextCursor, totals: totals.totals, prevTotals: prevTotals?.ok ? prevTotals.totals : null });
-      })
-      .catch(() => active && setList({ status: "error" }));
-    return () => {
-      active = false;
-    };
-  }, [key, today, currency, version, attempt]);
-
-  const go = (next: Partial<Filters>) => {
-    setList({ status: "loading" });
-    setMore("idle");
-    setF((cur) => ({ ...cur, ...next }));
+  const onRefresh = () => {
+    setPulling(true);
+    void refresh().finally(() => setPulling(false));
   };
 
-  async function loadMore() {
-    if (list.status !== "ready" || !list.nextCursor || more === "loading") return;
-    setMore("loading");
-    try {
-      const page = await loadTransactionPage(getSupabase(), toApiFilters(f, range), { currency, cursor: list.nextCursor });
-      if (!page.ok) return setMore("error");
-      setList((l) => (l.status === "ready" ? { ...l, items: [...l.items, ...page.items], nextCursor: page.nextCursor } : l));
-      setMore("idle");
-    } catch {
-      setMore("error");
-    }
-  }
-
-  const addTransaction = (type: "expense" | "income" = "expense") => router.push({ pathname: "/add", params: { type } });
-  const label = periodLabel(f);
-  const hasAccounts = data.accounts.some((a) => !a.archived);
+  let body;
+  if (state.status === "loading") body = <ActivitySkeleton />;
+  else if (state.status === "error")
+    body = state.offline ? (
+      <EmptyState icon={CloudOff} title="You're offline" body="Activity will load when your phone is back online." action={{ label: "Try again", onPress: () => void refresh() }} />
+    ) : (
+      <EmptyState icon={CircleAlert} title="We couldn't load Activity" body={state.message} action={{ label: "Retry", onPress: () => void refresh() }} />
+    );
+  else body = <Activity data={state.data} filters={filters!} setFilters={setF} />;
 
   return (
-    <View style={styles.gap}>
-      <Button label="Add transaction" icon={Plus} onPress={() => addTransaction()} />
-      <Button label="Recurring" variant="secondary" icon={Repeat} onPress={() => router.push("/recurring")} accessibilityHint="Opens recurring items: what is due and what it costs" />
-      {spendLimit ? (
-        <Button
-          label={limitLabel ? `Limit ${limitLabel}` : "Set daily spend limit"}
-          variant="secondary"
-          icon={Gauge}
-          onPress={() => router.push("/sheets/spend-limit")}
-          accessibilityHint={limitLabel ? "Change daily spend limit" : "One cap for everyday spending"}
-        />
-      ) : null}
-      <Segmented label="Transaction type" options={TYPE_TABS} value={f.type} onChange={(type) => go({ type })} />
-
-      <Card style={styles.filters}>
-        <TextField
-          label="Search"
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Note, category, account or amount"
-          returnKeyType="search"
-          maxLength={100}
-          onSubmitEditing={() => go({ q: query.trim() })}
-          accessibilityHint="Searches when you press search on the keyboard"
-        />
-        <View style={styles.actions}>
-          <Button label="Search" variant="secondary" icon={Search} onPress={() => go({ q: query.trim() })} />
-          {f.q ? (
-            <TextLink
-              label="Clear search"
-              onPress={() => {
-                setQuery("");
-                go({ q: "" });
-              }}
-            />
-          ) : null}
-        </View>
-        <SelectField
-          label="Date"
-          value={f.period}
-          options={PERIODS.map((p) => ({ value: p.value, label: p.label }))}
-          onChange={(period) => go({ period: period as Filters["period"] })}
-          searchPlaceholder="Search periods"
-        />
-        {f.period === "custom" ? (
-          <View style={styles.gap}>
-            <DateField label="From" value={f.from} max={today} onChange={(from) => go({ from })} />
-            <DateField label="To" value={f.to} max={today} onChange={(to) => go({ to })} />
-          </View>
-        ) : null}
-        <SelectField
-          label="Category"
-          value={f.category}
-          options={[
-            { value: "", label: "All categories" },
-            ...data.categories.map((c) => ({
-              value: c.id,
-              label: `${c.name}${c.archived ? " (archived)" : ""}${c.kind === "income" ? " · income" : ""}`,
-            })),
-          ]}
-          onChange={(category) => go({ category })}
-          searchPlaceholder="Search categories"
-        />
-        <SelectField
-          label="Account"
-          value={f.account}
-          options={[{ value: "", label: "All accounts" }, ...data.accounts.map((a) => ({ value: a.id, label: `${a.label}${a.archived ? " (archived)" : ""}` }))]}
-          onChange={(account) => go({ account })}
-          searchPlaceholder="Search accounts"
-        />
-        <View style={styles.switchRow}>
-          <Text style={text.body}>Show voided entries</Text>
-          <Switch
-            value={f.showVoided}
-            onValueChange={(showVoided) => go({ showVoided })}
-            accessibilityLabel="Show voided entries"
-            trackColor={{ true: colors.ink, false: colors.lineStrong }}
-            thumbColor={colors.surface}
-          />
-        </View>
-        {hasActiveFilters(f) ? (
-          <TextLink
-            label="Clear filters"
-            onPress={() => {
-              setQuery("");
-              go(defaults);
-            }}
-          />
-        ) : null}
-      </Card>
-
-      {list.status === "loading" ? (
-        <View style={styles.center} accessibilityLabel="Loading transactions" accessibilityState={{ busy: true }}>
-          <ActivityIndicator color={colors.ink} />
-        </View>
-      ) : list.status === "error" ? (
-        <View style={styles.gap}>
-          <FormMessage tone="error" message={NETWORK_ERROR} />
-          <Button
-            label="Try again"
-            variant="secondary"
-            icon={RotateCw}
-            onPress={() => {
-              setList({ status: "loading" });
-              setAttempt((n) => n + 1);
-            }}
-          />
-        </View>
-      ) : (
-        <>
-          <Totals totals={list.totals} prevTotals={list.prevTotals} label={label} currency={currency} />
-          <Text style={text.caption}>
-            {rangeText(range)}. Transfers between your accounts ({list.totals.transferCount}) aren&apos;t income or expenses. Voided entries never count.
-            {list.totals.otherCurrencyCount > 0 ? ` ${list.totals.otherCurrencyCount} entries in other currencies are listed but not totalled.` : ""}
-          </Text>
-
-          {list.items.length === 0 ? (
-            !data.hasEntries ? (
-              <EmptyState
-                icon={Wallet}
-                title="No transactions yet"
-                body={
-                  hasAccounts
-                    ? "Add what you spend and receive. Transfers between your own accounts go here too, without counting as income or expenses."
-                    : "Add an account on the Income screen first, then record what you spend and receive here."
-                }
-                action={
-                  hasAccounts ? (
-                    <Button label="Add expense" icon={Plus} onPress={() => addTransaction("expense")} />
-                  ) : (
-                    <Button label="Go to Income" onPress={() => router.push("/income")} />
-                  )
-                }
-              />
-            ) : (
-              <EmptyState
-                icon={Search}
-                title="Nothing matches these filters"
-                body={`${f.q ? "Search looks in notes, category and account names, and exact amounts. " : ""}Try another period or clear the filters.`}
-                chip={colors.blue}
-              />
-            )
-          ) : (
-            <Card style={styles.listCard}>
-              <View style={styles.listHeader}>
-                <CardTitle>{f.type === "all" ? "All transactions" : (TYPE_TABS.find((t) => t.value === f.type)?.label ?? "All")}</CardTitle>
-                <CardDescription>
-                  {label}
-                  {f.q ? ` · matching “${f.q}”` : ""}
-                </CardDescription>
-              </View>
-              {groupByDay(list.items).map((g) => (
-                <View key={g.date}>
-                  <Text style={styles.day} accessibilityRole="header">
-                    {dayHeading(g.date, today).toUpperCase()}
-                  </Text>
-                  {g.rows.map((entry) => (
-                    <Row key={entry.id} entry={entry} lookup={lookup} onPress={() => router.push({ pathname: "/sheets/entry", params: { id: entry.id } })} />
-                  ))}
-                </View>
-              ))}
-              <View style={styles.footer}>
-                <Text style={text.caption} accessibilityLiveRegion="polite">
-                  Showing {list.items.length}
-                </Text>
-                {list.nextCursor ? <Button label="Show more" variant="secondary" loading={more === "loading"} onPress={() => void loadMore()} /> : null}
-              </View>
-              {more === "error" ? (
-                <View style={styles.footerError}>
-                  <FormMessage tone="error" message="We couldn't load more entries. Check your connection and try again." />
-                </View>
-              ) : null}
-            </Card>
-          )}
-        </>
-      )}
+    <View style={styles.page} testID="activity-screen">
+      <ActivityHeader
+        query={filters?.q ?? ""}
+        onSearch={(q) => filters && setF({ ...filters, q })}
+        onImportUpi={() => toast.show(comingSoonMessage("Import UPI"))}
+      />
+      <Screen aboveTabBar refreshControl={<RefreshControl refreshing={pulling} onRefresh={onRefresh} tintColor={mobile.colors.ink} />}>
+        {body}
+      </Screen>
     </View>
   );
 }
 
-function Totals({ totals, prevTotals, label, currency }: { totals: TransactionTotals; prevTotals: TransactionTotals | null; label: string; currency: string }) {
-  const trend = prevTotals ? incomeTrendBasisPoints(totals.incomeMinor, prevTotals.incomeMinor) : null;
-  const rate = savingsRateBasisPoints(totals);
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stats} accessibilityLabel="Totals for these filters">
-      <StatCard
-        label={`Income · ${label}`}
-        value={money(totals.incomeMinor, currency)}
-        footer={
-          trend === null ? (
-            <Text style={text.caption}>{`${totals.incomeCount} ${totals.incomeCount === 1 ? "entry" : "entries"}`}</Text>
-          ) : (
-            <Text style={[text.caption, { color: trend >= 0 ? colors.success : colors.danger }]}>
-              {formatPercentFromBasisPoints(trend, { signed: true })} from the month before
-            </Text>
-          )
-        }
-      />
-      <StatCard
-        label={`Expenses · ${label}`}
-        value={money(totals.expenseMinor, currency)}
-        footer={<Text style={text.caption}>{`${totals.expenseCount} ${totals.expenseCount === 1 ? "expense" : "expenses"}`}</Text>}
-      />
-      <StatCard
-        label="Net savings"
-        value={money(totals.netMinor, currency)}
-        footer={
-          rate === null ? (
-            <Text style={text.caption}>No income in this period</Text>
-          ) : totals.netMinor < 0 ? (
-            <Text style={[text.caption, { color: colors.danger }]}>Spent {money(-totals.netMinor, currency)} more than came in</Text>
-          ) : (
-            <Text style={[text.caption, { color: colors.success }]}>{formatPercentFromBasisPoints(rate)} savings rate</Text>
-          )
-        }
-      />
-    </ScrollView>
+function Activity({ data, filters: f, setFilters }: { data: TransactionsContext; filters: ActivityFilters; setFilters: (f: ActivityFilters) => void }) {
+  const router = useRouter();
+  const { state, version } = useTransactions();
+  const { list, reload, loadMore } = useActivityList(f, data.currency, version);
+  const [sheet, setSheet] = useState<"month" | "more" | null>(null);
+  const { today, currency } = data;
+  const lookup = useMemo(() => ledgerLookup(data), [data]);
+  const chips = useMemo(() => monthChips(today), [today]);
+  const searching = isSearching(f);
+  // "Oct" for a month this year (as on its chip), "All time" while searching, or the custom range.
+  const label = !searching && f.month !== null ? monthLabel(f.month, today) : activityRange(f).label;
+  // Coming back to the tab reloads the list, keeping it on screen (offline: a banner says when it was loaded).
+  const focused = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (focused.current) reload();
+      focused.current = true;
+    }, [reload]),
   );
-}
+  const more = moreFiltersCount(f);
+  // The daily spend limit (pre-13b 2 PR 4): left out if it couldn't be read, so it never offers "Set" over a saved one.
+  const spendLimit = state.status === "ready" ? state.spendLimit : null;
+  const limitLabel = spendLimit?.limit ? spendLimitLabel(spendLimit.limit) : null;
+  const accounts = [...data.accounts, ...data.cardAccounts].map((a) => ({ value: a.id, label: `${a.label}${a.archived ? " (archived)" : ""}` }));
+  const hasAccounts = data.accounts.some((a) => !a.archived);
+  const add = () => router.push({ pathname: "/add", params: { type: "expense" } });
+  // A month chip ends a search: search covers all time.
+  const pickMonth = (month: string) => setFilters(withMonth({ ...f, q: "" }, month));
 
-function Row({ entry, lookup, onPress }: { entry: LedgerItem; lookup: Lookup; onPress: () => void }) {
-  const title = entryTitle(entry, lookup);
-  const amount = signedAmount(entry);
+  const tools = (
+    <View style={styles.toolRow}>
+      {spendLimit ? (
+        <Chip icon={Gauge} label={limitLabel ? `Limit ${limitLabel}` : "Set daily spend limit"} onPress={() => router.push("/sheets/spend-limit")} />
+      ) : null}
+      <Chip icon={Repeat} label="Recurring" onPress={() => router.push("/recurring")} />
+    </View>
+  );
+
+  if (!data.hasEntries && !hasActivityFilters(f)) {
+    return (
+      <>
+        {tools}
+        <EmptyState
+          icon={hasAccounts ? Wallet : Landmark}
+          title="No entries yet"
+          body={
+            hasAccounts
+              ? "What you spend and receive shows here, by day. Transfers between your own accounts too, without counting as money in or out."
+              : "Add the bank account or cash you spend from, then record what you spend and receive."
+          }
+          action={
+            hasAccounts
+              ? { label: "Add expense", onPress: add }
+              : { label: "Add an account", onPress: () => router.push({ pathname: "/sheets/account", params: { kind: "bank" } }) }
+          }
+        />
+      </>
+    );
+  }
+
+  const ready = list.status === "ready" ? list : null;
+  const groups = ready ? dayTotals(ready.items, { currency, hasMore: ready.nextCursor !== null }) : [];
+
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}, ${amount}${entry.voided ? ", voided, not counted" : ""}`}
-      accessibilityHint="Opens details, edit, void and history"
-      style={({ pressed }) => [styles.row, entry.voided && styles.voidedRow, pressed && styles.pressed]}
-    >
-      <EntryIcon entry={entry} lookup={lookup} />
-      <View style={styles.rowText}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, entry.voided && styles.muted]} numberOfLines={1}>
-            {title}
-          </Text>
-          {entry.replacesId ? <Badge label="Edited" tone="info" /> : null}
-          {entry.voided ? <Badge label="Voided" tone="negative" /> : null}
-        </View>
-        <Text style={text.caption} numberOfLines={1}>
-          {entryKindLabel(entry, lookup)} · {accountChipText(entry, lookup)}
-          {entry.voided && entry.voidReason ? ` · Reason: ${entry.voidReason}` : ""}
-        </Text>
-      </View>
-      <Text style={[styles.amount, entry.type === "income" && styles.income, entry.voided && styles.struck]}>{amount}</Text>
-    </Pressable>
+    <>
+      {ready?.problem === "offline" ? <OfflineBanner detail={`Showing what was loaded at ${formatClockTime(ready.loadedAt, data.timeZone)}.`} /> : null}
+      {ready?.problem === "error" ? <WarningBanner message="We couldn't refresh Activity. Showing what was loaded earlier." action={{ label: "Retry", onPress: reload }} /> : null}
+      {tools}
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} accessibilityLabel="Months">
+        {searching ? <Chip label="All time" selected /> : null}
+        {visibleMonthChips(chips, f).map((c) => (
+          <Chip key={c.month} label={c.label} selected={!searching && f.month === c.month} onPress={() => pickMonth(c.month)} />
+        ))}
+        <Chip icon={CalendarDays} label="Pick a month" onPress={() => setSheet("month")} />
+      </ScrollView>
+
+      {ready ? <Summary totals={ready.totals} previous={ready.previous} currency={currency} label={label} /> : null}
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} accessibilityLabel="Show">
+        {ACTIVITY_CHIPS.map((c) => (
+          <Chip key={c.value} label={c.label} selected={activeChip(f.type) === c.value} onPress={() => setFilters({ ...f, type: c.value })} />
+        ))}
+        <Chip icon={SlidersHorizontal} label={more > 0 ? `More filters · ${more}` : "More filters"} selected={more > 0} onPress={() => setSheet("more")} />
+      </ScrollView>
+      {searching ? <Text style={dsText.caption}>{`Matching “${f.q}” in all time`}</Text> : null}
+
+      {list.status === "loading" ? (
+        <ActivitySkeleton />
+      ) : list.status === "offline" ? (
+        <EmptyState icon={CloudOff} title="You're offline" body="Activity will load when your phone is back online." action={{ label: "Try again", onPress: reload }} />
+      ) : list.status === "error" ? (
+        <EmptyState icon={CircleAlert} title="We couldn't load these entries" body="Please try again." action={{ label: "Retry", onPress: reload }} />
+      ) : list.items.length === 0 ? (
+        hasActivityFilters(f) ? (
+          <EmptyState
+            icon={Search}
+            title="No matches"
+            body={
+              searching
+                ? `Nothing matches “${f.q}”. Search looks in notes, category and account names, and exact amounts.`
+                : `Nothing in ${label} matches these filters.`
+            }
+            action={{ label: "Clear filters", onPress: () => setFilters(clearActivityFilters(f, today)) }}
+          />
+        ) : (
+          <EmptyState icon={Wallet} title={`Nothing in ${label}`} body="Entries you record for this month show here." action={{ label: "Add expense", onPress: add }} />
+        )
+      ) : (
+        <>
+          {groups.map((g) => (
+            <DayGroup
+              key={g.date}
+              date={g.date}
+              today={today}
+              rows={g.rows}
+              totals={g.totals}
+              currency={currency}
+              lookup={lookup}
+              onOpen={(entry) => router.push({ pathname: "/sheets/entry", params: { id: entry.id } })}
+            />
+          ))}
+          <View style={styles.footer}>
+            <Text style={dsText.caption} accessibilityLiveRegion="polite">
+              {list.nextCursor ? `Showing ${list.items.length}` : `${list.items.length} ${list.items.length === 1 ? "entry" : "entries"}`}
+            </Text>
+            {list.nextCursor ? <Button label="Load more" variant="secondary" size="small" loading={list.more === "loading"} onPress={() => void loadMore()} /> : null}
+          </View>
+          {list.more === "error" ? <WarningBanner message="We couldn't load more entries. Check your connection and try again." /> : null}
+        </>
+      )}
+
+      <MonthPicker visible={sheet === "month"} today={today} selected={searching ? null : f.month} onPick={(m) => { setSheet(null); pickMonth(m); }} onClose={() => setSheet(null)} />
+      <MoreFilters
+        visible={sheet === "more"}
+        filters={f}
+        today={today}
+        categories={data.categories}
+        accounts={accounts}
+        onApply={(next) => {
+          setSheet(null);
+          setFilters(next);
+        }}
+        onClose={() => setSheet(null)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  gap: { gap: spacing[4] },
-  filters: { gap: spacing[4] },
-  actions: { flexDirection: "row", alignItems: "center", gap: spacing[3] },
-  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: TOUCH_TARGET },
-  center: { paddingVertical: spacing[10], alignItems: "center" },
-  stats: { gap: spacing[3] },
-  listCard: { paddingHorizontal: 0, paddingBottom: spacing[3] },
-  listHeader: { paddingHorizontal: spacing[4], paddingBottom: spacing[3], gap: spacing[1] },
-  day: {
-    fontFamily: fontFamily.bodySemibold,
-    fontSize: fontSize.xs,
-    letterSpacing: 1.2,
-    color: colors.muted,
-    backgroundColor: colors.canvas,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[2],
-  },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing[3], paddingHorizontal: spacing[4], paddingVertical: spacing[3], minHeight: 64 },
-  voidedRow: { backgroundColor: colors.canvas },
-  pressed: { opacity: 0.7 },
-  rowText: { flex: 1, gap: 2 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
-  title: { flexShrink: 1, fontFamily: fontFamily.bodySemibold, fontSize: fontSize.sm, color: colors.ink },
-  muted: { color: colors.muted },
-  amount: { fontFamily: fontFamily.bodySemibold, fontSize: fontSize.sm, color: colors.ink, fontVariant: ["tabular-nums"] },
-  income: { color: colors.success },
-  struck: { textDecorationLine: "line-through", color: colors.muted },
-  footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing[4], paddingTop: spacing[3], borderTopWidth: 1, borderTopColor: colors.line, gap: spacing[3] },
-  footerError: { paddingHorizontal: spacing[4], paddingTop: spacing[3] },
+  page: { flex: 1, backgroundColor: mobile.colors.canvas },
+  toolRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing[2] },
+  chipRow: { gap: spacing[2], paddingVertical: 4 },
+  footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing[3], minHeight: mobile.tapTarget },
 });

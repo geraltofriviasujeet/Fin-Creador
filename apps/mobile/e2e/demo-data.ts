@@ -11,8 +11,9 @@ import {
   saveTransaction,
   setCategoryBudget,
   userToday,
+  voidTransaction,
 } from "@fin-creador/api";
-import { addDays, daysInMonth, floorToWholeMinor } from "@fin-creador/domain";
+import { addDays, daysInMonth, floorToWholeMinor, monthRange, previousMonthRange } from "@fin-creador/domain";
 import { createClient } from "@supabase/supabase-js";
 
 // Demo figures for the Home E2E, written as the demo user through the shared writers (public
@@ -164,6 +165,41 @@ export async function seedShort(demo: Demo) {
 export async function seedLimit(demo: Demo) {
   await seedNormal(demo);
   ok(await saveSpendLimit(demo.client, { period: "week", amount: "14000" }), "Set spend limit");
+}
+
+/**
+ * Activity (13b PR 4): HDFC Bank ₹50,000 and Cash ₹0, opened 10 days before last month. Last
+ * month (M): salary +₹80,000 on the 1st; rent ₹20,000 on the 2nd; a ₹5,000 transfer HDFC Bank
+ * → Cash and groceries ₹1,500 edited to ₹1,600 ("Edited") on the 3rd; dinner ₹900 voided on the
+ * 4th; 50 teas of ₹20 on the 5th (so the month has 54 entries shown: Load more after 50). →
+ * Money in ₹80,000, money out ₹22,600, net +₹57,400, 72% saved; no trend (no income the month
+ * before). This month: nothing. Returns last month's first day.
+ */
+export async function seedActivity(demo: Demo): Promise<{ month: string }> {
+  const month = previousMonthRange(monthRange(demo.today).start).start;
+  const day = (n: number) => addDays(month, n - 1);
+  const opened = addDays(month, -10);
+  ok(await saveAccount(demo.client, { kind: "bank", bankType: "savings", bankName: "HDFC Bank", currency: "INR", openingBalance: "50000", openingBalanceDate: opened }), "Add HDFC Bank");
+  ok(await saveAccount(demo.client, { kind: "cash", name: "Cash", currency: "INR", openingBalance: "0", openingBalanceDate: opened }), "Add cash");
+  const id = await ids(demo.client);
+  const hdfc = id.account("HDFC Bank");
+  const cash = id.account("Cash");
+  const entry = (type: "income" | "expense" | "transfer", amount: string, on: string, note: string, extra: Partial<{ categoryId: string; counterAccountId: string; transactionId: string }> = {}) =>
+    saveTransaction(demo.client, {
+      type, amount, categoryId: extra.categoryId ?? "", accountId: hdfc, counterAccountId: extra.counterAccountId ?? "", paymentMode: "", refundOfId: "",
+      occurredOn: on, note, idempotencyKey: newRequestKey(), ...(extra.transactionId ? { transactionId: extra.transactionId } : {}),
+    });
+  ok(await entry("income", "80000", day(1), "Salary", { categoryId: id.salary }), "Salary");
+  ok(await entry("expense", "20000", day(2), "Rent", { categoryId: id.home }), "Rent");
+  ok(await entry("transfer", "5000", day(3), "", { counterAccountId: cash }), "Transfer");
+  ok(await entry("expense", "1500", day(3), "Groceries", { categoryId: id.food }), "Groceries");
+  const { data: groceries } = await demo.client.from("transactions").select("id").eq("note", "Groceries").single();
+  ok(await entry("expense", "1600", day(3), "Groceries", { categoryId: id.food, transactionId: groceries?.id ?? "" }), "Edit groceries");
+  ok(await entry("expense", "900", day(4), "Dinner", { categoryId: id.food }), "Dinner");
+  const { data: dinner } = await demo.client.from("transactions").select("id").eq("note", "Dinner").single();
+  ok(await voidTransaction(demo.client, { transactionId: dinner?.id ?? "", idempotencyKey: newRequestKey(), reason: "Entered twice" }), "Void dinner");
+  for (let i = 0; i < 50; i++) ok(await entry("expense", "20", day(5), "Tea", { categoryId: id.food }), `Tea ${i + 1}`);
+  return { month };
 }
 
 /** What Home should show for this user: the shared loader's result, read as them. */
