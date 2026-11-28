@@ -1,6 +1,6 @@
 import { Pencil, Undo2, type LucideIcon } from "lucide-react-native";
 import { type ReactNode, useEffect, useState } from "react";
-import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { useReducedMotion } from "@/components/ds";
 import { fontFamily, mobile, spacing } from "@/theme";
 
@@ -15,6 +15,12 @@ const OPEN_X = -ACTION_WIDTH * 2;
 const START_SLOP = 10;
 /** A click that ends a mouse drag on Expo web arrives within a few ms of the release: ignore it. */
 const TAP_AFTER_SWIPE_MS = 100;
+/**
+ * Expo web: the row takes sideways moves itself, so the browser neither scrolls sideways nor
+ * treats a swipe as Back / Forward. React Native's types don't list `touchAction`; react-native-web
+ * passes it to CSS.
+ */
+const WEB_PAN_Y = Platform.OS === "web" ? ({ touchAction: "pan-y" } as unknown as ViewStyle) : null;
 
 type Props = {
   /** False for a voided entry: it can't be edited or voided. */
@@ -123,7 +129,7 @@ export function SwipeRow({ enabled, open, onOpenChange, onEdit, onVoid, children
   };
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, WEB_PAN_Y]}>
       {revealed ? (
         <View
           style={styles.actions}
