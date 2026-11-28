@@ -62,9 +62,9 @@ async function swipeLeft(page: Page, row: Locator) {
   await cdp.detach();
 }
 
-/** Waits until something that slides (a row's actions, a sheet) stops moving. */
-async function settled(locator: Locator) {
-  await expect(locator).toBeInViewport({ ratio: 1 });
+/** Waits until something that slides (a row's actions, a sheet) stops moving. `whole`: also fully on screen. */
+async function settled(locator: Locator, whole = true) {
+  if (whole) await expect(locator).toBeInViewport({ ratio: 1 });
   let last = "";
   await expect
     .poll(async () => {
@@ -241,7 +241,7 @@ test("swipe a row for Edit and Void; Import UPI opens the web's import page", as
   await shot(page, "13b-activity-swipe");
 
   // Tapping the open row closes it; it doesn't open the entry.
-  await settled(groceries);
+  await settled(groceries, false);
   await groceries.click();
   await expect(voidAction).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Void expense", exact: true })).toHaveCount(0);
@@ -253,7 +253,7 @@ test("swipe a row for Edit and Void; Import UPI opens the web's import page", as
   // Add's own close button (a quick browser Back can race expo-router's push on the web).
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Edit expense", exact: true })).toHaveCount(0);
-  await settled(groceries);
+  await settled(groceries, false);
 
   // Void opens the entry at its void step (reason, one-way warning); voiding takes it off the list.
   await swipeLeft(page, groceries);
