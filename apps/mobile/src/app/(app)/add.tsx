@@ -60,8 +60,6 @@ import { dsText, fontFamily, mobile, spacing } from "@/theme";
 // "Refunded to" on a refund's edit), as on the web: what is owed before → after, the 80% / over
 // limit note, never the runs-short warning.
 
-const REFUND_OPTION = { value: "refund" as const, label: "Refund" };
-
 type Editing = { status: "loading" } | { status: "error" } | { status: "ready"; entry: LedgerItem } | null;
 
 export default function AddScreen() {
@@ -115,14 +113,15 @@ export default function AddScreen() {
         <View style={styles.close} />
       </View>
       <View style={styles.segment}>
-        <SegmentedControl<EntryType>
-          label="Entry type"
-          options={type === "refund" ? [...ADD_TYPES, REFUND_OPTION] : ADD_TYPES}
-          value={type}
-          onChange={(t) => isAddType(t) && setNewType(t)}
-          disabled={locked}
-        />
-        {id ? <Text style={[dsText.caption, styles.lockNote]}>The type can&apos;t change. To make this another type, void it and add a new entry.</Text> : null}
+        {/* An edit or a recurring confirm can't change type: one line instead of the type switch,
+            so the account row stays on screen above the keypad. */}
+        {locked ? (
+          <Text style={[dsText.caption, styles.lockNote]}>
+            {id ? "The type can't change. To change it, void this and add a new entry." : "The type is set by the recurring item."}
+          </Text>
+        ) : (
+          <SegmentedControl label="Entry type" options={ADD_TYPES} value={newType} onChange={setNewType} />
+        )}
       </View>
       <View style={[styles.flex, styles.gatePad]}>
         <TransactionsGate>

@@ -261,9 +261,8 @@ test("edit from Activity: type locked, figures filled in, Save changes", async (
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   const add = addScreen(page);
   await expect(add.getByRole("heading", { name: "Edit expense", exact: true })).toBeVisible();
-  const types = add.getByRole("tablist", { name: "Entry type" });
-  await expect(types.getByRole("tab", { name: "Expense", exact: true })).toHaveAttribute("aria-selected", "true");
-  for (const t of ["Income", "Transfer"]) await expect(types.getByRole("tab", { name: t, exact: true })).toHaveAttribute("aria-disabled", "true");
+  // No type switch on an edit: one line says why.
+  await expect(add.getByRole("tablist", { name: "Entry type" })).toHaveCount(0);
   await expect(add.getByText(/^The type can.t change\./)).toBeVisible();
   await expect(add.getByText("₹1,200", { exact: true })).toBeVisible();
   await expect(add.getByRole("radio", { name: food, exact: true })).toHaveAttribute("aria-checked", "true");
@@ -273,7 +272,7 @@ test("edit from Activity: type locked, figures filled in, Save changes", async (
   await add.getByRole("button", { name: "Delete last digit", exact: true }).click();
   await add.getByRole("button", { name: "Delete last digit", exact: true }).click();
   await type(page, "50");
-  await expect(add.getByText("₹38,500 → ₹37,250", { exact: true })).toBeVisible();
+  await expect(add.getByText("₹38,500 → ₹37,250", { exact: true })).toBeInViewport({ ratio: 1 });
   await expect(add.getByRole("button", { name: "Save changes", exact: true })).toBeVisible();
   await shot(page, "13b-edit-expense");
 
@@ -302,7 +301,8 @@ test("recurring confirm: type and category set by the rule, saved against the oc
   await expect(add.getByRole("heading", { name: "Add expense", exact: true })).toBeVisible();
   await expect(add.getByText(/^Recurring · \d{1,2} [A-Z][a-z]{2} \d{4}$/)).toBeVisible();
   await expect(add.getByText("₹1,000", { exact: true })).toBeVisible();
-  for (const t of ["Income", "Transfer"]) await expect(add.getByRole("tablist", { name: "Entry type" }).getByRole("tab", { name: t, exact: true })).toHaveAttribute("aria-disabled", "true");
+  await expect(add.getByRole("tablist", { name: "Entry type" })).toHaveCount(0);
+  await expect(add.getByText("The type is set by the recurring item.", { exact: true })).toBeVisible();
   await expect(add.getByLabel(`Category: ${bills}. Set by the recurring item.`, { exact: true })).toBeVisible();
   await expect(add.getByRole("radiogroup", { name: "Category" })).toHaveCount(0);
   await expect(add.getByText("₹37,300 → ₹36,300", { exact: true })).toBeVisible();
@@ -342,7 +342,8 @@ test("expense paid by credit card: owed before → after, the limit note, never 
   await expect(card).toBeVisible();
   await card.click();
   await sheetClosed(page, "Paid from");
-  await expect(add.getByText("owed ₹6,000 → owed ₹42,000", { exact: true })).toBeVisible();
+  await expect(add.getByText("owed ₹6,000 → owed ₹42,000", { exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(add.getByText("Travel (card)", { exact: true })).toBeVisible();
   await expect(add.getByText("This takes Travel to 84% of its limit. You can still save it.", { exact: true })).toBeVisible();
   // A card never runs short; payment mode is for bank accounts only.
   await expect(add.getByText(/leaves you .* short/)).toHaveCount(0);

@@ -51,9 +51,15 @@ export function AccountRow({ label, account, move, error, onPress }: AccountRowP
           <Text style={dsText.bodyStrong} numberOfLines={1}>
             {account?.label ?? "Choose an account"}
           </Text>
+          {/* A card's "owed ₹6,000 → owed ₹42,000" is too long beside its name: it goes underneath. */}
+          {figures && account?.kind === "card" ? (
+            <Text style={[styles.figures, styles.figuresBelow]} numberOfLines={1}>
+              {figures}
+            </Text>
+          ) : null}
         </View>
-        {figures ? (
-          <Text style={[styles.figures, move && move.after < 0 && account?.kind !== "card" ? styles.negative : null]} numberOfLines={1} adjustsFontSizeToFit>
+        {figures && account?.kind !== "card" ? (
+          <Text style={[styles.figures, move && move.after < 0 ? styles.negative : null]} numberOfLines={1} adjustsFontSizeToFit>
             {figures}
           </Text>
         ) : null}
@@ -133,6 +139,7 @@ const styles = StyleSheet.create({
   rowPressed: { backgroundColor: mobile.colors.canvas },
   rowText: { flex: 1, minWidth: 0 },
   figures: { fontFamily: fontFamily.bodySemibold, fontSize: mobile.type.caption.size, color: mobile.colors.ink, fontVariant: ["tabular-nums"], flexShrink: 1, maxWidth: "55%" },
+  figuresBelow: { maxWidth: "100%" },
   negative: { color: mobile.colors.warning },
   error: { ...dsText.caption, color: mobile.colors.warning, fontFamily: fontFamily.bodySemibold },
   list: { gap: spacing[2] },
