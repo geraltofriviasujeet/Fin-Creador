@@ -16,7 +16,7 @@ export async function loadGoalsData(supabase: UserClient, budgetMonth?: string):
   const month = monthRange(shown)
   const later = shown > monthRange(day.today).start
   const [profile, goals, budgets, categories, breakdown] = await Promise.all([
-    supabase.from("profiles").select("currency").eq("id", day.userId).maybeSingle(),
+    supabase.from("profiles").select("currency, time_zone").eq("id", day.userId).maybeSingle(),
     supabase
       .from("goals")
       .select("id, type, name, target_amount_minor, saved_amount_minor, currency, target_date, details, archived_at, created_at"),
@@ -37,6 +37,7 @@ export async function loadGoalsData(supabase: UserClient, budgetMonth?: string):
     data: {
       today: day.today,
       currency,
+      timeZone: profile.data?.time_zone ?? null,
       goals: goals.data.map((g) => ({
         id: g.id,
         type: g.type,

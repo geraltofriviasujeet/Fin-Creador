@@ -150,6 +150,46 @@ export function savingPlan(input: {
 }
 
 // ---------------------------------------------------------------------------
+// On track or behind (Sprint 13c, phone)
+// ---------------------------------------------------------------------------
+
+export type GoalPaceStatus = "reached" | "on_track" | "behind";
+
+export interface GoalPace {
+  status: GoalPaceStatus;
+  /** What an even pace would have saved by now: target × whole months gone ÷ months in the plan. */
+  expectedMinor: number;
+  /** How far the saved amount is under that pace (0 unless behind). */
+  shortMinor: number;
+}
+
+/**
+ * Whether a goal's saved amount keeps an even pace from the month it was added to its target
+ * month (both counted, as savingPlan counts months). Only whole months gone count, so a goal is
+ * never behind in the month it was added; once the target month has passed, the whole target is
+ * expected. A goal without a target date has no pace (null). Saved in full is "reached".
+ */
+export function goalPace(input: {
+  targetMinor: number;
+  savedMinor: number;
+  targetDate: IsoDate | null;
+  /** The day the goal was added, in the person's time zone. */
+  startedOn: IsoDate;
+  today: IsoDate;
+}): GoalPace | null {
+  const { targetMinor, savedMinor, targetDate, startedOn, today } = input;
+  checkMinor(targetMinor, "Target");
+  checkMinor(savedMinor, "Saved amount");
+  if (savedMinor >= targetMinor) return { status: "reached", expectedMinor: targetMinor, shortMinor: 0 };
+  if (targetDate === null) return null;
+  const total = Math.max(1, monthsToTarget(startedOn, targetDate));
+  const gone = Math.min(total, Math.max(0, monthsToTarget(startedOn, today) - 1));
+  const expectedMinor = toSafe(divRoundHalfAway(BigInt(targetMinor) * BigInt(gone), BigInt(total)));
+  if (savedMinor >= expectedMinor) return { status: "on_track", expectedMinor, shortMinor: 0 };
+  return { status: "behind", expectedMinor, shortMinor: expectedMinor - savedMinor };
+}
+
+// ---------------------------------------------------------------------------
 // Monthly budgets
 // ---------------------------------------------------------------------------
 

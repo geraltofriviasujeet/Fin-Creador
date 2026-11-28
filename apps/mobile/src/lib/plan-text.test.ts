@@ -1,10 +1,16 @@
-import { budgetStatus } from "@fin-creador/domain";
+import { budgetStatus, savingPlan } from "@fin-creador/domain";
 import { describe, expect, it } from "vitest";
 import {
   BUDGET_MONTH_COUNT,
   SET_BUDGET_AGAIN,
   budgetBadge,
   budgetBarLabel,
+  budgetBarTone,
+  goalBehindText,
+  goalPaceTag,
+  goalSavingText,
+  goalsSummaryText,
+  savedPercent,
   budgetMonthHeading,
   budgetMonthOptions,
   budgetsSummaryText,
@@ -15,9 +21,9 @@ import {
 describe("budgetBadge", () => {
   it("follows the domain's levels: near limit from 80%, over at 100%", () => {
     expect(budgetBadge(budgetStatus(4_799_99, 6_000_00))).toBeNull();
-    expect(budgetBadge(budgetStatus(4_800_00, 6_000_00))).toEqual({ label: "Near limit", tone: "neutral" });
-    expect(budgetBadge(budgetStatus(5_999_99, 6_000_00))).toEqual({ label: "Near limit", tone: "neutral" });
-    expect(budgetBadge(budgetStatus(6_000_00, 6_000_00))).toEqual({ label: "Over budget", tone: "warning" });
+    expect(budgetBadge(budgetStatus(4_800_00, 6_000_00))).toEqual({ label: "Near limit", tone: "caution" });
+    expect(budgetBadge(budgetStatus(5_999_99, 6_000_00))).toEqual({ label: "Near limit", tone: "caution" });
+    expect(budgetBadge(budgetStatus(6_000_00, 6_000_00))).toEqual({ label: "Over budget", tone: "danger" });
   });
 
   it("asks to set a budget in another currency again", () => {
@@ -71,5 +77,46 @@ describe("budgetMonthHeading", () => {
   it("names this month as such", () => {
     expect(budgetMonthHeading("2026-11-01", "2026-11-28")).toBe("This month · Nov 2026");
     expect(budgetMonthHeading("2026-12-01", "2026-11-28")).toBe("Dec 2026");
+  });
+});
+
+describe("budgetBarTone", () => {
+  it("is red only once over budget; amber from 80% to under 100%", () => {
+    expect(budgetBarTone(budgetStatus(4_799_99, 6_000_00))).toBe("ok");
+    expect(budgetBarTone(budgetStatus(4_800_00, 6_000_00))).toBe("caution");
+    expect(budgetBarTone(budgetStatus(5_999_99, 6_000_00))).toBe("caution");
+    expect(budgetBarTone(budgetStatus(6_000_00, 6_000_00))).toBe("over");
+  });
+});
+
+describe("goal words", () => {
+  const goal = (over: { targetDate?: string | null; savedMinor?: number; targetMinor?: number } = {}) => {
+    const g = { currency: "INR", targetMinor: 40_000_00, savedMinor: 8_000_00, targetDate: "2027-04-15" as string | null, ...over };
+    return { goal: g, plan: savingPlan({ targetMinor: g.targetMinor, savedMinor: g.savedMinor, targetDate: g.targetDate, today: "2026-11-28" }) };
+  };
+
+  it("says what to save a month, as the web does", () => {
+    expect(goalSavingText(goal())).toBe("Save ₹5,333.33 a month for 6 months (by 15 Apr 2027)");
+    expect(goalSavingText(goal({ targetDate: null }))).toBe("Save ₹2,666.67 a month, assuming 12 months (no target date)");
+    expect(goalSavingText(goal({ savedMinor: 40_000_00 }))).toBe("Saved in full");
+    expect(goalSavingText(goal({ targetDate: "2026-10-31" }))).toBe("Target date 31 Oct 2026 has passed: ₹32,000 still to save");
+  });
+
+  it("names the pace in words, and how far behind", () => {
+    const behind = { status: "behind" as const, expectedMinor: 40_000_00, shortMinor: 30_000_00 };
+    const onTrack = { status: "on_track" as const, expectedMinor: 0, shortMinor: 0 };
+    expect(goalPaceTag(behind)).toEqual({ label: "Behind", tone: "caution" });
+    expect(goalPaceTag(onTrack)).toEqual({ label: "On track", tone: "neutral" });
+    expect(goalPaceTag(null)).toBeNull();
+    expect(goalPaceTag({ status: "reached", expectedMinor: 1, shortMinor: 0 })).toBeNull();
+    expect(goalBehindText(behind, "INR")).toBe("₹30,000 behind an even pace since you added it");
+    expect(goalBehindText(onTrack, "INR")).toBeNull();
+    expect(goalsSummaryText([behind, onTrack, null])).toBe("1 behind · 1 on track");
+    expect(goalsSummaryText([null])).toBeNull();
+  });
+
+  it("rounds the saved share down", () => {
+    expect(savedPercent(9_960)).toBe("99%");
+    expect(savedPercent(2_000)).toBe("20%");
   });
 });

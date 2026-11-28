@@ -7,7 +7,7 @@ import { type DueRecord, type LoanRecord, type LoansData, buildLoansView } from 
 import { type RecurringRule, buildRecurringView } from "../recurring/view"
 import type { StatutoryDueRecord } from "../statutory/view"
 import type { LedgerAccount, LedgerCategory } from "../transactions/types"
-import { PLAN_BILL_CHIPS, PLAN_NEXT_DUES, PLAN_TOP_BUDGETS, PLAN_TOP_GOALS, planBills, planBudgets, planGoals, planInvestments, planLoans } from "./summary"
+import { PLAN_BILL_CHIPS, PLAN_NEXT_DUES, PLAN_TOP_BUDGETS, PLAN_TOP_GOALS, budgetsByNeed, goalPaceOf, planBills, planBudgets, planGoals, planInvestments, planLoans } from "./summary"
 
 // Demo figures only. The summaries read the views the web pages build, so these build the
 // views with the web's own builders and check that the Plan cards pick from them correctly.
@@ -87,6 +87,44 @@ describe("planGoals", () => {
     expect(s.top.map((g) => g.goal.name)).toEqual(v.active.slice(0, 3).map((g) => g.goal.name))
     expect(s.top.map((g) => g.goal.name)).toEqual(["Trip", "Phone", "Bike"])
     expect([s.count, s.archivedCount]).toEqual([4, 1])
+  })
+})
+
+describe("budgetsByNeed", () => {
+  it("puts over budget first, then near limit, then the rest, each by share used; another currency last", () => {
+    const v = goalsView({
+      budgets: [budget("food", 1_000), budget("fuel", 1_000), budget("fun", 1_000), budget("rent", 1_000), budget("travel", 1_000, "USD")],
+      // Food 50%, Fuel 85% (near), Fun 130% (over), Rent 10%.
+      spending: [["food", 500], ["fuel", 850], ["fun", 1_300], ["rent", 100]],
+    })
+    expect(budgetsByNeed(v.budgets).map((b) => b.category.name)).toEqual(["Fun", "Fuel", "Food", "Rent", "Travel"])
+    // The Plan card's three are the first three of the same order.
+    expect(planBudgets(v).top.map((b) => b.category.name)).toEqual(["Fun", "Fuel", "Food"])
+  })
+
+  it("orders equal shares by name (a later month: nothing spent)", () => {
+    const v = goalsView({ budgets: [budget("rent", 1_000), budget("food", 2_000)], budgetMonth: "2027-01-01" })
+    expect(budgetsByNeed(v.budgets).map((b) => b.category.name)).toEqual(["Food", "Rent"])
+  })
+})
+
+describe("goalPaceOf", () => {
+  const withZone = (g: GoalRecord, timeZone: string | null) => ({ ...goalsView({ goals: [g] }), timeZone })
+
+  it("counts from the day the goal was added in the person's time zone", () => {
+    // Added 31 Jul 2026 at 20:00 UTC: already 1 Aug in Kolkata. Target ₹1,30,000 by Aug 2027.
+    const g = goal("Bike", { targetMinor: R(130_000), savedMinor: R(10_000), targetDate: "2027-08-15", createdAt: "2026-07-31T20:00:00Z" })
+    // Kolkata: Aug 2026..Aug 2027 = 13 months, Aug..Oct gone (3) → ₹30,000 expected.
+    expect(goalPaceOf({ goal: g }, withZone(g, "Asia/Kolkata"))).toEqual({ status: "behind", expectedMinor: R(30_000), shortMinor: R(20_000) })
+    // UTC: Jul 2026..Aug 2027 = 14 months, Jul..Oct gone (4) → ₹37,142.86 expected.
+    expect(goalPaceOf({ goal: g }, withZone(g, "UTC"))).toEqual({ status: "behind", expectedMinor: 37_142_86, shortMinor: 27_142_86 })
+  })
+
+  it("is null without a time zone, a readable added time or a target date", () => {
+    const g = goal("Fund", { createdAt: "2026-11-01T00:00:00Z" })
+    expect(goalPaceOf({ goal: g }, withZone(g, null))).toBeNull()
+    expect(goalPaceOf({ goal: { ...g, createdAt: "not a time" } }, withZone(g, "Asia/Kolkata"))).toBeNull()
+    expect(goalPaceOf({ goal: { ...g, targetDate: null } }, withZone(g, "Asia/Kolkata"))).toBeNull()
   })
 })
 

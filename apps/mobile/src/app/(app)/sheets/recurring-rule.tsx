@@ -20,6 +20,9 @@ import { getSupabase } from "@/lib/supabase";
 import { useSave } from "@/lib/use-save";
 import { TOUCH_TARGET, colors, spacing, text } from "@/theme";
 
+export const ENDED_RESTART_HINT =
+  "To restart it, choose a later end date or clear it. Nothing is saved for the dates it missed; if one has passed, the latest shows under Due for you to confirm or skip.";
+
 const TYPES = [
   { value: "expense", label: "Expense" },
   { value: "income", label: "Income" },
@@ -90,6 +93,8 @@ function RuleForm({ data, item, initialType }: { data: TransactionsContext; item
   return (
     <View style={styles.gap}>
       {item?.attention ? <FormMessage tone="error" message={item.attention} /> : null}
+      {/* Restarting saves nothing: only the latest date already passed shows under Due (the web's Ended hint, 13c PR 3). */}
+      {item?.kind === "ended" ? <FormMessage tone="info" message={ENDED_RESTART_HINT} /> : null}
       {formError ? <FormMessage tone="error" message={formError} /> : null}
       <Segmented
         label="Type"

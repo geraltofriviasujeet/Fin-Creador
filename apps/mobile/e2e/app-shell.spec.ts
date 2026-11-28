@@ -80,9 +80,9 @@ test("old screens stay reachable from Plan: Recurring, Settings and Sign out", a
   await signIn(page);
 
   // Home reaches Income, Recurring and Settings through the avatar menu (home.spec.ts). Plan
-  // links to Recurring too (bills that repeat) until 13c.
+  // reaches Recurring through Bills that repeat → See all (13c PR 3).
   await tab(page, "Plan").click();
-  await screen(page, "Plan").getByRole("button", { name: /^Recurring\./ }).click();
+  await page.getByTestId("plan-screen").getByRole("button", { name: "See all bills that repeat" }).click();
   await expect(page.getByRole("heading", { name: "Recurring", exact: true })).toHaveCount(1);
   await page.goBack();
 

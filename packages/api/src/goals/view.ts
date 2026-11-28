@@ -57,6 +57,8 @@ export type BudgetItem = {
 export type GoalsView = {
   today: IsoDate
   currency: string
+  /** The profile's time zone (when a goal was added, as a local date); null when not loaded. */
+  timeZone: string | null
   month: DateRange
   active: GoalItem[]
   archived: GoalItem[]
@@ -75,6 +77,7 @@ export type GoalsView = {
 export type GoalsData = {
   today: IsoDate
   currency: string
+  timeZone?: string | null
   goals: GoalRecord[]
   budgetRows: BudgetRow[]
   categories: BudgetCategory[]
@@ -164,6 +167,7 @@ export function buildGoalsView(data: GoalsData): GoalsView {
   return {
     today,
     currency,
+    timeZone: data.timeZone ?? null,
     month: monthRange(today),
     active,
     archived,

@@ -129,12 +129,18 @@ export function ListRow({ icon, tint, title, subtitle, amount, tag, tagTone, onP
   );
 }
 
-export type TagTone = "neutral" | "warning";
+/**
+ * neutral: lavender. warning: peach with red text (Overdue). caution: peach with amber text (Near
+ * limit, Behind). danger: solid red (Over budget). The words carry the meaning, never colour alone.
+ */
+export type TagTone = "neutral" | "warning" | "caution" | "danger";
 
 export function Tag({ label, tone = "neutral" }: { label: string; tone?: TagTone }) {
   return (
-    <View style={[styles.tag, tone === "warning" && styles.tagWarning]}>
-      <Text style={[styles.tagText, tone === "warning" && styles.tagWarningText]}>{label}</Text>
+    <View style={[styles.tag, (tone === "warning" || tone === "caution") && styles.tagWarning, tone === "danger" && styles.tagDanger]}>
+      <Text style={[styles.tagText, tone === "warning" && styles.tagWarningText, tone === "caution" && styles.tagCautionText, tone === "danger" && styles.tagDangerText]}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -280,6 +286,9 @@ const styles = StyleSheet.create({
   tagText: { fontFamily: fontFamily.bodySemibold, fontSize: mobile.type.min.size, color: mobile.colors.ink },
   tagWarning: { backgroundColor: mobile.categoryTints.peach },
   tagWarningText: { color: mobile.colors.danger },
+  tagCautionText: { color: mobile.colors.caution },
+  tagDanger: { backgroundColor: mobile.colors.warning },
+  tagDangerText: { color: mobile.colors.surface },
   categoryTile: {
     flex: 1,
     minHeight: 84,

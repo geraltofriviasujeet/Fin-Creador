@@ -1,4 +1,4 @@
-import { type GoalsView, fullDate, monthLabel } from "@fin-creador/api";
+import { type GoalsView, budgetsByNeed, fullDate, monthLabel } from "@fin-creador/api";
 import { evenSpendShare } from "@fin-creador/domain";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Plus } from "lucide-react-native";
@@ -103,7 +103,8 @@ function Budgets({ view }: { view: GoalsView }) {
             )}
           </Card>
           <Card style={styles.list}>
-            {view.budgets.map((item, i) => (
+            {/* Over budget first, then near limit, then the rest (each by share used), as on Plan. */}
+            {budgetsByNeed(view.budgets).map((item, i) => (
               <BudgetRow
                 key={item.category.id}
                 first={i === 0}

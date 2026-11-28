@@ -152,6 +152,36 @@ export function amountInputState(typed: string, currency = "INR", locale = DEFAU
   return { display, minor: parsed.ok ? parsed.minor : null, label: `Amount, ${display}` };
 }
 
+/**
+ * Cleans what was typed into an amount field (MoneyField): digits and one point only, the
+ * currency's decimals at most, no leading zeros, 13 whole digits at most (beyond the largest
+ * amount, so the form still says "too large" rather than cutting it silently).
+ */
+export function cleanAmountTyping(typed: string, currency = "INR"): string {
+  const digits = currencyMinorDigits(currency);
+  const [rawWhole = "", ...rest] = typed.replace(/[^\d.]/g, "").split(".");
+  const whole = rawWhole.replace(/^0+(?=\d)/, "").slice(0, 13);
+  if (rest.length === 0 || digits === 0) return whole;
+  return `${whole || "0"}.${rest.join("").slice(0, digits)}`;
+}
+
+/** "600000.5" → "6,00,000.5": grouping only, nothing rounded or checked; "" stays "" (the placeholder shows). */
+export function groupTypedAmount(raw: string, locale = DEFAULT_LOCALE): string {
+  if (raw === "") return "";
+  const [whole = "", fraction] = raw.split(".");
+  return `${whole ? groupDigits(whole, locale) : "0"}${fraction === undefined ? "" : `.${fraction}`}`;
+}
+
+/** Groups whole digits as typed, even past the largest amount (so a refused amount still reads clearly): en-IN 2s after the last 3, otherwise 3s. */
+function groupDigits(whole: string, locale: string): string {
+  if (whole.length <= 3) return whole;
+  const size = locale === "en-IN" ? 2 : 3;
+  const rest = whole.slice(0, -3);
+  const groups: string[] = [];
+  for (let end = rest.length; end > 0; end -= size) groups.unshift(rest.slice(Math.max(0, end - size), end));
+  return `${groups.join(",")},${whole.slice(-3)}`;
+}
+
 /** INR → "₹". From packages/domain: a table first, never Intl formatToParts (Hermes lacks it). */
 export { currencySymbol };
 

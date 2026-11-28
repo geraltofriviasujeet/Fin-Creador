@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  cleanAmountTyping,
+  groupTypedAmount,
   KEYPAD_ROWS,
   MINUS,
   amountInputState,
@@ -188,5 +190,29 @@ describe("accessibility labels", () => {
     expect(short.after.text).toBe(`${MINUS}₹1,980`);
     expect(short.short).toBe("Leaves you ₹1,980 short");
     expect(short.label).toBe("SBI, ₹18,000 now, Minus ₹1,980 after this. Leaves you ₹1,980 short");
+  });
+});
+
+describe("amount field typing (MoneyField)", () => {
+  it("keeps digits and one point, the currency's decimals at most", () => {
+    expect(cleanAmountTyping("6,000")).toBe("6000");
+    expect(cleanAmountTyping("₹ 6,000.505")).toBe("6000.50");
+    expect(cleanAmountTyping("1.2.3")).toBe("1.23");
+    expect(cleanAmountTyping(".5")).toBe("0.5");
+    expect(cleanAmountTyping("007")).toBe("7");
+    expect(cleanAmountTyping("80x")).toBe("80");
+    expect(cleanAmountTyping("12.5", "JPY")).toBe("12");
+    expect(cleanAmountTyping("99999999999999")).toBe("9999999999999");
+  });
+
+  it("shows Indian grouping without rounding", () => {
+    expect(groupTypedAmount("")).toBe("");
+    expect(groupTypedAmount("6000")).toBe("6,000");
+    expect(groupTypedAmount("600000.5")).toBe("6,00,000.5");
+    expect(groupTypedAmount("1250.")).toBe("1,250.");
+    expect(groupTypedAmount("0.")).toBe("0.");
+    // Beyond the largest amount: still grouped, so the "too large" message reads against it.
+    expect(groupTypedAmount("9999999999999")).toBe("99,99,99,99,99,999");
+    expect(groupTypedAmount("1234567.5", "en-US")).toBe("1,234,567.5");
   });
 });

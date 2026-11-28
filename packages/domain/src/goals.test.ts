@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  goalPace,
   budgetStatus,
   budgetsForMonth,
   divRoundHalfAway,
@@ -346,5 +347,49 @@ describe("evenSpendShare (budget bar's even-spend mark)", () => {
   it("rejects dates that are not YYYY-MM-DD", () => {
     expect(() => evenSpendShare("2026-11", "2026-11-01")).toThrow(RangeError);
     expect(() => evenSpendShare("2026-11-01", "2026-02-30")).toThrow(RangeError);
+  });
+});
+
+describe("goalPace", () => {
+  const base = { targetMinor: 130_000_00, savedMinor: 0, targetDate: "2027-07-15", startedOn: "2026-07-20", today: "2026-07-31" };
+
+  it("is never behind in the month the goal was added", () => {
+    expect(goalPace(base)).toEqual({ status: "on_track", expectedMinor: 0, shortMinor: 0 });
+  });
+
+  it("expects target × whole months gone ÷ months in the plan (both ends counted)", () => {
+    // Jul 2026 to Jul 2027 is 13 months; four whole months gone by November.
+    expect(goalPace({ ...base, today: "2026-11-28", savedMinor: 10_000_00 })).toEqual({ status: "behind", expectedMinor: 40_000_00, shortMinor: 30_000_00 });
+    expect(goalPace({ ...base, today: "2026-11-28", savedMinor: 40_000_00 })).toEqual({ status: "on_track", expectedMinor: 40_000_00, shortMinor: 0 });
+  });
+
+  it("rounds the even pace half away from zero to the paisa", () => {
+    // 1,00,000 × 1 ÷ 3 = 33,333.333… → ₹33,333.33
+    const p = goalPace({ targetMinor: 100_000_00, savedMinor: 0, targetDate: "2026-03-01", startedOn: "2026-01-31", today: "2026-02-01" });
+    expect(p).toEqual({ status: "behind", expectedMinor: 33_333_33, shortMinor: 33_333_33 });
+  });
+
+  it("expects the whole target once the target month has passed", () => {
+    expect(goalPace({ ...base, today: "2027-08-01", savedMinor: 129_999_99 })).toEqual({ status: "behind", expectedMinor: 130_000_00, shortMinor: 1 });
+  });
+
+  it("is reached when saved meets the target, date or not", () => {
+    expect(goalPace({ ...base, savedMinor: 130_000_00, today: "2027-09-01" })?.status).toBe("reached");
+    expect(goalPace({ ...base, targetMinor: 0, targetDate: null })?.status).toBe("reached");
+  });
+
+  it("has no pace without a target date", () => {
+    expect(goalPace({ ...base, targetDate: null, today: "2027-01-01" })).toBeNull();
+  });
+
+  it("treats a target in the month added (or earlier) as a one-month plan", () => {
+    expect(goalPace({ ...base, targetDate: "2026-07-25" })?.status).toBe("on_track");
+    expect(goalPace({ ...base, targetDate: "2026-06-30", today: "2026-08-02" })).toEqual({ status: "behind", expectedMinor: 130_000_00, shortMinor: 130_000_00 });
+  });
+
+  it("counts months across a leap-year February", () => {
+    const p = goalPace({ targetMinor: 12_000_00, savedMinor: 2_000_00, targetDate: "2028-12-31", startedOn: "2028-01-31", today: "2028-03-01" });
+    // 12 months; January and February gone → ₹2,000 expected.
+    expect(p).toEqual({ status: "on_track", expectedMinor: 2_000_00, shortMinor: 0 });
   });
 });

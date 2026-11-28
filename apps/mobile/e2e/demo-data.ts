@@ -7,6 +7,8 @@ import {
   saveAccount,
   saveGoal,
   saveRecurringRule,
+  setGoalArchived,
+  skipRecurringOccurrence,
   saveSpendLimit,
   saveTransaction,
   setCategoryBudget,
@@ -15,6 +17,7 @@ import {
 } from "@fin-creador/api";
 import { addDays, daysInMonth, floorToWholeMinor, monthRange, previousMonthRange } from "@fin-creador/domain";
 import { createClient } from "@supabase/supabase-js";
+import { execFileSync } from "node:child_process";
 
 // Demo figures for the Home E2E, written as the demo user through the shared writers (public
 // API, RLS applies; no service key), on CI's throwaway local Supabase only (demo-user.ts checks
@@ -238,4 +241,83 @@ export async function expectedHome(demo: Demo): Promise<HomeData> {
   const home = await loadHomeData(demo.client);
   if (!home.ok) throw new Error(`Home loader failed: ${home.reason}`);
   return home.data;
+}
+
+/** The `day` of the month `months` after (or before) today's month: "2027-04-15". */
+export function monthDay(today: string, months: number, day: number): string {
+  const [y, m] = today.split("-").map(Number) as [number, number];
+  const index = y * 12 + (m - 1) + months;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * Goals and bills that repeat (13c PR 3): the normal month (Emergency fund ₹60,000, no target
+ * date, so no pace) plus
+ *  - Goa trip: 2 people, 4 days, flight and hotel, costs ₹40,000, ₹8,000 saved, by the 15th five
+ *    months on. Added today, so on track (never behind in its first month).
+ *  - New bike: Royal Enfield Classic 350, ₹1,20,000 + ₹10,000 extras, cash → ₹1,30,000, ₹10,000
+ *    saved, by the 15th eight months on. backdateGoal moves its "added" day to the 15th four
+ *    months ago: 13 months in the plan, 4 gone → ₹40,000 expected → behind by ₹30,000.
+ *  - Old laptop (other, ₹50,000), archived.
+ *  - Internet ₹1,000 from HDFC Bank, due 3 days ago, and Newspaper ₹300, due today (both Due:
+ *    Confirm or Skip), and a Gym membership
+ *    ₹1,500 that started 20 days ago and ended 5 days ago, its one date skipped (Ended).
+ */
+export async function seedPlanGoals(demo: Demo): Promise<{ bikeStartedOn: string }> {
+  await seedNormal(demo);
+  const id = await ids(demo.client);
+  const hdfc = id.account("HDFC Bank");
+  const goal = async (input: Record<string, string>, what: string) => {
+    const r = await saveGoal(demo.client, { ...input, idempotencyKey: newRequestKey() });
+    if (r.status !== "success") throw new Error(`${what}: ${r.message}`);
+    return r.goalId;
+  };
+  await goal(
+    {
+      type: "trip", name: "Goa trip", scope: "domestic", place: "Goa", people: "2", days: "4", travelMode: "flight", stay: "hotel",
+      cost_transport: "12000", cost_stay: "16000", cost_food: "6000", cost_activities: "4000", cost_buffer: "2000",
+      targetDate: monthDay(demo.today, 5, 15), saved: "8000",
+    },
+    "Add Goa trip",
+  );
+  await goal(
+    {
+      type: "vehicle", name: "New bike", vehicle: "bike", condition: "new", make: "Royal Enfield", model: "Classic 350", price: "120000",
+      extras: "10000", payment: "cash", targetDate: monthDay(demo.today, 8, 15), saved: "10000",
+    },
+    "Add New bike",
+  );
+  const laptop = await goal({ type: "other", name: "Old laptop", description: "Replaced at work", amount: "50000", targetDate: "", saved: "" }, "Add Old laptop");
+  ok(await setGoalArchived(demo.client, { goalId: laptop, archived: true }), "Archive Old laptop");
+
+  await addRule(demo, { type: "expense", amount: "1000", categoryId: id.bills, accountId: hdfc, inDays: -3, note: "Internet" });
+  await addRule(demo, { type: "expense", amount: "300", categoryId: id.bills, accountId: hdfc, inDays: 0, note: "Newspaper" });
+  ok(
+    await saveRecurringRule(demo.client, {
+      type: "expense", amount: "1500", categoryId: id.bills, accountId: hdfc, counterAccountId: "", paymentMode: "", frequency: "monthly",
+      startDate: addDays(demo.today, -20), endDate: addDays(demo.today, -5), note: "Gym membership", idempotencyKey: newRequestKey(),
+    }),
+    "Add Gym membership",
+  );
+  const { data: gym } = await demo.client.from("recurring_rules").select("id").eq("note", "Gym membership").single();
+  ok(
+    await skipRecurringOccurrence(demo.client, { ruleId: gym?.id ?? "", occurrenceDate: addDays(demo.today, -20), reason: "", idempotencyKey: newRequestKey() }),
+    "Skip the gym date",
+  );
+  return { bikeStartedOn: monthDay(demo.today, -4, 15) };
+}
+
+/**
+ * Moves a goal's "added" day back (fixtures/backdate-goal.sql). Only on CI's local database:
+ * E2E_DB_URL is set by the CI step to the runner's own Supabase and checked here.
+ */
+export function backdateGoal(email: string, name: string, startedOn: string) {
+  const url = process.env.E2E_DB_URL ?? "";
+  if (!url) throw new Error("E2E_DB_URL is not set (CI sets it to the runner's local database).");
+  const host = new URL(url).hostname;
+  if (host !== "127.0.0.1" && host !== "localhost") throw new Error("Backdating only runs against the local CI database.");
+  // npm run e2e runs from apps/mobile.
+  execFileSync("psql", [url, "-q", "-v", "ON_ERROR_STOP=1", "-v", `email=${email}`, "-v", `name=${name}`, "-v", `started=${startedOn}`, "-f", "e2e/fixtures/backdate-goal.sql"], {
+    stdio: "pipe",
+  });
 }
