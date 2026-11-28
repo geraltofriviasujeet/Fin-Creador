@@ -72,7 +72,7 @@ test("expense: last-used tile first, keypad, before → after, account picker, o
   const add = addScreen(page);
   await expect(add.getByRole("heading", { name: "Add expense", exact: true })).toBeVisible();
   // The latest expense's account and category come first.
-  await expect(add.getByRole("button", { name: /^Paid from: HDFC Bank\. Balance ₹37,300 now\./ })).toBeVisible();
+  await expect(add.getByRole("button", { name: "Paid from: HDFC Bank. Balance ₹37,300. Change account", exact: true })).toBeVisible();
   await expect(add.getByRole("radiogroup", { name: "Category" }).getByRole("radio").first()).toHaveAccessibleName(food);
   await expect(add.getByRole("button", { name: "Save expense", exact: true })).toBeVisible();
 
