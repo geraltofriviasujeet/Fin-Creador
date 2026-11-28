@@ -165,11 +165,21 @@ export function cleanAmountTyping(typed: string, currency = "INR"): string {
   return `${whole || "0"}.${rest.join("").slice(0, digits)}`;
 }
 
-/** "600000.5" → "6,00,000.5": grouping only, nothing rounded; "" stays "" (the placeholder shows). */
-export function groupTypedAmount(raw: string, currency = "INR", locale = DEFAULT_LOCALE): string {
+/** "600000.5" → "6,00,000.5": grouping only, nothing rounded or checked; "" stays "" (the placeholder shows). */
+export function groupTypedAmount(raw: string, locale = DEFAULT_LOCALE): string {
   if (raw === "") return "";
   const [whole = "", fraction] = raw.split(".");
-  return `${whole ? regroupAmountInput(whole, currency, locale) : "0"}${fraction === undefined ? "" : `.${fraction}`}`;
+  return `${whole ? groupDigits(whole, locale) : "0"}${fraction === undefined ? "" : `.${fraction}`}`;
+}
+
+/** Groups whole digits as typed, even past the largest amount (so a refused amount still reads clearly): en-IN 2s after the last 3, otherwise 3s. */
+function groupDigits(whole: string, locale: string): string {
+  if (whole.length <= 3) return whole;
+  const size = locale === "en-IN" ? 2 : 3;
+  const rest = whole.slice(0, -3);
+  const groups: string[] = [];
+  for (let end = rest.length; end > 0; end -= size) groups.unshift(rest.slice(Math.max(0, end - size), end));
+  return `${groups.join(",")},${whole.slice(-3)}`;
 }
 
 /** INR → "₹". From packages/domain: a table first, never Intl formatToParts (Hermes lacks it). */

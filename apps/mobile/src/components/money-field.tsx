@@ -26,7 +26,7 @@ export function MoneyField({ label, value, onChange, currency, hint, error, auto
   const [focused, setFocused] = useState(false);
   const borderColor = error ? colors.danger : focused ? colors.accentDeep : colors.lineStrong;
   const symbol = currencySymbol(currency);
-  const shown = groupTypedAmount(value, currency);
+  const shown = groupTypedAmount(value);
   const description = [hint, error].filter(Boolean).join(". ");
   return (
     <View style={styles.field}>

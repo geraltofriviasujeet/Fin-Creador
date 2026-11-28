@@ -211,5 +211,8 @@ describe("amount field typing (MoneyField)", () => {
     expect(groupTypedAmount("600000.5")).toBe("6,00,000.5");
     expect(groupTypedAmount("1250.")).toBe("1,250.");
     expect(groupTypedAmount("0.")).toBe("0.");
+    // Beyond the largest amount: still grouped, so the "too large" message reads against it.
+    expect(groupTypedAmount("9999999999999")).toBe("99,99,99,99,99,999");
+    expect(groupTypedAmount("1234567.5", "en-US")).toBe("1,234,567.5");
   });
 });
