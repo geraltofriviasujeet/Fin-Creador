@@ -251,6 +251,11 @@ test("kill switch: the self-unregistering worker clears caches and unregisters",
 
   // The sign-in page doesn't register the worker, so nothing re-registers after the reload.
   await page.goto("/sign-in")
+  // Register only once nothing is in flight. The sign-in page prefetches "/" right after load,
+  // and those fetches go through the old worker. If one is still open when the kill switch
+  // finishes installing, Chrome restarts the old worker to serve it and never activates the
+  // kill switch (seen in CI traces: it stays waiting, nothing reloads).
+  await page.waitForLoadState("networkidle")
   const reloaded = page.waitForEvent("load")
   // The kill switch reloads this tab, which may end the evaluate itself.
   await page.evaluate(() => navigator.serviceWorker.register("/sw-kill-switch.js", { scope: "/" })).catch(() => {})
