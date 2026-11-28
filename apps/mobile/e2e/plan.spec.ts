@@ -99,7 +99,8 @@ test("Plan: net worth and budgets, the Budgets screen and the budget sheet", asy
   await expect(page.getByRole("button", { name: "Add transaction" })).toHaveCount(0);
   await expect(plan(page).getByText("What you own minus what you owe, today.", { exact: true })).toBeVisible();
   // Over first, then near limit, then the most used.
-  const names = await plan(page).getByRole("progressbar").evaluateAll((bars) => bars.map((b) => b.getAttribute("aria-label")?.split(":")[0]));
+  // Budget bars only (goal rings are progress bars too, "…: 20% saved").
+  const names = await plan(page).getByRole("progressbar", { name: / used/ }).evaluateAll((bars) => bars.map((b) => b.getAttribute("aria-label")?.split(":")[0]));
   expect(names).toEqual(["All budgets", "Shopping", "Food & dining", "Travel"]);
   await shot(page, "13c-plan-01-top");
 

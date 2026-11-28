@@ -229,41 +229,46 @@ function Row({ item, lookup, today, onPress, children }: { item: RecurringItem; 
   const pastDue = pastDueLabel(item, today);
   const when =
     item.kind === "ended" ? (item.date ? `Ended ${fullDate(item.date)}` : "Ended") : item.kind === "archived" ? "Archived" : item.date ? dayHeading(item.date, today) : "";
-  const body = (
-    <View style={styles.row}>
-      <View style={styles.rowTop}>
-        <EntryIcon entry={item.entry} lookup={lookup} />
-        <View style={styles.rowText}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={1}>
-              {title}
-            </Text>
-            {item.kind === "needs_attention" ? <Badge label="Needs attention" tone="negative" /> : null}
-            {pastDue ? <Badge label={pastDue} tone={pastDue === "Overdue" ? "negative" : "info"} /> : null}
-          </View>
-          <Text style={text.caption} numberOfLines={2}>
-            {item.schedule} · {entryKindLabel(item.entry, lookup)} · {accountChipText(item.entry, lookup)}
+  const top = (
+    <View style={styles.rowTop}>
+      <EntryIcon entry={item.entry} lookup={lookup} />
+      <View style={styles.rowText}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
           </Text>
-          {item.attention ? (
-            <View style={styles.attention}>
-              <CircleAlert size={14} color={colors.danger} />
-              <Text style={styles.attentionText}>{item.attention}</Text>
-            </View>
-          ) : null}
+          {item.kind === "needs_attention" ? <Badge label="Needs attention" tone="negative" /> : null}
+          {pastDue ? <Badge label={pastDue} tone={pastDue === "Overdue" ? "negative" : "info"} /> : null}
         </View>
-        <View style={styles.right}>
-          <Text style={styles.amount}>{signedAmount(item.entry)}</Text>
-          <Text style={text.caption}>{when}</Text>
-        </View>
+        <Text style={text.caption} numberOfLines={2}>
+          {item.schedule} · {entryKindLabel(item.entry, lookup)} · {accountChipText(item.entry, lookup)}
+        </Text>
+        {item.attention ? (
+          <View style={styles.attention}>
+            <CircleAlert size={14} color={colors.danger} />
+            <Text style={styles.attentionText}>{item.attention}</Text>
+          </View>
+        ) : null}
       </View>
-      {children}
+      <View style={styles.right}>
+        <Text style={styles.amount}>{signedAmount(item.entry)}</Text>
+        <Text style={text.caption}>{when}</Text>
+      </View>
     </View>
   );
-  if (!onPress) return body;
+  // The row's buttons (Undo skip, Confirm…) sit under the pressable part, never inside it: a
+  // button inside a button is invalid on the web and unreachable for screen readers.
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}, ${signedAmount(item.entry)}, ${item.schedule}`} accessibilityHint="Opens edit, archive and undo" style={({ pressed }) => [pressed && styles.pressed]}>
-      {body}
-    </Pressable>
+    <View style={styles.row}>
+      {onPress ? (
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}, ${signedAmount(item.entry)}, ${item.schedule}`} accessibilityHint="Opens edit, archive and undo" style={({ pressed }) => [pressed && styles.pressed]}>
+          {top}
+        </Pressable>
+      ) : (
+        top
+      )}
+      {children}
+    </View>
   );
 }
 
