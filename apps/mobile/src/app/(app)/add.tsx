@@ -88,6 +88,7 @@ function useBills(): SafeToSpendBill[] | null {
 }
 
 type Picker = null | "from" | "to" | "category";
+type Side = "from" | "to";
 
 function AddForm({ data, type, presetAccountId, bottomInset }: { data: TransactionsContext; type: AddType; presetAccountId: string; bottomInset: number }) {
   const router = useRouter();
@@ -112,6 +113,12 @@ function AddForm({ data, type, presetAccountId, bottomInset }: { data: Transacti
   const [paymentMode, setPaymentMode] = useState("");
   const [note, setNote] = useState("");
   const [picker, setPicker] = useState<Picker>(null);
+  // The account sheet's side, kept while it slides closed so its title and list don't change.
+  const [side, setSide] = useState<Side>("from");
+  const openAccounts = (s: Side) => {
+    setSide(s);
+    setPicker(s);
+  };
   const [lastType, setLastType] = useState(type);
   const bills = useBills();
   const { save, busy, fieldErrors, formError } = useSave();
@@ -206,7 +213,7 @@ function AddForm({ data, type, presetAccountId, bottomInset }: { data: Transacti
           account={account}
           move={moveFor(account?.id)}
           error={fieldErrors.accountId}
-          onPress={() => setPicker("from")}
+          onPress={() => openAccounts("from")}
         />
         {type === "transfer" ? (
           <AccountRow
@@ -214,11 +221,10 @@ function AddForm({ data, type, presetAccountId, bottomInset }: { data: Transacti
             account={counter}
             move={moveFor(counter?.id)}
             error={fieldErrors.counterAccountId}
-            onPress={() => setPicker("to")}
+            onPress={() => openAccounts("to")}
           />
         ) : null}
 
-        {short ? <WarningBanner message={runsShortText(short, moveFor(short.accountId)?.account.currency ?? currency)} /> : null}
         {preview.beforeOpening.map((a) => (
           <FormMessage
             key={a.id}
@@ -265,17 +271,19 @@ function AddForm({ data, type, presetAccountId, bottomInset }: { data: Transacti
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: bottomInset + spacing[3] }]}>
+        {/* Above the keypad, so it shows as the amount is typed (the rows above may scroll). */}
+        {short ? <WarningBanner message={runsShortText(short, moveFor(short.accountId)?.account.currency ?? currency)} /> : null}
         <NumberKeypad onKey={(key) => setAmount((a) => applyKeypadKey(a, key, currency))} disabled={busy} />
         <Button label={saveLabel(type, amountMinor, currency)} fullWidth loading={busy} onPress={submit} />
       </View>
 
       <AccountPicker
         visible={picker === "from" || picker === "to"}
-        title={accountRowLabel(type, picker === "to" ? "to" : "from")}
-        accounts={picker === "to" ? accounts.filter((a) => a.id !== accountId) : accounts}
-        selectedId={picker === "to" ? counterAccountId : accountId}
+        title={accountRowLabel(type, side)}
+        accounts={side === "to" ? accounts.filter((a) => a.id !== accountId) : accounts}
+        selectedId={side === "to" ? counterAccountId : accountId}
         onPick={(id) => {
-          if (picker === "to") setCounterAccountId(id);
+          if (side === "to") setCounterAccountId(id);
           else {
             setAccountId(id);
             setAccountTouched(true);

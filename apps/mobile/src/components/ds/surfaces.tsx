@@ -287,6 +287,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
     backgroundColor: mobile.colors.surface,
     paddingVertical: spacing[2],
+    // Keeps a long label (bold when selected) clear of the selection ring.
+    paddingHorizontal: spacing[1],
   },
   categorySelected: { borderColor: mobile.colors.forest },
   categoryPressed: { backgroundColor: mobile.colors.canvas },

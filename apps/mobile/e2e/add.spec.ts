@@ -1,4 +1,4 @@
-import { type Page, expect, test } from "@playwright/test";
+import { type Locator, type Page, expect, test } from "@playwright/test";
 import { type Demo, demoClient, seedNormal } from "./demo-data";
 import { createConfirmedUser } from "./demo-user";
 
@@ -55,6 +55,24 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${SHOTS}/${name}.png` });
 }
 
+/** Waits until a sheet has slid fully in (its position stops changing) before a screenshot. */
+async function settled(locator: Locator) {
+  await expect(locator).toBeInViewport({ ratio: 1 });
+  let last = "";
+  await expect
+    .poll(async () => {
+      const box = await locator.boundingBox();
+      const now = JSON.stringify(box);
+      const same = now === last;
+      last = now;
+      return same;
+    }, { intervals: [100] })
+    .toBe(true);
+}
+
+/** The account sheet has slid away and is gone. */
+const sheetClosed = (page: Page, title: string) => expect(page.getByRole("radiogroup", { name: title, exact: true })).toHaveCount(0);
+
 async function categoryName(demo: Demo, kind: "expense" | "income", key: string) {
   const { data } = await demo.client.from("categories").select("name, icon, source_type").eq("kind", kind);
   const row = data?.find((c) => (kind === "expense" ? c.icon : c.source_type) === key);
@@ -89,9 +107,10 @@ test("expense: last-used tile first, keypad, before → after, account picker, o
   const cash = page.getByRole("radio", { name: "Cash, balance ₹3,500", exact: true });
   await expect(cash).toBeVisible();
   await expect(page.getByRole("radio", { name: "HDFC Bank, balance ₹37,300", exact: true })).toHaveAttribute("aria-checked", "true");
+  await settled(cash);
   await shot(page, "13b-add-account-picker");
   await cash.click();
-  await expect(cash).toBeHidden();
+  await sheetClosed(page, "Paid from");
   await expect(add.getByText("₹3,500 → ₹2,250", { exact: true })).toBeVisible();
 
   // Offline: the save says to check the connection and keeps everything typed.
@@ -126,7 +145,9 @@ test("runs-short warning, then income and a transfer from Home's quick actions",
   const add = addScreen(page);
   await expect(add.getByRole("heading", { name: "Add expense", exact: true })).toBeVisible();
   await type(page, "36000");
-  await expect(add.getByText(/^With this, .+ on \d{1,2} [A-Z][a-z]{2} leaves you ₹1,100 short in HDFC Bank\.$/)).toBeVisible();
+  const warning = add.getByText(/^With this, .+ on \d{1,2} [A-Z][a-z]{2} leaves you ₹1,100 short in HDFC Bank\.$/);
+  // On screen above the keypad while typing, not only somewhere in the scrolled page.
+  await expect(warning).toBeInViewport({ ratio: 1 });
   // Information only: saving is still allowed.
   await expect(add.getByRole("button", { name: "Save ₹36,000 expense", exact: true })).toBeEnabled();
   await shot(page, "13b-add-runs-short");
@@ -137,6 +158,7 @@ test("runs-short warning, then income and a transfer from Home's quick actions",
   await add.getByRole("radio", { name: salary, exact: true }).click();
   await add.getByRole("button", { name: /^Received into: / }).click();
   await page.getByRole("radio", { name: "HDFC Bank, balance ₹37,300", exact: true }).click();
+  await sheetClosed(page, "Received into");
   await expect(add.getByText("₹37,300 → ₹73,300", { exact: true })).toBeVisible();
   await expect(add.getByText(/leaves you .* short/)).toHaveCount(0);
   await expect(add.getByRole("button", { name: "Save ₹36,000 income", exact: true })).toBeVisible();
@@ -150,10 +172,12 @@ test("runs-short warning, then income and a transfer from Home's quick actions",
   await type(page, "5000");
   await add.getByRole("button", { name: /^From: / }).click();
   await page.getByRole("radio", { name: "HDFC Bank, balance ₹37,300", exact: true }).click();
+  await sheetClosed(page, "From");
   await add.getByRole("button", { name: "To: choose an account", exact: true }).click();
   // The From account isn't offered as To.
   await expect(page.getByRole("radio", { name: /^HDFC Bank, balance/ })).toHaveCount(0);
   await page.getByRole("radio", { name: "Cash, balance ₹3,500", exact: true }).click();
+  await sheetClosed(page, "To");
   await expect(add.getByText("₹37,300 → ₹32,300", { exact: true })).toBeVisible();
   await expect(add.getByText("₹3,500 → ₹8,500", { exact: true })).toBeVisible();
   await shot(page, "13b-add-transfer");
